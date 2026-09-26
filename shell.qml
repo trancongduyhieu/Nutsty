@@ -76,6 +76,9 @@ Scope {
     property string currentLanguage: I18n.locale
     property string streamingQuality: "high_opus"
     property string downloadQuality: "high_opus"
+    property string spotifySpdc: ""
+    property string lyricsSource: "auto"
+    property string canvasPreference: "apple_first"
     property bool showSidebar: true
     property var friendsNotes: []
     property var friendsList: []
@@ -2166,6 +2169,7 @@ Scope {
                     track: win.currentTrack
                     appDir: win.appDir
                     animatedCoverEnabled: win.animatedCoverEnabled
+                    canvasPreference: win.canvasPreference
                     currentTime: win.currentTime
                     totalDuration: win.totalDuration
                     isPlaying: win.isPlaying
@@ -2286,14 +2290,30 @@ Scope {
             syncHistoryToGoogle: win.syncHistoryToGoogle
             desktopLyricsEnabled: win.desktopLyricsEnabled
             animatedCoverEnabled: win.animatedCoverEnabled
+            canvasPreference: win.canvasPreference
             lyricsPreset: win.desktopLyricsPreset
             customX: win.desktopLyricsCustomX
             customY: win.desktopLyricsCustomY
             currentLanguage: win.currentLanguage
             streamingQuality: win.streamingQuality
             downloadQuality: win.downloadQuality
+            spotifySpdc: win.spotifySpdc
+            lyricsSource: win.lyricsSource
 
             onCloseRequested: settingsModal.visible = false
+            onSaveSpotifySpdcRequested: spdc => {
+                win.spotifySpdc = spdc;
+                win.saveSettings();
+            }
+            onSaveLyricsSourceRequested: src => {
+                win.lyricsSource = src;
+                win.saveSettings();
+            }
+            onSaveCanvasPreferenceRequested: pref => {
+                win.canvasPreference = pref;
+                win.animatedCoverEnabled = (pref !== "off");
+                win.saveSettings();
+            }
             onSelectLanguageRequested: lang => {
                 win.currentLanguage = lang;
                 I18n.locale = lang;
@@ -2739,7 +2759,13 @@ Scope {
             if (obj.widgetX !== undefined) win.widgetX = Number(obj.widgetX);
             if (obj.widgetY !== undefined) win.widgetY = Number(obj.widgetY);
             if (obj.desktopLyricsEnabled !== undefined) win.desktopLyricsEnabled = !!obj.desktopLyricsEnabled;
-            if (obj.animatedCoverEnabled !== undefined) win.animatedCoverEnabled = !!obj.animatedCoverEnabled;
+            if (obj.canvasPreference !== undefined && typeof obj.canvasPreference === "string") {
+                win.canvasPreference = obj.canvasPreference;
+                win.animatedCoverEnabled = (win.canvasPreference !== "off");
+            } else if (obj.animatedCoverEnabled !== undefined) {
+                win.animatedCoverEnabled = !!obj.animatedCoverEnabled;
+                win.canvasPreference = win.animatedCoverEnabled ? "apple_first" : "off";
+            }
             if (obj.desktopLyricsPreset !== undefined) win.desktopLyricsPreset = Number(obj.desktopLyricsPreset);
             if (obj.desktopLyricsCustomX !== undefined) win.desktopLyricsCustomX = Number(obj.desktopLyricsCustomX);
             if (obj.desktopLyricsCustomY !== undefined) win.desktopLyricsCustomY = Number(obj.desktopLyricsCustomY);
@@ -2768,7 +2794,13 @@ Scope {
             if (obj.downloadQuality !== undefined && (obj.downloadQuality === "high_opus" || obj.downloadQuality === "high_aac" || obj.downloadQuality === "medium" || obj.downloadQuality === "low")) {
                 win.downloadQuality = obj.downloadQuality;
             }
-            console.log("DEBUG Nutsty settings loaded: isShuffle=" + win.isShuffle + ", isRepeat=" + win.isRepeat + ", lyricsPreset=" + win.desktopLyricsPreset + ", language=" + win.currentLanguage + ", streamingQuality=" + win.streamingQuality + ", downloadQuality=" + win.downloadQuality);
+            if (obj.spotifySpdc !== undefined) {
+                win.spotifySpdc = obj.spotifySpdc.toString();
+            }
+            if (obj.lyricsSource !== undefined && typeof obj.lyricsSource === "string") {
+                win.lyricsSource = obj.lyricsSource;
+            }
+            console.log("DEBUG Nutsty settings loaded: isShuffle=" + win.isShuffle + ", isRepeat=" + win.isRepeat + ", lyricsPreset=" + win.desktopLyricsPreset + ", language=" + win.currentLanguage + ", streamingQuality=" + win.streamingQuality + ", downloadQuality=" + win.downloadQuality + ", lyricsSource=" + win.lyricsSource + ", canvasPreference=" + win.canvasPreference);
         } catch(e) {}
     }
 
@@ -2782,13 +2814,16 @@ Scope {
             widgetY: win.widgetY,
             desktopLyricsEnabled: win.desktopLyricsEnabled,
             animatedCoverEnabled: win.animatedCoverEnabled,
+            canvasPreference: win.canvasPreference,
             desktopLyricsPreset: win.desktopLyricsPreset,
             desktopLyricsCustomX: win.desktopLyricsCustomX,
             desktopLyricsCustomY: win.desktopLyricsCustomY,
             desktopLyricsWallpaperPositions: win.desktopLyricsWallpaperPositions,
             language: win.currentLanguage,
             streamingQuality: win.streamingQuality,
-            downloadQuality: win.downloadQuality
+            downloadQuality: win.downloadQuality,
+            spotifySpdc: win.spotifySpdc,
+            lyricsSource: win.lyricsSource
         });
         var profSuffix = Quickshell.env("NUTSTY_PROFILE") ? ("_" + Quickshell.env("NUTSTY_PROFILE").toLowerCase()) : "";
         Quickshell.execDetached(["python3", "-c",
@@ -3387,10 +3422,18 @@ Scope {
         function scrollArtworkDown() { frostifyIpc.scrollArtworkDown(); }
         function dislikeCurrentTrack() { frostifyIpc.dislikeCurrentTrack(); }
         function openSettings() { frostifyIpc.openSettings(); }
+        function expandSpotifySettings() { frostifyIpc.expandSpotifySettings(); }
+        function testSpotifyConnected(spdc: string) { frostifyIpc.testSpotifyConnected(spdc); }
+        function testSpotifyDisconnected() { frostifyIpc.testSpotifyDisconnected(); }
+        function testSpotifyLogout() { frostifyIpc.testSpotifyLogout(); }
+        function testSpotifyInput(t: string) { frostifyIpc.testSpotifyInput(t); }
+        function testSpotifyValidate(t: string) { frostifyIpc.testSpotifyValidate(t); }
         function openLyricsSettings() { frostifyIpc.openLyricsSettings(); }
         function closeSettings() { frostifyIpc.closeSettings(); }
         function toggleStreamingQualityMenu() { frostifyIpc.toggleStreamingQualityMenu(); }
         function toggleDownloadQualityMenu() { frostifyIpc.toggleDownloadQualityMenu(); }
+        function toggleCanvasPrefMenu() { frostifyIpc.toggleCanvasPrefMenu(); }
+        function toggleLyricsSourceMenu() { frostifyIpc.toggleLyricsSourceMenu(); }
         function showLibrary() { frostifyIpc.showLibrary(); }
         function showHome() { frostifyIpc.showHome(); }
         function selectMood(title: string, params: string) { frostifyIpc.selectMood(title, params); }
@@ -3632,6 +3675,46 @@ Scope {
             settingsModal.currentTab = 0;
             settingsModal.visible = true;
         }
+        function expandSpotifySettings() {
+            settingsModal.currentTab = 0;
+            settingsModal.visible = true;
+            settingsModal.spotifyExpanded = true;
+        }
+        function testSpotifyConnected(spdc: string) {
+            win.spotifySpdc = spdc && spdc.length > 0 ? spdc : "AQD1234567890abcdef1234567890";
+            settingsModal.spotifySpdc = win.spotifySpdc;
+            settingsModal.currentTab = 0;
+            settingsModal.visible = true;
+            settingsModal.spotifyExpanded = true;
+        }
+        function testSpotifyDisconnected() {
+            win.spotifySpdc = "";
+            settingsModal.currentTab = 0;
+            settingsModal.visible = true;
+            settingsModal.spotifyExpanded = true;
+            settingsModal.manualSpotifyExpanded = true;
+        }
+        function testSpotifyLogout() {
+            settingsModal.saveSpotifySpdcRequested("");
+            settingsModal.spotifySpdc = "";
+            win.spotifySpdc = "";
+            settingsModal.currentTab = 0;
+            settingsModal.visible = true;
+            settingsModal.spotifyExpanded = true;
+            settingsModal.manualSpotifyExpanded = true;
+        }
+        function testSpotifyInput(t: string) {
+            win.spotifySpdc = "";
+            settingsModal.currentTab = 0;
+            settingsModal.visible = true;
+            settingsModal.spotifyExpanded = true;
+            settingsModal.manualSpotifyExpanded = true;
+            settingsModal.testSpotifyInput(t);
+        }
+        function testSpotifyValidate(t: string) {
+            testSpotifyInput(t);
+            settingsModal.validateAndSaveSpotifyCookie(t);
+        }
         function openLyricsSettings() {
             settingsModal.visible = true;
             settingsModal.currentTab = 1;
@@ -3650,6 +3733,19 @@ Scope {
             settingsModal.visible = true;
             settingsModal.currentTab = 0;
             settingsModal.toggleDownloadQualityMenu();
+        }
+        function toggleCanvasPrefMenu() {
+            win.visible = true;
+            settingsModal.visible = true;
+            settingsModal.currentTab = 0;
+            settingsModal.scrollSettings(500);
+            settingsModal.toggleCanvasPrefMenu();
+        }
+        function toggleLyricsSourceMenu() {
+            win.visible = true;
+            settingsModal.visible = true;
+            settingsModal.currentTab = 1;
+            settingsModal.toggleLyricsSourceMenu();
         }
         function showLibrary() {
             win.isNowPlayingOpen = false;

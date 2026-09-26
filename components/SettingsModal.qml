@@ -23,6 +23,7 @@ Rectangle {
     property bool isProcessing: false
     property bool syncHistoryToGoogle: true
     property bool animatedCoverEnabled: true
+    property string canvasPreference: "apple_first"
     property int currentTab: 0 // 0: Google Account, 1: Desktop Lyrics
     property bool desktopLyricsEnabled: true
     property int lyricsPreset: 2 // 1: Gacha, 2: Apple Music 5-Line, 3: Minimalist Blur, 4: Anime MV Kinetic
@@ -31,8 +32,17 @@ Rectangle {
     property string currentLanguage: I18n.locale
     property string streamingQuality: "high_opus"
     property string downloadQuality: "high_opus"
+    property string spotifySpdc: ""
+    property string lyricsSource: "auto"
+    property string spotifyStatusMessage: ""
+    property bool spotifyStatusSuccess: false
+    property bool spotifyMasked: true
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
     property bool manualCookieExpanded: false
+    property bool spotifyExpanded: false
+    property bool spotifyAutoSyncing: false
+    property bool manualSpotifyExpanded: false
+    property bool spotifyValidating: false
 
     onVisibleChanged: {
         if (!visible) {
@@ -40,6 +50,24 @@ Rectangle {
             if (root.isProcessing) {
                 root.isProcessing = false;
             }
+            root.spotifyValidating = false;
+            root.spotifyStatusMessage = "";
+            spotifyStatusDismissTimer.stop();
+        }
+    }
+
+    Timer {
+        id: spotifyStatusDismissTimer
+        interval: 4000
+        repeat: false
+        onTriggered: {
+            root.spotifyStatusMessage = "";
+        }
+    }
+
+    onSpotifyStatusMessageChanged: {
+        if (root.spotifyStatusMessage.length > 0) {
+            spotifyStatusDismissTimer.restart();
         }
     }
 
@@ -96,6 +124,148 @@ Rectangle {
         }
     }
 
+    function pasteSpotifyCookie() {
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", "http://127.0.0.1:17890/api/clipboard");
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                var text = "";
+                if (xhr.status === 200) {
+                    try {
+                        var res = JSON.parse(xhr.responseText);
+                        text = (res.text || "").trim();
+                    } catch(e) {}
+                }
+                if (!text && typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.getClipboardText === "function") {
+                    text = __NutstyBridge.getClipboardText().trim();
+                }
+                if (!text && typeof spotifyInput !== "undefined" && spotifyInput) {
+                    spotifyInput.selectAll();
+                    spotifyInput.paste();
+                    text = spotifyInput.text.trim();
+                }
+                applyPastedSpotifyCookie(text);
+            }
+        };
+        xhr.onerror = function() {
+            var text = "";
+            if (typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.getClipboardText === "function") {
+                text = __NutstyBridge.getClipboardText().trim();
+            }
+            if (!text && typeof spotifyInput !== "undefined" && spotifyInput) {
+                spotifyInput.selectAll();
+                spotifyInput.paste();
+                text = spotifyInput.text.trim();
+            }
+            applyPastedSpotifyCookie(text);
+        };
+        xhr.send();
+    }
+
+    function applyPastedSpotifyCookie(text) {
+        text = (text || "").trim();
+        if (!text) {
+            root.spotifyStatusSuccess = false;
+            root.spotifyStatusMessage = I18n.tr("Clipboard đang rỗng. Hãy sao chép chuỗi sp_dc trước.", "Clipboard is empty. Please copy sp_dc string first.");
+            return;
+        }
+        var match = text.match(/sp_dc=([A-Za-z0-9_\-]+)/);
+        if (match && match[1]) {
+            text = match[1];
+        }
+        if (typeof spotifyInput !== "undefined" && spotifyInput) {
+            spotifyInput.text = text;
+        }
+        root.spotifyStatusSuccess = true;
+        root.spotifyStatusMessage = I18n.tr("Đã dán chuỗi từ Clipboard! Bấm Lưu để kết nối.", "Pasted from Clipboard! Click Save to connect.");
+    }
+
+    function autoSyncSpotifyFromBrowsers() {
+        root.spotifyAutoSyncing = true;
+        root.spotifyStatusMessage = I18n.tr("Đang quét cookie Spotify từ trình duyệt...", "Scanning Spotify cookie from browsers...");
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", "http://127.0.0.1:17890/api/spotify/auto-sync");
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                root.spotifyAutoSyncing = false;
+                if (xhr.status === 200) {
+                    try {
+                        var res = JSON.parse(xhr.responseText);
+                        if (res.success && res.spdc) {
+                            root.spotifySpdc = res.spdc;
+                            root.saveSpotifySpdcRequested(res.spdc);
+                            root.spotifyStatusSuccess = true;
+                            root.spotifyStatusMessage = I18n.tr("Đã đồng bộ cookie Spotify thành công từ " + res.browser + "!", "Successfully synced Spotify cookie from " + res.browser + "!");
+                            return;
+                        } else {
+                            root.spotifyStatusSuccess = false;
+                            root.spotifyStatusMessage = res.message || I18n.tr("Không tìm thấy cookie Spotify. Hãy đăng nhập Spotify trên trình duyệt.", "No Spotify cookie found. Please log in to Spotify on your browser.");
+                        }
+                    } catch(e) {
+                        root.spotifyStatusSuccess = false;
+                        root.spotifyStatusMessage = I18n.tr("Lỗi xử lý phản hồi từ daemon.", "Error processing response from daemon.");
+                    }
+                } else {
+                    root.spotifyStatusSuccess = false;
+                    root.spotifyStatusMessage = I18n.tr("Không thể kết nối với Nutsty daemon.", "Could not connect to Nutsty daemon.");
+                }
+            }
+        };
+        xhr.onerror = function() {
+            root.spotifyAutoSyncing = false;
+            root.spotifyStatusSuccess = false;
+            root.spotifyStatusMessage = I18n.tr("Lỗi mạng khi kết nối tới backend.", "Network error connecting to backend.");
+        };
+        xhr.send();
+    }
+
+    function validateAndSaveSpotifyCookie(val) {
+        if (!val || val.length === 0) {
+            root.spotifyStatusSuccess = false;
+            root.spotifyStatusMessage = I18n.tr("Vui lòng nhập cookie sp_dc trước khi lưu.", "Please enter sp_dc cookie before saving.");
+            return;
+        }
+
+        root.spotifyValidating = true;
+        root.spotifyStatusSuccess = true;
+        root.spotifyStatusMessage = I18n.tr("Đang xác thực cookie với máy chủ Spotify...", "Verifying cookie with Spotify servers...");
+
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", "http://127.0.0.1:17890/api/spotify/validate");
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                root.spotifyValidating = false;
+                if (xhr.status === 200) {
+                    try {
+                        var res = JSON.parse(xhr.responseText);
+                        if (res && res.success) {
+                            root.spotifySpdc = val;
+                            root.saveSpotifySpdcRequested(val);
+                            root.spotifyStatusSuccess = true;
+                            root.spotifyStatusMessage = I18n.tr("Đã xác thực và liên kết Spotify thành công!", "Spotify verified and linked successfully!");
+                        } else {
+                            root.spotifyStatusSuccess = false;
+                            root.spotifyStatusMessage = (res && res.error) ? res.error : I18n.tr("Cookie sp_dc không hợp lệ hoặc đã hết hạn từ Spotify.", "Invalid or expired sp_dc cookie from Spotify.");
+                        }
+                    } catch (e) {
+                        root.spotifyStatusSuccess = false;
+                        root.spotifyStatusMessage = I18n.tr("Lỗi xử lý phản hồi từ daemon.", "Error processing response from daemon.");
+                    }
+                } else {
+                    root.spotifyStatusSuccess = false;
+                    root.spotifyStatusMessage = I18n.tr("Không thể xác thực cookie (mã lỗi " + xhr.status + ").", "Could not verify cookie (error " + xhr.status + ").");
+                }
+            }
+        };
+        xhr.onerror = function() {
+            root.spotifyValidating = false;
+            root.spotifyStatusSuccess = false;
+            root.spotifyStatusMessage = I18n.tr("Lỗi kết nối tới daemon để xác thực.", "Connection error while validating with daemon.");
+        };
+        xhr.send(JSON.stringify({ "spdc": val }));
+    }
+
     // =========================================================================
     // Signals (100% preserved for shell.qml integration)
     // =========================================================================
@@ -108,9 +278,35 @@ Rectangle {
     signal launchBrowserLoginRequested()
     signal toggleSyncHistoryRequested(bool enabled)
     signal toggleAnimatedCoverRequested(bool enabled)
+    signal saveCanvasPreferenceRequested(string pref)
     signal toggleDesktopLyricsRequested(bool enabled)
     signal selectLyricsPresetRequested(int preset)
     signal resetLyricsPositionRequested()
+    signal saveSpotifySpdcRequested(string spdc)
+    signal saveLyricsSourceRequested(string source)
+
+    function getCanvasPrefLabel(pref) {
+        var p = (pref || "apple_first").toLowerCase().trim();
+        if (p === "spotify_first") return "Spotify > Apple";
+        if (p === "apple_only") return I18n.tr("Chỉ Apple Music", "Apple Music only");
+        if (p === "spotify_only") return I18n.tr("Chỉ Spotify Canvas", "Spotify Canvas only");
+        if (p === "off") return I18n.tr("Tắt (Chỉ ảnh tĩnh)", "Off (Static only)");
+        return "Apple > Spotify";
+    }
+
+    function getLyricsSourceLabel(src) {
+        if (src === "spotify") {
+            return I18n.tr("Spotify (sp_dc)", "Spotify (sp_dc)");
+        } else if (src === "betterlyrics") {
+            return I18n.tr("Apple Music (BetterLyrics)", "Apple Music (BetterLyrics)");
+        } else if (src === "lrclib") {
+            return I18n.tr("LRCLIB", "LRCLIB");
+        } else if (src === "netease") {
+            return I18n.tr("NetEase Cloud Music", "NetEase Cloud Music");
+        } else {
+            return I18n.tr("Tự động (Khuyến nghị)", "Auto (Recommended)");
+        }
+    }
 
     function getQualityLabel(qual, isDownload) {
         if (qual === "high_opus") {
@@ -133,6 +329,8 @@ Rectangle {
         if (typeof langRowItem !== "undefined" && langRowItem) langRowItem.menuOpen = false;
         if (typeof streamQualityRowItem !== "undefined" && streamQualityRowItem) streamQualityRowItem.menuOpen = false;
         if (typeof downloadQualityRowItem !== "undefined" && downloadQualityRowItem) downloadQualityRowItem.menuOpen = false;
+        if (typeof canvasPrefRowItem !== "undefined" && canvasPrefRowItem) canvasPrefRowItem.menuOpen = false;
+        if (typeof lyricsSourceRowItem !== "undefined" && lyricsSourceRowItem) lyricsSourceRowItem.menuOpen = false;
     }
 
     function toggleStreamingQualityMenu() {
@@ -145,6 +343,28 @@ Rectangle {
         var next = !(typeof downloadQualityRowItem !== "undefined" && downloadQualityRowItem.menuOpen);
         closeAllDropdowns();
         if (typeof downloadQualityRowItem !== "undefined") downloadQualityRowItem.menuOpen = next;
+    }
+
+    function toggleCanvasPrefMenu() {
+        var next = !(typeof canvasPrefRowItem !== "undefined" && canvasPrefRowItem.menuOpen);
+        closeAllDropdowns();
+        if (typeof canvasPrefRowItem !== "undefined") canvasPrefRowItem.menuOpen = next;
+    }
+
+    function toggleLyricsSourceMenu() {
+        var next = !(typeof lyricsSourceRowItem !== "undefined" && lyricsSourceRowItem.menuOpen);
+        closeAllDropdowns();
+        if (typeof lyricsSourceRowItem !== "undefined") lyricsSourceRowItem.menuOpen = next;
+    }
+
+    function testSpotifyInput(t) {
+        if (typeof spotifyInput !== "undefined" && spotifyInput) {
+            spotifyInput.text = t;
+        }
+    }
+
+    function scrollSettings(y) {
+        settingsFlickable.contentY = y;
     }
 
     // =========================================================================
@@ -407,8 +627,8 @@ Rectangle {
                     width: settingsFlickable.width
                     height: implicitHeight
                     implicitHeight: (root.currentTab === 0
-                                     ? tab0Content.implicitHeight + (langRowItem.menuOpen || streamQualityRowItem.menuOpen || downloadQualityRowItem.menuOpen ? 210 : 30)
-                                     : tab1Content.implicitHeight) + 8
+                                     ? tab0Content.implicitHeight + (langRowItem.menuOpen || streamQualityRowItem.menuOpen || downloadQualityRowItem.menuOpen || (typeof canvasPrefRowItem !== "undefined" && canvasPrefRowItem.menuOpen) ? 240 : 30)
+                                     : tab1Content.implicitHeight + (typeof lyricsSourceRowItem !== "undefined" && lyricsSourceRowItem.menuOpen ? 240 : 0)) + 8
 
                     // =========================================================
                     // TAB 0: Google & Cloud Account Content (100% Frameless)
@@ -907,6 +1127,548 @@ Rectangle {
                     }
                 }
 
+                // =============================================================
+                // Spotify Account & sp_dc Cookie Integration (Tab 0 - Expandable Accordion)
+                // =============================================================
+                // =============================================================
+                // Spotify Account & sp_dc Cookie Integration (Tab 0 - Frameless Expandable)
+                // =============================================================
+                Item {
+                    id: spotifyRowItem
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: root.spotifyExpanded
+                        ? (spotifyHeaderItem.height + 4 + (spotifyRowItem.isConnected ? (spotifyConnectedCard.height + 10) : (spotifyDisconnectedCol.implicitHeight + 10)))
+                        : 46
+                    clip: true
+
+                    Behavior on Layout.preferredHeight { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+
+                    readonly property bool isConnected: root.spotifySpdc && root.spotifySpdc.length > 10
+
+                    // Header Row (Clickable, Gióng hàng trái và phải 100% thẳng hàng với các dòng dưới)
+                    Item {
+                        id: spotifyHeaderItem
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        height: 46
+
+                        Column {
+                            anchors.left: parent.left
+                            anchors.right: spotifyDropdownBtn.left
+                            anchors.rightMargin: 16
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 2
+
+                            Text {
+                                text: I18n.tr("Đăng nhập từ Spotify", "Log in with Spotify")
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 13
+                                font.bold: true
+                                color: Theme.textPrimary
+                            }
+
+                            Text {
+                                text: spotifyRowItem.isConnected
+                                      ? I18n.tr("Đã liên kết tài khoản Spotify • Sẵn sàng đồng bộ Canvas & Lời bài hát", "Spotify account connected • Ready to sync Canvas & Lyrics")
+                                      : I18n.tr("Đăng nhập để dùng bài hát từ Spotify, Spotify Canvas và hơn thế nữa", "Log in to use songs from Spotify, Spotify Canvas, and more")
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 11
+                                color: Theme.textSecondary
+                                elide: Text.ElideRight
+                            }
+                        }
+
+                        // Right-aligned Trigger Button (Khớp 100% kích thước và vị trí với langDropdownBtn)
+                        Rectangle {
+                            id: spotifyDropdownBtn
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            height: 28
+                            width: spotifyBtnRow.implicitWidth + 16
+                            radius: 6
+                            color: (spotifyBtnMouse.containsMouse || root.spotifyExpanded)
+                                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
+                                   : "transparent"
+                            border.width: 0
+
+                            Behavior on color { ColorAnimation { duration: 120 } }
+
+                            Row {
+                                id: spotifyBtnRow
+                                anchors.centerIn: parent
+                                spacing: 6
+
+                                Text {
+                                    text: spotifyRowItem.isConnected
+                                          ? I18n.tr("Đã kết nối", "Connected")
+                                          : I18n.tr("Chưa kết nối", "Not connected")
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: spotifyRowItem.isConnected
+                                           ? root.accentColor
+                                           : ((spotifyBtnMouse.containsMouse || root.spotifyExpanded) ? "#ffffff" : Qt.rgba(255, 255, 255, 0.85))
+                                    Behavior on color { ColorAnimation { duration: 120 } }
+                                }
+
+                                AppIcon {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    source: "../assets/icons/go-down-symbolic.svg"
+                                    iconSize: 10
+                                    color: root.accentColor
+                                    rotation: root.spotifyExpanded ? 180 : 0
+                                    Behavior on rotation { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                                }
+                            }
+
+                            MouseArea {
+                                id: spotifyBtnMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.spotifyExpanded = !root.spotifyExpanded
+                            }
+                        }
+
+                        MouseArea {
+                            anchors.left: parent.left
+                            anchors.right: spotifyDropdownBtn.left
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.spotifyExpanded = !root.spotifyExpanded
+                        }
+                    }
+
+                    // Collapsible Details Panel (100% Frameless Dark Glass)
+                    ColumnLayout {
+                        id: spotifyDetailCol
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: spotifyHeaderItem.bottom
+                        anchors.topMargin: 4
+                        spacing: 10
+                        visible: root.spotifyExpanded
+                        opacity: root.spotifyExpanded ? 1.0 : 0.0
+                        Behavior on opacity { NumberAnimation { duration: 150 } }
+
+                        // CASE 1: ĐÃ KẾT NỐI (Connected Profile Card with Log Out button only)
+                        Rectangle {
+                            id: spotifyConnectedCard
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 64
+                            radius: 10
+                            color: Qt.rgba(255, 255, 255, 0.03)
+                            border.color: Qt.rgba(255, 255, 255, 0.08)
+                            border.width: 1
+                            visible: spotifyRowItem.isConnected
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 16
+                                anchors.rightMargin: 16
+                                spacing: 14
+
+                                Column {
+                                    Layout.fillWidth: true
+                                    spacing: 3
+
+                                    Text {
+                                        text: I18n.tr("Tài khoản Spotify", "Spotify Account")
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 13
+                                        font.bold: true
+                                        color: Theme.textPrimary
+                                    }
+
+                                    Text {
+                                        text: I18n.tr("Đã liên kết cookie • Sẵn sàng tải Canvas và Lời bài hát", "Cookie linked • Ready for Canvas & Lyrics")
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 11
+                                        color: Theme.textSecondary
+                                        elide: Text.ElideRight
+                                    }
+
+                                    Text {
+                                        text: "sp_dc: " + (root.spotifySpdc.length > 12 ? (root.spotifySpdc.substring(0, 8) + "••••••••" + root.spotifySpdc.substring(root.spotifySpdc.length - 4)) : "••••••••")
+                                        font.family: "Monospace"
+                                        font.pixelSize: 10
+                                        color: Qt.rgba(255, 255, 255, 0.40)
+                                    }
+                                }
+
+                                // Logout Button (Borderless Text Button Style matching Google Logout)
+                                Rectangle {
+                                    Layout.preferredHeight: 28
+                                    Layout.preferredWidth: spotifyLogoutTxt.implicitWidth + 18
+                                    radius: 6
+                                    color: spotifyLogoutMouse.containsMouse ? Qt.rgba(244, 63, 94, 0.14) : "transparent"
+                                    border.width: 0
+                                    Behavior on color { ColorAnimation { duration: 120 } }
+
+                                    Text {
+                                        id: spotifyLogoutTxt
+                                        anchors.centerIn: parent
+                                        text: I18n.tr("Đăng xuất", "Log out")
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        color: spotifyLogoutMouse.containsMouse ? "#fda4af" : "#f87171"
+                                        Behavior on color { ColorAnimation { duration: 120 } }
+                                    }
+
+                                    MouseArea {
+                                        id: spotifyLogoutMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            root.spotifySpdc = "";
+                                            root.saveSpotifySpdcRequested("");
+                                            if (typeof spotifyInput !== "undefined" && spotifyInput) {
+                                                spotifyInput.text = "";
+                                            }
+                                            root.spotifyStatusSuccess = true;
+                                            root.spotifyStatusMessage = I18n.tr("Đã đăng xuất tài khoản Spotify.", "Logged out of Spotify account.");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // CASE 2: CHƯA KẾT NỐI (1-Click Auto-sync + Manual Input)
+                        ColumnLayout {
+                            id: spotifyDisconnectedCol
+                            Layout.fillWidth: true
+                            spacing: 10
+                            visible: !spotifyRowItem.isConnected
+
+                            // 1-Click Auto-sync Button from Browsers (Unified Dark Glass styling matching Connected Card)
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 52
+                                radius: 10
+                                color: autoSyncMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.06) : Qt.rgba(255, 255, 255, 0.03)
+                                border.color: autoSyncMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.16) : Qt.rgba(255, 255, 255, 0.08)
+                                border.width: 1
+
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                                Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 16
+                                    anchors.rightMargin: 16
+                                    spacing: 12
+
+                                    Column {
+                                        Layout.fillWidth: true
+                                        Layout.alignment: Qt.AlignVCenter
+                                        spacing: 3
+
+                                        Text {
+                                            text: root.spotifyAutoSyncing
+                                                  ? I18n.tr("Đang quét cookie Spotify từ trình duyệt...", "Scanning Spotify cookie from browsers...")
+                                                  : I18n.tr("Tự động đồng bộ cookie Spotify từ Trình duyệt (1-Chạm)", "Auto-sync Spotify cookie from Browser (1-Click)")
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 12
+                                            font.bold: true
+                                            color: Theme.textPrimary
+                                        }
+
+                                        Text {
+                                            text: I18n.tr("Tự động trích xuất sp_dc từ Brave, Chrome, Firefox, Edge mà không cần mở F12", "Automatically extracts sp_dc from Brave, Chrome, Firefox, Edge without opening F12")
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 10
+                                            color: Theme.textSecondary
+                                        }
+                                    }
+
+                                    AppIcon {
+                                        Layout.alignment: Qt.AlignVCenter
+                                        visible: root.spotifyAutoSyncing
+                                        source: "../assets/icons/process-working-symbolic.svg"
+                                        iconSize: 16
+                                        color: root.accentColor
+                                        rotation: 0
+                                        RotationAnimation on rotation {
+                                            loops: Animation.Infinite
+                                            from: 0
+                                            to: 360
+                                            duration: 900
+                                            running: root.spotifyAutoSyncing
+                                        }
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: autoSyncMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    enabled: !root.spotifyAutoSyncing
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.autoSyncSpotifyFromBrowsers()
+                                }
+                            }
+
+                            // Manual Input Panel (Clean & Always Visible directly below auto-sync)
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.topMargin: 4
+                                spacing: 8
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: I18n.tr(
+                                        "Dán chuỗi cookie 'sp_dc' từ Spotify Web Player:",
+                                        "Paste 'sp_dc' cookie string from Spotify Web Player:"
+                                    )
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: Theme.textPrimary
+                                    wrapMode: Text.Wrap
+                                }
+
+                                // Input Field Container (Unified Dark Glass styling matching Connected Card)
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 42
+                                    radius: 10
+                                    color: Qt.rgba(255, 255, 255, 0.03)
+                                    border.color: (typeof spotifyInput !== "undefined" && spotifyInput && spotifyInput.activeFocus) ? root.accentColor : Qt.rgba(255, 255, 255, 0.08)
+                                    border.width: 1
+                                    Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 12
+                                        anchors.rightMargin: 8
+                                        spacing: 8
+
+                                        TextInput {
+                                            id: spotifyInput
+                                            Layout.fillWidth: true
+                                            text: root.spotifySpdc
+                                            echoMode: root.spotifyMasked ? TextInput.Password : TextInput.Normal
+                                            passwordMaskDelay: 0
+                                            passwordCharacter: "•"
+                                            inputMethodHints: root.spotifyMasked
+                                                              ? (Qt.ImhHiddenText | Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhSensitiveData)
+                                                              : (Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText)
+                                            font.family: "Monospace"
+                                            font.pixelSize: 11
+                                            color: "#ffffff"
+                                            clip: true
+                                            selectByMouse: true
+                                            selectionColor: root.accentColor
+                                            selectedTextColor: "#000000"
+                                            onAccepted: root.validateAndSaveSpotifyCookie(text.trim())
+
+                                            Text {
+                                                anchors.fill: parent
+                                                text: I18n.tr("Dán cookie sp_dc tại đây (AQB...)", "Paste sp_dc cookie here (AQB...)")
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 11
+                                                color: Qt.rgba(255, 255, 255, 0.30)
+                                                visible: !spotifyInput.text && !spotifyInput.activeFocus
+                                            }
+                                        }
+
+                                        // Toggle Mask Visibility Icon (Intuitive: Eye-slash when hidden, bright open Eye when visible)
+                                        Rectangle {
+                                            Layout.preferredWidth: 28
+                                            Layout.preferredHeight: 28
+                                            radius: 6
+                                            color: !root.spotifyMasked
+                                                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
+                                                   : (eyeMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : "transparent")
+                                            border.color: !root.spotifyMasked
+                                                          ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                                                          : "transparent"
+                                            border.width: 1
+
+                                            AppIcon {
+                                                anchors.centerIn: parent
+                                                source: root.spotifyMasked ? "../assets/icons/eye-slash-symbolic.svg" : "../assets/icons/eye-symbolic.svg"
+                                                iconSize: 14
+                                                color: !root.spotifyMasked ? root.accentColor : (eyeMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.45))
+                                            }
+
+                                            MouseArea {
+                                                id: eyeMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    root.spotifyMasked = !root.spotifyMasked;
+                                                    spotifyInput.forceActiveFocus();
+                                                }
+                                            }
+                                        }
+
+                                        // Quick Paste Button (Universal Clipboard Integration)
+                                        Rectangle {
+                                            Layout.preferredHeight: 28
+                                            Layout.preferredWidth: pasteSpdcTxt.implicitWidth + 18
+                                            radius: 6
+                                            color: pasteSpdcMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) : Qt.rgba(255, 255, 255, 0.06)
+                                            border.color: pasteSpdcMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.50) : Qt.rgba(255, 255, 255, 0.10)
+                                            border.width: 1
+
+                                            RowLayout {
+                                                anchors.centerIn: parent
+                                                spacing: 4
+                                                AppIcon {
+                                                    source: "../assets/icons/edit-copy-symbolic.svg"
+                                                    iconSize: 11
+                                                    color: pasteSpdcMouse.containsMouse ? root.accentColor : Qt.rgba(255, 255, 255, 0.85)
+                                                }
+                                                Text {
+                                                    id: pasteSpdcTxt
+                                                    text: I18n.tr("Dán", "Paste")
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: 11
+                                                    font.bold: true
+                                                    color: pasteSpdcMouse.containsMouse ? root.accentColor : "#ffffff"
+                                                }
+                                            }
+
+                                            MouseArea {
+                                                id: pasteSpdcMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: root.pasteSpotifyCookie()
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Action Buttons Row: Save & Clear All (Clean Dark Glass & Dynamic Accent)
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+
+                                    // Save Button (Dynamic Accent Button with Server Validation State)
+                                    Rectangle {
+                                        Layout.preferredHeight: 30
+                                        Layout.preferredWidth: saveBtnRow.implicitWidth + 24
+                                        radius: 8
+                                        enabled: !root.spotifyValidating && spotifyInput.text.trim().length > 0
+                                        color: enabled
+                                               ? (saveBtnMouse.containsMouse ? Qt.lighter(root.accentColor, 1.12) : root.accentColor)
+                                               : Qt.rgba(255, 255, 255, 0.05)
+                                        border.color: enabled ? "transparent" : Qt.rgba(255, 255, 255, 0.08)
+                                        border.width: 1
+
+                                        RowLayout {
+                                            id: saveBtnRow
+                                            anchors.centerIn: parent
+                                            spacing: 6
+
+                                            AppIcon {
+                                                visible: root.spotifyValidating
+                                                source: "../assets/icons/process-working-symbolic.svg"
+                                                iconSize: 12
+                                                color: Theme.isColorDark(root.accentColor) ? "#ffffff" : "#000000"
+                                                rotation: 0
+                                                RotationAnimation on rotation {
+                                                    loops: Animation.Infinite
+                                                    from: 0
+                                                    to: 360
+                                                    duration: 800
+                                                    running: root.spotifyValidating
+                                                }
+                                            }
+
+                                            Text {
+                                                id: saveBtnTxt
+                                                text: root.spotifyValidating
+                                                      ? I18n.tr("Đang kiểm tra...", "Verifying...")
+                                                      : I18n.tr("Lưu", "Save")
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 11
+                                                font.bold: true
+                                                color: parent.parent.enabled
+                                                       ? (Theme.isColorDark(root.accentColor) ? "#ffffff" : "#000000")
+                                                       : Qt.rgba(255, 255, 255, 0.30)
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            id: saveBtnMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: parent.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                            onClicked: root.validateAndSaveSpotifyCookie(spotifyInput.text.trim())
+                                        }
+                                    }
+
+                                    // Clear All Button (Borderless Text Button Style matching Google Logout)
+                                    Rectangle {
+                                        Layout.preferredHeight: 28
+                                        Layout.preferredWidth: clearSpdcTxt.implicitWidth + 18
+                                        radius: 6
+                                        color: clearSpdcMouse.containsMouse ? Qt.rgba(244, 63, 94, 0.14) : "transparent"
+                                        border.width: 0
+                                        visible: spotifyInput.text.length > 0
+                                        Behavior on color { ColorAnimation { duration: 120 } }
+
+                                        Text {
+                                            id: clearSpdcTxt
+                                            anchors.centerIn: parent
+                                            text: I18n.tr("Xóa tất cả đã nhập", "Clear all entered")
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 12
+                                            font.bold: true
+                                            color: clearSpdcMouse.containsMouse ? "#fda4af" : "#f87171"
+                                            Behavior on color { ColorAnimation { duration: 120 } }
+                                        }
+
+                                        MouseArea {
+                                            id: clearSpdcMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                spotifyInput.text = "";
+                                                root.spotifyStatusSuccess = true;
+                                                root.spotifyStatusMessage = I18n.tr("Đã xóa nội dung đã nhập.", "Cleared entered content.");
+                                            }
+                                        }
+                                    }
+
+                                }
+                            }
+
+                            // Status Feedback Message for Spotify (visible for both auto-sync & manual entry)
+                            Item {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: spotifyStatusTxt.implicitHeight + 6
+                                visible: root.spotifyStatusMessage.length > 0
+
+                                Text {
+                                    id: spotifyStatusTxt
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.leftMargin: 2
+                                    anchors.rightMargin: 2
+                                    text: root.spotifyStatusMessage
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                    color: root.spotifyStatusSuccess ? root.accentColor : "#f87171"
+                                    wrapMode: Text.Wrap
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Language Selection Row (100% Borderless, Expandable Clean Dropdown Pinned to Right)
                 Item {
                     id: langRowItem
@@ -1248,13 +2010,13 @@ Rectangle {
                                                 elide: Text.ElideRight
                                             }
 
-                                            Text {
+                                            MarqueeText {
                                                 width: parent.width
                                                 text: modelData.desc
                                                 font.family: Theme.fontFamily
                                                 font.pixelSize: 10
                                                 color: (root.streamingQuality === modelData.key) ? Qt.rgba(255, 255, 255, 0.80) : Theme.textSecondary
-                                                elide: Text.ElideRight
+                                                active: streamQualityRowItem.menuOpen
                                             }
                                         }
 
@@ -1455,13 +2217,13 @@ Rectangle {
                                                 elide: Text.ElideRight
                                             }
 
-                                            Text {
+                                            MarqueeText {
                                                 width: parent.width
                                                 text: modelData.desc
                                                 font.family: Theme.fontFamily
                                                 font.pixelSize: 10
                                                 color: (root.downloadQuality === modelData.key) ? Qt.rgba(255, 255, 255, 0.80) : Theme.textSecondary
-                                                elide: Text.ElideRight
+                                                active: downloadQualityRowItem.menuOpen
                                             }
                                         }
 
@@ -1553,20 +2315,26 @@ Rectangle {
                     }
                 }
 
-                // Apple Music Animated Album Artwork Toggle (Frameless Row, Toggle Pinned to Right)
+                // =============================================================
+                // Animated Cover & Spotify Canvas Priority Dropdown (Frameless Row)
+                // =============================================================
                 Item {
+                    id: canvasPrefRowItem
                     Layout.fillWidth: true
                     Layout.preferredHeight: 46
+                    z: menuOpen ? 95 : 2
+
+                    property bool menuOpen: false
 
                     Column {
                         anchors.left: parent.left
-                        anchors.right: toggleAnimatedCover.left
+                        anchors.right: canvasPrefDropdownBtn.left
                         anchors.rightMargin: 16
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 2
 
                         Text {
-                            text: I18n.tr("Bìa album động Apple Music (Animated Cover)", "Apple Music Animated Album Artwork")
+                            text: I18n.tr("Bìa động & Spotify Canvas", "Animated Cover & Spotify Canvas")
                             font.family: Theme.fontFamily
                             font.pixelSize: 13
                             font.bold: true
@@ -1574,41 +2342,191 @@ Rectangle {
                         }
 
                         Text {
-                            text: I18n.tr("Tự động phát video loop nghệ thuật từ Apple Music thay cho ảnh tĩnh", "Play artistic loop video from Apple Music instead of static artwork")
+                            text: I18n.tr("Ưu tiên phát video loop nghệ thuật Apple Music hoặc Spotify Canvas", "Priority for Apple Music artistic video loop or Spotify Canvas")
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             color: Theme.textSecondary
+                            elide: Text.ElideRight
                         }
                     }
 
-                    // Toggle Switch Pill (Pinned to Right)
+                    // Right-aligned Trigger Button (Khớp 100% kích thước và vị trí với các dropdown khác)
                     Rectangle {
-                        id: toggleAnimatedCover
+                        id: canvasPrefDropdownBtn
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        width: 44
-                        height: 24
-                        radius: 12
-                        color: root.animatedCoverEnabled ? root.accentColor : Qt.rgba(255, 255, 255, 0.14)
-                        Behavior on color { ColorAnimation { duration: 150 } }
+                        height: 28
+                        width: canvasPrefBtnRow.implicitWidth + 16
+                        radius: 6
+                        color: (canvasPrefBtnMouse.containsMouse || canvasPrefRowItem.menuOpen)
+                               ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
+                               : "transparent"
+                        border.width: 0
 
-                        Rectangle {
-                            width: 18
-                            height: 18
-                            radius: 9
-                            color: "#ffffff"
-                            anchors.verticalCenter: parent.verticalCenter
-                            x: root.animatedCoverEnabled ? parent.width - width - 3 : 3
-                            Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                        Behavior on color { ColorAnimation { duration: 120 } }
+
+                        Row {
+                            id: canvasPrefBtnRow
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            Text {
+                                text: root.getCanvasPrefLabel(root.canvasPreference)
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: (canvasPrefBtnMouse.containsMouse || canvasPrefRowItem.menuOpen) ? "#ffffff" : Qt.rgba(255, 255, 255, 0.85)
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                            }
+
+                            AppIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                source: "../assets/icons/go-down-symbolic.svg"
+                                iconSize: 10
+                                color: root.accentColor
+                                rotation: canvasPrefRowItem.menuOpen ? 180 : 0
+                                Behavior on rotation { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                            }
                         }
 
                         MouseArea {
+                            id: canvasPrefBtnMouse
                             anchors.fill: parent
-                            preventStealing: false
+                            hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                root.animatedCoverEnabled = !root.animatedCoverEnabled;
-                                root.toggleAnimatedCoverRequested(root.animatedCoverEnabled);
+                                var next = !canvasPrefRowItem.menuOpen;
+                                root.closeAllDropdowns();
+                                canvasPrefRowItem.menuOpen = next;
+                            }
+                        }
+                    }
+
+                    // Chromatic Salience Dropdown Popover Menu (Zero Dull Grey)
+                    Rectangle {
+                        id: canvasPrefDropdownMenu
+                        visible: canvasPrefRowItem.menuOpen
+                        anchors.top: canvasPrefDropdownBtn.bottom
+                        anchors.topMargin: 6
+                        anchors.right: canvasPrefDropdownBtn.right
+                        width: 320
+                        height: canvasPrefCol.implicitHeight + 10
+                        radius: 10
+                        color: Qt.rgba(0.06 + root.accentColor.r * 0.08, 0.06 + root.accentColor.g * 0.08, 0.08 + root.accentColor.b * 0.12, 0.96)
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                        border.width: 1
+                        z: 100
+
+                        Column {
+                            id: canvasPrefCol
+                            anchors.top: parent.top
+                            anchors.topMargin: 5
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            spacing: 3
+
+                            readonly property var canvasOptions: [
+                                {
+                                    key: "apple_first",
+                                    name: "Apple Music > Spotify Canvas",
+                                    desc: I18n.tr("Ưu tiên Apple Music, nếu không có sẽ dùng Spotify Canvas (Khuyến nghị)", "Prefer Apple Music, fallback to Spotify Canvas (Recommended)")
+                                },
+                                {
+                                    key: "spotify_first",
+                                    name: "Spotify Canvas > Apple Music",
+                                    desc: I18n.tr("Ưu tiên Spotify Canvas, nếu không có sẽ dùng Apple Music", "Prefer Spotify Canvas, fallback to Apple Music")
+                                },
+                                {
+                                    key: "apple_only",
+                                    name: I18n.tr("Chỉ Apple Music", "Apple Music only"),
+                                    desc: I18n.tr("Chỉ dùng bìa động Apple Music, không dùng Spotify Canvas", "Only use Apple Music animated artwork, never Canvas")
+                                },
+                                {
+                                    key: "spotify_only",
+                                    name: I18n.tr("Chỉ Spotify Canvas", "Spotify Canvas only"),
+                                    desc: I18n.tr("Chỉ dùng video Spotify Canvas (yêu cầu kết nối Spotify)", "Only use Spotify Canvas video (requires Spotify login)")
+                                },
+                                {
+                                    key: "off",
+                                    name: I18n.tr("Tắt (Chỉ dùng ảnh tĩnh)", "Off (Static artwork only)"),
+                                    desc: I18n.tr("Không tải video bìa động để tiết kiệm mạng và CPU", "Do not load video covers to save bandwidth and CPU")
+                                }
+                            ]
+
+                            Repeater {
+                                model: canvasPrefCol.canvasOptions
+                                delegate: Rectangle {
+                                    width: canvasPrefCol.width - 10
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    height: 42
+                                    radius: 7
+                                    color: (root.canvasPreference === modelData.key)
+                                           ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.26)
+                                           : (cpItemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.14) : "transparent")
+                                    border.color: (root.canvasPreference === modelData.key)
+                                                  ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                                                  : (cpItemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25) : "transparent")
+                                    border.width: 1
+
+                                    Behavior on color { ColorAnimation { duration: 100 } }
+                                    Behavior on border.color { ColorAnimation { duration: 100 } }
+
+                                    Item {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+
+                                        Column {
+                                            anchors.left: parent.left
+                                            anchors.right: cpCheckIcon.left
+                                            anchors.rightMargin: 8
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            spacing: 1
+
+                                            Text {
+                                                width: parent.width
+                                                text: modelData.name
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 12
+                                                font.bold: root.canvasPreference === modelData.key
+                                                color: (root.canvasPreference === modelData.key) ? "#ffffff" : (cpItemMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.85))
+                                                elide: Text.ElideRight
+                                            }
+
+                                            MarqueeText {
+                                                width: parent.width
+                                                text: modelData.desc
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 10
+                                                color: (root.canvasPreference === modelData.key) ? Qt.rgba(255, 255, 255, 0.80) : Theme.textSecondary
+                                                active: canvasPrefRowItem.menuOpen
+                                            }
+                                        }
+
+                                        AppIcon {
+                                            id: cpCheckIcon
+                                            anchors.right: parent.right
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            source: "../assets/icons/emblem-ok-symbolic.svg"
+                                            iconSize: 12
+                                            color: root.accentColor
+                                            visible: root.canvasPreference === modelData.key
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: cpItemMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            root.canvasPreference = modelData.key;
+                                            root.animatedCoverEnabled = (modelData.key !== "off");
+                                            root.saveCanvasPreferenceRequested(modelData.key);
+                                            canvasPrefRowItem.menuOpen = false;
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -1693,6 +2611,219 @@ Rectangle {
                             preventStealing: false
                             cursorShape: Qt.PointingHandCursor
                             onClicked: root.toggleDesktopLyricsRequested(!root.desktopLyricsEnabled)
+                        }
+                    }
+                }
+
+                // Lyrics Source Preference Row (100% Borderless, Expandable Clean Dropdown Pinned to Right)
+                Item {
+                    id: lyricsSourceRowItem
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 46
+                    z: menuOpen ? 100 : 2
+
+                    property bool menuOpen: false
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: lyricsSourceDropdownBtn.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            text: I18n.tr("Nguồn ưu tiên tìm kiếm lời bài hát", "Preferred Lyrics Source")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                        }
+
+                        Text {
+                            text: I18n.tr("Thứ tự ưu tiên phân giải lời bài hát (Spotify, BetterLyrics, LRCLIB...)", "Preferred source order for resolving lyrics (Spotify, BetterLyrics, LRCLIB...)")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                        }
+                    }
+
+                    // Dropdown Trigger (Chromatic Ghost Action Button)
+                    Rectangle {
+                        id: lyricsSourceDropdownBtn
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        height: 28
+                        width: lyricsSourceBtnRow.implicitWidth + 16
+                        radius: 6
+                        color: (lyricsSourceBtnMouse.containsMouse || lyricsSourceRowItem.menuOpen)
+                               ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
+                               : "transparent"
+                        border.width: 0
+
+                        Behavior on color { ColorAnimation { duration: 120 } }
+
+                        Row {
+                            id: lyricsSourceBtnRow
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            Text {
+                                text: root.getLyricsSourceLabel(root.lyricsSource)
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: (lyricsSourceBtnMouse.containsMouse || lyricsSourceRowItem.menuOpen) ? "#ffffff" : Qt.rgba(255, 255, 255, 0.85)
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                            }
+
+                            AppIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                source: "../assets/icons/go-down-symbolic.svg"
+                                iconSize: 10
+                                color: root.accentColor
+                                rotation: lyricsSourceRowItem.menuOpen ? 180 : 0
+                                Behavior on rotation { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                            }
+                        }
+
+                        MouseArea {
+                            id: lyricsSourceBtnMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                var next = !lyricsSourceRowItem.menuOpen;
+                                root.closeAllDropdowns();
+                                lyricsSourceRowItem.menuOpen = next;
+                            }
+                        }
+                    }
+
+                    // Chromatic Salience Dropdown Popover Menu (Zero Dull Grey)
+                    Rectangle {
+                        id: lyricsSourceDropdownMenu
+                        visible: lyricsSourceRowItem.menuOpen
+                        anchors.top: lyricsSourceDropdownBtn.bottom
+                        anchors.topMargin: 6
+                        anchors.right: lyricsSourceDropdownBtn.right
+                        width: 290
+                        height: lyricsSourceCol.implicitHeight + 10
+                        radius: 10
+                        color: Qt.rgba(0.06 + root.accentColor.r * 0.08, 0.06 + root.accentColor.g * 0.08, 0.08 + root.accentColor.b * 0.12, 0.96)
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                        border.width: 1
+                        z: 100
+
+                        Column {
+                            id: lyricsSourceCol
+                            anchors.top: parent.top
+                            anchors.topMargin: 5
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            spacing: 3
+
+                            readonly property var sourceOptions: [
+                                {
+                                    key: "auto",
+                                    name: I18n.tr("Tự động (Khuyến nghị)", "Auto (Recommended)"),
+                                    desc: I18n.tr("Spotify (nếu có sp_dc) → BetterLyrics → LRCLIB → NetEase", "Spotify (if sp_dc) → BetterLyrics → LRCLIB → NetEase")
+                                },
+                                {
+                                    key: "spotify",
+                                    name: I18n.tr("Spotify (sp_dc)", "Spotify (sp_dc)"),
+                                    desc: I18n.tr("Lời đồng bộ word-level trực tiếp từ Spotify spclient", "Word-level synced lyrics directly from Spotify spclient")
+                                },
+                                {
+                                    key: "betterlyrics",
+                                    name: I18n.tr("Apple Music (BetterLyrics)", "Apple Music (BetterLyrics)"),
+                                    desc: I18n.tr("Định dạng TTML Apple Music từng từ độ chính xác cao", "High precision word-level Apple Music TTML")
+                                },
+                                {
+                                    key: "lrclib",
+                                    name: I18n.tr("LRCLIB", "LRCLIB"),
+                                    desc: I18n.tr("Cơ sở dữ liệu LRC mã nguồn mở cộng đồng", "Open-source community LRC database")
+                                },
+                                {
+                                    key: "netease",
+                                    name: I18n.tr("NetEase Cloud Music", "NetEase Cloud Music"),
+                                    desc: I18n.tr("Kho lời bài hát phong phú cho nhạc Á Đông & Anime", "Rich lyrics repository for Asian & Anime tracks")
+                                }
+                            ]
+
+                            Repeater {
+                                model: lyricsSourceCol.sourceOptions
+                                delegate: Rectangle {
+                                    width: lyricsSourceCol.width - 10
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    height: 42
+                                    radius: 7
+                                    color: (root.lyricsSource === modelData.key)
+                                           ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.26)
+                                           : (lsItemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.14) : "transparent")
+                                    border.color: (root.lyricsSource === modelData.key)
+                                                  ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                                                  : (lsItemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25) : "transparent")
+                                    border.width: 1
+
+                                    Behavior on color { ColorAnimation { duration: 100 } }
+                                    Behavior on border.color { ColorAnimation { duration: 100 } }
+
+                                    Item {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+
+                                        Column {
+                                            anchors.left: parent.left
+                                            anchors.right: lsCheckIcon.left
+                                            anchors.rightMargin: 8
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            spacing: 1
+
+                                            Text {
+                                                width: parent.width
+                                                text: modelData.name
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 12
+                                                font.bold: root.lyricsSource === modelData.key
+                                                color: (root.lyricsSource === modelData.key) ? "#ffffff" : (lsItemMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.85))
+                                                elide: Text.ElideRight
+                                            }
+
+                                            MarqueeText {
+                                                width: parent.width
+                                                text: modelData.desc
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 10
+                                                color: (root.lyricsSource === modelData.key) ? Qt.rgba(255, 255, 255, 0.80) : Theme.textSecondary
+                                                active: lyricsSourceRowItem.menuOpen
+                                            }
+                                        }
+
+                                        AppIcon {
+                                            id: lsCheckIcon
+                                            anchors.right: parent.right
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            source: "../assets/icons/emblem-ok-symbolic.svg"
+                                            iconSize: 12
+                                            color: root.accentColor
+                                            visible: root.lyricsSource === modelData.key
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: lsItemMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            root.lyricsSource = modelData.key;
+                                            root.saveLyricsSourceRequested(modelData.key);
+                                            lyricsSourceRowItem.menuOpen = false;
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
