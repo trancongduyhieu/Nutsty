@@ -750,6 +750,7 @@ Rectangle {
                     Rectangle {
                         id: logoutBtn
                         anchors.right: parent.right
+                        anchors.rightMargin: 16
                         anchors.verticalCenter: parent.verticalCenter
                         height: 28
                         width: logoutTxt.implicitWidth + 18
