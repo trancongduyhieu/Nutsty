@@ -82,9 +82,19 @@ class SocialRelayCore:
         avatar = str(raw.get("avatar_url") or raw.get("avatar") or "").strip()
         last_active = float(raw.get("last_active_at") or raw.get("last_active") or 0.0)
         
+        # Normalize epoch timestamp (Cloudflare D1 stores ms while Python uses seconds)
+        if last_active > 1e11:
+            last_active = last_active / 1000.0
+
         # Calculate real-time presence
         now = time.time()
-        is_online = bool(raw.get("is_online")) or ((now - last_active) < PRESENCE_ONLINE_THRESHOLD and last_active > 0)
+        if "is_online" in raw and raw["is_online"] is not None:
+            is_online = bool(raw["is_online"])
+        elif last_active > 0:
+            diff = now - last_active
+            is_online = 0 <= diff < PRESENCE_ONLINE_THRESHOLD
+        else:
+            is_online = False
         
         now_playing = raw.get("now_playing")
         if not is_online:
