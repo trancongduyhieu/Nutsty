@@ -101,6 +101,7 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 │   ├── LibraryData.qml             # Model quản lý danh sách bài hát trong QML
 │   ├── LibraryLoader.qml           # Loader nạp dữ liệu từ library.json
 │   ├── MainTrackGrid.qml           # Grid danh sách bài hát & nút phát tuần tự
+│   ├── MarqueeText.qml             # Chữ cuộn ngang mượt mà khi text dài vượt giới hạn
 │   ├── NavArrowButton.qml          # Nút mũi tên < > đồng bộ màu động accentColor
 │   ├── NavSidebar.qml              # Sidebar điều hướng [ Playlists | Queue ]
 │   ├── PlayerBarBottom.qml         # Thanh phát nhạc chính Nutsty
