@@ -18,10 +18,16 @@ import sys
 import json
 import os
 import re
+import html
 import sqlite3
 import urllib.request
 import urllib.parse
 import urllib.error
+import time
+import hmac
+import hashlib
+import struct
+import base64
 
 # Ensure backend directory is in sys.path
 backend_dir = os.path.dirname(os.path.abspath(__file__))
@@ -32,17 +38,16 @@ import platform_compat as pc
 pc.configure_windows_ssl()
 
 CACHE_DIR = os.path.join(pc.get_cache_dir(), "lyrics")
-SETTINGS_PATH = os.path.join(
-    os.path.expanduser("~"), ".config", "noctalia", "nutsty_settings.json"
-)
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Settings helpers
-# ──────────────────────────────────────────────────────────────────────────────
+def _get_settings_path():
+    prof_suffix = pc.get_profile_suffix() if hasattr(pc, "get_profile_suffix") else ""
+    return os.path.join(pc.get_config_dir(), f"nutsty_settings{prof_suffix}.json")
 
 def _load_settings():
     try:
-        with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
+        p = _get_settings_path()
+        if not os.path.exists(p):
+            p = os.path.join(pc.get_config_dir(), "nutsty_settings.json")
+        with open(p, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return {}
@@ -50,6 +55,160 @@ def _load_settings():
 def get_spotify_spdc():
     """Return sp_dc cookie string from nutsty_settings.json, or empty string."""
     return _load_settings().get("spotifySpdc", "").strip()
+
+def get_lyrics_source_preference():
+    """Return user's preferred lyrics source: 'auto' (default), 'spotify', 'betterlyrics', 'lrclib', 'netease'."""
+    return _load_settings().get("lyricsSource", "auto").strip().lower()
+
+def get_spotify_session_info(spdc):
+    """Fetch Spotify session info (account type, country) using sp_dc cookie."""
+    if not spdc:
+        return {"isAnonymous": True, "isPremium": False}
+    try:
+        import base64
+        url = "https://open.spotify.com/"
+        req = urllib.request.Request(url, headers={
+            "Cookie": f"sp_dc={spdc}",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        })
+        with urllib.request.urlopen(req, timeout=8) as r:
+            html = r.read().decode("utf-8", errors="ignore")
+        m = re.search(r'<script[^>]*id="appServerConfig"[^>]*>(.*?)</script>', html)
+        if m:
+            raw = m.group(1).strip()
+            pad = len(raw) % 4
+            if pad:
+                raw += "=" * (4 - pad)
+            conf = json.loads(base64.b64decode(raw).decode("utf-8"))
+            return {
+                "isAnonymous": conf.get("isAnonymous", False),
+                "isPremium": conf.get("isPremium", False),
+                "userCountry": conf.get("userCountry", ""),
+            }
+    except Exception:
+        pass
+    return {"isAnonymous": False, "isPremium": False}
+
+def extract_spotify_cookie_from_browsers():
+    """
+    Auto-detect and extract sp_dc cookie from installed browsers
+    (Firefox, Brave, Chrome, Chromium, Edge) across Linux and Windows.
+    """
+    import glob, shutil, tempfile
+
+    # 1. Firefox
+    if sys.platform == "win32":
+        ff_patterns = [os.path.expandvars(r"%APPDATA%\Mozilla\Firefox\Profiles\*\cookies.sqlite")]
+    else:
+        ff_patterns = [os.path.expanduser("~/.mozilla/firefox/*/cookies.sqlite")]
+
+    for pat in ff_patterns:
+        for p in glob.glob(pat):
+            try:
+                with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as tmp:
+                    tmp_path = tmp.name
+                shutil.copy2(p, tmp_path)
+                conn = sqlite3.connect(tmp_path)
+                cur = conn.cursor()
+                cur.execute("SELECT value FROM moz_cookies WHERE name='sp_dc' AND host LIKE '%spotify.com%'")
+                row = cur.fetchone()
+                conn.close()
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
+                if row and row[0]:
+                    val = str(row[0]).strip()
+                    if len(val) > 20:
+                        sess = get_spotify_session_info(val)
+                        return {"success": True, "browser": "Firefox", "spdc": val, "session": sess}
+            except Exception:
+                pass
+
+    # 2. Chromium-based browsers
+    candidates = []
+    if sys.platform == "win32":
+        candidates = [
+            ("Brave", os.path.expandvars(r"%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\Default\Network\Cookies")),
+            ("Chrome", os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\User Data\Default\Network\Cookies")),
+            ("Edge", os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\User Data\Default\Network\Cookies")),
+        ]
+    else:
+        candidates = [
+            ("Brave", os.path.expanduser("~/.config/BraveSoftware/Brave-Browser/Default/Cookies"), "brave"),
+            ("Chrome", os.path.expanduser("~/.config/google-chrome/Default/Cookies"), "google-chrome"),
+            ("Chromium", os.path.expanduser("~/.config/chromium/Default/Cookies"), "chromium"),
+            ("Edge", os.path.expanduser("~/.config/microsoft-edge/Default/Cookies"), "microsoft-edge"),
+        ]
+
+    for item in candidates:
+        b_name = item[0]
+        c_path = item[1]
+        app_key = item[2] if len(item) > 2 else ""
+        if not os.path.exists(c_path):
+            continue
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as tmp:
+                tmp_path = tmp.name
+            shutil.copy2(c_path, tmp_path)
+            conn = sqlite3.connect(tmp_path)
+            cur = conn.cursor()
+            cur.execute("SELECT encrypted_value FROM cookies WHERE host_key LIKE '%spotify%' AND name='sp_dc'")
+            row = cur.fetchone()
+            conn.close()
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+            if not row or not row[0]:
+                continue
+            enc = row[0]
+            val = ""
+            if sys.platform == "win32":
+                import ctypes, ctypes.wintypes
+                class DATA_BLOB(ctypes.Structure):
+                    _fields_ = [('cbData', ctypes.wintypes.DWORD), ('pbData', ctypes.POINTER(ctypes.c_char))]
+                blob_in = DATA_BLOB(len(enc), ctypes.cast(ctypes.create_string_buffer(enc), ctypes.POINTER(ctypes.c_char)))
+                blob_out = DATA_BLOB()
+                if ctypes.windll.crypt32.CryptUnprotectData(ctypes.byref(blob_in), None, None, None, None, 0, ctypes.byref(blob_out)):
+                    val = ctypes.string_at(blob_out.pbData, blob_out.cbData).decode("utf-8", errors="ignore")
+            else:
+                import hashlib, subprocess
+                pwd = ""
+                if app_key:
+                    try:
+                        res = subprocess.run(["secret-tool", "lookup", "application", app_key], capture_output=True, text=True, timeout=1)
+                        if res.returncode == 0 and res.stdout.strip():
+                            pwd = res.stdout.strip()
+                    except Exception:
+                        pass
+                if not pwd:
+                    pwd = "peanuts"
+                salt = b"saltysalt"
+                iv = b" " * 16
+                key = hashlib.pbkdf2_hmac("sha1", pwd.encode("utf-8"), salt, 1, 16)
+                from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+                from cryptography.hazmat.backends import default_backend
+                data = enc[3:]
+                cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+                decryptor = cipher.decryptor()
+                dec = decryptor.update(data) + decryptor.finalize()
+                pad = dec[-1]
+                dec = dec[:-pad]
+                if enc[:3] == b"v11" and len(dec) > 32:
+                    val = dec[32:].decode("utf-8", errors="ignore")
+                else:
+                    val = dec.decode("utf-8", errors="ignore")
+
+            val = (val or "").strip()
+            if val and len(val) > 20:
+                sess = get_spotify_session_info(val)
+                return {"success": True, "browser": b_name, "spdc": val, "session": sess}
+        except Exception:
+            pass
+
+    return {"success": False, "message": "Không tìm thấy cookie Spotify trong các trình duyệt đã cài đặt."}
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Filename / cache utilities
@@ -83,6 +242,7 @@ def strip_rich_sync_tags(text):
     if not text:
         return ""
     t = re.sub(r'<[0-9:.]+>', ' ', text)
+    t = html.unescape(t)
     return re.sub(r'\s+', ' ', t).strip()
 
 def parse_rich_sync_words(line_str, default_start=0.0):
@@ -97,7 +257,7 @@ def parse_rich_sync_words(line_str, default_start=0.0):
     for i, m in enumerate(matches):
         mins, secs = int(m.group(1)), float(m.group(2))
         start_t = round(mins * 60.0 + secs, 3)
-        txt = m.group(3).strip()
+        txt = html.unescape(m.group(3).strip())
         if not txt:
             continue
         if i + 1 < len(matches):
@@ -203,7 +363,7 @@ def parse_ttml(ttml_str):
         if spans:
             words = []
             for sp_begin, sp_end, sp_text in spans:
-                sp_text = sp_text.strip()
+                sp_text = html.unescape(sp_text.strip())
                 if not sp_text:
                     continue
                 start = round(_parse_ttml_time(sp_begin), 3)
@@ -227,7 +387,7 @@ def parse_ttml(ttml_str):
                     "words": words,
                 })
         else:
-            plain = re.sub(r'<[^>]+>', '', inner).strip()
+            plain = html.unescape(re.sub(r'<[^>]+>', '', inner).strip())
             if plain:
                 results.append({
                     "time": line_start,
@@ -270,7 +430,7 @@ def parse_spotify_lyrics(data):
 
         # Spotify LINE_SYNCED → no word timing
         if is_line_synced or not raw_words or "<" not in raw_words:
-            clean = raw_words.strip() if raw_words else ""
+            clean = html.unescape(raw_words.strip()) if raw_words else ""
             if not clean:
                 continue
             results.append({
@@ -304,14 +464,68 @@ def parse_spotify_lyrics(data):
 
 def _http_get(url, headers=None, timeout=8):
     """Simple HTTP GET, returns response body as str or None on error."""
-    req = urllib.request.Request(url, headers=headers or {})
-    req.add_header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) Nutsty/1.0")
+    h = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"}
+    if headers:
+        h.update(headers)
+    req = urllib.request.Request(url, headers=h)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.read().decode("utf-8", errors="replace")
     except Exception as e:
         sys.stderr.write(f"[http_get {url[:60]}]: {e}\n")
         return None
+
+# ──────────────────────────────────────────────────────────────────────────────
+# TẦNG 2.5: SimpMusic Cloud API (YouTube Video ID — rich-sync syllable-level)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def fetch_simpmusic_lyrics(video_id):
+    """
+    Fetch rich-sync syllable lyrics from api-lyrics.simpmusic.org/v1/{video_id}.
+    Returns parsed lyric line dicts with real syllables (hasWords=True) if available,
+    or line-synced lyrics if available, or [].
+    """
+    if not video_id:
+        return []
+    clean_vid = str(video_id).replace("ytdl://", "").replace("yt_", "").strip()
+    if not clean_vid or len(clean_vid) < 5:
+        return []
+    url = f"https://api-lyrics.simpmusic.org/v1/{clean_vid}"
+    body = _http_get(url, headers={"User-Agent": "SimpMusicLyrics/1.0"}, timeout=6)
+    if not body:
+        return []
+    try:
+        data = json.loads(body)
+        items = data.get("data", [])
+        if not items:
+            return []
+        item = items[0]
+        rich_sync = item.get("richSyncLyrics", "")
+        if rich_sync:
+            parsed = parse_lrc(rich_sync)
+            if parsed and _has_real_syllables(parsed):
+                return parsed
+        synced = item.get("syncedLyrics", "")
+        if synced:
+            parsed = parse_lrc(synced)
+            if parsed:
+                return parsed
+        plain = item.get("plainLyric", "")
+        if plain:
+            lines = [html.unescape(l.strip()) for l in plain.splitlines() if l.strip()]
+            if lines:
+                return [{
+                    "time": idx * 3.5,
+                    "endTime": idx * 3.5 + 3.5,
+                    "text": line,
+                    "hasWords": False,
+                    "isSynthetic": True,
+                    "words": [],
+                } for idx, line in enumerate(lines)]
+        return []
+    except Exception as e:
+        sys.stderr.write(f"[SimpMusic lyrics error]: {e}\n")
+        return []
 
 # ──────────────────────────────────────────────────────────────────────────────
 # TẦNG 3: BetterLyrics TTML (Apple Music word-level)
@@ -341,8 +555,97 @@ def fetch_betterlyrics_ttml(title, artist, duration_sec=None):
         return []
 
 # ──────────────────────────────────────────────────────────────────────────────
-# TẦNG 4: Spotify spclient (sp_dc cookie) — word-level
+# TẦNG 4: Spotify spclient (sp_dc cookie) — word-level & TOTP token
 # ──────────────────────────────────────────────────────────────────────────────
+
+_SPOTIFY_TOKEN_CACHE = {"token": "", "expires_at": 0}
+_SPOTIFY_SECRETS_CACHE = {"secrets": None, "fetched_at": 0}
+
+def get_spotify_access_token(spdc=None):
+    """Exchange sp_dc cookie for a valid Spotify personal access token via TOTP."""
+    global _SPOTIFY_TOKEN_CACHE, _SPOTIFY_SECRETS_CACHE
+    if not spdc:
+        spdc = get_spotify_spdc()
+    if not spdc:
+        return ""
+
+    now = time.time()
+    if _SPOTIFY_TOKEN_CACHE["token"] and (now < _SPOTIFY_TOKEN_CACHE["expires_at"] - 60):
+        return _SPOTIFY_TOKEN_CACHE["token"]
+
+    try:
+        # 1. Fetch latest secret dict from xyloflake/spot-secrets-go
+        secrets = None
+        if _SPOTIFY_SECRETS_CACHE["secrets"] and (now - _SPOTIFY_SECRETS_CACHE["fetched_at"] < 86400):
+            secrets = _SPOTIFY_SECRETS_CACHE["secrets"]
+        else:
+            sec_url = "https://raw.githubusercontent.com/xyloflake/spot-secrets-go/refs/heads/main/secrets/secretDict.json"
+            sec_body = _http_get(sec_url, timeout=5)
+            if sec_body:
+                secrets = json.loads(sec_body)
+                _SPOTIFY_SECRETS_CACHE = {"secrets": secrets, "fetched_at": now}
+
+        if secrets:
+            version_str, cipher_bytes = list(secrets.items())[-1]
+            version = int(version_str)
+        else:
+            version = 61
+            cipher_bytes = [44,55,47,42,70,40,34,114,76,74,50,111,120,97,75,76,94,102,43,69,49,120,118,80,64,78]
+
+        # 2. Transform bytes to base32 secret
+        transformed = [b ^ ((i % 33) + 9) for i, b in enumerate(cipher_bytes)]
+        joined = "".join(str(x) for x in transformed)
+        raw_bytes = bytes.fromhex(joined.encode("utf-8").hex())
+        b32 = base64.b32encode(raw_bytes).decode("ascii").rstrip("=")
+
+        # 3. Get server time from Spotify
+        time_url = "https://open.spotify.com/api/server-time"
+        time_body = _http_get(time_url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Cookie": f"sp_dc={spdc}",
+        }, timeout=5)
+        if time_body:
+            server_time = json.loads(time_body).get("serverTime", int(now))
+        else:
+            server_time = int(now)
+
+        # 4. Generate TOTP code
+        pad_len = (8 - len(b32) % 8) % 8
+        key = base64.b32decode(b32 + "=" * pad_len)
+        counter = struct.pack(">Q", int(server_time) // 30)
+        h = hmac.new(key, counter, hashlib.sha1).digest()
+        offset = h[-1] & 0x0f
+        code = ((struct.unpack(">I", h[offset:offset+4])[0] & 0x7fffffff) % 1000000)
+        otp = f"{code:06d}"
+
+        # 5. Request access token
+        params = urllib.parse.urlencode({
+            "reason": "transport",
+            "productType": "mobile-web-player",
+            "totp": otp,
+            "totpServer": otp,
+            "totpVer": version,
+        })
+        token_url = f"https://open.spotify.com/api/token?{params}"
+        token_body = _http_get(token_url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Cookie": f"sp_dc={spdc}",
+            "Accept": "application/json",
+            "Origin": "https://open.spotify.com",
+            "Referer": "https://open.spotify.com/",
+        }, timeout=6)
+
+        if token_body:
+            data = json.loads(token_body)
+            acc_tok = data.get("accessToken", "")
+            exp_ms = data.get("accessTokenExpirationTimestampMs", (now + 3600) * 1000)
+            if acc_tok:
+                _SPOTIFY_TOKEN_CACHE = {"token": acc_tok, "expires_at": exp_ms / 1000}
+                return acc_tok
+    except Exception as e:
+        sys.stderr.write(f"[Spotify get_spotify_access_token error]: {e}\n")
+
+    return ""
 
 def _spotify_get_client_token():
     """Get anonymous Spotify client token (no sp_dc needed)."""
@@ -378,22 +681,8 @@ def _spotify_get_client_token():
         return ""
 
 def _spotify_get_personal_token(spdc):
-    """Exchange sp_dc cookie for a personal access token."""
-    url = "https://open.spotify.com/get_access_token?reason=transport&productType=web_player"
-    body = _http_get(url, headers={
-        "Cookie": f"sp_dc={spdc}",
-        "App-platform": "WebPlayer",
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/135.0.0.0 Safari/537.36",
-        "Accept": "application/json",
-        "Origin": "https://open.spotify.com",
-        "Referer": "https://open.spotify.com/",
-    }, timeout=8)
-    if not body:
-        return ""
-    try:
-        return json.loads(body).get("accessToken", "")
-    except Exception:
-        return ""
+    """Exchange sp_dc cookie for a personal access token via TOTP."""
+    return get_spotify_access_token(spdc)
 
 def _spotify_search_track(query, access_token, client_token, duration_sec=None):
     """Search Spotify for a track, return trackId string or ''."""
@@ -508,7 +797,7 @@ def fetch_lrclib(title, artist, duration_sec=None):
                 return parsed
         plain = data.get("plainLyrics", "")
         if plain:
-            lines = [l.strip() for l in plain.splitlines() if l.strip()]
+            lines = [html.unescape(l.strip()) for l in plain.splitlines() if l.strip()]
             return [{
                 "time": i * 3.5, "endTime": i * 3.5 + 3.5,
                 "text": l, "hasWords": False, "isSynthetic": True, "words": []
@@ -661,71 +950,145 @@ def get_lyrics(title, artist=None, video_id=None, file_path=None, duration_sec=N
         cached_plain = None
 
     # ──────────────────────────────────────────────────────────────────────
-    # TẦNG 3: BetterLyrics TTML (Apple Music word-level) — best online source
+    # ONLINE PIPELINE: Configurable source preference with fallback
+    # Auto order: SimpMusic (video_id syllable) -> BetterLyrics TTML -> Spotify (sp_dc) -> LRCLIB -> NetEase
     # ──────────────────────────────────────────────────────────────────────
     cleaned_title = clean_search_title(title)
-    ttml_result = fetch_betterlyrics_ttml(cleaned_title, artist, duration_sec)
-    if _has_real_syllables(ttml_result):
-        # Save a plain LRC to cache so future local hits skip online fetch
-        _save_ttml_as_lrc_cache(ttml_result, title, artist)
-        return ttml_result
+    pref = get_lyrics_source_preference()
 
-    # ──────────────────────────────────────────────────────────────────────
-    # TẦNG 4: Spotify spclient (sp_dc cookie) — word-level
-    # ──────────────────────────────────────────────────────────────────────
-    spotify_result = fetch_spotify_lyrics(cleaned_title, artist, duration_sec)
-    if _has_real_syllables(spotify_result):
-        return spotify_result
-    if _has_synced(spotify_result) and not cached_plain:
-        # Spotify returned line-synced — keep it as fallback, still try LRCLIB
-        spotify_line_synced = spotify_result
-    else:
-        spotify_line_synced = None
-
-    # ──────────────────────────────────────────────────────────────────────
-    # TẦNG 5: LRCLIB /api/get with duration matching
-    # ──────────────────────────────────────────────────────────────────────
-    lrclib_result = fetch_lrclib(cleaned_title, artist, duration_sec)
-    if lrclib_result:
-        # Save to cache
-        _save_lrc_cache_from_lines(lrclib_result, title, artist)
-        return lrclib_result
-
-    # ──────────────────────────────────────────────────────────────────────
-    # TẦNG 6: syncedlyrics (NetEase → LRCLIB → Musixmatch)
-    # ──────────────────────────────────────────────────────────────────────
-    try:
-        import syncedlyrics
-
-        queries = []
-        if artist and artist.strip() and artist.lower() not in title.lower():
-            queries.append(f"{cleaned_title} {artist}".strip())
-        queries.append(cleaned_title)
-        if cleaned_title != title:
-            if artist and artist.strip():
-                queries.append(f"{title} {artist}".strip())
-            queries.append(title.strip())
-
-        for q in queries:
+    def _run_simpmusic():
+        vid = video_id
+        if not vid:
             try:
-                lrc = syncedlyrics.search(q, providers=["netease", "lrclib"])
-                if lrc:
-                    parsed = parse_lrc(lrc)
-                    if parsed:
-                        try:
-                            with open(get_cache_path(title, artist), "w", encoding="utf-8") as f:
-                                f.write(lrc)
-                        except Exception:
-                            pass
-                        return parsed
-            except Exception as e:
-                sys.stderr.write(f"[syncedlyrics '{q}']: {e}\n")
-    except ImportError:
-        sys.stderr.write("[syncedlyrics not installed]\n")
+                import ytmusic_helper
+                q = f"{cleaned_title} {artist}".strip() if artist else cleaned_title
+                results = ytmusic_helper.filter_search(q, "songs")
+                if results and results[0].get("videoId"):
+                    vid = results[0].get("videoId")
+            except Exception:
+                pass
+        if vid:
+            res = fetch_simpmusic_lyrics(vid)
+            if res:
+                _save_lrc_cache_from_lines(res, title, artist)
+                return res
+        return None
 
-    # Return Spotify line-synced if found earlier
-    if spotify_line_synced:
-        return spotify_line_synced
+    def _run_spotify():
+        if not get_spotify_spdc():
+            return None
+        res = fetch_spotify_lyrics(cleaned_title, artist, duration_sec)
+        if res:
+            _save_lrc_cache_from_lines(res, title, artist)
+        return res
+
+    def _run_betterlyrics():
+        res = fetch_betterlyrics_ttml(cleaned_title, artist, duration_sec)
+        if _has_real_syllables(res):
+            _save_ttml_as_lrc_cache(res, title, artist)
+            return res
+        return None
+
+    def _run_lrclib():
+        res = fetch_lrclib(cleaned_title, artist, duration_sec)
+        if res:
+            _save_lrc_cache_from_lines(res, title, artist)
+            return res
+        return None
+
+    def _run_netease():
+        try:
+            import syncedlyrics
+            queries = []
+            if artist and artist.strip() and artist.lower() not in title.lower():
+                queries.append(f"{cleaned_title} {artist}".strip())
+            queries.append(cleaned_title)
+            if cleaned_title != title:
+                if artist and artist.strip():
+                    queries.append(f"{title} {artist}".strip())
+                queries.append(title.strip())
+
+            for q in queries:
+                try:
+                    lrc = syncedlyrics.search(q, providers=["netease", "lrclib"])
+                    if lrc:
+                        parsed = parse_lrc(lrc)
+                        if parsed:
+                            try:
+                                with open(get_cache_path(title, artist), "w", encoding="utf-8") as f:
+                                    f.write(lrc)
+                            except Exception:
+                                pass
+                            return parsed
+                except Exception as e:
+                    sys.stderr.write(f"[syncedlyrics '{q}']: {e}\n")
+        except ImportError:
+            sys.stderr.write("[syncedlyrics not installed]\n")
+        return None
+
+    if pref == "spotify":
+        sp_res = _run_spotify()
+        if sp_res:
+            return sp_res
+        for fn in [_run_betterlyrics, _run_simpmusic, _run_lrclib, _run_netease]:
+            res = fn()
+            if res:
+                return res
+    elif pref == "betterlyrics":
+        bl_res = _run_betterlyrics()
+        if bl_res:
+            return bl_res
+        for fn in [_run_simpmusic, _run_spotify, _run_lrclib, _run_netease]:
+            res = fn()
+            if res:
+                return res
+    elif pref == "lrclib":
+        for fn in [_run_lrclib, _run_simpmusic, _run_spotify, _run_betterlyrics, _run_netease]:
+            res = fn()
+            if res:
+                return res
+    elif pref == "netease":
+        for fn in [_run_netease, _run_simpmusic, _run_spotify, _run_betterlyrics, _run_lrclib]:
+            res = fn()
+            if res:
+                return res
+    else:  # 'auto' default: Pass 1 (Syllables) -> Pass 2 (Line sync)
+        # Pass 1: True syllable-level word highlights
+        # If user has Spotify cookie configured, check Spotify syllable-level first!
+        sp_res = None
+        if get_spotify_spdc():
+            sp_res = _run_spotify()
+            if sp_res and _has_real_syllables(sp_res):
+                return sp_res
+
+        # 1a. BetterLyrics (Apple Music TTML word-level)
+        bl_res = _run_betterlyrics()
+        if bl_res and _has_real_syllables(bl_res):
+            return bl_res
+
+        # 1b. SimpMusic API (video_id available or resolved - rich syllable timestamps)
+        simp_res = _run_simpmusic()
+        if simp_res and _has_real_syllables(simp_res):
+            return simp_res
+
+        # Pass 2: Line-synced Fallback (if no provider had real syllables)
+        if sp_res and (_has_synced(sp_res) or sp_res):
+            return sp_res
+        if not sp_res and get_spotify_spdc():
+            sp_res = _run_spotify()
+            if sp_res and (_has_synced(sp_res) or sp_res):
+                return sp_res
+
+        if simp_res and (_has_synced(simp_res) or simp_res):
+            return simp_res
+
+        lrc_res = _run_lrclib()
+        if lrc_res:
+            return lrc_res
+
+        ne_res = _run_netease()
+        if ne_res:
+            return ne_res
 
     # Return plain cache if we have it
     if cached_plain:
@@ -781,13 +1144,20 @@ def _save_ttml_as_lrc_cache(lines, title, artist):
         pass
 
 def _save_lrc_cache_from_lines(lines, title, artist):
-    """Save simple timestamped LRC from parsed line list."""
+    """Save timestamped LRC from parsed line list (preserving rich sync if present)."""
     try:
         out = []
         for ln in lines:
             mm = int(ln["time"] // 60)
             ss = ln["time"] % 60
-            out.append(f"[{mm:02d}:{ss:05.2f}]{ln['text']}")
+            if ln.get("words"):
+                word_tags = "".join(
+                    f"<{int(w['start']//60):02d}:{w['start']%60:05.2f}>{w['text']} "
+                    for w in ln["words"]
+                ).rstrip()
+                out.append(f"[{mm:02d}:{ss:05.2f}]{word_tags}")
+            else:
+                out.append(f"[{mm:02d}:{ss:05.2f}]{ln['text']}")
         path = get_cache_path(title, artist)
         with open(path, "w", encoding="utf-8") as f:
             f.write("\n".join(out))

@@ -46,7 +46,7 @@ try:
         get_song_details, rate_song_action, get_song_related_content, get_youtube_lyrics,
         get_am_token, select_am_rendition, clean_for_search, normalize_for_match,
         match_key, matches_loosely, artist_agrees, match_score,
-        get_apple_music_animated_artwork, resolve_square_cover
+        get_apple_music_animated_artwork, resolve_square_cover, get_animated_background
     )
 except (ImportError, ValueError):
     import platform_compat as pc
@@ -81,7 +81,7 @@ except (ImportError, ValueError):
         get_song_details, rate_song_action, get_song_related_content, get_youtube_lyrics,
         get_am_token, select_am_rendition, clean_for_search, normalize_for_match,
         match_key, matches_loosely, artist_agrees, match_score,
-        get_apple_music_animated_artwork, resolve_square_cover
+        get_apple_music_animated_artwork, resolve_square_cover, get_animated_background
     )
 
 def handle_cli(args):
@@ -90,6 +90,16 @@ def handle_cli(args):
 
 def main():
     execute_command(sys.argv[1:])
+
+def _load_settings():
+    settings_path = os.path.join(pc.get_config_dir(), "nutsty_settings.json")
+    if os.path.exists(settings_path):
+        try:
+            with open(settings_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
 
 def execute_command(args):
     if len(args) < 1:
@@ -236,7 +246,8 @@ def execute_command(args):
         artist = args[2] if len(args) > 2 else ""
         dur = float(args[3]) if len(args) > 3 and args[3] else 0.0
         album_hint = args[4] if len(args) > 4 else ""
-        res = get_apple_music_animated_artwork(title, artist, dur, album_hint)
+        pref = args[5] if len(args) > 5 else _load_settings().get("canvasPreference", "apple_first")
+        res = get_animated_background(title, artist, dur, album_hint, pref)
         print(json.dumps(res, ensure_ascii=False))
 
     elif cmd == "resolve_stream" and len(args) > 1:

@@ -1542,7 +1542,7 @@ Rectangle {
                     preferredHighlightBegin: height * 0.35
                     preferredHighlightEnd: height * 0.35
                     highlightRangeMode: userScrollTimer.running ? ListView.NoHighlightRange : ListView.ApplyRange
-                    highlightMoveDuration: 620
+                    highlightMoveDuration: 340
                     highlightMoveVelocity: -1
                     model: root.activeLyrics
 
@@ -1556,33 +1556,32 @@ Rectangle {
                         width: Math.max(100, lyricsView.width - 24)
                         height: Math.max(48, lyricContentItem.implicitHeight + 16)
 
-                        readonly property int dist: Math.abs(index - root.currentLyricIndex)
+                        readonly property int signedDist: index - root.currentLyricIndex
+                        readonly property int dist: Math.abs(signedDist)
+                        // Strict SSOT: Exactly ONE line is current at any time
+                        readonly property bool isCurrent: dist === 0
                         readonly property real lineStartTime: (modelData && modelData.time !== undefined) ? modelData.time : 0.0
                         readonly property real lineEndTime: (modelData && modelData.endTime && modelData.endTime > lineStartTime)
                             ? modelData.endTime
                             : ((index + 1 < root.activeLyrics.length) ? root.activeLyrics[index + 1].time : (lineStartTime + 5.0))
-                        readonly property bool isTimeActive: (dist <= 2) && (root.currentTime >= (lineStartTime - 0.15)) && (root.currentTime <= (lineEndTime + 0.25))
-                        readonly property bool isCurrent: isTimeActive || (dist === 0 && root.currentTime >= lineStartTime - 0.5)
                         readonly property real duration: Math.max(0.6, lineEndTime - lineStartTime)
                         readonly property real lineProgress: isCurrent ? Math.min(1.0, Math.max(0.0, (root.currentTime - lineStartTime) / duration)) : 0.0
 
-                            // isHovered: chỉ TRUE khi NHẤN GIỮ chuột trái, không phải hover.
-                            readonly property bool isHovered: rowMouse.pressed && !isCurrent
+                        // isHovered: chỉ TRUE khi NHẤN GIỮ chuột trái, không phải hover.
+                        readonly property bool isHovered: rowMouse.pressed && !isCurrent
 
-                            readonly property bool isPlainLine: !modelData.hasWords || modelData.isSynthetic || !modelData.words || modelData.words.length === 0
-                        // SimpMusic & Apple Music Parametric Formulas
-                        // When user drags/scrolls or hovers upcoming line: blur is disabled (0.0) without glowing
-                        readonly property real targetBlur: (isCurrent || lyricsView.isUserScrolling || isHovered) ? 0.0 : (dist === 1 ? 0.35 : (dist === 2 ? 0.70 : 1.0))
-                        readonly property real targetOpacity: isCurrent ? 1.0 : (lyricsView.isUserScrolling ? 0.85 : (isHovered ? 0.90 : (dist === 1 ? 0.45 : (dist === 2 ? 0.18 : Math.max(0.02, 0.08 - 0.03 * (dist - 3))))))
-                        readonly property int targetFontSize: isPlainLine ? 28 : (isCurrent ? 28 : (dist === 1 ? 24 : (dist === 2 ? 21 : 18)))
+                        readonly property bool isPlainLine: !modelData.hasWords || modelData.isSynthetic || !modelData.words || modelData.words.length === 0
+                        readonly property real targetBlur: (isCurrent || lyricsView.isUserScrolling || isHovered) ? 0.0 : (dist === 1 ? 0.20 : (dist === 2 ? 0.42 : (dist === 3 ? 0.65 : 0.85)))
+                        readonly property real targetOpacity: isCurrent ? 1.0 : (lyricsView.isUserScrolling ? 0.85 : (isHovered ? 0.90 : (dist === 1 ? 0.46 : (dist === 2 ? 0.22 : (dist === 3 ? 0.10 : 0.04)))))
+                        readonly property int targetFontSize: isPlainLine ? 28 : (isCurrent ? 28 : (dist === 1 ? 24 : (dist === 2 ? 20 : (dist === 3 ? 17 : 15))))
 
                         opacity: targetOpacity
                         transformOrigin: Item.Left
                         scale: isPlainLine ? 1.0 : (isCurrent ? 1.0 : 0.97)
-                        Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
-                        Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
+                        Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
 
-                        layer.enabled: !lyricsView.isUserScrolling && !isHovered && targetBlur > 0.01 && dist <= 2
+                        layer.enabled: !lyricsView.isUserScrolling && !isHovered && targetBlur > 0.01 && dist <= 4
                         layer.effect: MultiEffect {
                             blurEnabled: true
                             blur: lyricRow.targetBlur
@@ -1594,20 +1593,17 @@ Rectangle {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
-                            implicitHeight: Math.max(36, lyricRow.isCurrent
-                                ? ((appleMusicFlowLoader.item && appleMusicFlowLoader.item.visible) ? appleMusicFlowLoader.item.implicitHeight : (fullLineBlock.visible ? fullLineBlock.implicitHeight : 36))
-                                : nonActiveTxt.paintedHeight)
+                            implicitHeight: Math.max(36, (appleMusicFlowLoader.visible && appleMusicFlowLoader.item)
+                                ? appleMusicFlowLoader.item.implicitHeight
+                                : staticLineTxt.implicitHeight)
 
                             // Apple Music Word Flow: Traveling wave ripple + phosphor bloom
                             // ONLY for lines with genuine syllable timestamps (hasWords=true AND NOT isSynthetic).
-                            // isSynthetic=true means LRC plain line — routed to Full-Line Solid Highlight below.
-                            //
-                            // HELD NOTE OVERLAP: prev line (dist=-1) stays visible if it has a live held word.
                             Loader {
                                 id: appleMusicFlowLoader
                                 active: lyricRow.dist <= 1 && modelData.hasWords && !modelData.isSynthetic && modelData.words && modelData.words.length > 0
-                                visible: lyricRow.isCurrent ||
-                                         (lyricRow.dist === -1 && appleMusicFlowLoader.item !== null && appleMusicFlowLoader.item.hasActiveHeldWord)
+                                visible: active && (lyricRow.isCurrent ||
+                                         (lyricRow.signedDist === -1 && appleMusicFlowLoader.item !== null && appleMusicFlowLoader.item.hasActiveHeldWord))
                                 anchors.left: parent.left
                                 anchors.right: parent.right
                                 sourceComponent: Component {
@@ -1619,49 +1615,27 @@ Rectangle {
                                 }
                             }
 
-                            // Full-Line Solid Highlight — for plain LRC lines (isSynthetic / no words).
-                            // Zero scale swell, zero wave bounce, crisp static typography.
-                            Item {
-                                id: fullLineBlock
-                                readonly property bool shouldShow: lyricRow.isCurrent && lyricRow.isPlainLine
-                                visible: shouldShow
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                implicitHeight: fullLineMainTxt.implicitHeight
-
-                                Text {
-                                    id: fullLineMainTxt
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    textFormat: Text.PlainText
-                                    text: modelData.text || ""
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 28
-                                    font.weight: Font.Bold
-                                    color: "#ffffff"
-                                    wrapMode: Text.Wrap
-                                    lineHeight: 1.28
-                                    style: Text.Outline
-                                    styleColor: Qt.rgba(1.0, 1.0, 1.0, 0.22)
-                                }
-                            }
-
-
-                            // 2. Non-active blurred/dimmed lines
+                            // Unified Static Typography: Used for plain LRC lines and inactive lines
                             Text {
-                                id: nonActiveTxt
-                                visible: !lyricRow.isCurrent
+                                id: staticLineTxt
+                                visible: !appleMusicFlowLoader.visible
                                 anchors.left: parent.left
                                 anchors.right: parent.right
+                                textFormat: Text.PlainText
                                 text: modelData.text || ""
                                 font.family: Theme.fontFamily
                                 font.pixelSize: lyricRow.targetFontSize
                                 font.weight: Font.Bold
-                                color: "#d8dce8"
+                                color: lyricRow.isCurrent ? "#ffffff" : "#d8dce8"
                                 wrapMode: Text.Wrap
                                 lineHeight: 1.28
-                                Behavior on font.pixelSize { NumberAnimation { duration: 180 } }
-                                Behavior on color { ColorAnimation { duration: 150 } }
+
+                                Behavior on color {
+                                    ColorAnimation { duration: 180 }
+                                }
+                                Behavior on font.pixelSize {
+                                    NumberAnimation { duration: 180; easing.type: Easing.OutQuad }
+                                }
                             }
                         }
 

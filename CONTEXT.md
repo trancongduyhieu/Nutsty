@@ -98,3 +98,24 @@ This document establishes the **Ubiquitous Language** for the Nutsty codebase. E
 ### `Phrase`
 - **Definition**: A cohesive rhythmic clause within a lyric line bounded by punctuation (`,`, `.`, `!`, `?`, `;`, `—`) or an inter-word vocal breath pause ($\Delta t > 0.35\text{s}$). Each phrase functions as an independent wave propagation envelope.
 
+---
+
+## 7. Synchronized Lyrics & Pipeline Domain
+
+### `LyricsPipeline`
+- **Definition**: The multi-tier progressive fallback resolution pipeline for obtaining lyrics with the highest possible timing fidelity.
+- **Resolution Order (Auto Mode)**:
+  1. `LocalDatabase` (Tier 0) / `LocalLrcFile` (Tier 1) / `DiskCache` (Tier 2).
+  2. `SpotifySpclient` (Tier 3): Word-level timestamps via `spclient.wg.spotify.com` (active only when `SpotifySpdcCredential` is configured).
+  3. `BetterLyricsTtml` (Tier 4): Word-level Apple Music TTML via reverse-engineered proxy endpoints.
+  4. `LrclibApi` (Tier 5): Line-synchronized lyrics with strict duration-window matching ($\pm 12\text{s}$).
+  5. `NeteaseCloudMusic` (Tier 6): Broad Asian pop / V-Pop coverage via `syncedlyrics`.
+
+### `LyricsSourcePreference`
+- **Definition**: The user-selected preference in settings controlling the priority strategy:
+  - `"auto"`: Follows the canonical 7-tier pipeline order above.
+  - `"spotify"` / `"betterlyrics"` / `"lrclib"` / `"netease"`: Forces the selected provider as primary, with graceful fallback to ensure lyrics are never lost.
+
+### `SpotifySpdcCredential`
+- **Definition**: The `sp_dc` cookie parameter extracted from Spotify Web Player. Exchanged dynamically for an ephemeral bearer `accessToken` to access `spclient.wg.spotify.com/color-lyrics/v2/`.
+- **Validation**: Verified via a lightweight probe to `open.spotify.com/get_access_token` to confirm active status without exposing sensitive user telemetry.

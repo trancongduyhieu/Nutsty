@@ -178,6 +178,10 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             social_routes.handle_search_users(self, query)
         elif path == "/api/notes/events":
             social_routes.handle_get_note_events(self, query)
+        elif path == "/api/clipboard":
+            music_routes.handle_get_clipboard(self)
+        elif path == "/api/spotify/profile":
+            music_routes.handle_get_spotify_profile(self, query)
         else:
             self.send_response(404)
             self._send_cors_headers()
@@ -186,6 +190,10 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path in ("/api/auth/cookies", "/api/auth/sync"):
             music_routes.handle_post_auth_cookies(self, self._read_post_body())
+        elif self.path == "/api/spotify/auto-sync":
+            music_routes.handle_post_spotify_auto_sync(self)
+        elif self.path == "/api/spotify/validate":
+            music_routes.handle_post_spotify_validate(self)
         elif self.path == "/api/users/update_profile":
             social_routes.handle_post_update_profile(self, self._read_post_json())
         elif self.path == "/api/users/regenerate_pin":

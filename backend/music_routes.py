@@ -3,6 +3,7 @@
 Nutsty Music & Authentication HTTP Route Handlers
 Extracted from auth_server.py for clean modularity and CodeGraph AST function indexing.
 """
+import os
 import sys
 import json
 
@@ -92,3 +93,115 @@ def handle_post_auth_cookies(handler, post_body):
     res = ytmusic_helper.save_auth(raw_data)
     status_code = 200 if res.get("success") else 400
     handler._send_json(res, status_code)
+
+
+def handle_get_clipboard(handler):
+    text = ""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.user32.OpenClipboard(0)
+            try:
+                if ctypes.windll.user32.IsClipboardFormatAvailable(13): # CF_UNICODETEXT
+                    h = ctypes.windll.user32.GetClipboardData(13)
+                    text = ctypes.c_wchar_p(h).value or ""
+            finally:
+                ctypes.windll.user32.CloseClipboard()
+        except Exception:
+            pass
+    else:
+        import subprocess
+        try:
+            res = subprocess.run(["wl-paste", "-n"], capture_output=True, text=True, timeout=1)
+            if res.returncode == 0 and res.stdout:
+                text = res.stdout
+        except Exception:
+            pass
+        if not text:
+            try:
+                res = subprocess.run(["xclip", "-selection", "clipboard", "-o"], capture_output=True, text=True, timeout=1)
+                if res.returncode == 0 and res.stdout:
+                    text = res.stdout
+            except Exception:
+                pass
+    handler._send_json({"text": text or ""}, 200)
+
+
+def handle_post_spotify_auto_sync(handler):
+    try:
+        from . import lyrics_helper
+    except (ImportError, ValueError):
+        import lyrics_helper
+
+    res = lyrics_helper.extract_spotify_cookie_from_browsers()
+    if res.get("success") and res.get("spdc"):
+        # Validate that the extracted cookie is actively authorized by Spotify
+        tok = lyrics_helper.get_spotify_access_token(res["spdc"])
+        if not tok:
+            handler._send_json({
+                "success": False,
+                "message": f"Tìm thấy cookie từ {res.get('browser', 'trình duyệt')} nhưng cookie đã hết hạn (401 Unauthorized)."
+            }, 200)
+            return
+
+        # Auto-save to settings
+        try:
+            import platform_compat as pc
+            prof_suffix = pc.get_profile_suffix() if hasattr(pc, "get_profile_suffix") else ""
+            p = os.path.join(pc.get_config_dir(), f"nutsty_settings{prof_suffix}.json")
+            if not os.path.exists(p):
+                p = os.path.join(pc.get_config_dir(), "nutsty_settings.json")
+            data = {}
+            if os.path.exists(p):
+                with open(p, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            data["spotifySpdc"] = res["spdc"]
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            sys.stderr.write(f"[spotify_auto_sync save error]: {e}\n")
+    handler._send_json(res, 200)
+
+
+def handle_get_spotify_profile(handler, query):
+    spdc = query.get("spdc", [""])[0]
+    try:
+        from . import lyrics_helper
+    except (ImportError, ValueError):
+        import lyrics_helper
+    if not spdc:
+        spdc = lyrics_helper.get_spotify_spdc()
+    sess = lyrics_helper.get_spotify_session_info(spdc)
+    handler._send_json(sess, 200)
+
+
+def handle_post_spotify_validate(handler):
+    body = handler._read_post_json()
+    spdc = body.get("spdc", "").strip() if isinstance(body, dict) else ""
+    if not spdc:
+        handler._send_json({"success": False, "error": "Vui lòng nhập chuỗi cookie sp_dc."}, 400)
+        return
+
+    try:
+        from . import lyrics_helper
+    except (ImportError, ValueError):
+        import lyrics_helper
+
+    # Test TOTP exchange directly with official Spotify token endpoint
+    access_token = lyrics_helper.get_spotify_access_token(spdc)
+    if not access_token:
+        handler._send_json({
+            "success": False,
+            "error": "Cookie sp_dc không hợp lệ hoặc đã hết hạn từ Spotify (401 Unauthorized)."
+        }, 200)
+        return
+
+    sess = lyrics_helper.get_spotify_session_info(spdc)
+    handler._send_json({
+        "success": True,
+        "message": "Xác thực tài khoản Spotify thành công!",
+        "isPremium": sess.get("isPremium", False),
+        "userCountry": sess.get("userCountry", "")
+    }, 200)
+
+

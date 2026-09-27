@@ -118,12 +118,12 @@ Item {
         highlightRangeMode: ListView.NoHighlightRange
         currentIndex: root.currentLyricIndex
 
-        // AMLL-accurate scroll animation: cubic-bezier(0.4, 0, 0.2, 1)
+        // AMLL-accurate scroll animation: cubic-bezier(0.4, 0, 0.2, 1) (snappy 340ms)
         Behavior on contentY {
             id: scrollBehavior
             NumberAnimation {
                 id: scrollAnim
-                duration: 480
+                duration: 340
                 easing.type: Easing.BezierSpline
                 easing.bezierCurve: [0.4, 0.0, 0.2, 1.0, 1.0, 1.0]
             }
@@ -143,25 +143,27 @@ Item {
             // ── Optical Depth-of-Field Formulas ──────────────────────────────
             readonly property real targetOpacity: {
                 if (isCurrent || isHeldNoteActive) return 1.0;
-                if (dist === -1 || dist === 1) return 0.58;
-                if (dist === 2) return 0.38;
-                if (dist === 3) return 0.18;
+                if (dist === -1 || dist === 1) return 0.50;
+                if (dist === 2) return 0.24;
+                if (dist === 3) return 0.10;
                 return 0.0;
             }
 
             readonly property real targetScale: {
                 if (!hasWords) return 1.0; // Plain lines stay completely still
-                if (isCurrent || isHeldNoteActive || dist === 1 || dist === -1) return 1.0;
-                if (dist === 2) return 0.93;
-                if (dist === 3) return 0.84;
-                return 0.75;
+                if (isCurrent || isHeldNoteActive) return 1.0;
+                if (dist === -1 || dist === 1) return 0.92;
+                if (dist === 2) return 0.84;
+                if (dist === 3) return 0.76;
+                return 0.68;
             }
 
             readonly property real targetBlur: {
                 if (isCurrent || isHeldNoteActive) return 0.0;
-                if (dist === -1 || dist === 1) return 0.35;
-                if (dist === 2) return 0.60;
-                return 0.85;
+                if (dist === -1 || dist === 1) return 0.22;
+                if (dist === 2) return 0.45;
+                if (dist === 3) return 0.70;
+                return 0.90;
             }
 
             opacity: targetOpacity
@@ -169,14 +171,14 @@ Item {
             visible: dist >= -1 && dist <= 4 && opacity > 0.01
 
             Behavior on opacity {
-                NumberAnimation { duration: 320; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
             }
             Behavior on scale {
-                NumberAnimation { duration: 320; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
             }
 
             // Depth of field blur layer (disabled on active line for zero FBO overhead)
-            layer.enabled: targetBlur > 0.01 && dist >= -1 && dist <= 3
+            layer.enabled: targetBlur > 0.01 && dist >= -1 && dist <= 4
             layer.effect: MultiEffect {
                 blurEnabled: true
                 blur: lyricRow.targetBlur

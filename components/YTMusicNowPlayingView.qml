@@ -73,10 +73,18 @@ Item {
     }
 
     property bool animatedCoverEnabled: true
+    property string canvasPreference: "apple_first"
     property string animatedArtworkUrl: ""
     property bool isLoadingAnimatedArtwork: false
     onAnimatedCoverEnabledChanged: {
-        if (animatedCoverEnabled) {
+        if (animatedCoverEnabled && canvasPreference !== "off") {
+            fetchAnimatedArtwork();
+        } else {
+            animatedArtworkUrl = "";
+        }
+    }
+    onCanvasPreferenceChanged: {
+        if (animatedCoverEnabled && canvasPreference !== "off") {
             fetchAnimatedArtwork();
         } else {
             animatedArtworkUrl = "";
@@ -482,7 +490,7 @@ Item {
 
     function fetchAnimatedArtwork() {
         root.animatedArtworkUrl = "";
-        if (!root.animatedCoverEnabled || !root.track) {
+        if (!root.animatedCoverEnabled || root.canvasPreference === "off" || !root.track) {
             root.isLoadingAnimatedArtwork = false;
             return;
         }
@@ -528,7 +536,8 @@ Item {
             songTitle,
             songArtist,
             String(dur),
-            songAlbum
+            songAlbum,
+            root.canvasPreference || "apple_first"
         ];
         amArtworkProc.running = true;
     }
@@ -1869,17 +1878,11 @@ Item {
                         highlightRangeMode: ListView.NoHighlightRange
                         model: root.activeLyrics
 
-                        // AMLL-style smooth scroll: SmoothedAnimation on contentY
-                        // duration=380ms OutCubic matches AMLL scrollIntoView cubic-bezier(0.4,0,0.2,1)
-                        // SmoothedAnimation (not NumberAnimation) absorbs rapid line changes in fast songs
-                        // — if index flips 3 times in 1s, it gracefully converges instead of triple-animating.
+                        // AMLL-style smooth scroll: BezierSpline on contentY (snappy 340ms)
                         Behavior on contentY {
                             enabled: !lyricsView.moving && !lyricsView.dragging && !lyricsView.flicking
                             NumberAnimation {
-                                // cubic-bezier(0.4, 0, 0.2, 1) — AMLL scrollIntoView easing (Material standard).
-                                // Feels: slow start → accelerates → very soft landing.
-                                // QML BezierSpline format: [cp1x, cp1y, cp2x, cp2y, endX, endY]
-                                duration: 520
+                                duration: 340
                                 easing.type: Easing.BezierSpline
                                 easing.bezierCurve: [0.4, 0.0, 0.2, 1.0, 1.0, 1.0]
                             }
@@ -1895,41 +1898,36 @@ Item {
                             width: Math.max(100, lyricsView.width - 24)
                             height: Math.max(48, lyricContentItem.implicitHeight + 16)
 
-                            readonly property int dist: Math.abs(index - root.currentLyricIndex)
+                            readonly property int signedDist: index - root.currentLyricIndex
+                            readonly property int dist: Math.abs(signedDist)
+                            // Strict SSOT: Exactly ONE line is current at any time (prevents 2 lines glowing together)
+                            readonly property bool isCurrent: dist === 0
                             readonly property real lineStartTime: (modelData && modelData.time !== undefined) ? modelData.time : 0.0
                             readonly property real lineEndTime: (modelData && modelData.endTime && modelData.endTime > lineStartTime)
                                 ? modelData.endTime
                                 : ((index + 1 < root.activeLyrics.length) ? root.activeLyrics[index + 1].time : (lineStartTime + 5.0))
-                            readonly property bool isTimeActive: (dist <= 2) && (root.currentTime >= (lineStartTime - 0.15)) && (root.currentTime <= (lineEndTime + 0.25))
-                            readonly property bool isCurrent: isTimeActive || (dist === 0 && root.currentTime >= lineStartTime - 0.5)
                             readonly property real duration: Math.max(0.6, lineEndTime - lineStartTime)
                             readonly property real lineProgress: isCurrent ? Math.min(1.0, Math.max(0.0, (root.currentTime - lineStartTime) / duration)) : 0.0
 
                             // isHovered: chỉ TRUE khi đang NHẤN GIỮ chuột trái (pressed), KHÔNG phải hover.
-                            // → Lướt qua dòng: vẫn blur bình thường.
-                            // → Giữ chuột trái trên dòng: unblur để xem rõ trước khi seek.
                             readonly property bool isHovered: rowMouse.pressed && !isCurrent
 
                             readonly property bool isPlainLine: !modelData.hasWords || modelData.isSynthetic || !modelData.words || modelData.words.length === 0
-                            // SimpMusic & Apple Music Parametric Formulas
-                            // When user drags/scrolls or hovers upcoming line: blur is disabled (0.0) without glowing
-                            readonly property real targetBlur: (isCurrent || lyricsView.isUserScrolling || isHovered) ? 0.0 : (dist === 1 ? 0.30 : (dist === 2 ? 0.60 : 1.0))
-                            readonly property real targetOpacity: isCurrent ? 1.0 : (lyricsView.isUserScrolling ? 0.85 : (isHovered ? 0.90 : (dist === 1 ? 0.45 : (dist === 2 ? 0.18 : Math.max(0.02, 0.08 - 0.03 * (dist - 3))))))
-                            readonly property int targetFontSize: isPlainLine ? 28 : (isCurrent ? 28 : (dist === 1 ? 24 : (dist === 2 ? 21 : 18)))
+                            readonly property real targetBlur: (isCurrent || lyricsView.isUserScrolling || isHovered) ? 0.0 : (dist === 1 ? 0.20 : (dist === 2 ? 0.42 : (dist === 3 ? 0.65 : 0.85)))
+                            readonly property real targetOpacity: isCurrent ? 1.0 : (lyricsView.isUserScrolling ? 0.85 : (isHovered ? 0.90 : (dist === 1 ? 0.46 : (dist === 2 ? 0.22 : (dist === 3 ? 0.10 : 0.04)))))
+                            readonly property int targetFontSize: isPlainLine ? 28 : (isCurrent ? 28 : (dist === 1 ? 24 : (dist === 2 ? 20 : (dist === 3 ? 17 : 15))))
 
                             opacity: targetOpacity
                             transformOrigin: Item.Left
-                            // Scale: 1.0 active, 0.985 adjacent — less jarring than 0.97.
-                            // For plain lines (isPlainLine): lock to 1.0 completely still, no jump.
                             scale: isPlainLine ? 1.0 : (isCurrent ? 1.0 : 0.985)
                             Behavior on scale {
-                                SmoothedAnimation { duration: 320; easing.type: Easing.OutCubic; velocity: 4 }
+                                NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
                             }
                             Behavior on opacity {
-                                SmoothedAnimation { duration: 320; easing.type: Easing.OutCubic; velocity: 4 }
+                                NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
                             }
 
-                            layer.enabled: !lyricsView.isUserScrolling && !isHovered && targetBlur > 0.01 && dist <= 2
+                            layer.enabled: !lyricsView.isUserScrolling && !isHovered && targetBlur > 0.01 && dist <= 4
                             layer.effect: MultiEffect {
                                 blurEnabled: true
                                 blur: lyricRow.targetBlur
@@ -1941,25 +1939,17 @@ Item {
                                 anchors.left: parent.left
                                 anchors.right: parent.right
                                 anchors.verticalCenter: parent.verticalCenter
-                                implicitHeight: Math.max(36, lyricRow.isCurrent
-                                    ? ((appleMusicFlowLoader.item && appleMusicFlowLoader.item.visible) ? appleMusicFlowLoader.item.implicitHeight : (fullLineBlock.visible ? fullLineBlock.implicitHeight : 36))
-                                    : nonActiveTxt.paintedHeight)
+                                implicitHeight: Math.max(36, (appleMusicFlowLoader.visible && appleMusicFlowLoader.item)
+                                    ? appleMusicFlowLoader.item.implicitHeight
+                                    : staticLineTxt.implicitHeight)
 
                                 // Apple Music Word Flow: Traveling wave ripple + phosphor bloom
                                 // ONLY for lines with genuine syllable timestamps (hasWords=true AND NOT isSynthetic).
-                                // isSynthetic=true means LRC plain line — routed to Full-Line Solid Highlight below.
-                                //
-                                // HELD NOTE OVERLAP: when a held word (isHeld=true, e.g. "Oh" 34→38s) is still
-                                // within its end timestamp even though the NEXT line became active (dist=-1),
-                                // the loader stays visible via hasActiveHeldWord. This makes "Oh" continue to
-                                // bloom while "I'm blinded..." starts on the line below — exactly like Apple Music.
                                 Loader {
                                     id: appleMusicFlowLoader
                                     active: lyricRow.dist <= 1 && modelData.hasWords && !modelData.isSynthetic && modelData.words && modelData.words.length > 0
-                                    // Keep visible when: (a) this is the current line, OR
-                                    //                    (b) this is the previous line (dist=-1) with a live held note
-                                    visible: lyricRow.isCurrent ||
-                                             (lyricRow.dist === -1 && appleMusicFlowLoader.item !== null && appleMusicFlowLoader.item.hasActiveHeldWord)
+                                    visible: active && (lyricRow.isCurrent ||
+                                             (lyricRow.signedDist === -1 && appleMusicFlowLoader.item !== null && appleMusicFlowLoader.item.hasActiveHeldWord))
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     sourceComponent: Component {
@@ -1971,46 +1961,27 @@ Item {
                                     }
                                 }
 
-                                // Full-Line Solid Highlight — for plain LRC lines (isSynthetic / no words).
-                                // Zero scale swell, zero wave bounce, crisp static typography.
-                                Item {
-                                    id: fullLineBlock
-                                    readonly property bool shouldShow: lyricRow.isCurrent && lyricRow.isPlainLine
-                                    visible: shouldShow
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    implicitHeight: fullLineMainTxt.implicitHeight
-
-                                    // ── Main Crisp Typography ─────────────────────────────
-                                    Text {
-                                        id: fullLineMainTxt
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        textFormat: Text.PlainText
-                                        text: modelData.text || ""
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 28
-                                        font.weight: Font.Bold
-                                        color: "#ffffff"
-                                        wrapMode: Text.Wrap
-                                        lineHeight: 1.28
-                                        style: Text.Outline
-                                        styleColor: Qt.rgba(1.0, 1.0, 1.0, 0.22)
-                                    }
-                                }
-
+                                // Unified Static Typography: Used for plain LRC lines and inactive lines
                                 Text {
-                                    id: nonActiveTxt
-                                    visible: !lyricRow.isCurrent
+                                    id: staticLineTxt
+                                    visible: !appleMusicFlowLoader.visible
                                     anchors.left: parent.left
                                     anchors.right: parent.right
+                                    textFormat: Text.PlainText
                                     text: modelData.text || ""
                                     font.family: Theme.fontFamily
                                     font.pixelSize: lyricRow.targetFontSize
                                     font.weight: Font.Bold
-                                    color: "#c4c8d4"
+                                    color: lyricRow.isCurrent ? "#ffffff" : "#c4c8d4"
                                     wrapMode: Text.Wrap
-                                    lineHeight: 1.25
+                                    lineHeight: 1.28
+
+                                    Behavior on color {
+                                        ColorAnimation { duration: 180 }
+                                    }
+                                    Behavior on font.pixelSize {
+                                        NumberAnimation { duration: 180; easing.type: Easing.OutQuad }
+                                    }
                                 }
                             }
 

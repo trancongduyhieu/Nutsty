@@ -33,4 +33,10 @@ QtObject {
     readonly property int radiusCard: 8
     readonly property int radiusPill: 16
     readonly property int radiusSm: 4
+
+    // Contrast Utility
+    function isColorDark(c) {
+        if (!c) return true;
+        return (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) < 0.55;
+    }
 }

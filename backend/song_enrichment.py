@@ -27,6 +27,7 @@ try:
         get_cached_artist_avatar, DISLIKED_SONGS_FILE, ARTIST_AVATARS_FILE
     )
     from .stream_resolver import resolve_video_id_for_track
+    from . import lyrics_helper
 except (ImportError, ValueError):
     import platform_compat as pc
     from ytmusic_auth import (
@@ -43,6 +44,7 @@ except (ImportError, ValueError):
         get_cached_artist_avatar, DISLIKED_SONGS_FILE, ARTIST_AVATARS_FILE
     )
     from stream_resolver import resolve_video_id_for_track
+    import lyrics_helper
 
 SQUARE_COVERS_CACHE_FILE = os.path.join(pc.get_cache_dir(), "square_covers.json")
 
@@ -861,5 +863,124 @@ def resolve_square_cover(title, artist="", video_id=None, current_image=None):
 
     # Do not permanently cache fallback covers so future attempts or corrected metadata can resolve the official square art
     return {"url": fallback_url, "is_square": False, "match": "fallback"}
+
+
+SPOTIFY_CANVAS_CACHE_FILE = os.path.join(pc.get_cache_dir(), "spotify_canvas_cache.json")
+
+def get_spotify_canvas(title, artist, duration_seconds=0):
+    """
+    Fetch Spotify Canvas looping video (.cnvs.mp4) for a track.
+    Requires user to have sp_dc cookie connected (or anonymous client token fallback).
+    """
+    if not title:
+        return {"found": False}
+    clean_title = clean_for_search(title)
+    clean_artist = clean_for_search(artist)
+    cache_key = f"{match_key(clean_title)}_{match_key(clean_artist)}"
+
+    cached_data = load_json(SPOTIFY_CANVAS_CACHE_FILE, {})
+    if cache_key in cached_data:
+        entry = cached_data[cache_key]
+        if time.time() - entry.get("timestamp", 0) < 86400 * 7:  # 7 days cache
+            return entry
+
+    spdc = lyrics_helper.get_spotify_spdc()
+    if not spdc:
+        return {"found": False, "reason": "no_spotify_cookie"}
+
+    access_token = lyrics_helper.get_spotify_access_token(spdc)
+    if not access_token:
+        return {"found": False, "reason": "spotify_token_failed"}
+
+    client_token = lyrics_helper._spotify_get_client_token()
+    query = f"{clean_title} {clean_artist}".strip() if clean_artist else clean_title
+    track_id = lyrics_helper._spotify_search_track(query, access_token, client_token, duration_seconds)
+    if not track_id and clean_title != title:
+        track_id = lyrics_helper._spotify_search_track(clean_title, access_token, client_token, duration_seconds)
+
+    if not track_id:
+        res = {"found": False, "reason": "track_not_found_on_spotify", "timestamp": time.time()}
+        cached_data[cache_key] = res
+        save_json(SPOTIFY_CANVAS_CACHE_FILE, cached_data)
+        return res
+
+    try:
+        # Protobuf binary payload:
+        # message CanvasRequest { repeated Track tracks = 1; }
+        # message Track { string track_uri = 1; }
+        uri = f"spotify:track:{track_id}".encode("utf-8")
+        inner = bytes([0x0a, len(uri)]) + uri
+        outer = bytes([0x0a, len(inner)]) + inner
+
+        canvas_req = urllib.request.Request(
+            "https://spclient.wg.spotify.com/canvaz-cache/v0/canvases",
+            data=outer,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Client-Token": client_token,
+                "Accept": "application/protobuf",
+                "Content-Type": "application/protobuf",
+                "User-Agent": "Spotify/9.0.34.593 iOS/18.4 (iPhone15,3)",
+            },
+            method="POST"
+        )
+        ssl_ctx = pc.get_ssl_context()
+        with urllib.request.urlopen(canvas_req, timeout=6, context=ssl_ctx) as resp:
+            content = resp.read()
+            urls = re.findall(rb"https://[^\x00-\x1f\s\"]+\.cnvs\.mp4", content)
+            if urls:
+                canvas_url = urls[0].decode("utf-8")
+                res = {
+                    "found": True,
+                    "video_url": canvas_url,
+                    "master_url": canvas_url,
+                    "type": "spotify_canvas",
+                    "track_id": track_id,
+                    "timestamp": time.time()
+                }
+                cached_data[cache_key] = res
+                save_json(SPOTIFY_CANVAS_CACHE_FILE, cached_data)
+                return res
+    except Exception as e:
+        sys.stderr.write(f"[get_spotify_canvas error]: {e}\n")
+
+    res = {"found": False, "reason": "no_canvas_for_track", "track_id": track_id, "timestamp": time.time()}
+    cached_data[cache_key] = res
+    save_json(SPOTIFY_CANVAS_CACHE_FILE, cached_data)
+    return res
+
+
+def get_animated_background(title, artist, duration_seconds=0, album_hint="", preference="apple_first"):
+    """
+    Fetch animated background video (Apple Music Animated Cover or Spotify Canvas)
+    based on user's preference:
+    - 'apple_first': Apple Music > Spotify Canvas (Default)
+    - 'spotify_first': Spotify Canvas > Apple Music
+    - 'apple_only': Apple Music only
+    - 'spotify_only': Spotify Canvas only
+    - 'off': None
+    """
+    pref = (preference or "apple_first").lower().strip()
+    if pref == "off":
+        return {"found": False, "reason": "disabled_by_user"}
+
+    if pref == "apple_only":
+        return get_apple_music_animated_artwork(title, artist, duration_seconds, album_hint)
+
+    if pref == "spotify_only":
+        return get_spotify_canvas(title, artist, duration_seconds)
+
+    if pref == "spotify_first":
+        sc = get_spotify_canvas(title, artist, duration_seconds)
+        if sc and sc.get("found"):
+            return sc
+        return get_apple_music_animated_artwork(title, artist, duration_seconds, album_hint)
+
+    # Default: apple_first
+    am = get_apple_music_animated_artwork(title, artist, duration_seconds, album_hint)
+    if am and am.get("found"):
+        return am
+    return get_spotify_canvas(title, artist, duration_seconds)
+
 
 
