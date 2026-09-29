@@ -348,7 +348,7 @@ def main():
 SONG_PALETTES_CACHE = Path(pc.get_cache_dir()) / "song_palettes.json"
 
 def extract_song_palette(img_src: str) -> dict:
-    default_res = {"highlightColor": "#f4afb3", "theme": "crimson"}
+    default_res = {"highlightColor": "", "theme": "default"}
     if not HAS_PIL or not img_src or not str(img_src).strip():
         return default_res
 
@@ -367,12 +367,15 @@ def extract_song_palette(img_src: str) -> dict:
         if clean_src.startswith("http://") or clean_src.startswith("https://"):
             import urllib.request
             import io
-            req = urllib.request.Request(clean_src, headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64)"})
-            with urllib.request.urlopen(req, timeout=4) as resp:
+            req = urllib.request.Request(clean_src, headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+            })
+            with urllib.request.urlopen(req, timeout=6, context=pc.get_ssl_context()) as resp:
                 content = resp.read()
             img = Image.open(io.BytesIO(content))
         else:
-            path_str = clean_src.replace("file://", "")
+            path_str = clean_src.replace("file:///", "").replace("file://", "")
             p = Path(os.path.expanduser(path_str))
             if not p.exists():
                 return default_res
@@ -406,10 +409,15 @@ def extract_song_palette(img_src: str) -> dict:
         sys.stderr.write(f"[extract_song_palette error]: {e}\n")
         return default_res
 
-if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "song_palette":
-        src = sys.argv[2] if len(sys.argv) > 2 else ""
+def handle_cli(args=None):
+    if args is None:
+        args = sys.argv[1:]
+    if args and args[0] == "song_palette":
+        src = args[1] if len(args) > 1 else ""
         res = extract_song_palette(src)
         print(json.dumps(res, ensure_ascii=False))
-        sys.exit(0)
-    main()
+        return res
+    return main()
+
+if __name__ == "__main__":
+    handle_cli()

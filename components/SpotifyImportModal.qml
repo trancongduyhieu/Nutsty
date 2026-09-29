@@ -16,6 +16,8 @@ Rectangle {
     property color accentColor: Theme.accent
 
     // State properties
+    property string spotifySpdc: (typeof win !== "undefined" && win.spotifySpdc) ? win.spotifySpdc : ""
+    readonly property bool hasSpotifySession: (root.spotifySpdc !== "" || (typeof win !== "undefined" && win.spotifySpdc !== ""))
     property bool isImporting: false
     property bool isLoadingList: false
     property var spotifyPlaylists: []
@@ -63,7 +65,12 @@ Rectangle {
         root.isLoadingList = true;
         root.errorMessage = "";
         var xhr = new XMLHttpRequest();
-        xhr.open("GET", "http://127.0.0.1:17890/api/spotify/playlists", true);
+        var url = "http://127.0.0.1:17890/api/spotify/playlists";
+        var effectiveSpdc = root.spotifySpdc || (typeof win !== "undefined" ? win.spotifySpdc : "");
+        if (effectiveSpdc) {
+            url += "?spdc=" + encodeURIComponent(effectiveSpdc);
+        }
+        xhr.open("GET", url, true);
         xhr.onreadystatechange = function() {
             if (xhr.readyState === XMLHttpRequest.DONE) {
                 root.isLoadingList = false;
@@ -122,7 +129,8 @@ Rectangle {
                 }
             }
         };
-        xhr.send(JSON.stringify({ "url": clean }));
+        var effectiveSpdc = root.spotifySpdc || (typeof win !== "undefined" ? win.spotifySpdc : "");
+        xhr.send(JSON.stringify({ "url": clean, "spdc": effectiveSpdc }));
     }
 
     function startImport(playlistId, playlistTitle) {
@@ -664,7 +672,7 @@ Rectangle {
 
                         Text {
                             Layout.alignment: Qt.AlignHCenter
-                            text: I18n.tr("Chưa kết nối tài khoản Spotify", "Spotify Account Not Connected")
+                            text: root.hasSpotifySession ? I18n.tr("Chưa tìm thấy playlist trong tài khoản", "No Playlists Found in Account") : I18n.tr("Chưa kết nối tài khoản Spotify", "Spotify Account Not Connected")
                             color: "#ffffff"
                             font.pixelSize: 15
                             font.bold: true
@@ -676,7 +684,9 @@ Rectangle {
                             Layout.alignment: Qt.AlignHCenter
                             horizontalAlignment: Text.AlignHCenter
                             wrapMode: Text.Wrap
-                            text: I18n.tr("Đăng nhập 1-chạm hoặc đồng bộ từ trình duyệt để tải danh sách phát của bạn. Bạn cũng có thể dán link playlist bất kỳ ở tab bên cạnh.", "1-click login or sync from browser to load your playlists. You can also paste any playlist link in the tab above.")
+                            text: root.hasSpotifySession
+                                ? I18n.tr("Tài khoản Spotify đã kết nối! Bạn có thể dán trực tiếp link playlist Spotify bất kỳ ở tab bên cạnh để nhập và lưu về Nutsty ngay lập tức.", "Spotify connected! You can paste any Spotify playlist link in the tab above to import immediately.")
+                                : I18n.tr("Đăng nhập 1-chạm hoặc đồng bộ từ trình duyệt để tải danh sách phát của bạn. Bạn cũng có thể dán link playlist bất kỳ ở tab bên cạnh.", "1-click login or sync from browser to load your playlists. You can also paste any playlist link in the tab above.")
                             color: "#9ca3af"
                             font.pixelSize: 12
                         }
@@ -687,11 +697,12 @@ Rectangle {
                             Layout.alignment: Qt.AlignHCenter
                             spacing: 10
 
-                            // 1-Click Connect Button
+                            // 1-Click Connect Button (only shown if not yet connected)
                             Rectangle {
                                 Layout.preferredWidth: 155
                                 Layout.preferredHeight: 34
                                 radius: 8
+                                visible: !root.hasSpotifySession
                                 color: connectMouse.containsMouse ? Qt.darker(root.accentColor, 1.15) : root.accentColor
 
                                 RowLayout {

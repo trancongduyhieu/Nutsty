@@ -391,11 +391,41 @@ def get_auth_status():
             name = cached_info.get("name")
         if not email and cached_info.get("email") and "@" in cached_info.get("email") and not cached_info.get("email").startswith("googleuser@"):
             email = cached_info.get("email")
-        if not thumb and cached_info.get("avatar"):
-            thumb = cached_info.get("avatar")
+        # Real avatar check: prefer actual Google photo (ggpht.com, googleusercontent.com) over ui-avatars fallback
+        cached_avatar = cached_info.get("avatar") or ""
+        is_cached_real = cached_avatar and "ui-avatars.com" not in cached_avatar
+
+        if thumb and "ui-avatars.com" not in thumb:
+            pass
+        elif is_cached_real:
+            thumb = cached_avatar
+        else:
+            # Attempt to pull fresh cookies from browser_auth profile directly
+            try:
+                from yt_dlp.cookies import _extract_chrome_cookies
+                p_dir = os.path.join(os.path.dirname(AUTH_FILE), f"browser_auth{PROFILE_SUFFIX}", "Default")
+                if os.path.exists(p_dir):
+                    class _L:
+                        def info(self, *a): pass
+                        def debug(self, *a): pass
+                        def warning(self, *a): pass
+                        def error(self, *a): pass
+                    jar = _extract_chrome_cookies("chrome", profile=p_dir, keyring=None, logger=_L())
+                    yt_cks = [c for c in jar if "youtube" in c.domain or "google" in c.domain]
+                    if yt_cks:
+                        cookie_str = "; ".join(f"{c.name}={c.value}" for c in yt_cks)
+                        save_res = save_auth(cookie_str)
+                        if save_res.get("avatar") and "ui-avatars.com" not in save_res["avatar"]:
+                            thumb = save_res["avatar"]
+                        if save_res.get("name") and (not name or name == "Google User"):
+                            name = save_res["name"]
+                        if save_res.get("email") and not email:
+                            email = save_res["email"]
+            except Exception:
+                pass
 
         # Direct profile extraction from cookies if still missing
-        if not name or name == "Google User" or not email:
+        if not name or name == "Google User" or not email or not thumb or "ui-avatars.com" in thumb:
             try:
                 with open(AUTH_FILE, "r", encoding="utf-8") as f:
                     auth_data = json.load(f)
@@ -406,7 +436,7 @@ def get_auth_status():
                         name = dp["name"]
                     if dp.get("email") and not email:
                         email = dp["email"]
-                    if dp.get("thumb") and not thumb:
+                    if dp.get("thumb") and ("ui-avatars.com" not in dp["thumb"]):
                         thumb = dp["thumb"]
             except Exception:
                 pass

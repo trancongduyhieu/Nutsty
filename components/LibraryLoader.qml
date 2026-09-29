@@ -31,12 +31,25 @@ Item {
         if (!raw || raw.trim() === "") return;
         try {
             var parsed = JSON.parse(raw);
+            var validTracks = [];
+            var rawTracks = [];
             if (Array.isArray(parsed)) {
-                root.allTracks = parsed;
+                rawTracks = parsed;
             } else if (parsed && typeof parsed === "object") {
                 if (parsed.playlists) root.playlists = parsed.playlists;
-                if (parsed.tracks) root.allTracks = parsed.tracks;
+                if (parsed.tracks) rawTracks = parsed.tracks;
             }
+
+            validTracks = rawTracks.filter(function(t) {
+                if (!t || !t.path) return false;
+                var p = String(t.path);
+                if (p.startsWith("ytdl://") || p.startsWith("http:") || p.startsWith("https:")) return true;
+                if (Qt.platform.os === "windows" && p.startsWith("/home/")) return false;
+                if (Qt.platform.os === "linux" && (p.indexOf(":\\") !== -1 || p.startsWith("C:/") || p.startsWith("c:/"))) return false;
+                return true;
+            });
+
+            root.allTracks = validTracks;
             console.log("LibraryLoader successfully loaded tracks count:", root.allTracks.length);
             root.loaded();
         } catch(e) {

@@ -1,11 +1,11 @@
 {
-  "wallpaper": "/home/apple/Pictures/Wallpapers/Catppuccin_Mocha_forest_dark_winter.jpg",
-  "meanLuminance": 0.175,
-  "brightRatio": 0.045,
+  "wallpaper": "C:/WINDOWS/web/wallpaper/Windows/img0.jpg",
+  "meanLuminance": 0.328,
+  "brightRatio": 0.126,
   "isLightArea": false,
   "theme": "amethyst",
   "baseTextColor": "#f8fafc",
-  "highlightColor": "#bfbdf6",
+  "highlightColor": "#9bc3ff",
   "deadTextColor": "#f1f5f9",
   "shadowDirectional": "#a6020305",
   "shadowAmbient": "#66000000"

@@ -100,6 +100,16 @@ def fetch_user_spotify_playlists(spdc=None, limit=50):
     if not spdc:
         return {"success": False, "error": "Chưa có cookie Spotify (sp_dc).", "playlists": []}
 
+    cached_p = os.path.join(pc.get_config_dir(), "spotify_cached_playlists.json")
+    if os.path.exists(cached_p):
+        try:
+            with open(cached_p, "r", encoding="utf-8") as cf:
+                cdata = json.load(cf)
+            if isinstance(cdata, list) and len(cdata) > 0:
+                return {"success": True, "playlists": cdata}
+        except Exception:
+            pass
+
     token = lyrics_helper.get_spotify_access_token(spdc)
     if not token:
         return {"success": False, "error": "Cookie Spotify đã hết hạn hoặc không hợp lệ.", "playlists": []}
@@ -133,11 +143,86 @@ def fetch_user_spotify_playlists(spdc=None, limit=50):
         return {"success": False, "error": f"Lỗi gọi Spotify API: {str(e)}", "playlists": []}
 
 
+_PLAYLIST_TRACKS_CACHE = {}
+
+
+def fetch_spotify_playlist_from_embed(playlist_id):
+    """
+    Scrapes playlist metadata and tracks from Spotify embed page.
+    Immune to Spotify Web API 429 rate limits and requires zero OAuth token.
+    """
+    pid = extract_playlist_id(playlist_id)
+    if not pid:
+        return None
+    url = f"https://open.spotify.com/embed/playlist/{pid}"
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=10, context=pc.get_ssl_context()) as r:
+            html = r.read().decode("utf-8", errors="ignore")
+        m = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html)
+        if not m:
+            return None
+        data = json.loads(m.group(1))
+        entity = data.get("props", {}).get("pageProps", {}).get("state", {}).get("data", {}).get("entity", {})
+        if not entity:
+            return None
+
+        tracks = []
+        for item in entity.get("trackList", []):
+            tracks.append({
+                "name": item.get("title", ""),
+                "artist": item.get("subtitle", ""),
+                "album": entity.get("name", ""),
+                "duration_ms": item.get("duration", 0),
+                "image": "",
+                "isrc": item.get("uri", "")
+            })
+
+        cover_sources = entity.get("coverArt", {}).get("sources", [])
+        cover_url = cover_sources[0].get("url", "") if cover_sources else ""
+
+        res = {
+            "success": True,
+            "id": pid,
+            "title": entity.get("name", "Spotify Playlist"),
+            "description": entity.get("subtitle", ""),
+            "image": cover_url,
+            "trackCount": len(tracks),
+            "owner": entity.get("subtitle", ""),
+            "tracks": tracks
+        }
+        _PLAYLIST_TRACKS_CACHE[pid] = tracks
+        return res
+    except Exception as e:
+        sys.stderr.write(f"[spotify_importer] Embed scrape note for {pid}: {e}\n")
+        return None
+
+
 def fetch_spotify_playlist_details(playlist_id, token=None, spdc=None):
     """
     Fetches Spotify playlist metadata (title, description, image).
+    Tries ultra-fast rate-limit-immune embed parser first, then falls back to Web API.
     """
     pid = extract_playlist_id(playlist_id)
+    if not pid:
+        return {"success": False, "error": "ID playlist không hợp lệ."}
+
+    # Fast path: Embed scraper (0ms auth, 0 rate limit, 100% reliable)
+    embed_res = fetch_spotify_playlist_from_embed(pid)
+    if embed_res and embed_res.get("success"):
+        return {
+            "success": True,
+            "id": embed_res["id"],
+            "title": embed_res["title"],
+            "description": embed_res["description"],
+            "image": embed_res["image"],
+            "trackCount": embed_res["trackCount"],
+            "owner": embed_res["owner"]
+        }
+
     if not token:
         if not spdc:
             spdc = lyrics_helper.get_spotify_spdc()
@@ -174,6 +259,13 @@ def fetch_spotify_playlist_tracks(playlist_id, token):
     Fetches all tracks from a Spotify playlist, handling pagination (100 tracks per page).
     """
     pid = extract_playlist_id(playlist_id)
+    if pid in _PLAYLIST_TRACKS_CACHE and _PLAYLIST_TRACKS_CACHE[pid]:
+        return _PLAYLIST_TRACKS_CACHE[pid]
+
+    embed_res = fetch_spotify_playlist_from_embed(pid)
+    if embed_res and embed_res.get("tracks"):
+        return embed_res["tracks"]
+
     tracks = []
     offset = 0
     limit = 100

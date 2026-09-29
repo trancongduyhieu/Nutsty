@@ -102,6 +102,20 @@ def handle_post_auth_cookies(handler, post_body):
 
 
 def handle_post_auth_auto_sync(handler):
+    # Phase 0: If current session is already authentic, return immediately with zero browser friction
+    try:
+        cur_auth = ytmusic_helper.get_auth_status()
+        if cur_auth.get("logged_in") and cur_auth.get("name") and cur_auth.get("name") != "Google User":
+            handler._send_json({
+                "success": True,
+                "browser": "Phiên hiện tại",
+                "name": cur_auth.get("name"),
+                "email": cur_auth.get("email")
+            }, 200)
+            return
+    except Exception:
+        pass
+
     res = ytmusic_helper.extract_ytmusic_cookies_from_browsers()
     handler._send_json(res, 200)
 
@@ -143,6 +157,22 @@ def handle_post_spotify_auto_sync(handler):
         from . import lyrics_helper
     except (ImportError, ValueError):
         import lyrics_helper
+
+    # Phase 0: If stored sp_dc in settings is already valid, connect instantly
+    try:
+        stored_spdc = lyrics_helper.get_spotify_spdc()
+        if stored_spdc:
+            sess = lyrics_helper.get_spotify_session_info(stored_spdc)
+            if not sess.get("isAnonymous", True):
+                handler._send_json({
+                    "success": True,
+                    "browser": "Cài đặt Nutsty",
+                    "spdc": stored_spdc,
+                    "session": sess
+                }, 200)
+                return
+    except Exception:
+        pass
 
     res = lyrics_helper.extract_spotify_cookie_from_browsers()
     if res.get("success") and res.get("spdc"):
@@ -222,9 +252,13 @@ def handle_post_spotify_validate(handler):
 def handle_get_spotify_playlists(handler, query):
     try:
         from . import spotify_importer
+        from . import lyrics_helper
     except (ImportError, ValueError):
         import spotify_importer
-    spdc = query.get("spdc", [""])[0]
+        import lyrics_helper
+    spdc = query.get("spdc", [""])[0].strip()
+    if not spdc:
+        spdc = lyrics_helper.get_spotify_spdc()
     res = spotify_importer.fetch_user_spotify_playlists(spdc)
     handler._send_json(res, 200)
 
@@ -232,11 +266,15 @@ def handle_get_spotify_playlists(handler, query):
 def handle_post_spotify_resolve_url(handler):
     try:
         from . import spotify_importer
+        from . import lyrics_helper
     except (ImportError, ValueError):
         import spotify_importer
+        import lyrics_helper
     body = handler._read_post_json()
     url = body.get("url", "") if isinstance(body, dict) else ""
     spdc = body.get("spdc", "") if isinstance(body, dict) else ""
+    if not spdc:
+        spdc = lyrics_helper.get_spotify_spdc()
     res = spotify_importer.fetch_spotify_playlist_details(url, spdc=spdc)
     handler._send_json(res, 200 if res.get("success") else 400)
 

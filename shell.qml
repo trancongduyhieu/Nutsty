@@ -117,8 +117,8 @@ Scope {
     property bool isLoadingArtist: false
     property var followedArtists: []
     property color wallpaperAccentColor: "#f4afb3"
-    property color songAccentColor: "#f4afb3"
-    readonly property color effectiveAccentColor: (win.currentTrack && win.isPlaying) ? win.songAccentColor : win.wallpaperAccentColor
+    property color songAccentColor: win.wallpaperAccentColor
+    readonly property color effectiveAccentColor: (win.currentTrack && win.isPlaying && win.songAccentColor) ? win.songAccentColor : win.wallpaperAccentColor
     property color accentColor: effectiveAccentColor
     Behavior on accentColor {
         ColorAnimation {
@@ -178,8 +178,10 @@ Scope {
                 if (!data || data.trim() === "") return;
                 try {
                     var parsed = JSON.parse(data);
-                    if (parsed && parsed.highlightColor) {
+                    if (parsed && parsed.highlightColor && parsed.highlightColor !== "#f4afb3" && parsed.highlightColor.trim() !== "") {
                         win.songAccentColor = parsed.highlightColor;
+                    } else {
+                        win.songAccentColor = win.wallpaperAccentColor;
                     }
                 } catch(e) {}
             }
@@ -2543,6 +2545,7 @@ Scope {
             id: spotifyImportModal
             backgroundSourceItem: nutstyAppSurface
             accentColor: win.accentColor
+            spotifySpdc: win.spotifySpdc
             onCloseRequested: spotifyImportModal.closeModal()
             onPlaylistImported: playlistId => {
                 win.loadCustomPlaylists();

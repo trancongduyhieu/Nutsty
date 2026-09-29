@@ -37,7 +37,7 @@ PROFILE_DIR = os.path.join(pc.get_config_dir(), f"browser_auth{PROFILE_SUFFIX}")
 
 LOGIN_URL = (
     "https://accounts.google.com/ServiceLogin?"
-    "ltmpl=music&service=youtube&uilel=3&passive=true&"
+    "ltmpl=music&service=youtube&uilel=3&passive=true&prompt=select_account&"
     "continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3Dhttps%253A%252F%252Fmusic.youtube.com%252F%26feature%3D__FEATURE__&hl=en"
 )
 
@@ -600,6 +600,68 @@ def start_login(service="youtube"):
 
     prompt_msg = "Starting native Spotify login assistant..." if service == "spotify" else "Starting native browser login assistant..."
     emit_status({"status": "starting", "service": service, "message": prompt_msg})
+
+    # Phase 0: Non-intrusive instant auto-connect from existing session / installed browsers
+    if service == "spotify":
+        try:
+            import lyrics_helper
+            # 1. Check if stored sp_dc in settings is already valid
+            stored_spdc = lyrics_helper.get_spotify_spdc()
+            if stored_spdc:
+                sess = lyrics_helper.get_spotify_session_info(stored_spdc)
+                if not sess.get("isAnonymous", True):
+                    log(f"Found active valid Spotify session in settings (country: {sess.get('userCountry')}). Fast-path connected!")
+                    res = {"success": True, "service": "spotify", "spdc": stored_spdc, "session": sess}
+                    emit_status({"status": "verified", "service": "spotify", "spdc": stored_spdc, "message": "Connected to Spotify!"})
+                    return res
+
+            # 2. Check if cookies can be extracted from any installed browser
+            auto_res = lyrics_helper.extract_spotify_cookie_from_browsers()
+            if auto_res.get("success") and auto_res.get("spdc"):
+                auto_spdc = auto_res["spdc"]
+                log(f"Auto-detected Spotify sp_dc from {auto_res.get('browser')}. Fast-path connected!")
+                settings_path = os.path.join(pc.get_config_dir(), f"nutsty_settings{PROFILE_SUFFIX}.json")
+                if not os.path.exists(settings_path):
+                    settings_path = os.path.join(pc.get_config_dir(), "nutsty_settings.json")
+                sdata = {}
+                if os.path.exists(settings_path):
+                    try:
+                        with open(settings_path, "r", encoding="utf-8") as sf:
+                            sdata = json.load(sf)
+                    except Exception:
+                        pass
+                sdata["spotifySpdc"] = auto_spdc
+                with open(settings_path, "w", encoding="utf-8") as sf:
+                    json.dump(sdata, sf, indent=2, ensure_ascii=False)
+                res = {"success": True, "service": "spotify", "spdc": auto_spdc, "session": auto_res.get("session")}
+                emit_status({"status": "verified", "service": "spotify", "spdc": auto_spdc, "message": f"Connected to Spotify via {auto_res.get('browser')}!"})
+                return res
+        except Exception as ae:
+            log(f"Spotify auto-login check note: {ae}", "DEBUG")
+    elif service == "youtube":
+        # Check if browser_auth has valid cookies
+        try:
+            from yt_dlp.cookies import _extract_chrome_cookies
+            p_dir = os.path.join(session_profile_dir, "Default")
+            if os.path.exists(p_dir):
+                class _SilentLogger:
+                    def info(self, *a): pass
+                    def debug(self, *a): pass
+                    def warning(self, *a): pass
+                    def error(self, *a): pass
+                jar = _extract_chrome_cookies("chrome", profile=p_dir, keyring=None, logger=_SilentLogger())
+                yt_cks = [c for c in jar if "youtube" in c.domain or "google" in c.domain]
+                has_sapisid = any(c.name in ("SAPISID", "__Secure-3PAPISID") for c in yt_cks)
+                has_login_info = any(c.name in ("LOGIN_INFO", "SID") for c in yt_cks)
+                if has_sapisid and has_login_info:
+                    cookie_str = "; ".join(f"{c.name}={c.value}" for c in yt_cks)
+                    res = ytmusic_helper.save_auth(cookie_str)
+                    if res.get("success") and res.get("name") and res.get("name") != "Google User":
+                        log(f"Restored Google session from existing profile: {res.get('name')}. Fast-path connected!")
+                        emit_status({"status": "verified", "name": res.get("name"), "email": res.get("email"), "message": f"Connected as {res.get('name')}!"})
+                        return res
+        except Exception as ye:
+            log(f"YouTube auto-login check note: {ye}", "DEBUG")
 
     browser_bin = find_system_browser()
     if not browser_bin:

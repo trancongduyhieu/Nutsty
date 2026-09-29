@@ -196,8 +196,10 @@ def extract_spotify_cookie_from_browsers():
     # 2. Chromium-based browsers
     candidates = []
     nutsty_profile_dir = os.path.join(pc.get_config_dir(), "browser_auth")
+    nutsty_spotify_dir = os.path.join(pc.get_config_dir(), "browser_spotify")
     if sys.platform == "win32":
         candidates = [
+            ("Nutsty Spotify Profile", nutsty_spotify_dir),
             ("Nutsty Browser Profile", nutsty_profile_dir),
             ("Edge", os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\User Data")),
             ("Chrome", os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\User Data")),
@@ -209,6 +211,7 @@ def extract_spotify_cookie_from_browsers():
         ]
     else:
         candidates = [
+            ("Nutsty Spotify Profile", nutsty_spotify_dir),
             ("Nutsty Browser Profile", nutsty_profile_dir),
             ("Chrome", os.path.expanduser("~/.config/google-chrome"), "google-chrome"),
             ("Chromium", os.path.expanduser("~/.config/chromium"), "chromium"),
