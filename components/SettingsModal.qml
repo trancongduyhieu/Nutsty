@@ -112,49 +112,12 @@ Rectangle {
 
     function startBrowserLoginFlow() {
         root.isProcessing = true;
-        root.statusMessage = I18n.tr("Đang tự động quét phiên đăng nhập từ các trình duyệt...", "Scanning active session from installed browsers...");
+        root.statusMessage = I18n.tr(
+            "Đang mở trình duyệt... Vui lòng chọn tài khoản Google để đăng nhập.",
+            "Opening browser window... Please select your Google account."
+        );
         loginTimeoutTimer.restart();
-
-        // Phase 1: Try instant 0-second auto-sync from browser databases
-        var xhr = new XMLHttpRequest();
-        xhr.open("POST", "http://127.0.0.1:17890/api/auth/auto-sync");
-        xhr.onreadystatechange = function() {
-            if (xhr.readyState === XMLHttpRequest.DONE) {
-
-                if (xhr.status === 200) {
-                    try {
-                        var res = JSON.parse(xhr.responseText);
-                        if (res.success) {
-                            root.isProcessing = false;
-                            root.statusMessage = I18n.tr(
-                                "Đã kết nối tài khoản " + (res.name || "") + " từ " + (res.browser || "trình duyệt") + "!",
-                                "Connected account " + (res.name || "") + " from " + (res.browser || "browser") + "!"
-                            );
-                            if (typeof win !== "undefined" && win.checkAuthStatus) {
-                                win.checkAuthStatus();
-                                win.loadHomeFeed();
-                            }
-                            return;
-                        }
-                    } catch(e) {}
-                }
-
-                // Phase 2: Launch the native login assistant window with CDP
-                root.statusMessage = I18n.tr(
-                    "Đang mở trình duyệt đăng nhập... Vui lòng đăng nhập Google.",
-                    "Opening browser window... Please sign in with Google."
-                );
-                root.launchBrowserLoginRequested();
-            }
-        };
-        xhr.onerror = function() {
-            root.statusMessage = I18n.tr(
-                "Đang mở trình duyệt đăng nhập... Vui lòng đăng nhập Google.",
-                "Opening browser window... Please sign in with Google."
-            );
-            root.launchBrowserLoginRequested();
-        };
-        xhr.send();
+        root.launchBrowserLoginRequested();
     }
 
     function pasteAndConnectFromClipboard() {
@@ -253,49 +216,12 @@ Rectangle {
     function autoSyncSpotifyFromBrowsers() {
         root.spotifyAutoSyncing = true;
         root.spotifyStatusSuccess = true;
-        root.spotifyStatusMessage = I18n.tr("Đang quét cookie Spotify từ trình duyệt...", "Scanning Spotify cookie from browsers...");
+        root.spotifyStatusMessage = I18n.tr(
+            "Đang mở trình duyệt... Vui lòng đăng nhập Spotify.",
+            "Opening browser window... Please sign in to Spotify."
+        );
         spotifyLoginTimeoutTimer.restart();
-
-        // Phase 1: Try instant 0-second offline extraction
-        var xhr = new XMLHttpRequest();
-        xhr.open("POST", "http://127.0.0.1:17890/api/spotify/auto-sync");
-        xhr.onreadystatechange = function() {
-            if (xhr.readyState === XMLHttpRequest.DONE) {
-                if (xhr.status === 200) {
-                    try {
-                        var res = JSON.parse(xhr.responseText);
-                        if (res.success && res.spdc) {
-                            root.spotifyAutoSyncing = false;
-                            root.spotifySpdc = res.spdc;
-                            root.saveSpotifySpdcRequested(res.spdc);
-                            root.spotifyStatusSuccess = true;
-                            root.spotifyStatusMessage = I18n.tr("Đã đồng bộ cookie Spotify thành công từ " + res.browser + "!", "Successfully synced Spotify cookie from " + res.browser + "!");
-                            if (typeof win !== "undefined" && win.showToast) {
-                                win.showToast(root.spotifyStatusMessage);
-                            }
-                            return;
-                        }
-                    } catch(e) {}
-                }
-
-                // Phase 2: Launch the native login assistant window with CDP (identical to YouTube Music)
-                root.spotifyStatusSuccess = true;
-                root.spotifyStatusMessage = I18n.tr(
-                    "Đang mở trình duyệt đăng nhập... Vui lòng đăng nhập Spotify.",
-                    "Opening browser window... Please sign in to Spotify."
-                );
-                root.launchSpotifyBrowserLoginRequested();
-            }
-        };
-        xhr.onerror = function() {
-            root.spotifyStatusSuccess = true;
-            root.spotifyStatusMessage = I18n.tr(
-                "Đang mở trình duyệt đăng nhập... Vui lòng đăng nhập Spotify.",
-                "Opening browser window... Please sign in to Spotify."
-            );
-            root.launchSpotifyBrowserLoginRequested();
-        };
-        xhr.send();
+        root.launchSpotifyBrowserLoginRequested();
     }
 
     function validateAndSaveSpotifyCookie(val) {

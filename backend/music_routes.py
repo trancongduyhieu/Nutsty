@@ -116,6 +116,11 @@ def handle_post_auth_auto_sync(handler):
     except Exception:
         pass
 
+    # On Windows, locked browser cookies prevent offline extraction; fail fast so browser opens in 0ms
+    if sys.platform == "win32" or os.name == "nt":
+        handler._send_json({"success": False, "message": "Opening native browser login..."}, 200)
+        return
+
     res = ytmusic_helper.extract_ytmusic_cookies_from_browsers()
     handler._send_json(res, 200)
 
@@ -173,6 +178,11 @@ def handle_post_spotify_auto_sync(handler):
                 return
     except Exception:
         pass
+
+    # On Windows, locked browser cookies prevent offline extraction; fail fast so browser opens in 0ms
+    if sys.platform == "win32" or os.name == "nt":
+        handler._send_json({"success": False, "message": "Opening native browser login..."}, 200)
+        return
 
     res = lyrics_helper.extract_spotify_cookie_from_browsers()
     if res.get("success") and res.get("spdc"):

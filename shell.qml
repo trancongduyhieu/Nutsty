@@ -711,10 +711,16 @@ Scope {
                         return;
                     }
                     if (res.success) {
+                        win.isAuthLoggedIn = true;
+                        if (res.name) win.authAccountName = res.name;
+                        if (res.email) win.authAccountEmail = res.email;
+                        var t = res.thumb || res.avatar || "";
+                        if (t && !t.includes("ui-avatars.com")) win.authAccountThumb = t;
                         settingsModal.statusMessage = I18n.tr("Đã kết nối thành công: ", "Connected successfully as ") + (res.name || "Google User") + "!";
                         settingsModal.isProcessing = false;
                         win.checkAuthStatus();
                         win.loadHomeFeed();
+                        win.fetchCurrentUserProfile();
                     } else if (res.error) {
                         settingsModal.statusMessage = I18n.tr("Đăng nhập: ", "Login: ") + res.error;
                         settingsModal.isProcessing = false;
@@ -850,14 +856,12 @@ Scope {
     }
 
     readonly property string currentUserAvatar: {
-        if (win.authAccountThumb) return win.authAccountThumb;
+        if (win.authAccountThumb && !win.authAccountThumb.includes("ui-avatars.com")) {
+            return win.authAccountThumb;
+        }
         var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
         if (profile === "user2") {
             return "https://yt3.ggpht.com/yti/ANjgQV-gmgVqqr67jTVBtevq6YMeZh0jpxYB0_EOiLb7uSg=s108-c-k-c0x00ffffff-no-rj";
-        }
-        var name = (win.authAccountName || win.currentUserName);
-        if (name && name !== I18n.tr("Khách", "Guest") && name !== "Khách" && name !== "Guest") {
-            return "https://ui-avatars.com/api/?name=" + encodeURIComponent(name) + "&background=6366f1&color=fff&size=256&bold=true";
         }
         return "";
     }
@@ -2831,9 +2835,9 @@ Scope {
         if (!raw || raw.trim() === "") return;
         try {
             var c = JSON.parse(raw);
-            if (c.name && !win.authAccountName) win.authAccountName = c.name;
-            if (c.avatar && !win.authAccountThumb) win.authAccountThumb = c.avatar;
-            if (c.email && !win.authAccountEmail) win.authAccountEmail = c.email;
+            if (c.name) win.authAccountName = c.name;
+            if (c.avatar && !c.avatar.includes("ui-avatars.com")) win.authAccountThumb = c.avatar;
+            if (c.email) win.authAccountEmail = c.email;
         } catch(e) {}
     }
 

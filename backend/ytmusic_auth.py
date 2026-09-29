@@ -348,15 +348,15 @@ def extract_account_details_from_client(yt, headers=None):
         sys.stderr.write(f"[extract_account_details account_menu error]: {e}\n")
 
     # Method 2: Standard ytmusicapi get_account_info fallback
-    if not info["name"] or info["name"] == "Google User":
+    if not info.get("thumb") or not info.get("name") or info.get("name") == "Google User":
         try:
             std_user = yt.get_account_info()
             if isinstance(std_user, dict):
-                if std_user.get("accountName"):
+                if std_user.get("accountName") and (not info.get("name") or info.get("name") == "Google User"):
                     info["name"] = std_user.get("accountName")
-                if std_user.get("channelHandle") and not info["handle"]:
+                if std_user.get("channelHandle") and not info.get("handle"):
                     info["handle"] = std_user.get("channelHandle")
-                if std_user.get("accountPhotoUrl") and not info["thumb"]:
+                if std_user.get("accountPhotoUrl"):
                     info["thumb"] = std_user.get("accountPhotoUrl")
         except Exception:
             pass
@@ -391,6 +391,7 @@ def get_auth_status():
             name = cached_info.get("name")
         if not email and cached_info.get("email") and "@" in cached_info.get("email") and not cached_info.get("email").startswith("googleuser@"):
             email = cached_info.get("email")
+        
         # Real avatar check: prefer actual Google photo (ggpht.com, googleusercontent.com) over ui-avatars fallback
         cached_avatar = cached_info.get("avatar") or ""
         is_cached_real = cached_avatar and "ui-avatars.com" not in cached_avatar
@@ -400,44 +401,14 @@ def get_auth_status():
         elif is_cached_real:
             thumb = cached_avatar
         else:
-            # Attempt to pull fresh cookies from browser_auth profile directly
+            # Query official ytmusicapi get_account_info for fresh accountPhotoUrl
             try:
-                from yt_dlp.cookies import _extract_chrome_cookies
-                p_dir = os.path.join(os.path.dirname(AUTH_FILE), f"browser_auth{PROFILE_SUFFIX}", "Default")
-                if os.path.exists(p_dir):
-                    class _L:
-                        def info(self, *a): pass
-                        def debug(self, *a): pass
-                        def warning(self, *a): pass
-                        def error(self, *a): pass
-                    jar = _extract_chrome_cookies("chrome", profile=p_dir, keyring=None, logger=_L())
-                    yt_cks = [c for c in jar if "youtube" in c.domain or "google" in c.domain]
-                    if yt_cks:
-                        cookie_str = "; ".join(f"{c.name}={c.value}" for c in yt_cks)
-                        save_res = save_auth(cookie_str)
-                        if save_res.get("avatar") and "ui-avatars.com" not in save_res["avatar"]:
-                            thumb = save_res["avatar"]
-                        if save_res.get("name") and (not name or name == "Google User"):
-                            name = save_res["name"]
-                        if save_res.get("email") and not email:
-                            email = save_res["email"]
-            except Exception:
-                pass
-
-        # Direct profile extraction from cookies if still missing
-        if not name or name == "Google User" or not email or not thumb or "ui-avatars.com" in thumb:
-            try:
-                with open(AUTH_FILE, "r", encoding="utf-8") as f:
-                    auth_data = json.load(f)
-                cookie_str = auth_data.get("cookie", "")
-                if cookie_str:
-                    dp = fetch_google_profile_from_cookies(cookie_str)
-                    if dp.get("name") and (not name or name == "Google User"):
-                        name = dp["name"]
-                    if dp.get("email") and not email:
-                        email = dp["email"]
-                    if dp.get("thumb") and ("ui-avatars.com" not in dp["thumb"]):
-                        thumb = dp["thumb"]
+                acc_info = yt.get_account_info()
+                if isinstance(acc_info, dict):
+                    if acc_info.get("accountPhotoUrl"):
+                        thumb = acc_info["accountPhotoUrl"]
+                    if acc_info.get("accountName") and (not name or name == "Google User"):
+                        name = acc_info["accountName"]
             except Exception:
                 pass
 
@@ -446,11 +417,6 @@ def get_auth_status():
         if not email and name and name != "Google User":
             safe_name = re.sub(r'[^a-zA-Z0-9]', '', name).lower()
             email = f"{safe_name or (PROFILE_NAME or 'user')}@gmail.com"
-
-        import urllib.parse
-        if not thumb and name and name != "Google User":
-            safe_query = urllib.parse.quote(name)
-            thumb = f"https://ui-avatars.com/api/?name={safe_query}&background=6366f1&color=fff&size=256&bold=true"
 
         # Update local user cache with verified account details
         try:
@@ -481,23 +447,8 @@ def get_auth_status():
         if cached_info and cached_info.get("name") and cached_info.get("name") != "Google User":
             c_name = cached_info.get("name")
             c_thumb = cached_info.get("avatar") or ""
-            if not c_thumb and c_name:
-                import urllib.parse
-                c_thumb = f"https://ui-avatars.com/api/?name={urllib.parse.quote(c_name)}&background=6366f1&color=fff&size=256&bold=true"
-                cached_info["avatar"] = c_thumb
-                try:
-                    with open(user_cache_file, "w", encoding="utf-8") as ucf:
-                        json.dump(cached_info, ucf, indent=2, ensure_ascii=False)
-                except Exception:
-                    pass
-                try:
-                    from . import cloud_relay_client as crc
-                except (ImportError, ValueError):
-                    import cloud_relay_client as crc
-                try:
-                    crc.ensure_cloud_identity(PROFILE_SUFFIX, fallback_name=c_name, fallback_avatar=c_thumb)
-                except Exception:
-                    pass
+            if "ui-avatars.com" in c_thumb:
+                c_thumb = ""
             return {
                 "logged_in": True,
                 "name": c_name,
@@ -515,9 +466,8 @@ def get_auth_status():
                 fb_name = dp.get("name") or (cached_info.get("name") if cached_info else "") or "Google User"
                 fb_email = dp.get("email") or (cached_info.get("email") if cached_info else "") or ""
                 fb_thumb = dp.get("thumb") or (cached_info.get("avatar") if cached_info else "") or ""
-                if not fb_thumb and fb_name and fb_name != "Google User":
-                    import urllib.parse
-                    fb_thumb = f"https://ui-avatars.com/api/?name={urllib.parse.quote(fb_name)}&background=6366f1&color=fff&size=256&bold=true"
+                if "ui-avatars.com" in fb_thumb:
+                    fb_thumb = ""
                 return {"logged_in": True, "name": fb_name, "thumb": fb_thumb, "email": fb_email}
         except Exception:
             pass
@@ -716,6 +666,19 @@ def save_auth(raw_text, profile_hint=None):
                     except Exception:
                         pass
 
+        # Dynamically fetch latest authentic account name and photo directly from InnerTube
+        try:
+            from ytmusicapi import YTMusic
+            yt = YTMusic(AUTH_FILE)
+            acc_info = yt.get_account_info()
+            if isinstance(acc_info, dict):
+                if acc_info.get("accountName") and (not name or name == "Google User"):
+                    name = acc_info["accountName"]
+                if acc_info.get("accountPhotoUrl"):
+                    thumb = acc_info["accountPhotoUrl"]
+        except Exception:
+            pass
+
         # Cache profile info for instant sub-millisecond access (never wipe with empty info)
         user_cache_file = os.path.join(os.path.dirname(AUTH_FILE), f"nutsty_user_cache{PROFILE_SUFFIX}.json")
         try:
@@ -726,6 +689,9 @@ def save_auth(raw_text, profile_hint=None):
                     thumb = cached_ex.get("avatar") or ""
                 except Exception:
                     pass
+
+            if "ui-avatars.com" in thumb:
+                thumb = ""
 
             if email or (name and name != "Google User"):
                 user_data = {
@@ -738,6 +704,17 @@ def save_auth(raw_text, profile_hint=None):
                     json.dump(user_data, ucf, indent=2, ensure_ascii=False)
         except Exception as ce:
             sys.stderr.write(f"[cache user info error]: {ce}\n")
+
+        # Automatically sync avatar to Cloud Identity and Global Relay
+        if thumb:
+            try:
+                from . import cloud_relay_client as crc
+            except (ImportError, ValueError):
+                import cloud_relay_client as crc
+            try:
+                crc.ensure_cloud_identity(PROFILE_SUFFIX, fallback_name=name, fallback_avatar=thumb)
+            except Exception:
+                pass
 
         try:
             with open(AUTH_CHANGED_FILE, "w") as f:
