@@ -729,6 +729,48 @@ Scope {
     }
 
     Process {
+        id: spotifyBrowserLoginProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try {
+                    var res = JSON.parse(data);
+                    if (res.status === "browser_launched") {
+                        settingsModal.spotifyStatusMessage = res.message || I18n.tr("Đã mở trình duyệt. Vui lòng đăng nhập Spotify...", "Browser opened. Please sign in to Spotify...");
+                        return;
+                    }
+                    if (res.status === "verified" || res.success) {
+                        var spdc = res.spdc || "";
+                        if (spdc) {
+                            win.spotifySpdc = spdc;
+                            settingsModal.spotifySpdc = spdc;
+                            settingsModal.saveSpotifySpdcRequested(spdc);
+                        }
+                        settingsModal.spotifyStatusSuccess = true;
+                        settingsModal.spotifyStatusMessage = I18n.tr("Đã liên kết tài khoản Spotify thành công!", "Connected Spotify account successfully!");
+                        settingsModal.spotifyAutoSyncing = false;
+                        win.showToast(I18n.tr("Đã kết nối tài khoản Spotify thành công!", "Connected Spotify account successfully!"));
+                        return;
+                    }
+                    if (res.error) {
+                        settingsModal.spotifyStatusSuccess = false;
+                        settingsModal.spotifyStatusMessage = I18n.tr("Lỗi Spotify: ", "Spotify error: ") + res.error;
+                        settingsModal.spotifyAutoSyncing = false;
+                    }
+                } catch(e) {
+                    settingsModal.spotifyStatusSuccess = false;
+                    settingsModal.spotifyStatusMessage = "Error: " + e;
+                    settingsModal.spotifyAutoSyncing = false;
+                }
+            }
+        }
+        onExited: {
+            settingsModal.spotifyAutoSyncing = false;
+        }
+    }
+
+    Process {
+
         id: playbackTrackingProc
         stdout: SplitParser {
             splitMarker: "\n"
@@ -805,14 +847,23 @@ Scope {
         return I18n.tr("Khách", "Guest");
     }
 
-    function getCurrentUserAvatar() {
+    readonly property string currentUserAvatar: {
         if (win.authAccountThumb) return win.authAccountThumb;
         var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
         if (profile === "user2") {
             return "https://yt3.ggpht.com/yti/ANjgQV-gmgVqqr67jTVBtevq6YMeZh0jpxYB0_EOiLb7uSg=s108-c-k-c0x00ffffff-no-rj";
         }
+        var name = (win.authAccountName || win.currentUserName);
+        if (name && name !== I18n.tr("Khách", "Guest") && name !== "Khách" && name !== "Guest") {
+            return "https://ui-avatars.com/api/?name=" + encodeURIComponent(name) + "&background=6366f1&color=fff&size=256&bold=true";
+        }
         return "";
     }
+
+    function getCurrentUserAvatar() {
+        return win.currentUserAvatar;
+    }
+
 
     property string currentUserName: ""
     property string currentUserPin: ""
@@ -1894,7 +1945,7 @@ Scope {
                             isLoadingAudio: win.isLoadingAudio
                             accentColor: win.accentColor
                             accountName: win.authAccountName
-                            accountThumb: win.authAccountThumb
+                            accountThumb: win.currentUserAvatar
                             friendsNotes: win.friendsNotes
                             myLatestNote: win.myLatestNote
 
@@ -2295,7 +2346,7 @@ Scope {
             backgroundSourceItem: nutstyAppSurface
             isLoggedIn: win.isAuthLoggedIn
             accountName: win.authAccountName
-            accountThumb: win.authAccountThumb
+            accountThumb: win.currentUserAvatar
             accountEmail: win.authAccountEmail
             syncHistoryToGoogle: win.syncHistoryToGoogle
             desktopLyricsEnabled: win.desktopLyricsEnabled
@@ -2394,7 +2445,21 @@ Scope {
                 settingsModal.isProcessing = false;
                 settingsModal.statusMessage = I18n.tr("Đã hủy chờ đăng nhập.", "Login cancelled.");
             }
+            onLaunchSpotifyBrowserLoginRequested: {
+                settingsModal.spotifyAutoSyncing = true;
+                settingsModal.spotifyStatusSuccess = true;
+                settingsModal.spotifyStatusMessage = I18n.tr("Đang mở trình duyệt để kết nối Spotify...", "Opening browser window to link Spotify...");
+                spotifyBrowserLoginProc.running = false;
+                spotifyBrowserLoginProc.command = ["python3", "-u", win.appDir + "/backend/browser_login.py", "--service", "spotify"];
+                spotifyBrowserLoginProc.running = true;
+            }
+            onCancelSpotifyBrowserLoginRequested: {
+                spotifyBrowserLoginProc.running = false;
+                settingsModal.spotifyAutoSyncing = false;
+                settingsModal.spotifyStatusMessage = I18n.tr("Đã hủy kết nối Spotify.", "Spotify login cancelled.");
+            }
         }
+
 
         PostNoteModal {
             id: postNoteModal
@@ -2402,7 +2467,7 @@ Scope {
             currentTrack: win.currentTrack
             resolvedCover: win.currentResolvedCover
             availableTracks: (win.currentTracks && win.currentTracks.length > 0) ? win.currentTracks : (win.browsingTracks && win.browsingTracks.length > 0 ? win.browsingTracks : win.allTracks)
-            userAvatar: win.authAccountThumb
+            userAvatar: win.currentUserAvatar
             userName: win.authAccountName
             accentColor: win.accentColor
             isPreviewPlaying: win.isPlaying && win.isSameTrack(postNoteModal.previewingTrack, win.currentTrack)
@@ -2458,8 +2523,9 @@ Scope {
         UserNoteDetailModal {
             id: userNoteDetailModal
             backgroundSourceItem: nutstyAppSurface
-            userAvatar: win.authAccountThumb
+            userAvatar: win.currentUserAvatar
             userName: win.authAccountName
+
             accentColor: win.accentColor
             isTrackPlaying: win.isPlaying
             onChangeNoteRequested: {
@@ -2481,7 +2547,15 @@ Scope {
             onPlaylistImported: playlistId => {
                 win.loadCustomPlaylists();
             }
+            onOpenSettingsRequested: {
+                spotifyImportModal.closeModal();
+                settingsModal.openModal();
+            }
+            onLaunchSpotifyBrowserLoginRequested: {
+                settingsModal.startSpotifyBrowserLoginFlow();
+            }
         }
+
 
         TrackContextMenu {
             id: trackContextMenu
@@ -2733,7 +2807,36 @@ Scope {
     }
 
     FileView {
+        id: userCacheFileView
+        path: Quickshell.env("HOME") + "/.config/noctalia/nutsty_user_cache" + (Quickshell.env("NUTSTY_PROFILE") ? ("_" + Quickshell.env("NUTSTY_PROFILE").toLowerCase()) : "") + ".json"
+        watchChanges: true
+        onFileChanged: {
+            reload();
+            win.loadUserCache();
+        }
+        onLoadedChanged: {
+            if (loaded) win.loadUserCache();
+        }
+        Component.onCompleted: {
+            if (loaded) win.loadUserCache();
+        }
+    }
+
+    function loadUserCache() {
+        if (!userCacheFileView.loaded) return;
+        var raw = userCacheFileView.text();
+        if (!raw || raw.trim() === "") return;
+        try {
+            var c = JSON.parse(raw);
+            if (c.name && !win.authAccountName) win.authAccountName = c.name;
+            if (c.avatar && !win.authAccountThumb) win.authAccountThumb = c.avatar;
+            if (c.email && !win.authAccountEmail) win.authAccountEmail = c.email;
+        } catch(e) {}
+    }
+
+    FileView {
         id: paletteFileView
+
         path: Quickshell.env("HOME") + "/.config/noctalia/nutsty_palette.json"
         watchChanges: true
         onFileChanged: {

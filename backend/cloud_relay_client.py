@@ -763,6 +763,21 @@ def ensure_cloud_identity(profile_suffix="", fallback_name=None, fallback_avatar
                     return ensure_cloud_identity(profile_suffix, fallback_name=user_name, fallback_avatar=avatar_url, force_recreate=True)
             except Exception:
                 pass
+
+        # Always synchronize avatar_url to Cloud Relay if updated or missing
+        if avatar_url and avatar_url != ident.get("avatar_url"):
+            try:
+                up_res = GLOBAL_RELAY_CLIENT.update_profile(
+                    user_id=ident["user_id"],
+                    secret_key=ident["secret_key"],
+                    avatar_url=avatar_url
+                )
+                if up_res and up_res.get("success"):
+                    ident["avatar_url"] = avatar_url
+                    save_cloud_identity(ident, profile_suffix)
+            except Exception:
+                pass
+
         return ident
 
     if not user_name:

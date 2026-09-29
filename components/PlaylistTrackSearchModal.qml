@@ -352,11 +352,31 @@ Rectangle {
                 }
             }
 
+            // Results List & Skeleton Loading Container
+            ColumnLayout {
+                id: searchSkeletonCol
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: 6
+                visible: root.isSearchingOnline && (!resultsList.model || resultsList.model.length === 0)
+
+                Repeater {
+                    model: 5
+                    SkeletonTrackRow {
+                        Layout.fillWidth: true
+                        isCompact: false
+                    }
+                }
+
+                Item { Layout.fillHeight: true }
+            }
+
             // Results List
             ListView {
                 id: resultsList
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                visible: !searchSkeletonCol.visible
                 clip: true
                 spacing: 6
                 boundsBehavior: Flickable.StopAtBounds

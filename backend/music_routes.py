@@ -171,7 +171,10 @@ def handle_post_spotify_auto_sync(handler):
                 json.dump(data, f, indent=2, ensure_ascii=False)
         except Exception as e:
             sys.stderr.write(f"[spotify_auto_sync save error]: {e}\n")
+    else:
+        res["need_browser_login"] = True
     handler._send_json(res, 200)
+
 
 
 def handle_get_spotify_profile(handler, query):

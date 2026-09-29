@@ -72,6 +72,24 @@ Rectangle {
     }
 
     Timer {
+        id: spotifyLoginTimeoutTimer
+        interval: 180000 // 180 seconds fail-safe timeout
+        running: root.spotifyAutoSyncing
+        repeat: false
+        onTriggered: {
+            if (root.spotifyAutoSyncing) {
+                root.cancelSpotifyBrowserLoginRequested();
+                root.spotifyAutoSyncing = false;
+                root.spotifyStatusSuccess = false;
+                root.spotifyStatusMessage = I18n.tr(
+                    "Đã hết thời gian chờ trình duyệt Spotify (180s). Hãy thử lại hoặc dán cookie sp_dc thủ công.",
+                    "Spotify browser login timed out (180s). Please try again or paste sp_dc cookie manually."
+                );
+            }
+        }
+    }
+
+    Timer {
         id: loginTimeoutTimer
         interval: 180000 // 180 seconds fail-safe timeout
         running: root.isProcessing
@@ -88,6 +106,10 @@ Rectangle {
         }
     }
 
+    function startSpotifyBrowserLoginFlow() {
+        root.autoSyncSpotifyFromBrowsers();
+    }
+
     function startBrowserLoginFlow() {
         root.isProcessing = true;
         root.statusMessage = I18n.tr("Đang tự động quét phiên đăng nhập từ các trình duyệt...", "Scanning active session from installed browsers...");
@@ -98,6 +120,7 @@ Rectangle {
         xhr.open("POST", "http://127.0.0.1:17890/api/auth/auto-sync");
         xhr.onreadystatechange = function() {
             if (xhr.readyState === XMLHttpRequest.DONE) {
+
                 if (xhr.status === 200) {
                     try {
                         var res = JSON.parse(xhr.responseText);
@@ -229,39 +252,48 @@ Rectangle {
 
     function autoSyncSpotifyFromBrowsers() {
         root.spotifyAutoSyncing = true;
+        root.spotifyStatusSuccess = true;
         root.spotifyStatusMessage = I18n.tr("Đang quét cookie Spotify từ trình duyệt...", "Scanning Spotify cookie from browsers...");
+        spotifyLoginTimeoutTimer.restart();
+
+        // Phase 1: Try instant 0-second offline extraction
         var xhr = new XMLHttpRequest();
         xhr.open("POST", "http://127.0.0.1:17890/api/spotify/auto-sync");
         xhr.onreadystatechange = function() {
             if (xhr.readyState === XMLHttpRequest.DONE) {
-                root.spotifyAutoSyncing = false;
                 if (xhr.status === 200) {
                     try {
                         var res = JSON.parse(xhr.responseText);
                         if (res.success && res.spdc) {
+                            root.spotifyAutoSyncing = false;
                             root.spotifySpdc = res.spdc;
                             root.saveSpotifySpdcRequested(res.spdc);
                             root.spotifyStatusSuccess = true;
                             root.spotifyStatusMessage = I18n.tr("Đã đồng bộ cookie Spotify thành công từ " + res.browser + "!", "Successfully synced Spotify cookie from " + res.browser + "!");
+                            if (typeof win !== "undefined" && win.showToast) {
+                                win.showToast(root.spotifyStatusMessage);
+                            }
                             return;
-                        } else {
-                            root.spotifyStatusSuccess = false;
-                            root.spotifyStatusMessage = res.message || I18n.tr("Không tìm thấy cookie Spotify. Hãy đăng nhập Spotify trên trình duyệt.", "No Spotify cookie found. Please log in to Spotify on your browser.");
                         }
-                    } catch(e) {
-                        root.spotifyStatusSuccess = false;
-                        root.spotifyStatusMessage = I18n.tr("Lỗi xử lý phản hồi từ daemon.", "Error processing response from daemon.");
-                    }
-                } else {
-                    root.spotifyStatusSuccess = false;
-                    root.spotifyStatusMessage = I18n.tr("Không thể kết nối với Nutsty daemon.", "Could not connect to Nutsty daemon.");
+                    } catch(e) {}
                 }
+
+                // Phase 2: Launch the native login assistant window with CDP (identical to YouTube Music)
+                root.spotifyStatusSuccess = true;
+                root.spotifyStatusMessage = I18n.tr(
+                    "Đang mở trình duyệt đăng nhập... Vui lòng đăng nhập Spotify.",
+                    "Opening browser window... Please sign in to Spotify."
+                );
+                root.launchSpotifyBrowserLoginRequested();
             }
         };
         xhr.onerror = function() {
-            root.spotifyAutoSyncing = false;
-            root.spotifyStatusSuccess = false;
-            root.spotifyStatusMessage = I18n.tr("Lỗi mạng khi kết nối tới backend.", "Network error connecting to backend.");
+            root.spotifyStatusSuccess = true;
+            root.spotifyStatusMessage = I18n.tr(
+                "Đang mở trình duyệt đăng nhập... Vui lòng đăng nhập Spotify.",
+                "Opening browser window... Please sign in to Spotify."
+            );
+            root.launchSpotifyBrowserLoginRequested();
         };
         xhr.send();
     }
@@ -324,7 +356,10 @@ Rectangle {
     signal logoutRequested()
     signal launchBrowserLoginRequested()
     signal cancelBrowserLoginRequested()
+    signal launchSpotifyBrowserLoginRequested()
+    signal cancelSpotifyBrowserLoginRequested()
     signal toggleSyncHistoryRequested(bool enabled)
+
     signal toggleAnimatedCoverRequested(bool enabled)
     signal saveCanvasPreferenceRequested(string pref)
     signal toggleDesktopLyricsRequested(bool enabled)

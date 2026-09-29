@@ -41,6 +41,10 @@ LOGIN_URL = (
     "continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3Dhttps%253A%252F%252Fmusic.youtube.com%252F%26feature%3D__FEATURE__&hl=en"
 )
 
+SPOTIFY_LOGIN_URL = "https://accounts.spotify.com/en/login?continue=https%3A%2F%2Fopen.spotify.com%2F"
+SPOTIFY_PROFILE_DIR = os.path.join(pc.get_config_dir(), f"browser_spotify{PROFILE_SUFFIX}")
+
+
 # Forensic Logger Targets
 LOG_FILE_PRIMARY = os.path.join(pc.get_config_dir(), "browser_login.log")
 LOG_FILE_TEMP = os.path.join(pc.get_temp_dir(), "browser_login.log")
@@ -302,12 +306,12 @@ async def query_browser_profile(cdp_port):
         log(f"query_browser_profile debug: {e}", "DEBUG")
     return None
 
-async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
+async def capture_cookies_via_cdp(ws_url, cdp_port, proc, service="youtube", max_timeout=300):
     import websockets
 
     # Guarantee IPv4 loopback to avoid Windows IPv6 [WinError 10061]
     ws_url = ws_url.replace("localhost", "127.0.0.1")
-    log(f"Initiating CDP connection to Browser Target: {ws_url}")
+    log(f"Initiating CDP connection to Browser Target: {ws_url} (service={service})")
 
     start_time = time.time()
     google_signed_in_time = None
@@ -366,6 +370,17 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
                     with urllib.request.urlopen(f"http://127.0.0.1:{cdp_port}/json/list", timeout=1.0) as r:
                         pages = json.loads(r.read().decode("utf-8"))
 
+                    target_urls = [
+                        "https://open.spotify.com",
+                        "https://accounts.spotify.com",
+                        "https://spotify.com"
+                    ] if service == "spotify" else [
+                        "https://music.youtube.com",
+                        "https://youtube.com",
+                        "https://www.youtube.com",
+                        "https://accounts.google.com"
+                    ]
+
                     for p in pages:
                         p_ws = p.get("webSocketDebuggerUrl")
                         p_url = p.get("url", "")
@@ -379,12 +394,7 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
                                         "id": 777,
                                         "method": "Network.getCookies",
                                         "params": {
-                                            "urls": [
-                                                "https://music.youtube.com",
-                                                "https://youtube.com",
-                                                "https://www.youtube.com",
-                                                "https://accounts.google.com"
-                                            ]
+                                            "urls": target_urls
                                         }
                                     }))
                                     for _ in range(6):
@@ -397,12 +407,51 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
                                             break
                             except Exception as pe:
                                 log(f"Page query error for target [{p_url}]: {pe}", "DEBUG")
-                            # CRITICAL FIX: DO NOT BREAK HERE! Continue scanning remaining tabs/redirects
                 except Exception as le:
                     log(f"Error reading /json/list: {le}", "DEBUG")
 
                 # 3. Analyze accumulated cookies
-                if cookies:
+                if cookies and service == "spotify":
+                    spdc_val = ""
+                    for c in cookies:
+                        if c.get("name") == "sp_dc" and c.get("value"):
+                            spdc_val = c.get("value").strip()
+                            break
+
+                    if spdc_val:
+                        log(f"Detected Spotify sp_dc cookie: {spdc_val[:10]}... (length={len(spdc_val)}). Verifying...")
+                        try:
+                            import lyrics_helper
+                            tok = lyrics_helper.get_spotify_access_token(spdc_val)
+                            if tok:
+                                settings_path = os.path.join(pc.get_config_dir(), f"nutsty_settings{PROFILE_SUFFIX}.json")
+                                if not os.path.exists(settings_path):
+                                    settings_path = os.path.join(pc.get_config_dir(), "nutsty_settings.json")
+                                sdata = {}
+                                if os.path.exists(settings_path):
+                                    try:
+                                        with open(settings_path, "r", encoding="utf-8") as sf:
+                                            sdata = json.load(sf)
+                                    except Exception:
+                                        pass
+                                sdata["spotifySpdc"] = spdc_val
+                                with open(settings_path, "w", encoding="utf-8") as sf:
+                                    json.dump(sdata, sf, indent=2, ensure_ascii=False)
+
+                                sess_info = lyrics_helper.get_spotify_session_info(spdc_val)
+                                log(f"Spotify authentication verified successfully! Session: {sess_info}")
+                                emit_status({"status": "verified", "service": "spotify", "spdc": spdc_val, "message": "Connected to Spotify!"})
+                                await asyncio.sleep(0.5)
+                                return {"success": True, "service": "spotify", "spdc": spdc_val, "session": sess_info}
+                            else:
+                                if time.time() - last_pending_log > 3.0:
+                                    last_pending_log = time.time()
+                                    log("Found sp_dc cookie but token validation pending. Waiting for complete login...", "INFO")
+                        except Exception as se:
+                            log(f"Spotify verify exception: {se}", "WARN")
+
+                elif cookies and service != "spotify":
+
                     yt_cookies = {}
                     google_cookies = {}
                     has_login_info = False
@@ -536,19 +585,21 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
     log("Login timed out after 5 minutes.", "WARN")
     return {"success": False, "error": "Login timed out after 5 minutes."}
 
-def start_login():
-    session_profile_dir = PROFILE_DIR
+def start_login(service="youtube"):
+    session_profile_dir = SPOTIFY_PROFILE_DIR if service == "spotify" else PROFILE_DIR
+    login_url = SPOTIFY_LOGIN_URL if service == "spotify" else LOGIN_URL
     os.makedirs(session_profile_dir, exist_ok=True)
 
     log("=" * 60)
-    log("Nutsty Browser Login Session Started")
+    log(f"Nutsty Browser Login Session Started (Service: {service})")
     log(f"Platform: {sys.platform} ({os.name}), Python: {sys.version.split()[0]}")
     log(f"Profile: '{PROFILE_NAME}', CDP Port: {CDP_PORT}")
     log(f"Session Profile Dir: {session_profile_dir}")
     log(f"Logs: {LOG_FILE_PRIMARY}")
     log("=" * 60)
 
-    emit_status({"status": "starting", "message": "Starting native browser login assistant..."})
+    prompt_msg = "Starting native Spotify login assistant..." if service == "spotify" else "Starting native browser login assistant..."
+    emit_status({"status": "starting", "service": service, "message": prompt_msg})
 
     browser_bin = find_system_browser()
     if not browser_bin:
@@ -560,7 +611,7 @@ def start_login():
     cmd = [
         browser_bin,
         "--new-window",
-        LOGIN_URL,
+        login_url,
         f"--remote-debugging-port={CDP_PORT}",
         "--remote-debugging-address=127.0.0.1",
         f"--user-data-dir={session_profile_dir}",
@@ -572,7 +623,8 @@ def start_login():
     ]
 
     log(f"Launching browser command: {' '.join(cmd)}")
-    emit_status({"status": "browser_launched", "browser": os.path.basename(browser_bin), "message": f"Browser opened. Please sign in with Google..."})
+    sign_in_hint = "Please sign in to Spotify..." if service == "spotify" else "Please sign in with Google..."
+    emit_status({"status": "browser_launched", "service": service, "browser": os.path.basename(browser_bin), "message": f"Browser opened. {sign_in_hint}"})
 
     kwargs = {}
     if sys.platform == "win32" or os.name == "nt":
@@ -631,7 +683,7 @@ def start_login():
 
     result = {"success": False, "error": "Unknown error"}
     try:
-        result = asyncio.run(capture_cookies_via_cdp(ws_url, CDP_PORT, proc))
+        result = asyncio.run(capture_cookies_via_cdp(ws_url, CDP_PORT, proc, service=service))
     except Exception as e:
         result = {"success": False, "error": str(e)}
         log(f"CDP capture exception: {e}\n{traceback.format_exc()}", "ERROR")
@@ -644,10 +696,20 @@ def start_login():
 
 def handle_cli(args=None):
     """Thread-safe CLI dispatcher entry point for launcher_win.py in-process runner."""
-    return start_login()
+    svc = "youtube"
+    if args:
+        for i, a in enumerate(args):
+            if a == "--service" and i + 1 < len(args):
+                svc = args[i + 1]
+    return start_login(service=svc)
 
 def main():
-    start_login()
+    import argparse
+    parser = argparse.ArgumentParser(description="Nutsty Native Browser Login Assistant")
+    parser.add_argument("--service", choices=["youtube", "spotify"], default="youtube", help="Service to authenticate")
+    args, _ = parser.parse_known_args()
+    start_login(service=args.service)
 
 if __name__ == "__main__":
     main()
+

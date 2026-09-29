@@ -118,15 +118,18 @@ def sanitize_cookie_for_ytmusic(raw_cookie: str) -> str:
 def fetch_google_profile_from_cookies(cookie_str: str) -> dict:
     """
     Directly query Google / YouTube endpoints using session cookies to extract
-    verified account name and email address.
+    verified account name, email address, and avatar photo URL.
     """
     info = {"name": "", "email": "", "thumb": ""}
     if not cookie_str:
         return info
     try:
         import requests
+        import urllib.parse
+        # Sanitize cookie to strictly valid latin-1 / ASCII for HTTP header compatibility
+        clean_cookie = re.sub(r'[^\x20-\x7E]', '', cookie_str)
         headers = {
-            "Cookie": cookie_str,
+            "Cookie": clean_cookie,
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9"
         }
@@ -145,6 +148,13 @@ def fetch_google_profile_from_cookies(cookie_str: str) -> dict:
                 valid_emails = [e for e in emails if not e.endswith("@google.com") and not e.endswith("@youtube.com")]
                 if valid_emails:
                     info["email"] = valid_emails[0]
+
+                # Extract avatar image URLs if present
+                img_matches = re.findall(r'https://[^\s"\'<>]+\.(?:googleusercontent|ggpht)\.com/[^\s"\'<>]+', raw_text)
+                if not img_matches:
+                    img_matches = re.findall(r'https://yt3\.[^\s"\'<>]+\.[^\s"\'<>]+/[^\s"\'<>]+', raw_text)
+                if img_matches:
+                    info["thumb"] = img_matches[0].replace("\\u0026", "&")
 
                 def find_key(obj, k):
                     if isinstance(obj, dict):
@@ -166,13 +176,20 @@ def fetch_google_profile_from_cookies(cookie_str: str) -> dict:
                         if runs: info["name"] = runs[0].get("text", "").strip()
                     elif isinstance(acc_name, str):
                         info["name"] = acc_name.strip()
+                    
+                    if not info["thumb"]:
+                        photo_node = find_key(data, "accountPhoto") or find_key(data, "thumbnail")
+                        if isinstance(photo_node, dict):
+                            thumbs_list = photo_node.get("thumbnails", [])
+                            if thumbs_list:
+                                info["thumb"] = thumbs_list[-1].get("url", "")
                 except Exception:
                     pass
         except Exception:
             pass
 
         # 2. Query Google MyAccount dashboard fallback
-        if not info["name"] or not info["email"]:
+        if not info["name"] or not info["email"] or not info["thumb"]:
             try:
                 r = requests.get("https://myaccount.google.com/", headers=headers, timeout=4.0, allow_redirects=True)
                 if r.status_code == 200:
@@ -197,6 +214,11 @@ def fetch_google_profile_from_cookies(cookie_str: str) -> dict:
                                 cand = wel_match.group(1).strip()
                                 if len(cand) < 40 and not cand.startswith("<"):
                                     info["name"] = cand
+
+                    if not info["thumb"]:
+                        lh3_matches = re.findall(r'src=["\'](https://lh3\.googleusercontent\.com/[^"\']+)["\']', html)
+                        if lh3_matches:
+                            info["thumb"] = lh3_matches[0]
             except Exception:
                 pass
     except Exception as e:
@@ -395,6 +417,11 @@ def get_auth_status():
             safe_name = re.sub(r'[^a-zA-Z0-9]', '', name).lower()
             email = f"{safe_name or (PROFILE_NAME or 'user')}@gmail.com"
 
+        import urllib.parse
+        if not thumb and name and name != "Google User":
+            safe_query = urllib.parse.quote(name)
+            thumb = f"https://ui-avatars.com/api/?name={safe_query}&background=6366f1&color=fff&size=256&bold=true"
+
         # Update local user cache with verified account details
         try:
             with open(user_cache_file, "w", encoding="utf-8") as ucf:
@@ -407,14 +434,44 @@ def get_auth_status():
         except Exception:
             pass
 
+        # Automatically sync avatar to Cloud Identity and Global Relay
+        if thumb:
+            try:
+                from . import cloud_relay_client as crc
+            except (ImportError, ValueError):
+                import cloud_relay_client as crc
+            try:
+                crc.ensure_cloud_identity(PROFILE_SUFFIX, fallback_name=name, fallback_avatar=thumb)
+            except Exception:
+                pass
+
         return {"logged_in": True, "name": name, "thumb": thumb, "email": email}
     except Exception as e:
         # Fallback 1: Return cached profile if available
         if cached_info and cached_info.get("name") and cached_info.get("name") != "Google User":
+            c_name = cached_info.get("name")
+            c_thumb = cached_info.get("avatar") or ""
+            if not c_thumb and c_name:
+                import urllib.parse
+                c_thumb = f"https://ui-avatars.com/api/?name={urllib.parse.quote(c_name)}&background=6366f1&color=fff&size=256&bold=true"
+                cached_info["avatar"] = c_thumb
+                try:
+                    with open(user_cache_file, "w", encoding="utf-8") as ucf:
+                        json.dump(cached_info, ucf, indent=2, ensure_ascii=False)
+                except Exception:
+                    pass
+                try:
+                    from . import cloud_relay_client as crc
+                except (ImportError, ValueError):
+                    import cloud_relay_client as crc
+                try:
+                    crc.ensure_cloud_identity(PROFILE_SUFFIX, fallback_name=c_name, fallback_avatar=c_thumb)
+                except Exception:
+                    pass
             return {
                 "logged_in": True,
-                "name": cached_info.get("name"),
-                "thumb": cached_info.get("avatar") or "",
+                "name": c_name,
+                "thumb": c_thumb,
                 "email": cached_info.get("email") or ""
             }
 
@@ -428,6 +485,9 @@ def get_auth_status():
                 fb_name = dp.get("name") or (cached_info.get("name") if cached_info else "") or "Google User"
                 fb_email = dp.get("email") or (cached_info.get("email") if cached_info else "") or ""
                 fb_thumb = dp.get("thumb") or (cached_info.get("avatar") if cached_info else "") or ""
+                if not fb_thumb and fb_name and fb_name != "Google User":
+                    import urllib.parse
+                    fb_thumb = f"https://ui-avatars.com/api/?name={urllib.parse.quote(fb_name)}&background=6366f1&color=fff&size=256&bold=true"
                 return {"logged_in": True, "name": fb_name, "thumb": fb_thumb, "email": fb_email}
         except Exception:
             pass

@@ -90,18 +90,87 @@ def get_spotify_session_info(spdc):
         pass
     return {"isAnonymous": False, "isPremium": False}
 
+def _decrypt_aes_gcm_win(key: bytes, iv: bytes, ciphertext_with_tag: bytes) -> bytes:
+    try:
+        import ctypes, ctypes.wintypes
+        bcrypt = ctypes.windll.bcrypt
+        BCRYPT_CHAINING_MODE = 'ChainingMode'
+        BCRYPT_CHAIN_MODE_GCM = 'ChainingModeGCM'
+
+        class BCRYPT_AUTHENTICATED_CIPHER_MODE_INFO(ctypes.Structure):
+            _fields_ = [
+                ('cbSize', ctypes.wintypes.ULONG),
+                ('dwInfoVersion', ctypes.wintypes.ULONG),
+                ('pbNonce', ctypes.c_void_p),
+                ('cbNonce', ctypes.wintypes.ULONG),
+                ('pbAuthData', ctypes.c_void_p),
+                ('cbAuthData', ctypes.wintypes.ULONG),
+                ('pbTag', ctypes.c_void_p),
+                ('cbTag', ctypes.wintypes.ULONG),
+                ('pbMacContext', ctypes.c_void_p),
+                ('cbMacContext', ctypes.wintypes.ULONG),
+                ('cbAAD', ctypes.wintypes.ULONG),
+                ('cbData', ctypes.wintypes.LARGE_INTEGER),
+                ('dwFlags', ctypes.wintypes.ULONG),
+            ]
+
+        hAlg = ctypes.c_void_p()
+        status = bcrypt.BCryptOpenAlgorithmProvider(ctypes.byref(hAlg), 'AES', None, 0)
+        if status != 0:
+            return b""
+        try:
+            chain_mode = BCRYPT_CHAIN_MODE_GCM.encode('utf-16le') + b'\x00\x00'
+            chain_prop = BCRYPT_CHAINING_MODE.encode('utf-16le') + b'\x00\x00'
+            bcrypt.BCryptSetProperty(hAlg, chain_prop, chain_mode, len(chain_mode), 0)
+            hKey = ctypes.c_void_p()
+            status = bcrypt.BCryptGenerateSymmetricKey(hAlg, ctypes.byref(hKey), None, 0, key, len(key), 0)
+            if status != 0:
+                return b""
+            try:
+                tag = ciphertext_with_tag[-16:]
+                ct = ciphertext_with_tag[:-16]
+                auth_info = BCRYPT_AUTHENTICATED_CIPHER_MODE_INFO()
+                auth_info.cbSize = ctypes.sizeof(auth_info)
+                auth_info.dwInfoVersion = 1
+                auth_info.pbNonce = ctypes.cast(iv, ctypes.c_void_p)
+                auth_info.cbNonce = len(iv)
+                auth_info.pbTag = ctypes.cast(tag, ctypes.c_void_p)
+                auth_info.cbTag = len(tag)
+                cbPlain = ctypes.wintypes.ULONG()
+                status = bcrypt.BCryptDecrypt(hKey, ct, len(ct), ctypes.byref(auth_info), None, 0, None, 0, ctypes.byref(cbPlain), 0)
+                if status != 0:
+                    return b""
+                plain = ctypes.create_string_buffer(cbPlain.value)
+                cbResult = ctypes.wintypes.ULONG()
+                status = bcrypt.BCryptDecrypt(hKey, ct, len(ct), ctypes.byref(auth_info), None, 0, plain, len(plain), ctypes.byref(cbResult), 0)
+                if status != 0:
+                    return b""
+                return plain.raw[:cbResult.value]
+            finally:
+                bcrypt.BCryptDestroyKey(hKey)
+        finally:
+            bcrypt.BCryptCloseAlgorithmProvider(hAlg, 0)
+    except Exception:
+        return b""
+
 def extract_spotify_cookie_from_browsers():
     """
-    Auto-detect and extract sp_dc cookie from installed browsers
-    (Firefox, Brave, Chrome, Chromium, Edge) across Linux and Windows.
+    Auto-detect and extract sp_dc cookie from all installed browsers
+    (Edge, Chrome, Brave, Opera, Opera GX, Vivaldi, CocCoc, Firefox) across Linux and Windows.
     """
     import glob, shutil, tempfile
 
     # 1. Firefox
     if sys.platform == "win32":
-        ff_patterns = [os.path.expandvars(r"%APPDATA%\Mozilla\Firefox\Profiles\*\cookies.sqlite")]
+        ff_patterns = [
+            os.path.expandvars(r"%APPDATA%\Mozilla\Firefox\Profiles\*\cookies.sqlite"),
+            os.path.expandvars(r"%LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\cookies.sqlite")
+        ]
     else:
-        ff_patterns = [os.path.expanduser("~/.mozilla/firefox/*/cookies.sqlite")]
+        ff_patterns = [
+            os.path.expanduser("~/.mozilla/firefox/*/cookies.sqlite"),
+            os.path.expanduser("~/.var/app/org.mozilla.firefox/.mozilla/firefox/*/cookies.sqlite")
+        ]
 
     for pat in ff_patterns:
         for p in glob.glob(pat):
@@ -111,13 +180,11 @@ def extract_spotify_cookie_from_browsers():
                 shutil.copy2(p, tmp_path)
                 conn = sqlite3.connect(tmp_path)
                 cur = conn.cursor()
-                cur.execute("SELECT value FROM moz_cookies WHERE name='sp_dc' AND host LIKE '%spotify.com%'")
+                cur.execute("SELECT value FROM moz_cookies WHERE name='sp_dc' AND (host LIKE '%spotify.com%' OR host LIKE '%spotify%')")
                 row = cur.fetchone()
                 conn.close()
-                try:
-                    os.remove(tmp_path)
-                except Exception:
-                    pass
+                try: os.remove(tmp_path)
+                except Exception: pass
                 if row and row[0]:
                     val = str(row[0]).strip()
                     if len(val) > 20:
@@ -128,85 +195,149 @@ def extract_spotify_cookie_from_browsers():
 
     # 2. Chromium-based browsers
     candidates = []
+    nutsty_profile_dir = os.path.join(pc.get_config_dir(), "browser_auth")
     if sys.platform == "win32":
         candidates = [
-            ("Brave", os.path.expandvars(r"%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\Default\Network\Cookies")),
-            ("Chrome", os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\User Data\Default\Network\Cookies")),
-            ("Edge", os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\User Data\Default\Network\Cookies")),
+            ("Nutsty Browser Profile", nutsty_profile_dir),
+            ("Edge", os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\User Data")),
+            ("Chrome", os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\User Data")),
+            ("Brave", os.path.expandvars(r"%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data")),
+            ("Opera", os.path.expandvars(r"%APPDATA%\Opera Software\Opera Stable")),
+            ("Opera GX", os.path.expandvars(r"%APPDATA%\Opera Software\Opera GX Stable")),
+            ("Vivaldi", os.path.expandvars(r"%LOCALAPPDATA%\Vivaldi\User Data")),
+            ("CocCoc", os.path.expandvars(r"%LOCALAPPDATA%\CocCoc\Browser\User Data")),
         ]
     else:
         candidates = [
-            ("Brave", os.path.expanduser("~/.config/BraveSoftware/Brave-Browser/Default/Cookies"), "brave"),
-            ("Chrome", os.path.expanduser("~/.config/google-chrome/Default/Cookies"), "google-chrome"),
-            ("Chromium", os.path.expanduser("~/.config/chromium/Default/Cookies"), "chromium"),
-            ("Edge", os.path.expanduser("~/.config/microsoft-edge/Default/Cookies"), "microsoft-edge"),
+            ("Nutsty Browser Profile", nutsty_profile_dir),
+            ("Chrome", os.path.expanduser("~/.config/google-chrome"), "google-chrome"),
+            ("Chromium", os.path.expanduser("~/.config/chromium"), "chromium"),
+            ("Brave", os.path.expanduser("~/.config/BraveSoftware/Brave-Browser"), "brave"),
+            ("Edge", os.path.expanduser("~/.config/microsoft-edge"), "microsoft-edge"),
+            ("Opera", os.path.expanduser("~/.config/opera"), "opera"),
+            ("Vivaldi", os.path.expanduser("~/.config/vivaldi"), "vivaldi"),
         ]
 
     for item in candidates:
         b_name = item[0]
-        c_path = item[1]
+        u_dir = item[1]
         app_key = item[2] if len(item) > 2 else ""
-        if not os.path.exists(c_path):
-            continue
-        try:
-            with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as tmp:
-                tmp_path = tmp.name
-            shutil.copy2(c_path, tmp_path)
-            conn = sqlite3.connect(tmp_path)
-            cur = conn.cursor()
-            cur.execute("SELECT encrypted_value FROM cookies WHERE host_key LIKE '%spotify%' AND name='sp_dc'")
-            row = cur.fetchone()
-            conn.close()
-            try:
-                os.remove(tmp_path)
-            except Exception:
-                pass
-            if not row or not row[0]:
-                continue
-            enc = row[0]
-            val = ""
-            if sys.platform == "win32":
-                import ctypes, ctypes.wintypes
-                class DATA_BLOB(ctypes.Structure):
-                    _fields_ = [('cbData', ctypes.wintypes.DWORD), ('pbData', ctypes.POINTER(ctypes.c_char))]
-                blob_in = DATA_BLOB(len(enc), ctypes.cast(ctypes.create_string_buffer(enc), ctypes.POINTER(ctypes.c_char)))
-                blob_out = DATA_BLOB()
-                if ctypes.windll.crypt32.CryptUnprotectData(ctypes.byref(blob_in), None, None, None, None, 0, ctypes.byref(blob_out)):
-                    val = ctypes.string_at(blob_out.pbData, blob_out.cbData).decode("utf-8", errors="ignore")
-            else:
-                import hashlib, subprocess
-                pwd = ""
-                if app_key:
-                    try:
-                        res = subprocess.run(["secret-tool", "lookup", "application", app_key], capture_output=True, text=True, timeout=1)
-                        if res.returncode == 0 and res.stdout.strip():
-                            pwd = res.stdout.strip()
-                    except Exception:
-                        pass
-                if not pwd:
-                    pwd = "peanuts"
-                salt = b"saltysalt"
-                iv = b" " * 16
-                key = hashlib.pbkdf2_hmac("sha1", pwd.encode("utf-8"), salt, 1, 16)
-                from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-                from cryptography.hazmat.backends import default_backend
-                data = enc[3:]
-                cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
-                decryptor = cipher.decryptor()
-                dec = decryptor.update(data) + decryptor.finalize()
-                pad = dec[-1]
-                dec = dec[:-pad]
-                if enc[:3] == b"v11" and len(dec) > 32:
-                    val = dec[32:].decode("utf-8", errors="ignore")
-                else:
-                    val = dec.decode("utf-8", errors="ignore")
 
-            val = (val or "").strip()
-            if val and len(val) > 20:
-                sess = get_spotify_session_info(val)
-                return {"success": True, "browser": b_name, "spdc": val, "session": sess}
-        except Exception:
-            pass
+        if not os.path.exists(u_dir):
+            continue
+
+        master_key = None
+        if sys.platform == "win32":
+            ls_path = os.path.join(u_dir, "Local State")
+            if os.path.exists(ls_path):
+                try:
+                    import ctypes, ctypes.wintypes
+                    with open(ls_path, "r", encoding="utf-8") as f:
+                        ls = json.load(f)
+                    enc_key = base64.b64decode(ls["os_crypt"]["encrypted_key"])
+                    enc_key = enc_key[5:]
+                    class DATA_BLOB(ctypes.Structure):
+                        _fields_ = [("cbData", ctypes.wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
+                    b_in = DATA_BLOB(len(enc_key), ctypes.cast(ctypes.create_string_buffer(enc_key), ctypes.POINTER(ctypes.c_char)))
+                    b_out = DATA_BLOB()
+                    if ctypes.windll.crypt32.CryptUnprotectData(ctypes.byref(b_in), None, None, None, None, 0, ctypes.byref(b_out)):
+                        master_key = ctypes.string_at(b_out.pbData, b_out.cbData)
+                except Exception:
+                    pass
+        else:
+            import hashlib
+            pwd = ""
+            if app_key:
+                try:
+                    import subprocess
+                    r = subprocess.run(["secret-tool", "lookup", "application", app_key], capture_output=True, text=True, timeout=1)
+                    if r.returncode == 0 and r.stdout.strip():
+                        pwd = r.stdout.strip()
+                except Exception:
+                    pass
+            if not pwd:
+                pwd = "peanuts"
+            master_key = hashlib.pbkdf2_hmac("sha1", pwd.encode("utf-8"), b"saltysalt", 1, 16)
+
+        profiles = ["Default", "Profile 1", "Profile 2", "Profile 3", "Profile 4", "."]
+        for prof in profiles:
+            c_path = os.path.join(u_dir, prof, "Network", "Cookies")
+            if not os.path.exists(c_path):
+                c_path = os.path.join(u_dir, prof, "Cookies")
+            if not os.path.exists(c_path):
+                continue
+
+            try:
+                with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as tmp:
+                    tmp_p = tmp.name
+                shutil.copy2(c_path, tmp_p)
+                conn = sqlite3.connect(tmp_p)
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT name, encrypted_value FROM cookies "
+                    "WHERE (host_key LIKE '%spotify%' OR host_key LIKE '%.spotify.com') "
+                    "AND name = 'sp_dc'"
+                )
+                rows = cur.fetchall()
+                conn.close()
+                try: os.remove(tmp_p)
+                except Exception: pass
+
+                if not rows:
+                    continue
+
+                for rname, enc in rows:
+                    if not enc:
+                        continue
+                    dec_val = ""
+                    if sys.platform == "win32":
+                        if enc.startswith(b"v10") or enc.startswith(b"v11"):
+                            try:
+                                raw_bytes = _decrypt_aes_gcm_win(master_key, enc[3:15], enc[15:])
+                                if raw_bytes:
+                                    dec_val = raw_bytes.decode("utf-8", errors="ignore")
+                            except Exception:
+                                pass
+                            if not dec_val:
+                                try:
+                                    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+                                    aesgcm = AESGCM(master_key)
+                                    dec_val = aesgcm.decrypt(enc[3:15], enc[15:], None).decode("utf-8", errors="ignore")
+                                except Exception:
+                                    try:
+                                        from Crypto.Cipher import AES
+                                        dec_val = AES.new(master_key, AES.MODE_GCM, enc[3:15]).decrypt(enc[15:])[:-16].decode("utf-8", errors="ignore")
+                                    except Exception:
+                                        pass
+                        else:
+                            try:
+                                import ctypes, ctypes.wintypes
+                                class DATA_BLOB(ctypes.Structure):
+                                    _fields_ = [("cbData", ctypes.wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
+                                b_in = DATA_BLOB(len(enc), ctypes.cast(ctypes.create_string_buffer(enc), ctypes.POINTER(ctypes.c_char)))
+                                b_out = DATA_BLOB()
+                                if ctypes.windll.crypt32.CryptUnprotectData(ctypes.byref(b_in), None, None, None, None, 0, ctypes.byref(b_out)):
+                                    dec_val = ctypes.string_at(b_out.pbData, b_out.cbData).decode("utf-8", errors="ignore")
+                            except Exception:
+                                pass
+                    else:
+                        try:
+                            from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+                            from cryptography.hazmat.backends import default_backend
+                            c = Cipher(algorithms.AES(master_key), modes.CBC(b" " * 16), backend=default_backend())
+                            dec = c.decryptor().update(enc[3:]) + c.decryptor().finalize()
+                            pad = dec[-1]
+                            dec = dec[:-pad]
+                            dec_val = dec[32:].decode("utf-8", errors="ignore") if enc.startswith(b"v11") else dec.decode("utf-8", errors="ignore")
+                        except Exception:
+                            pass
+
+                    dec_val = (dec_val or "").strip()
+                    if dec_val and len(dec_val) > 20:
+                        sess = get_spotify_session_info(dec_val)
+                        return {"success": True, "browser": b_name, "spdc": dec_val, "session": sess}
+            except Exception:
+                continue
 
     return {"success": False, "message": "Không tìm thấy cookie Spotify trong các trình duyệt đã cài đặt."}
 

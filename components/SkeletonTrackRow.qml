@@ -6,6 +6,8 @@ Item {
     id: root
     Layout.fillWidth: true
     Layout.preferredHeight: isCompact ? 44 : 52
+    implicitHeight: isCompact ? 44 : 52
+    implicitWidth: 200
     height: isCompact ? 44 : 52
 
     property bool isCompact: false

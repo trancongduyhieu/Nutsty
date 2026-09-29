@@ -38,6 +38,8 @@ Rectangle {
 
     signal closeRequested()
     signal playlistImported(string playlistId)
+    signal openSettingsRequested()
+    signal launchSpotifyBrowserLoginRequested()
 
     Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
 
@@ -71,18 +73,25 @@ Rectangle {
                         if (res.success && Array.isArray(res.playlists)) {
                             root.spotifyPlaylists = res.playlists;
                         } else {
-                            root.errorMessage = res.error || I18n.tr("Không thể tải danh sách playlist Spotify.", "Unable to load Spotify playlists.");
+                            if (root.currentTab !== 0) {
+                                root.errorMessage = res.error || I18n.tr("Không thể tải danh sách playlist Spotify.", "Unable to load Spotify playlists.");
+                            }
                         }
                     } catch(e) {
-                        root.errorMessage = I18n.tr("Lỗi xử lý dữ liệu từ Spotify.", "Data parse error from Spotify.");
+                        if (root.currentTab !== 0) {
+                            root.errorMessage = I18n.tr("Lỗi xử lý dữ liệu từ Spotify.", "Data parse error from Spotify.");
+                        }
                     }
                 } else {
-                    root.errorMessage = I18n.tr("Lỗi kết nối máy chủ cục bộ.", "Failed to connect to local server.");
+                    if (root.currentTab !== 0) {
+                        root.errorMessage = I18n.tr("Lỗi kết nối máy chủ cục bộ.", "Failed to connect to local server.");
+                    }
                 }
             }
         };
         xhr.send();
     }
+
 
     function resolveUrl(urlStr) {
         var clean = (urlStr || "").trim();
@@ -344,15 +353,16 @@ Rectangle {
             // --- ERROR BANNER ---
             Rectangle {
                 Layout.fillWidth: true
-                height: root.errorMessage ? errorText.implicitHeight + 16 : 0
+                Layout.preferredHeight: (root.errorMessage && root.currentTab !== 0) ? (errorText.implicitHeight + 16) : 0
+                implicitHeight: Layout.preferredHeight
                 radius: 10
                 color: Qt.rgba(244, 63, 94, 0.15)
                 border.color: Qt.rgba(244, 63, 94, 0.35)
                 border.width: 1
-                visible: root.errorMessage !== ""
+                visible: (root.errorMessage !== "") && (root.currentTab !== 0)
                 clip: true
 
-                Behavior on height { NumberAnimation { duration: 150 } }
+                Behavior on Layout.preferredHeight { NumberAnimation { duration: 150 } }
 
                 Text {
                     id: errorText
@@ -365,6 +375,7 @@ Rectangle {
                     horizontalAlignment: Text.AlignHCenter
                 }
             }
+
 
             // --- VIEW 1: IMPORTING PROGRESS VIEW ---
             ColumnLayout {
@@ -573,7 +584,13 @@ Rectangle {
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: root.currentTab = 0
+                                onClicked: {
+                                    root.currentTab = 0;
+                                    root.errorMessage = "";
+                                    if (root.spotifyPlaylists.length === 0) {
+                                        root.fetchPlaylists();
+                                    }
+                                }
                             }
                         }
 
@@ -597,7 +614,10 @@ Rectangle {
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: root.currentTab = 1
+                                onClicked: {
+                                    root.currentTab = 1;
+                                    root.errorMessage = "";
+                                }
                             }
                         }
                     }
@@ -621,47 +641,116 @@ Rectangle {
                     // Empty or Not Connected Notice
                     ColumnLayout {
                         anchors.centerIn: parent
+                        width: parent.width - 48
                         spacing: 12
                         visible: !root.isLoadingList && root.spotifyPlaylists.length === 0
 
-                        AppIcon {
+                        Rectangle {
                             Layout.alignment: Qt.AlignHCenter
-                            source: "assets/icons/folder-music-symbolic.svg"
-                            iconSize: 36
-                            color: "#6b7280"
+                            width: 50
+                            height: 50
+                            radius: 16
+                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
+                            border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                            border.width: 1
+
+                            AppIcon {
+                                anchors.centerIn: parent
+                                source: "assets/icons/folder-music-symbolic.svg"
+                                iconSize: 24
+                                color: root.accentColor
+                            }
                         }
 
                         Text {
                             Layout.alignment: Qt.AlignHCenter
-                            text: I18n.tr("Không tìm thấy Playlist Spotify nào.", "No Spotify playlists found.")
-                            color: "#9ca3af"
-                            font.pixelSize: 13
+                            text: I18n.tr("Chưa kết nối tài khoản Spotify", "Spotify Account Not Connected")
+                            color: "#ffffff"
+                            font.pixelSize: 15
+                            font.bold: true
                         }
 
-                        Rectangle {
+                        Text {
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: 380
                             Layout.alignment: Qt.AlignHCenter
-                            width: 130
-                            height: 32
-                            radius: 8
-                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18)
-                            border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
-                            border.width: 1
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.Wrap
+                            text: I18n.tr("Đăng nhập 1-chạm hoặc đồng bộ từ trình duyệt để tải danh sách phát của bạn. Bạn cũng có thể dán link playlist bất kỳ ở tab bên cạnh.", "1-click login or sync from browser to load your playlists. You can also paste any playlist link in the tab above.")
+                            color: "#9ca3af"
+                            font.pixelSize: 12
+                        }
 
-                            Text {
-                                anchors.centerIn: parent
-                                text: I18n.tr("Tải lại", "Refresh")
-                                color: root.accentColor
-                                font.pixelSize: 12
-                                font.bold: true
+                        Item { Layout.preferredHeight: 6 }
+
+                        RowLayout {
+                            Layout.alignment: Qt.AlignHCenter
+                            spacing: 10
+
+                            // 1-Click Connect Button
+                            Rectangle {
+                                Layout.preferredWidth: 155
+                                Layout.preferredHeight: 34
+                                radius: 8
+                                color: connectMouse.containsMouse ? Qt.darker(root.accentColor, 1.15) : root.accentColor
+
+                                RowLayout {
+                                    anchors.centerIn: parent
+                                    spacing: 6
+                                    AppIcon {
+                                        source: "assets/icons/process-working-symbolic.svg"
+                                        iconSize: 13
+                                        color: "#ffffff"
+                                    }
+                                    Text {
+                                        text: I18n.tr("Kết nối 1-Chạm", "Connect 1-Click")
+                                        color: "#ffffff"
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: connectMouse
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root.closeModal();
+                                        root.launchSpotifyBrowserLoginRequested();
+                                    }
+                                }
                             }
 
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.fetchPlaylists()
+                            // Switch to Link Tab Button
+                            Rectangle {
+                                Layout.preferredWidth: 130
+                                Layout.preferredHeight: 34
+                                radius: 8
+                                color: pasteTabMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.06)
+                                border.color: Qt.rgba(255, 255, 255, 0.12)
+                                border.width: 1
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: I18n.tr("Dán link trực tiếp", "Paste link directly")
+                                    color: "#e5e7eb"
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                }
+
+                                MouseArea {
+                                    id: pasteTabMouse
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root.currentTab = 1;
+                                        root.errorMessage = "";
+                                    }
+                                }
                             }
                         }
                     }
+
 
                     // Playlists ListView
                     ListView {
