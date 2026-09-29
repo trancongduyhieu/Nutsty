@@ -298,10 +298,11 @@ def handle_post_spotify_import(handler):
     if not isinstance(body, dict):
         handler._send_json({"success": False, "error": "Dữ liệu không hợp lệ."}, 400)
         return
-    playlist_id = body.get("playlist_id", "")
-    playlist_title = body.get("playlist_title", "")
+    playlist_id = body.get("playlist_id") or body.get("id") or ""
+    playlist_title = body.get("playlist_title") or body.get("title") or ""
+    cover_url = body.get("image") or body.get("cover_url") or body.get("coverImage") or ""
     spdc = body.get("spdc", "")
-    res = spotify_importer.importer.start_import(playlist_id, playlist_title, spdc)
+    res = spotify_importer.importer.start_import(playlist_id, playlist_title, spdc, cover_url=cover_url)
     handler._send_json(res, 200 if res.get("success") else 400)
 
 

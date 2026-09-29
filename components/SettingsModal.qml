@@ -876,237 +876,6 @@ Rectangle {
                         }
                     }
 
-                    // Smart Backup Actions Row (Zero Extension Required)
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-
-                        // Quick Auto-Paste from Clipboard & Login (2-Second Fallback)
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 34
-                            radius: 8
-                            color: pasteAutoMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20) : Qt.rgba(255, 255, 255, 0.06)
-                            border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.30)
-                            border.width: 1
-                            Behavior on color { ColorAnimation { duration: 120 } }
-
-                            RowLayout {
-                                anchors.centerIn: parent
-                                spacing: 6
-
-                                AppIcon {
-                                    source: "../assets/icons/edit-select-all-symbolic.svg"
-                                    iconSize: 12
-                                    color: root.accentColor
-                                }
-
-                                Text {
-                                    text: I18n.tr("Dán nhanh từ Clipboard & Đăng nhập", "Quick Paste Clipboard & Sign In")
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 12
-                                    font.bold: true
-                                    color: "#ffffff"
-                                }
-                            }
-
-                            MouseArea {
-                                id: pasteAutoMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                enabled: !root.isProcessing
-                                onClicked: root.pasteAndConnectFromClipboard()
-                            }
-                        }
-
-                        // Toggle Manual Input Accordion
-                        Rectangle {
-                            Layout.preferredWidth: manualToggleTxt.implicitWidth + 28
-                            Layout.preferredHeight: 34
-                            radius: 8
-                            color: manualToggleMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.06)
-                            border.color: Qt.rgba(255, 255, 255, 0.10)
-                            border.width: 1
-                            Behavior on color { ColorAnimation { duration: 120 } }
-
-                            RowLayout {
-                                anchors.centerIn: parent
-                                spacing: 4
-
-                                Text {
-                                    id: manualToggleTxt
-                                    text: root.manualCookieExpanded ? I18n.tr("Thu gọn", "Collapse") : I18n.tr("Nhập thủ công", "Manual Paste")
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 11
-                                    color: Theme.textSecondary
-                                }
-
-                                AppIcon {
-                                    source: "../assets/icons/go-down-symbolic.svg"
-                                    iconSize: 10
-                                    color: Theme.textSecondary
-                                    rotation: root.manualCookieExpanded ? 180 : 0
-                                    Behavior on rotation { NumberAnimation { duration: 160 } }
-                                }
-                            }
-
-                            MouseArea {
-                                id: manualToggleMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.manualCookieExpanded = !root.manualCookieExpanded
-                            }
-                        }
-                    }
-
-                    // Collapsible Manual Cookie Entry Panel
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: root.manualCookieExpanded ? manualCol.implicitHeight + 20 : 0
-                        radius: 10
-                        color: Qt.rgba(255, 255, 255, 0.03)
-                        border.color: Qt.rgba(255, 255, 255, 0.08)
-                        border.width: root.manualCookieExpanded ? 1 : 0
-                        clip: true
-                        visible: height > 0
-                        Behavior on Layout.preferredHeight { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-
-                        ColumnLayout {
-                            id: manualCol
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            anchors.margins: 10
-                            spacing: 8
-
-                            Text {
-                                Layout.fillWidth: true
-                                text: I18n.tr(
-                                    "💡 Mẹo: Mở trình duyệt > Vào music.youtube.com > F12 > Thẻ Network > F5 > Bấm dòng 'music.youtube.com' > Copy giá trị 'cookie' và dán vào đây.",
-                                    "💡 Tip: Open browser > Go to music.youtube.com > F12 > Network tab > F5 > Click 'music.youtube.com' > Copy 'cookie' value and paste here."
-                                )
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 11
-                                color: Qt.rgba(255, 255, 255, 0.65)
-                                wrapMode: Text.Wrap
-                            }
-
-                            Rectangle {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 70
-                                radius: 8
-                                color: "#0a0a0f"
-                                border.color: (typeof authInput !== "undefined" && authInput.activeFocus) ? root.accentColor : Qt.rgba(255, 255, 255, 0.10)
-                                border.width: 1
-
-                                ScrollView {
-                                    anchors.fill: parent
-                                    anchors.margins: 6
-
-                                    TextArea {
-                                        id: authInput
-                                        placeholderText: I18n.tr("Dán mã cookie (SAPISID=...; SSID=...) hoặc Request Headers...", "Paste cookie (SAPISID=...; SSID=...) or Request Headers...")
-                                        placeholderTextColor: "#555555"
-                                        font.family: "Monospace"
-                                        font.pixelSize: 11
-                                        color: Theme.textPrimary
-                                        wrapMode: TextEdit.Wrap
-                                        selectByMouse: true
-                                        background: null
-                                    }
-                                }
-                            }
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: 8
-
-                                Rectangle {
-                                    Layout.preferredHeight: 28
-                                    Layout.preferredWidth: pasteManualTxt.implicitWidth + 16
-                                    radius: 6
-                                    color: pasteManualMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.10) : Qt.rgba(255, 255, 255, 0.05)
-                                    border.color: Qt.rgba(255, 255, 255, 0.08)
-                                    border.width: 1
-
-                                    Text {
-                                        id: pasteManualTxt
-                                        anchors.centerIn: parent
-                                        text: I18n.tr("Dán", "Paste")
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 11
-                                        color: Theme.textSecondary
-                                    }
-
-                                    MouseArea {
-                                        id: pasteManualMouse
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            authInput.selectAll();
-                                            authInput.paste();
-                                        }
-                                    }
-                                }
-
-                                Rectangle {
-                                    Layout.preferredHeight: 28
-                                    Layout.preferredWidth: clearManualTxt.implicitWidth + 16
-                                    radius: 6
-                                    color: clearManualMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.10) : Qt.rgba(255, 255, 255, 0.05)
-                                    border.color: Qt.rgba(255, 255, 255, 0.08)
-                                    border.width: 1
-
-                                    Text {
-                                        id: clearManualTxt
-                                        anchors.centerIn: parent
-                                        text: I18n.tr("Xóa", "Clear")
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 11
-                                        color: Theme.textSecondary
-                                    }
-
-                                    MouseArea {
-                                        id: clearManualMouse
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: authInput.text = ""
-                                    }
-                                }
-
-                                Item { Layout.fillWidth: true }
-
-                                Rectangle {
-                                    Layout.preferredHeight: 28
-                                    Layout.preferredWidth: 120
-                                    radius: 6
-                                    color: (!root.isProcessing && authInput.text.trim().length > 0) ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: root.isProcessing ? I18n.tr("Đang xác thực...", "Verifying...") : I18n.tr("Xác thực & Kết nối", "Verify & Connect")
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 11
-                                        font.bold: true
-                                        color: "#000000"
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: (!root.isProcessing && authInput.text.trim().length > 0) ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                        enabled: !root.isProcessing && authInput.text.trim().length > 0
-                                        onClicked: root.connectRequested(authInput.text.trim())
-                                    }
-                                }
-                            }
-                        }
-                    }
-
                     // Direct Status & Diagnostic Feedback Message
                     ColumnLayout {
                         Layout.fillWidth: true
@@ -1381,60 +1150,37 @@ Rectangle {
                             }
                         }
 
-                        // CASE 2: CHƯA KẾT NỐI (1-Click Auto-sync + Manual Input)
+                        // CASE 2: CHƯA KẾT NỐI (1-Click Native Browser Login Card matching Google Login)
                         ColumnLayout {
                             id: spotifyDisconnectedCol
                             Layout.fillWidth: true
-                            spacing: 10
+                            spacing: 8
                             visible: !spotifyRowItem.isConnected
 
-                            // 1-Click Auto-sync Button from Browsers (Unified Dark Glass styling matching Connected Card)
+                            // 1-Click Native Browser Login Card (Reusing Google Login visual design & dimensions)
                             Rectangle {
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 52
-                                radius: 10
-                                color: autoSyncMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.06) : Qt.rgba(255, 255, 255, 0.03)
-                                border.color: autoSyncMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.16) : Qt.rgba(255, 255, 255, 0.08)
+                                Layout.preferredHeight: 44
+                                radius: 12
+                                color: root.spotifyAutoSyncing
+                                       ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                                       : (spotifyBrowserMouse.containsMouse ? Qt.lighter(root.accentColor, 1.12) : root.accentColor)
+                                border.color: Qt.rgba(255, 255, 255, 0.16)
                                 border.width: 1
-
                                 Behavior on color { ColorAnimation { duration: 120 } }
-                                Behavior on border.color { ColorAnimation { duration: 120 } }
 
                                 RowLayout {
                                     anchors.fill: parent
                                     anchors.leftMargin: 16
-                                    anchors.rightMargin: 16
-                                    spacing: 12
-
-                                    Column {
-                                        Layout.fillWidth: true
-                                        Layout.alignment: Qt.AlignVCenter
-                                        spacing: 3
-
-                                        Text {
-                                            text: root.spotifyAutoSyncing
-                                                  ? I18n.tr("Đang quét cookie Spotify từ trình duyệt...", "Scanning Spotify cookie from browsers...")
-                                                  : I18n.tr("Tự động đồng bộ cookie Spotify từ Trình duyệt (1-Chạm)", "Auto-sync Spotify cookie from Browser (1-Click)")
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: 12
-                                            font.bold: true
-                                            color: Theme.textPrimary
-                                        }
-
-                                        Text {
-                                            text: I18n.tr("Tự động trích xuất sp_dc từ Brave, Chrome, Firefox, Edge mà không cần mở F12", "Automatically extracts sp_dc from Brave, Chrome, Firefox, Edge without opening F12")
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: 10
-                                            color: Theme.textSecondary
-                                        }
-                                    }
+                                    anchors.rightMargin: 12
+                                    spacing: 8
 
                                     AppIcon {
-                                        Layout.alignment: Qt.AlignVCenter
-                                        visible: root.spotifyAutoSyncing
-                                        source: "../assets/icons/process-working-symbolic.svg"
-                                        iconSize: 16
-                                        color: root.accentColor
+                                        source: root.spotifyAutoSyncing
+                                                ? "../assets/icons/process-working-symbolic.svg"
+                                                : "../assets/icons/arrow-outward-symbolic.svg"
+                                        iconSize: 14
+                                        color: "#000000"
                                         rotation: 0
                                         RotationAnimation on rotation {
                                             loops: Animation.Infinite
@@ -1444,250 +1190,65 @@ Rectangle {
                                             running: root.spotifyAutoSyncing
                                         }
                                     }
-                                }
 
-                                MouseArea {
-                                    id: autoSyncMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    enabled: !root.spotifyAutoSyncing
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.autoSyncSpotifyFromBrowsers()
-                                }
-                            }
-
-                            // Manual Input Panel (Clean & Always Visible directly below auto-sync)
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                Layout.topMargin: 4
-                                spacing: 8
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: I18n.tr(
-                                        "Dán chuỗi cookie 'sp_dc' từ Spotify Web Player:",
-                                        "Paste 'sp_dc' cookie string from Spotify Web Player:"
-                                    )
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 12
-                                    font.bold: true
-                                    color: Theme.textPrimary
-                                    wrapMode: Text.Wrap
-                                }
-
-                                // Input Field Container (Unified Dark Glass styling matching Connected Card)
-                                Rectangle {
-                                    Layout.fillWidth: true
-                                    Layout.preferredHeight: 42
-                                    radius: 10
-                                    color: Qt.rgba(255, 255, 255, 0.03)
-                                    border.color: (typeof spotifyInput !== "undefined" && spotifyInput && spotifyInput.activeFocus) ? root.accentColor : Qt.rgba(255, 255, 255, 0.08)
-                                    border.width: 1
-                                    Behavior on border.color { ColorAnimation { duration: 120 } }
-
-                                    RowLayout {
-                                        anchors.fill: parent
-                                        anchors.leftMargin: 12
-                                        anchors.rightMargin: 8
-                                        spacing: 8
-
-                                        TextInput {
-                                            id: spotifyInput
-                                            Layout.fillWidth: true
-                                            text: root.spotifySpdc
-                                            echoMode: root.spotifyMasked ? TextInput.Password : TextInput.Normal
-                                            passwordMaskDelay: 0
-                                            passwordCharacter: "•"
-                                            inputMethodHints: root.spotifyMasked
-                                                              ? (Qt.ImhHiddenText | Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhSensitiveData)
-                                                              : (Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText)
-                                            font.family: "Monospace"
-                                            font.pixelSize: 11
-                                            color: "#ffffff"
-                                            clip: true
-                                            selectByMouse: true
-                                            selectionColor: root.accentColor
-                                            selectedTextColor: "#000000"
-                                            onAccepted: root.validateAndSaveSpotifyCookie(text.trim())
-
-                                            Text {
-                                                anchors.fill: parent
-                                                text: I18n.tr("Dán cookie sp_dc tại đây (AQB...)", "Paste sp_dc cookie here (AQB...)")
-                                                font.family: Theme.fontFamily
-                                                font.pixelSize: 11
-                                                color: Qt.rgba(255, 255, 255, 0.30)
-                                                visible: !spotifyInput.text && !spotifyInput.activeFocus
-                                            }
-                                        }
-
-                                        // Toggle Mask Visibility Icon (Intuitive: Eye-slash when hidden, bright open Eye when visible)
-                                        Rectangle {
-                                            Layout.preferredWidth: 28
-                                            Layout.preferredHeight: 28
-                                            radius: 6
-                                            color: !root.spotifyMasked
-                                                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
-                                                   : (eyeMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : "transparent")
-                                            border.color: !root.spotifyMasked
-                                                          ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
-                                                          : "transparent"
-                                            border.width: 1
-
-                                            AppIcon {
-                                                anchors.centerIn: parent
-                                                source: root.spotifyMasked ? "../assets/icons/eye-slash-symbolic.svg" : "../assets/icons/eye-symbolic.svg"
-                                                iconSize: 14
-                                                color: !root.spotifyMasked ? root.accentColor : (eyeMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.45))
-                                            }
-
-                                            MouseArea {
-                                                id: eyeMouse
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    root.spotifyMasked = !root.spotifyMasked;
-                                                    spotifyInput.forceActiveFocus();
-                                                }
-                                            }
-                                        }
-
-                                        // Quick Paste Button (Universal Clipboard Integration)
-                                        Rectangle {
-                                            Layout.preferredHeight: 28
-                                            Layout.preferredWidth: pasteSpdcTxt.implicitWidth + 18
-                                            radius: 6
-                                            color: pasteSpdcMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) : Qt.rgba(255, 255, 255, 0.06)
-                                            border.color: pasteSpdcMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.50) : Qt.rgba(255, 255, 255, 0.10)
-                                            border.width: 1
-
-                                            RowLayout {
-                                                anchors.centerIn: parent
-                                                spacing: 4
-                                                AppIcon {
-                                                    source: "../assets/icons/edit-copy-symbolic.svg"
-                                                    iconSize: 11
-                                                    color: pasteSpdcMouse.containsMouse ? root.accentColor : Qt.rgba(255, 255, 255, 0.85)
-                                                }
-                                                Text {
-                                                    id: pasteSpdcTxt
-                                                    text: I18n.tr("Dán", "Paste")
-                                                    font.family: Theme.fontFamily
-                                                    font.pixelSize: 11
-                                                    font.bold: true
-                                                    color: pasteSpdcMouse.containsMouse ? root.accentColor : "#ffffff"
-                                                }
-                                            }
-
-                                            MouseArea {
-                                                id: pasteSpdcMouse
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: root.pasteSpotifyCookie()
-                                            }
-                                        }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: root.spotifyAutoSyncing
+                                              ? I18n.tr("Đang chờ đăng nhập Spotify trên trình duyệt...", "Waiting for Spotify browser login...")
+                                              : I18n.tr("Đăng nhập Spotify qua Trình duyệt (1-Chạm)", "Sign in to Spotify via Browser (1-Click)")
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 13
+                                        font.bold: true
+                                        color: "#000000"
+                                        elide: Text.ElideRight
                                     }
-                                }
 
-                                // Action Buttons Row: Save & Clear All (Clean Dark Glass & Dynamic Accent)
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 8
-
-                                    // Save Button (Dynamic Accent Button with Server Validation State)
+                                    // Quick Cancel Button when process is waiting
                                     Rectangle {
-                                        Layout.preferredHeight: 30
-                                        Layout.preferredWidth: saveBtnRow.implicitWidth + 24
-                                        radius: 8
-                                        enabled: !root.spotifyValidating && spotifyInput.text.trim().length > 0
-                                        color: enabled
-                                               ? (saveBtnMouse.containsMouse ? Qt.lighter(root.accentColor, 1.12) : root.accentColor)
-                                               : Qt.rgba(255, 255, 255, 0.05)
-                                        border.color: enabled ? "transparent" : Qt.rgba(255, 255, 255, 0.08)
+                                        Layout.preferredWidth: 64
+                                        Layout.preferredHeight: 28
+                                        radius: 6
+                                        visible: root.spotifyAutoSyncing
+                                        color: cancelSpotifyWaitMouse.containsMouse ? Qt.rgba(244, 63, 94, 0.35) : Qt.rgba(244, 63, 94, 0.20)
+                                        border.color: Qt.rgba(244, 63, 94, 0.40)
                                         border.width: 1
 
-                                        RowLayout {
-                                            id: saveBtnRow
-                                            anchors.centerIn: parent
-                                            spacing: 6
-
-                                            AppIcon {
-                                                visible: root.spotifyValidating
-                                                source: "../assets/icons/process-working-symbolic.svg"
-                                                iconSize: 12
-                                                color: Theme.isColorDark(root.accentColor) ? "#ffffff" : "#000000"
-                                                rotation: 0
-                                                RotationAnimation on rotation {
-                                                    loops: Animation.Infinite
-                                                    from: 0
-                                                    to: 360
-                                                    duration: 800
-                                                    running: root.spotifyValidating
-                                                }
-                                            }
-
-                                            Text {
-                                                id: saveBtnTxt
-                                                text: root.spotifyValidating
-                                                      ? I18n.tr("Đang kiểm tra...", "Verifying...")
-                                                      : I18n.tr("Lưu", "Save")
-                                                font.family: Theme.fontFamily
-                                                font.pixelSize: 11
-                                                font.bold: true
-                                                color: parent.parent.enabled
-                                                       ? (Theme.isColorDark(root.accentColor) ? "#ffffff" : "#000000")
-                                                       : Qt.rgba(255, 255, 255, 0.30)
-                                            }
-                                        }
-
-                                        MouseArea {
-                                            id: saveBtnMouse
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            cursorShape: parent.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                            onClicked: root.validateAndSaveSpotifyCookie(spotifyInput.text.trim())
-                                        }
-                                    }
-
-                                    // Clear All Button (Borderless Text Button Style matching Google Logout)
-                                    Rectangle {
-                                        Layout.preferredHeight: 28
-                                        Layout.preferredWidth: clearSpdcTxt.implicitWidth + 18
-                                        radius: 6
-                                        color: clearSpdcMouse.containsMouse ? Qt.rgba(244, 63, 94, 0.14) : "transparent"
-                                        border.width: 0
-                                        visible: spotifyInput.text.length > 0
-                                        Behavior on color { ColorAnimation { duration: 120 } }
-
                                         Text {
-                                            id: clearSpdcTxt
                                             anchors.centerIn: parent
-                                            text: I18n.tr("Xóa tất cả đã nhập", "Clear all entered")
+                                            text: I18n.tr("Hủy", "Cancel")
                                             font.family: Theme.fontFamily
-                                            font.pixelSize: 12
+                                            font.pixelSize: 11
                                             font.bold: true
-                                            color: clearSpdcMouse.containsMouse ? "#fda4af" : "#f87171"
-                                            Behavior on color { ColorAnimation { duration: 120 } }
+                                            color: "#ffffff"
                                         }
 
                                         MouseArea {
-                                            id: clearSpdcMouse
+                                            id: cancelSpotifyWaitMouse
                                             anchors.fill: parent
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
-                                                spotifyInput.text = "";
-                                                root.spotifyStatusSuccess = true;
-                                                root.spotifyStatusMessage = I18n.tr("Đã xóa nội dung đã nhập.", "Cleared entered content.");
+                                                root.cancelSpotifyBrowserLoginRequested();
+                                                root.spotifyAutoSyncing = false;
+                                                root.spotifyStatusMessage = I18n.tr("Đã hủy chờ đăng nhập Spotify.", "Spotify login cancelled.");
                                             }
                                         }
                                     }
+                                }
 
+                                MouseArea {
+                                    id: spotifyBrowserMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: root.spotifyAutoSyncing ? Qt.ArrowCursor : Qt.PointingHandCursor
+                                    enabled: !root.spotifyAutoSyncing
+                                    onClicked: {
+                                        root.autoSyncSpotifyFromBrowsers();
+                                    }
                                 }
                             }
 
-                            // Status Feedback Message for Spotify (visible for both auto-sync & manual entry)
+                            // Status Feedback Message for Spotify
                             Item {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: spotifyStatusTxt.implicitHeight + 6

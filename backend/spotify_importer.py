@@ -47,6 +47,25 @@ def extract_playlist_id(url_or_id):
     return text
 
 
+def parse_duration_to_seconds(val):
+    if not val:
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    s = str(val).strip()
+    parts = s.split(":")
+    try:
+        if len(parts) == 1:
+            return float(parts[0])
+        elif len(parts) == 2:
+            return int(parts[0]) * 60 + float(parts[1])
+        elif len(parts) == 3:
+            return int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
+    except Exception:
+        pass
+    return 0.0
+
+
 def calculate_track_match_score(sp_track, yt_candidate):
     """
     Scores how well a YouTube Music search candidate matches the Spotify track.
@@ -56,7 +75,10 @@ def calculate_track_match_score(sp_track, yt_candidate):
 
     # 1. Duration delta penalty/bonus
     sp_sec = int(sp_track.get("duration_ms", 0)) / 1000.0
-    yt_sec = float(yt_candidate.get("duration", 0) or 0)
+    if yt_candidate.get("durationMs"):
+        yt_sec = float(yt_candidate["durationMs"]) / 1000.0
+    else:
+        yt_sec = parse_duration_to_seconds(yt_candidate.get("duration", 0))
 
     delta = abs(sp_sec - yt_sec)
     if delta <= 2.0:
@@ -76,11 +98,13 @@ def calculate_track_match_score(sp_track, yt_candidate):
         score += 15.0
 
     # 3. Artist matching
-    sp_artist = sp_track.get("artist", "").lower()
+    sp_artist = sp_track.get("artist", "").lower().replace("\xa0", " ")
     yt_artist = yt_candidate.get("artist", "").lower()
 
-    if sp_artist and yt_artist and (sp_artist in yt_artist or yt_artist in sp_artist):
-        score += 15.0
+    if sp_artist and yt_artist:
+        sp_parts = [p.strip() for p in sp_artist.split(",") if p.strip()]
+        if any(p in yt_artist for p in sp_parts) or yt_artist in sp_artist:
+            score += 15.0
 
     # Penalize karaoke / instrumental unless requested
     if "karaoke" in yt_title and "karaoke" not in sp_title:
@@ -138,9 +162,22 @@ def fetch_user_spotify_playlists(spdc=None, limit=50):
                     "trackCount": item.get("tracks", {}).get("total", 0),
                     "owner": item.get("owner", {}).get("display_name", "")
                 })
+            if playlists:
+                try:
+                    with open(cached_p, "w", encoding="utf-8") as cf:
+                        json.dump(playlists, cf, ensure_ascii=False)
+                except Exception:
+                    pass
             return {"success": True, "playlists": playlists}
     except Exception as e:
-        return {"success": False, "error": f"Lỗi gọi Spotify API: {str(e)}", "playlists": []}
+        err_msg = str(e)
+        if "429" in err_msg:
+            return {
+                "success": False,
+                "error": "Spotify tạm thời giới hạn tần suất gọi API (HTTP 429). Bạn vẫn có thể dán link playlist trực tiếp vào ô bên trên để chuyển giao ngay.",
+                "playlists": []
+            }
+        return {"success": False, "error": f"Lỗi gọi Spotify API: {err_msg}", "playlists": []}
 
 
 _PLAYLIST_TRACKS_CACHE = {}
@@ -316,18 +353,18 @@ def match_spotify_track_to_ytmusic(sp_track):
     Uses ytmusic_helper.filter_search and score evaluation.
     """
     name = sp_track.get("name", "")
-    artist = sp_track.get("artist", "")
+    artist = sp_track.get("artist", "").replace("\xa0", " ")
     query = f"{name} {artist}".strip()
     if not query:
         return None
 
     try:
         search_res = ytmusic_helper.filter_search(query, "songs", limit=5)
-        candidates = search_res.get("items", []) if isinstance(search_res, dict) else []
+        candidates = search_res if isinstance(search_res, list) else (search_res.get("items", []) if isinstance(search_res, dict) else [])
         if not candidates:
             # Fallback to general search without filter
             search_res = ytmusic_helper.filter_search(query, "videos", limit=5)
-            candidates = search_res.get("items", []) if isinstance(search_res, dict) else []
+            candidates = search_res if isinstance(search_res, list) else (search_res.get("items", []) if isinstance(search_res, dict) else [])
 
         if not candidates:
             return None
@@ -343,14 +380,23 @@ def match_spotify_track_to_ytmusic(sp_track):
 
         if best_candidate and best_candidate.get("videoId"):
             vid = best_candidate["videoId"]
+            if best_candidate.get("durationMs"):
+                cand_dur = int(best_candidate["durationMs"] // 1000)
+            else:
+                cand_dur = int(parse_duration_to_seconds(best_candidate.get("duration", 0)))
+            if not cand_dur:
+                cand_dur = int(sp_track.get("duration_ms", 0) // 1000)
+
+            cand_image = best_candidate.get("image") or sp_track.get("image", "")
+
             return {
                 "title": sp_track.get("name") or best_candidate.get("title"),
                 "artist": sp_track.get("artist") or best_candidate.get("artist"),
                 "album": sp_track.get("album") or best_candidate.get("album", ""),
-                "duration": int(best_candidate.get("duration") or (sp_track.get("duration_ms", 0) // 1000)),
+                "duration": cand_dur,
                 "videoId": vid,
                 "path": f"ytdl://{vid}",
-                "image": sp_track.get("image") or best_candidate.get("image", ""),
+                "image": cand_image,
                 "source": "spotify_import"
             }
     except Exception as e:
@@ -379,6 +425,7 @@ class SpotifyImportManager:
         self.cancel_requested = False
         self.playlist_id = ""
         self.playlist_title = ""
+        self.playlist_image = ""
         self.current = 0
         self.total = 0
         self.percent = 0
@@ -394,6 +441,7 @@ class SpotifyImportManager:
                 "active": self.active,
                 "playlistId": self.playlist_id,
                 "playlistTitle": self.playlist_title,
+                "image": self.playlist_image,
                 "current": self.current,
                 "total": self.total,
                 "percent": self.percent,
@@ -412,7 +460,7 @@ class SpotifyImportManager:
                 return True
         return False
 
-    def start_import(self, playlist_id, playlist_title=None, spdc=None):
+    def start_import(self, playlist_id, playlist_title=None, spdc=None, cover_url=None):
         with self._lock:
             if self.active:
                 return {"success": False, "error": "Một tiến trình import khác đang chạy."}
@@ -425,6 +473,7 @@ class SpotifyImportManager:
             self.cancel_requested = False
             self.playlist_id = pid
             self.playlist_title = playlist_title or "Spotify Playlist"
+            self.playlist_image = cover_url or ""
             self.current = 0
             self.total = 0
             self.percent = 0
@@ -435,32 +484,27 @@ class SpotifyImportManager:
 
             self._thread = threading.Thread(
                 target=self._run_import,
-                args=(pid, self.playlist_title, spdc),
+                args=(pid, self.playlist_title, spdc, cover_url),
                 daemon=True
             )
             self._thread.start()
             return {"success": True, "message": "Đã bắt đầu chuyển giao playlist."}
 
-    def _run_import(self, pid, fallback_title, spdc):
+    def _run_import(self, pid, fallback_title, spdc, fallback_cover=None):
         try:
             if not spdc:
                 spdc = lyrics_helper.get_spotify_spdc()
             token = lyrics_helper.get_spotify_access_token(spdc) if spdc else None
 
-            if not token:
-                with self._lock:
-                    self.active = False
-                    self.error = "Không thể lấy token xác thực Spotify. Vui lòng kiểm tra lại Cookie."
-                return
-
-            # Fetch details
-            details = fetch_spotify_playlist_details(pid, token=token)
+            # Fetch details (embed scraper works seamlessly even with zero token)
+            details = fetch_spotify_playlist_details(pid, token=token, spdc=spdc)
             title = details.get("title") or fallback_title or "Spotify Playlist"
-            cover_image = details.get("image") or ""
+            cover_image = details.get("image") or fallback_cover or ""
             desc = details.get("description") or f"Chuyển giao từ Spotify ({time.strftime('%d/%m/%Y')})"
 
             with self._lock:
                 self.playlist_title = title
+                self.playlist_image = cover_image
                 self.current_track = "Đang tải danh sách bài hát..."
 
             # Fetch tracks
@@ -491,7 +535,7 @@ class SpotifyImportManager:
                     resolved_tracks.append(matched)
 
                 # Gentle pacing to avoid YouTube Music rate limits
-                time.sleep(0.05)
+                time.sleep(0.06)
 
             if not resolved_tracks and not self.cancel_requested:
                 with self._lock:
@@ -502,12 +546,13 @@ class SpotifyImportManager:
             # Save to custom_playlists.json via playlist_manager (SSOT)
             existing_playlists = playlist_manager.load_playlists()
             new_id = f"custom_spotify_{pid}_{int(time.time())}"
+            final_cover = cover_image or (resolved_tracks[0].get("image") if resolved_tracks else "")
             new_playlist = {
                 "id": new_id,
                 "playlistId": new_id,
                 "title": title,
                 "description": desc,
-                "image": cover_image,
+                "image": final_cover,
                 "trackCount": len(resolved_tracks),
                 "tracks": resolved_tracks,
                 "source": "spotify_import",

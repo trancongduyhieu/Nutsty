@@ -27,6 +27,7 @@ Rectangle {
     // Import progress properties
     property string importPlaylistTitle: ""
     property string importPlaylistId: ""
+    property string importPlaylistCover: ""
     property int importCurrent: 0
     property int importTotal: 0
     property int importPercent: 0
@@ -50,6 +51,7 @@ Rectangle {
         root.errorMessage = "";
         root.isImporting = false;
         root.importCompleted = false;
+        root.importPlaylistCover = "";
         root.resolvedPlaylist = null;
         fetchPlaylists();
         checkImportStatus();
@@ -133,13 +135,14 @@ Rectangle {
         xhr.send(JSON.stringify({ "url": clean, "spdc": effectiveSpdc }));
     }
 
-    function startImport(playlistId, playlistTitle) {
+    function startImport(playlistId, playlistTitle, coverUrl) {
         if (!playlistId) return;
         root.isImporting = true;
         root.importCompleted = false;
         root.errorMessage = "";
         root.importPlaylistId = playlistId;
         root.importPlaylistTitle = playlistTitle || "Spotify Playlist";
+        root.importPlaylistCover = coverUrl || (root.resolvedPlaylist ? root.resolvedPlaylist.image : "");
         root.importCurrent = 0;
         root.importTotal = 0;
         root.importPercent = 0;
@@ -163,7 +166,13 @@ Rectangle {
                 }
             }
         };
-        xhr.send(JSON.stringify({ "playlist_id": playlistId, "playlist_title": playlistTitle }));
+        var effectiveSpdc = root.spotifySpdc || (typeof win !== "undefined" ? win.spotifySpdc : "");
+        xhr.send(JSON.stringify({
+            "playlist_id": playlistId,
+            "playlist_title": playlistTitle,
+            "image": root.importPlaylistCover,
+            "spdc": effectiveSpdc
+        }));
     }
 
     function cancelImport() {
@@ -185,6 +194,9 @@ Rectangle {
                         root.isImporting = true;
                         root.importPlaylistId = st.playlistId || "";
                         root.importPlaylistTitle = st.playlistTitle || "";
+                        if (st.image) {
+                            root.importPlaylistCover = st.image;
+                        }
                         root.importCurrent = st.current || 0;
                         root.importTotal = st.total || 0;
                         root.importPercent = st.percent || 0;
@@ -195,6 +207,9 @@ Rectangle {
                         root.importCompleted = true;
                         root.importPercent = 100;
                         root.importedPlaylistId = st.importedPlaylistId || "";
+                        if (st.image) {
+                            root.importPlaylistCover = st.image;
+                        }
                         statusPollTimer.stop();
                         root.playlistImported(root.importedPlaylistId);
                     } else if (st.error && root.isImporting) {
@@ -307,7 +322,7 @@ Rectangle {
 
                     AppIcon {
                         anchors.centerIn: parent
-                        source: "assets/icons/media-playlist-consecutive-symbolic.svg"
+                        source: "../assets/icons/media-playlist-consecutive-symbolic.svg"
                         iconSize: 18
                         color: root.accentColor
                     }
@@ -343,7 +358,7 @@ Rectangle {
 
                     AppIcon {
                         anchors.centerIn: parent
-                        source: "assets/icons/window-close-symbolic.svg"
+                        source: "../assets/icons/window-close-symbolic.svg"
                         iconSize: 14
                         color: closeBtnArea.containsMouse ? "#ffffff" : "#9ca3af"
                     }
@@ -394,22 +409,78 @@ Rectangle {
 
                 Item { Layout.fillHeight: true }
 
-                RowLayout {
-                    Layout.alignment: Qt.AlignHCenter
-                    spacing: 12
+                // Playlist Info Card with Cover Art & Live Spinner
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 74
+                    radius: 12
+                    color: Qt.rgba(255, 255, 255, 0.04)
+                    border.color: Qt.rgba(255, 255, 255, 0.08)
+                    border.width: 1
 
-                    CircularSpinner {
-                        size: 24
-                        strokeWidth: 2.5
-                        color: root.accentColor
-                        running: root.isImporting
-                    }
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: 12
 
-                    Text {
-                        text: root.importPlaylistTitle
-                        color: "#ffffff"
-                        font.pixelSize: 15
-                        font.bold: true
+                        // Cover Art Thumbnail with Rounded Mask
+                        Rectangle {
+                            width: 54
+                            height: 54
+                            radius: 8
+                            color: Qt.rgba(255, 255, 255, 0.06)
+                            border.color: Qt.rgba(255, 255, 255, 0.12)
+                            border.width: 1
+                            clip: true
+
+                            Image {
+                                id: importCoverImg
+                                anchors.fill: parent
+                                source: root.importPlaylistCover || (root.resolvedPlaylist ? root.resolvedPlaylist.image : "")
+                                fillMode: Image.PreserveAspectCrop
+                                visible: status === Image.Ready
+                            }
+
+                            AppIcon {
+                                anchors.centerIn: parent
+                                source: "../assets/icons/media-playlist-consecutive-symbolic.svg"
+                                iconSize: 22
+                                color: root.accentColor
+                                visible: !importCoverImg.visible
+                            }
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 4
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: root.importPlaylistTitle || I18n.tr("Playlist Spotify", "Spotify Playlist")
+                                color: "#ffffff"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 14
+                                font.bold: true
+                                elide: Text.ElideRight
+                            }
+
+                            RowLayout {
+                                spacing: 6
+                                CircularSpinner {
+                                    size: 13
+                                    strokeWidth: 2
+                                    color: root.accentColor
+                                    running: root.isImporting
+                                }
+                                Text {
+                                    text: I18n.tr("Đang khớp nguồn âm thanh chất lượng cao...", "Matching high-quality audio streams...")
+                                    color: Theme.textSecondary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    elide: Text.ElideRight
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -442,12 +513,14 @@ Rectangle {
                         elide: Text.ElideRight
                         text: root.importCurrentTrack ? (I18n.tr("Đang xử lý: ", "Processing: ") + root.importCurrentTrack) : ""
                         color: "#9ca3af"
+                        font.family: Theme.fontFamily
                         font.pixelSize: 12
                     }
 
                     Text {
                         text: root.importTotal > 0 ? (root.importCurrent + " / " + root.importTotal + " (" + root.importPercent + "%)") : (root.importPercent + "%")
                         color: root.accentColor
+                        font.family: Theme.fontFamily
                         font.pixelSize: 12
                         font.bold: true
                     }
@@ -455,22 +528,34 @@ Rectangle {
 
                 Item { Layout.fillHeight: true }
 
-                // Cancel Button (Muted Rose)
+                // Cancel Button (Standard Squircle Design System: radius 12, muted rose, icon + label)
                 Rectangle {
-                    Layout.alignment: Qt.AlignHCenter
-                    width: 140
-                    height: 36
-                    radius: 10
-                    color: cancelMouse.containsMouse ? Qt.rgba(244, 63, 94, 0.25) : Qt.rgba(244, 63, 94, 0.15)
-                    border.color: Qt.rgba(244, 63, 94, 0.35)
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 40
+                    radius: 12
+                    color: cancelMouse.containsMouse ? Qt.rgba(244, 63, 94, 0.22) : Qt.rgba(244, 63, 94, 0.12)
+                    border.color: cancelMouse.containsMouse ? Qt.rgba(244, 63, 94, 0.50) : Qt.rgba(244, 63, 94, 0.30)
                     border.width: 1
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                    Behavior on border.color { ColorAnimation { duration: 120 } }
 
-                    Text {
+                    RowLayout {
                         anchors.centerIn: parent
-                        text: I18n.tr("Hủy Bỏ", "Cancel")
-                        color: "#f87171"
-                        font.pixelSize: 13
-                        font.bold: true
+                        spacing: 8
+
+                        AppIcon {
+                            source: "../assets/icons/window-close-symbolic.svg"
+                            iconSize: 13
+                            color: cancelMouse.containsMouse ? "#fda4af" : "#f87171"
+                        }
+
+                        Text {
+                            text: I18n.tr("Hủy Quá Trình Chuyển Giao", "Cancel Transfer")
+                            color: cancelMouse.containsMouse ? "#fda4af" : "#f87171"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                        }
                     }
 
                     MouseArea {
@@ -503,7 +588,7 @@ Rectangle {
 
                     AppIcon {
                         anchors.centerIn: parent
-                        source: "assets/icons/emblem-ok-symbolic.svg"
+                        source: "../assets/icons/emblem-ok-symbolic.svg"
                         iconSize: 26
                         color: root.accentColor
                     }
@@ -664,7 +749,7 @@ Rectangle {
 
                             AppIcon {
                                 anchors.centerIn: parent
-                                source: "assets/icons/folder-music-symbolic.svg"
+                                source: "../assets/icons/folder-music-symbolic.svg"
                                 iconSize: 24
                                 color: root.accentColor
                             }
@@ -709,7 +794,7 @@ Rectangle {
                                     anchors.centerIn: parent
                                     spacing: 6
                                     AppIcon {
-                                        source: "assets/icons/process-working-symbolic.svg"
+                                        source: "../assets/icons/process-working-symbolic.svg"
                                         iconSize: 13
                                         color: "#ffffff"
                                     }
@@ -792,7 +877,7 @@ Rectangle {
                                     height: 38
                                     radius: 8
                                     source: modelData.image || ""
-                                    fallbackIcon: "assets/icons/folder-music-symbolic.svg"
+                                    fallbackIcon: "../assets/icons/folder-music-symbolic.svg"
                                 }
 
                                 ColumnLayout {
@@ -837,7 +922,7 @@ Rectangle {
                                         anchors.fill: parent
                                         hoverEnabled: true
                                         cursorShape: Qt.PointingHandCursor
-                                        onClicked: root.startImport(modelData.id, modelData.title)
+                                        onClicked: root.startImport(modelData.id, modelData.title, modelData.image)
                                     }
                                 }
                             }
@@ -965,7 +1050,7 @@ Rectangle {
                                     height: 56
                                     radius: 10
                                     source: root.resolvedPlaylist ? (root.resolvedPlaylist.image || "") : ""
-                                    fallbackIcon: "assets/icons/folder-music-symbolic.svg"
+                                    fallbackIcon: "../assets/icons/folder-music-symbolic.svg"
                                 }
 
                                 ColumnLayout {
@@ -1012,7 +1097,7 @@ Rectangle {
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         if (root.resolvedPlaylist && root.resolvedPlaylist.id) {
-                                            root.startImport(root.resolvedPlaylist.id, root.resolvedPlaylist.title);
+                                            root.startImport(root.resolvedPlaylist.id, root.resolvedPlaylist.title, root.resolvedPlaylist.image);
                                         }
                                     }
                                 }
