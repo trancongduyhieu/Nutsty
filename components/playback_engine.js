@@ -1009,7 +1009,7 @@ function loadPlaylistTracks(win, pl) {
     win.mainSectionTitle = pl.title || pl.name || "Playlist";
     mainGrid.sectionTitle = pl.title || pl.name || "Playlist";
 
-    var isCustomPl = !!pl.isCustom || String(pid).startsWith("custom_pl_") || (pl.tracks && pl.tracks.length >= 0 && pl.isLocal);
+    var isCustomPl = !!pl.isCustom || String(pid).startsWith("custom_") || pl.source === "spotify_import" || (pl.tracks && pl.tracks.length >= 0 && pl.isLocal);
     if (isCustomPl) {
         var foundTracks = pl.tracks || [];
         if (win.customPlaylists) {

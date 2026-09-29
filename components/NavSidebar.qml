@@ -50,7 +50,7 @@ Rectangle {
                 for (var i = 0; i < root.playlists.length; i++) {
                     var p = root.playlists[i];
                     if (!p) continue;
-                    if (!p.isLocal && p.playlistId && !String(p.playlistId).startsWith("custom_pl_") && !p.isCustom) continue;
+                    if (!p.isLocal && p.playlistId && !String(p.playlistId).startsWith("custom_") && !p.isCustom && p.source !== "spotify_import") continue;
                     var k = p.id || p.playlistId || ("pl_" + i);
                     if (!seen[k]) {
                         seen[k] = true;

@@ -17,12 +17,8 @@ Rectangle {
 
     // State properties
     property string spotifySpdc: (typeof win !== "undefined" && win.spotifySpdc) ? win.spotifySpdc : ""
-    readonly property bool hasSpotifySession: (root.spotifySpdc !== "" || (typeof win !== "undefined" && win.spotifySpdc !== ""))
     property bool isImporting: false
-    property bool isLoadingList: false
-    property var spotifyPlaylists: []
     property string errorMessage: ""
-    property int currentTab: 0 // 0: User Playlists, 1: Paste Link
 
     // Import progress properties
     property string importPlaylistTitle: ""
@@ -53,7 +49,10 @@ Rectangle {
         root.importCompleted = false;
         root.importPlaylistCover = "";
         root.resolvedPlaylist = null;
-        fetchPlaylists();
+        if (linkInput) {
+            linkInput.text = "";
+        }
+        checkClipboardLink();
         checkImportStatus();
     }
 
@@ -63,44 +62,25 @@ Rectangle {
         root.closeRequested();
     }
 
-    function fetchPlaylists() {
-        root.isLoadingList = true;
-        root.errorMessage = "";
+    function checkClipboardLink() {
         var xhr = new XMLHttpRequest();
-        var url = "http://127.0.0.1:17890/api/spotify/playlists";
-        var effectiveSpdc = root.spotifySpdc || (typeof win !== "undefined" ? win.spotifySpdc : "");
-        if (effectiveSpdc) {
-            url += "?spdc=" + encodeURIComponent(effectiveSpdc);
-        }
-        xhr.open("GET", url, true);
+        xhr.open("GET", "http://127.0.0.1:17890/api/clipboard", true);
         xhr.onreadystatechange = function() {
-            if (xhr.readyState === XMLHttpRequest.DONE) {
-                root.isLoadingList = false;
-                if (xhr.status === 200) {
-                    try {
-                        var res = JSON.parse(xhr.responseText);
-                        if (res.success && Array.isArray(res.playlists)) {
-                            root.spotifyPlaylists = res.playlists;
-                        } else {
-                            if (root.currentTab !== 0) {
-                                root.errorMessage = res.error || I18n.tr("Không thể tải danh sách playlist Spotify.", "Unable to load Spotify playlists.");
-                            }
-                        }
-                    } catch(e) {
-                        if (root.currentTab !== 0) {
-                            root.errorMessage = I18n.tr("Lỗi xử lý dữ liệu từ Spotify.", "Data parse error from Spotify.");
+            if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
+                try {
+                    var res = JSON.parse(xhr.responseText);
+                    var text = (res.text || "").trim();
+                    if (text && (text.includes("spotify.com/playlist") || text.includes("spotify:playlist"))) {
+                        if (linkInput && !linkInput.text) {
+                            linkInput.text = text;
+                            root.resolveUrl(text);
                         }
                     }
-                } else {
-                    if (root.currentTab !== 0) {
-                        root.errorMessage = I18n.tr("Lỗi kết nối máy chủ cục bộ.", "Failed to connect to local server.");
-                    }
-                }
+                } catch(e) {}
             }
         };
         xhr.send();
     }
-
 
     function resolveUrl(urlStr) {
         var clean = (urlStr || "").trim();
@@ -263,7 +243,7 @@ Rectangle {
     LiquidGlass {
         id: dialogCard
         width: 520
-        height: root.isImporting || root.importCompleted ? 320 : 540
+        height: root.isImporting || root.importCompleted ? 320 : (root.resolvedPlaylist ? 370 : 230)
         anchors.centerIn: parent
         radius: 20
         displacement: 22.0
@@ -329,7 +309,6 @@ Rectangle {
                 }
 
                 ColumnLayout {
-                    Layout.fillWidth: true
                     spacing: 2
 
                     Text {
@@ -346,8 +325,13 @@ Rectangle {
                     }
                 }
 
-                // Close Button
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                // Close Button (aligned to far right)
                 Rectangle {
+                    Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                     width: 32
                     height: 32
                     radius: 8
@@ -376,13 +360,13 @@ Rectangle {
             // --- ERROR BANNER ---
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: (root.errorMessage && root.currentTab !== 0) ? (errorText.implicitHeight + 16) : 0
+                Layout.preferredHeight: (root.errorMessage !== "") ? (errorText.implicitHeight + 16) : 0
                 implicitHeight: Layout.preferredHeight
                 radius: 10
                 color: Qt.rgba(244, 63, 94, 0.15)
                 border.color: Qt.rgba(244, 63, 94, 0.35)
                 border.width: 1
-                visible: (root.errorMessage !== "") && (root.currentTab !== 0)
+                visible: root.errorMessage !== ""
                 clip: true
 
                 Behavior on Layout.preferredHeight { NumberAnimation { duration: 150 } }
@@ -398,7 +382,6 @@ Rectangle {
                     horizontalAlignment: Text.AlignHCenter
                 }
             }
-
 
             // --- VIEW 1: IMPORTING PROGRESS VIEW ---
             ColumnLayout {
@@ -518,9 +501,8 @@ Rectangle {
                     }
 
                     Text {
-                        text: root.importTotal > 0 ? (root.importCurrent + " / " + root.importTotal + " (" + root.importPercent + "%)") : (root.importPercent + "%")
-                        color: root.accentColor
-                        font.family: Theme.fontFamily
+                        text: (root.importTotal > 0 ? (root.importCurrent + "/" + root.importTotal) : (root.importPercent + "%"))
+                        color: "#ffffff"
                         font.pixelSize: 12
                         font.bold: true
                     }
@@ -528,7 +510,7 @@ Rectangle {
 
                 Item { Layout.fillHeight: true }
 
-                // Cancel Button (Standard Squircle Design System: radius 12, muted rose, icon + label)
+                // Cancel Button (Squircle Design System: radius 12, muted rose)
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 40
@@ -636,479 +618,175 @@ Rectangle {
                 }
             }
 
-            // --- VIEW 3: SELECTION TABS & PLAYLIST LIST ---
+            // --- VIEW 3: LINK INPUT & PREVIEW VIEW ---
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 spacing: 12
                 visible: !root.isImporting && !root.importCompleted
 
-                // Segmented Tab Control
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 38
-                    radius: 10
-                    color: Qt.rgba(255, 255, 255, 0.05)
-                    border.color: Qt.rgba(255, 255, 255, 0.1)
-                    border.width: 1
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 3
-                        spacing: 4
-
-                        // Tab 0: Account Playlists
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            radius: 8
-                            color: root.currentTab === 0 ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) : "transparent"
-                            border.color: root.currentTab === 0 ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.4) : "transparent"
-                            border.width: 1
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: I18n.tr("Playlist của bạn", "Your Playlists")
-                                color: root.currentTab === 0 ? "#ffffff" : "#9ca3af"
-                                font.pixelSize: 12
-                                font.bold: root.currentTab === 0
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    root.currentTab = 0;
-                                    root.errorMessage = "";
-                                    if (root.spotifyPlaylists.length === 0) {
-                                        root.fetchPlaylists();
-                                    }
-                                }
-                            }
-                        }
-
-                        // Tab 1: Paste Link
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            radius: 8
-                            color: root.currentTab === 1 ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) : "transparent"
-                            border.color: root.currentTab === 1 ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.4) : "transparent"
-                            border.width: 1
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: I18n.tr("Dán link Spotify", "Paste Spotify Link")
-                                color: root.currentTab === 1 ? "#ffffff" : "#9ca3af"
-                                font.pixelSize: 12
-                                font.bold: root.currentTab === 1
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    root.currentTab = 1;
-                                    root.errorMessage = "";
-                                }
-                            }
-                        }
-                    }
+                Text {
+                    text: I18n.tr("Dán đường link playlist Spotify (công khai hoặc chia sẻ):", "Paste a Spotify playlist link (public or shared):")
+                    color: "#9ca3af"
+                    font.pixelSize: 12
                 }
 
-                // --- TAB 0 CONTENT: LIST OF USER PLAYLISTS ---
-                Item {
+                // Input Box Row
+                RowLayout {
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    visible: root.currentTab === 0
+                    spacing: 8
 
-                    // Loading spinner
-                    CircularSpinner {
-                        anchors.centerIn: parent
-                        size: 28
-                        color: root.accentColor
-                        visible: root.isLoadingList
-                        running: root.isLoadingList
-                    }
-
-                    // Empty or Not Connected Notice
-                    ColumnLayout {
-                        anchors.centerIn: parent
-                        width: parent.width - 48
-                        spacing: 12
-                        visible: !root.isLoadingList && root.spotifyPlaylists.length === 0
-
-                        Rectangle {
-                            Layout.alignment: Qt.AlignHCenter
-                            width: 50
-                            height: 50
-                            radius: 16
-                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
-                            border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
-                            border.width: 1
-
-                            AppIcon {
-                                anchors.centerIn: parent
-                                source: "../assets/icons/folder-music-symbolic.svg"
-                                iconSize: 24
-                                color: root.accentColor
-                            }
-                        }
-
-                        Text {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: root.hasSpotifySession ? I18n.tr("Chưa tìm thấy playlist trong tài khoản", "No Playlists Found in Account") : I18n.tr("Chưa kết nối tài khoản Spotify", "Spotify Account Not Connected")
-                            color: "#ffffff"
-                            font.pixelSize: 15
-                            font.bold: true
-                        }
-
-                        Text {
-                            Layout.fillWidth: true
-                            Layout.maximumWidth: 380
-                            Layout.alignment: Qt.AlignHCenter
-                            horizontalAlignment: Text.AlignHCenter
-                            wrapMode: Text.Wrap
-                            text: root.hasSpotifySession
-                                ? I18n.tr("Tài khoản Spotify đã kết nối! Bạn có thể dán trực tiếp link playlist Spotify bất kỳ ở tab bên cạnh để nhập và lưu về Nutsty ngay lập tức.", "Spotify connected! You can paste any Spotify playlist link in the tab above to import immediately.")
-                                : I18n.tr("Đăng nhập 1-chạm hoặc đồng bộ từ trình duyệt để tải danh sách phát của bạn. Bạn cũng có thể dán link playlist bất kỳ ở tab bên cạnh.", "1-click login or sync from browser to load your playlists. You can also paste any playlist link in the tab above.")
-                            color: "#9ca3af"
-                            font.pixelSize: 12
-                        }
-
-                        Item { Layout.preferredHeight: 6 }
-
-                        RowLayout {
-                            Layout.alignment: Qt.AlignHCenter
-                            spacing: 10
-
-                            // 1-Click Connect Button (only shown if not yet connected)
-                            Rectangle {
-                                Layout.preferredWidth: 155
-                                Layout.preferredHeight: 34
-                                radius: 8
-                                visible: !root.hasSpotifySession
-                                color: connectMouse.containsMouse ? Qt.darker(root.accentColor, 1.15) : root.accentColor
-
-                                RowLayout {
-                                    anchors.centerIn: parent
-                                    spacing: 6
-                                    AppIcon {
-                                        source: "../assets/icons/process-working-symbolic.svg"
-                                        iconSize: 13
-                                        color: "#ffffff"
-                                    }
-                                    Text {
-                                        text: I18n.tr("Kết nối 1-Chạm", "Connect 1-Click")
-                                        color: "#ffffff"
-                                        font.pixelSize: 12
-                                        font.bold: true
-                                    }
-                                }
-
-                                MouseArea {
-                                    id: connectMouse
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        root.closeModal();
-                                        root.launchSpotifyBrowserLoginRequested();
-                                    }
-                                }
-                            }
-
-                            // Switch to Link Tab Button
-                            Rectangle {
-                                Layout.preferredWidth: 130
-                                Layout.preferredHeight: 34
-                                radius: 8
-                                color: pasteTabMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.06)
-                                border.color: Qt.rgba(255, 255, 255, 0.12)
-                                border.width: 1
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: I18n.tr("Dán link trực tiếp", "Paste link directly")
-                                    color: "#e5e7eb"
-                                    font.pixelSize: 12
-                                    font.bold: true
-                                }
-
-                                MouseArea {
-                                    id: pasteTabMouse
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        root.currentTab = 1;
-                                        root.errorMessage = "";
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-
-                    // Playlists ListView
-                    ListView {
-                        id: playlistView
-                        anchors.fill: parent
-                        clip: true
-                        spacing: 8
-                        model: root.spotifyPlaylists
-                        visible: !root.isLoadingList && root.spotifyPlaylists.length > 0
-
-                        delegate: Rectangle {
-                            id: playlistItem
-                            width: playlistView.width
-                            height: 56
-                            radius: 10
-                            color: itemMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.08) : Qt.rgba(255, 255, 255, 0.03)
-                            border.color: itemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.4) : Qt.rgba(255, 255, 255, 0.07)
-                            border.width: 1
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 10
-                                anchors.rightMargin: 10
-                                spacing: 12
-
-                                RoundedImage {
-                                    width: 38
-                                    height: 38
-                                    radius: 8
-                                    source: modelData.image || ""
-                                    fallbackIcon: "../assets/icons/folder-music-symbolic.svg"
-                                }
-
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 2
-
-                                    Text {
-                                        Layout.fillWidth: true
-                                        elide: Text.ElideRight
-                                        text: modelData.title || "Untitled"
-                                        color: "#ffffff"
-                                        font.pixelSize: 13
-                                        font.bold: true
-                                    }
-
-                                    Text {
-                                        text: (modelData.trackCount || 0) + " " + I18n.tr("bài hát", "tracks")
-                                        color: "#9ca3af"
-                                        font.pixelSize: 11
-                                    }
-                                }
-
-                                // Transfer Button
-                                Rectangle {
-                                    width: 90
-                                    height: 30
-                                    radius: 8
-                                    color: transferMouse.containsMouse ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.2)
-                                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.4)
-                                    border.width: 1
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: I18n.tr("Chuyển", "Import")
-                                        color: transferMouse.containsMouse ? "#ffffff" : root.accentColor
-                                        font.pixelSize: 12
-                                        font.bold: true
-                                    }
-
-                                    MouseArea {
-                                        id: transferMouse
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: root.startImport(modelData.id, modelData.title, modelData.image)
-                                    }
-                                }
-                            }
-
-                            MouseArea {
-                                id: itemMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                z: -1
-                            }
-                        }
-                    }
-                }
-
-                // --- TAB 1 CONTENT: PASTE LINK ---
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    spacing: 12
-                    visible: root.currentTab === 1
-
-                    Text {
-                        text: I18n.tr("Dán đường link playlist Spotify (công khai hoặc chia sẻ):", "Paste a Spotify playlist link (public or shared):")
-                        color: "#9ca3af"
-                        font.pixelSize: 12
-                    }
-
-                    // Input Box Row
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            height: 40
-                            radius: 10
-                            color: Qt.rgba(255, 255, 255, 0.05)
-                            border.color: linkInput.activeFocus ? root.accentColor : Qt.rgba(255, 255, 255, 0.15)
-                            border.width: 1
-
-                            TextInput {
-                                id: linkInput
-                                anchors.fill: parent
-                                anchors.leftMargin: 12
-                                anchors.rightMargin: 12
-                                verticalAlignment: TextInput.AlignVCenter
-                                color: "#ffffff"
-                                font.pixelSize: 13
-                                clip: true
-                                selectByMouse: true
-
-                                Text {
-                                    anchors.fill: parent
-                                    verticalAlignment: Text.AlignVCenter
-                                    text: I18n.tr("Ví dụ: https://open.spotify.com/playlist/...", "E.g. https://open.spotify.com/playlist/...")
-                                    color: "#6b7280"
-                                    font.pixelSize: 13
-                                    visible: !linkInput.text && !linkInput.activeFocus
-                                }
-
-                                onAccepted: root.resolveUrl(linkInput.text)
-                            }
-                        }
-
-                        // Check/Resolve Button
-                        Rectangle {
-                            width: 80
-                            height: 40
-                            radius: 10
-                            color: checkMouse.containsMouse ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.2)
-                            border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.4)
-                            border.width: 1
-
-                            RowLayout {
-                                anchors.centerIn: parent
-                                spacing: 6
-
-                                CircularSpinner {
-                                    size: 14
-                                    color: "#ffffff"
-                                    visible: root.isResolvingLink
-                                    running: root.isResolvingLink
-                                }
-
-                                Text {
-                                    text: I18n.tr("Kiểm tra", "Check")
-                                    color: checkMouse.containsMouse ? "#ffffff" : root.accentColor
-                                    font.pixelSize: 12
-                                    font.bold: true
-                                    visible: !root.isResolvingLink
-                                }
-                            }
-
-                            MouseArea {
-                                id: checkMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.resolveUrl(linkInput.text)
-                            }
-                        }
-                    }
-
-                    // Preview Card for resolved playlist
                     Rectangle {
                         Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        radius: 12
-                        color: Qt.rgba(255, 255, 255, 0.04)
-                        border.color: Qt.rgba(255, 255, 255, 0.08)
+                        height: 40
+                        radius: 10
+                        color: Qt.rgba(255, 255, 255, 0.05)
+                        border.color: linkInput.activeFocus ? root.accentColor : Qt.rgba(255, 255, 255, 0.15)
                         border.width: 1
-                        visible: root.resolvedPlaylist !== null
 
-                        ColumnLayout {
+                        TextInput {
+                            id: linkInput
                             anchors.fill: parent
-                            anchors.margins: 14
-                            spacing: 12
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 12
+                            verticalAlignment: TextInput.AlignVCenter
+                            color: "#ffffff"
+                            font.pixelSize: 13
+                            clip: true
+                            selectByMouse: true
 
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: 12
-
-                                RoundedImage {
-                                    width: 56
-                                    height: 56
-                                    radius: 10
-                                    source: root.resolvedPlaylist ? (root.resolvedPlaylist.image || "") : ""
-                                    fallbackIcon: "../assets/icons/folder-music-symbolic.svg"
-                                }
-
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 4
-
-                                    Text {
-                                        Layout.fillWidth: true
-                                        elide: Text.ElideRight
-                                        text: root.resolvedPlaylist ? (root.resolvedPlaylist.title || "") : ""
-                                        color: "#ffffff"
-                                        font.pixelSize: 15
-                                        font.bold: true
-                                    }
-
-                                    Text {
-                                        text: root.resolvedPlaylist ? (root.resolvedPlaylist.trackCount + " " + I18n.tr("bài hát", "tracks")) : ""
-                                        color: "#9ca3af"
-                                        font.pixelSize: 12
-                                    }
-                                }
+                            Text {
+                                anchors.fill: parent
+                                verticalAlignment: Text.AlignVCenter
+                                text: I18n.tr("Ví dụ: https://open.spotify.com/playlist/...", "E.g. https://open.spotify.com/playlist/...")
+                                color: "#6b7280"
+                                font.pixelSize: 13
+                                visible: !linkInput.text && !linkInput.activeFocus
                             }
 
-                            Item { Layout.fillHeight: true }
+                            onAccepted: root.resolveUrl(linkInput.text)
+                        }
+                    }
 
-                            Rectangle {
+                    // Check/Resolve Button
+                    Rectangle {
+                        width: 80
+                        height: 40
+                        radius: 10
+                        color: checkMouse.containsMouse ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.2)
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.4)
+                        border.width: 1
+
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            CircularSpinner {
+                                size: 14
+                                color: "#ffffff"
+                                visible: root.isResolvingLink
+                                running: root.isResolvingLink
+                            }
+
+                            Text {
+                                text: I18n.tr("Kiểm tra", "Check")
+                                color: checkMouse.containsMouse ? "#ffffff" : root.accentColor
+                                font.pixelSize: 12
+                                font.bold: true
+                                visible: !root.isResolvingLink
+                            }
+                        }
+
+                        MouseArea {
+                            id: checkMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.resolveUrl(linkInput.text)
+                        }
+                    }
+                }
+
+                // Preview Card for resolved playlist
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 120
+                    radius: 12
+                    color: Qt.rgba(255, 255, 255, 0.04)
+                    border.color: Qt.rgba(255, 255, 255, 0.08)
+                    border.width: 1
+                    visible: root.resolvedPlaylist !== null
+
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: 12
+                        spacing: 10
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 12
+
+                            RoundedImage {
+                                width: 52
+                                height: 52
+                                radius: 8
+                                source: root.resolvedPlaylist ? (root.resolvedPlaylist.image || "") : ""
+                                fallbackIcon: "../assets/icons/folder-music-symbolic.svg"
+                            }
+
+                            ColumnLayout {
                                 Layout.fillWidth: true
-                                height: 38
-                                radius: 10
-                                color: importLinkMouse.containsMouse ? Qt.darker(root.accentColor, 1.15) : root.accentColor
+                                spacing: 4
 
                                 Text {
-                                    anchors.centerIn: parent
-                                    text: I18n.tr("Bắt Đầu Chuyển Giao", "Start Transfer")
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight
+                                    text: root.resolvedPlaylist ? (root.resolvedPlaylist.title || "") : ""
                                     color: "#ffffff"
-                                    font.pixelSize: 13
+                                    font.pixelSize: 14
                                     font.bold: true
                                 }
 
-                                MouseArea {
-                                    id: importLinkMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        if (root.resolvedPlaylist && root.resolvedPlaylist.id) {
-                                            root.startImport(root.resolvedPlaylist.id, root.resolvedPlaylist.title, root.resolvedPlaylist.image);
-                                        }
+                                Text {
+                                    text: root.resolvedPlaylist ? (root.resolvedPlaylist.trackCount + " " + I18n.tr("bài hát", "tracks")) : ""
+                                    color: "#9ca3af"
+                                    font.pixelSize: 12
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: 36
+                            radius: 8
+                            color: importLinkMouse.containsMouse ? Qt.darker(root.accentColor, 1.15) : root.accentColor
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: I18n.tr("Bắt Đầu Chuyển Giao", "Start Transfer")
+                                color: "#ffffff"
+                                font.pixelSize: 13
+                                font.bold: true
+                            }
+
+                            MouseArea {
+                                id: importLinkMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (root.resolvedPlaylist && root.resolvedPlaylist.id) {
+                                        root.startImport(root.resolvedPlaylist.id, root.resolvedPlaylist.title, root.resolvedPlaylist.image);
                                     }
                                 }
                             }
                         }
                     }
+                }
 
-                    Item {
-                        Layout.fillHeight: true
-                        visible: root.resolvedPlaylist === null
-                    }
+                Item {
+                    Layout.fillHeight: true
+                    visible: root.resolvedPlaylist === null
                 }
             }
         }

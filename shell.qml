@@ -1966,7 +1966,7 @@ Scope {
                                 win.playingSourceTitle = "";
                                 win.startRadioFromTrack(trks[0]);
                             }
-                            onPlaylistSelected: pl => win.loadPlaylistTracks(pl)
+                            onPlaylistSelected: pl => win.handleSelectPlaylist(pl)
                             onTrackContextMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false)
                             onPostNoteRequested: postNoteModal.openModal()
                             onUserNoteDetailRequested: userNoteDetailModal.openModal(win.myLatestNote)
@@ -2051,14 +2051,7 @@ Scope {
                             }
                             onBatchDeleteRequested: paths => win.batchDeleteTracks(paths)
                             onCreatePlaylistRequested: trks => createPlaylistModal.openCreate(trks)
-                            onPlaylistSelected: pl => {
-                                var isCustom = pl && (pl.isCustom === true || pl.type === "custom" || String(pl.id || pl.playlistId || "").startsWith("custom_pl_"));
-                                if (isCustom) {
-                                    win.openCustomPlaylistDetail(pl);
-                                } else {
-                                    win.loadPlaylistTracks(pl);
-                                }
-                            }
+                            onPlaylistSelected: pl => win.handleSelectPlaylist(pl)
                             onPlayPlaylistRequested: (pl, shuffle) => win.playCustomPlaylist(pl, shuffle)
                             onEditPlaylistRequested: pl => createPlaylistModal.openEdit(pl)
                             onDeletePlaylistRequested: plId => win.deleteCustomPlaylist(plId)
@@ -2152,9 +2145,7 @@ Scope {
                             onAlbumSelected: alb => {
                                 win.loadAlbumDetails(alb);
                             }
-                            onPlaylistSelected: pl => {
-                                win.loadPlaylistTracks(pl);
-                            }
+                            onPlaylistSelected: pl => win.handleSelectPlaylist(pl)
                             onTrackContextMenuRequested: (trk, gx, gy) => {
                                 trackContextMenu.openAt(trk, gx, gy, false);
                             }
@@ -2257,7 +2248,7 @@ Scope {
                     }
                     onTrackContextMenuRequested: (trk, gx, gy, isQ) => trackContextMenu.openAt(trk, gx, gy, isQ)
                     onPlaylistSelected: pl => {
-                        win.loadPlaylistTracks(pl);
+                        win.handleSelectPlaylist(pl);
                         win.isNowPlayingOpen = false;
                     }
                     onArtistSelected: (name, chId) => {
@@ -3060,7 +3051,7 @@ Scope {
         } else if (pid === "ado") {
             win.browsingTracks = win.allTracks.filter(t => (t.artist && t.artist.toLowerCase().includes("ado")) || (t.name && t.name.toLowerCase().includes("ado")));
             mainGrid.sectionTitle = "Ado Collection";
-        } else if (pid && pid.startsWith("custom_pl_")) {
+        } else if (pid && (pid.startsWith("custom_pl_") || pid.startsWith("custom_"))) {
             for (var i = 0; i < win.customPlaylists.length; i++) {
                 if (win.customPlaylists[i].id === pid) {
                     win.browsingTracks = win.customPlaylists[i].tracks || [];
@@ -3346,9 +3337,30 @@ Scope {
         customPlaylistsProc.running = true;
     }
 
+    function handleSelectPlaylist(pl) {
+        if (!pl) return;
+        var pid = String(pl.id || pl.playlistId || pl.browseId || "");
+        var isCustom = pl.isCustom === true || pl.type === "custom" || pid.startsWith("custom_") || pl.source === "spotify_import";
+        if (isCustom) {
+            win.openCustomPlaylistDetail(pl);
+        } else {
+            win.loadPlaylistTracks(pl);
+        }
+    }
+
     function openCustomPlaylistDetail(pl) {
         if (!pl) return;
-        win.selectedCustomPlaylist = pl;
+        var fullPl = pl;
+        var pid = pl.id || pl.playlistId || "";
+        if ((!pl.tracks || pl.tracks.length === 0) && win.customPlaylists) {
+            for (var i = 0; i < win.customPlaylists.length; i++) {
+                if (win.customPlaylists[i].id === pid || win.customPlaylists[i].playlistId === pid) {
+                    fullPl = win.customPlaylists[i];
+                    break;
+                }
+            }
+        }
+        win.selectedCustomPlaylist = fullPl;
         win.currentView = "custom_playlist_detail";
     }
 

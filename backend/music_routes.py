@@ -57,6 +57,16 @@ def handle_get_filter_search(handler, query):
 
 def handle_get_playlist(handler, query):
     pl_id = query.get("id", [""])[0]
+    if pl_id.startswith("custom_"):
+        try:
+            from . import playlist_manager
+            playlists = playlist_manager.load_playlists()
+            for p in playlists:
+                if p.get("id") == pl_id or p.get("playlistId") == pl_id:
+                    handler._send_json(p.get("tracks", []), 200)
+                    return
+        except Exception as e:
+            sys.stderr.write(f"[handle_get_playlist custom error]: {e}\n")
     data = ytmusic_helper.get_playlist_tracks(pl_id)
     handler._send_json(data, 200)
 

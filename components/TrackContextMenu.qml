@@ -324,7 +324,7 @@ Item {
 
             // Action 5: Remove from Custom Playlist
             MenuItemButton {
-                visible: typeof win !== "undefined" && win && win.currentView === "playlist" && win.activePlaylistId && win.activePlaylistId.startsWith("custom_pl_")
+                visible: typeof win !== "undefined" && win && win.currentView === "playlist" && win.activePlaylistId && win.activePlaylistId.startsWith("custom_")
                 text: I18n.tr("Xóa khỏi danh sách phát", "Remove from playlist")
                 textColor: "#ff5252"
                 iconColor: "#ff5252"

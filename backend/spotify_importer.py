@@ -545,18 +545,23 @@ class SpotifyImportManager:
 
             # Save to custom_playlists.json via playlist_manager (SSOT)
             existing_playlists = playlist_manager.load_playlists()
-            new_id = f"custom_spotify_{pid}_{int(time.time())}"
+            new_id = f"custom_pl_spotify_{pid}_{int(time.time())}"
             final_cover = cover_image or (resolved_tracks[0].get("image") if resolved_tracks else "")
             new_playlist = {
                 "id": new_id,
                 "playlistId": new_id,
                 "title": title,
+                "name": title,
                 "description": desc,
                 "image": final_cover,
+                "customCover": final_cover,
                 "trackCount": len(resolved_tracks),
                 "tracks": resolved_tracks,
                 "source": "spotify_import",
                 "spotifyId": pid,
+                "isCustom": True,
+                "isLocal": True,
+                "type": "custom",
                 "createdAt": int(time.time() * 1000)
             }
             existing_playlists.insert(0, new_playlist)

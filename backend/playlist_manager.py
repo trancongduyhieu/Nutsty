@@ -29,7 +29,35 @@ def load_playlists():
     try:
         with open(p, "r", encoding="utf-8") as f:
             data = json.load(f)
-            return data if isinstance(data, list) else []
+            if not isinstance(data, list):
+                return []
+            needs_save = False
+            for item in data:
+                if isinstance(item, dict):
+                    if not item.get("isCustom"):
+                        item["isCustom"] = True
+                        needs_save = True
+                    if not item.get("isLocal"):
+                        item["isLocal"] = True
+                        needs_save = True
+                    if not item.get("type"):
+                        item["type"] = "custom"
+                        needs_save = True
+                    if not item.get("id") and item.get("playlistId"):
+                        item["id"] = item["playlistId"]
+                        needs_save = True
+                    if not item.get("playlistId") and item.get("id"):
+                        item["playlistId"] = item["id"]
+                        needs_save = True
+                    if not item.get("name") and item.get("title"):
+                        item["name"] = item["title"]
+                    if not item.get("title") and item.get("name"):
+                        item["title"] = item["name"]
+                    if not item.get("customCover") and item.get("image"):
+                        item["customCover"] = item["image"]
+            if needs_save:
+                save_playlists(data)
+            return data
     except Exception:
         return []
 
