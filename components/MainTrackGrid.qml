@@ -40,6 +40,9 @@ Rectangle {
         if (downloadsSubTab === "tracks" && typeof win !== "undefined" && win) {
             win.browsingTracks = win.allTracks;
         }
+        if (typeof win !== "undefined" && win) {
+            win.lastLibrarySubTab = downloadsSubTab;
+        }
     }
     property var localAlbums: []
     property var customPlaylists: []

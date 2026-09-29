@@ -122,13 +122,15 @@ Rectangle {
                 Layout.preferredWidth: 32
                 Layout.preferredHeight: 32
 
+                readonly property bool isLibActive: headerRoot.currentView === "library" || headerRoot.currentView === "custom_playlist_detail" || (headerRoot.currentView === "playlist" && typeof win !== "undefined" && win.previousView === "library")
+
                 AppIcon {
                     anchors.centerIn: parent
                     source: "../assets/icons/folder-music-symbolic.svg"
                     iconSize: 17
                     color: headerRoot.accentColor
-                    opacity: headerRoot.currentView === "library" ? 1.0 : (libMouse.containsMouse ? 1.0 : 0.70)
-                    scale: libMouse.containsMouse ? 1.12 : (headerRoot.currentView === "library" ? 1.05 : 1.0)
+                    opacity: libBtn.isLibActive ? 1.0 : (libMouse.containsMouse ? 1.0 : 0.70)
+                    scale: libMouse.containsMouse ? 1.12 : (libBtn.isLibActive ? 1.05 : 1.0)
                     Behavior on scale { NumberAnimation { duration: 120 } }
                     Behavior on opacity { NumberAnimation { duration: 120 } }
                 }

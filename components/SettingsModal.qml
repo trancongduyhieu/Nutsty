@@ -908,367 +908,228 @@ Rectangle {
                 }
 
                 // =============================================================
-                // Spotify Account & sp_dc Cookie Integration (Tab 0 - Expandable Accordion)
+                // Spotify Account Integration (Compact row matching Google)
                 // =============================================================
-                // =============================================================
-                // Spotify Account & sp_dc Cookie Integration (Tab 0 - Frameless Expandable)
-                // =============================================================
+                // Compact Spotify Profile Row (When Logged In - Frameless matching Google)
                 Item {
-                    id: spotifyRowItem
+                    id: spotifyConnectedRow
                     Layout.fillWidth: true
-                    Layout.preferredHeight: root.spotifyExpanded
-                        ? (spotifyHeaderItem.height + 4 + (spotifyRowItem.isConnected ? (spotifyConnectedCard.height + 10) : (spotifyDisconnectedCol.implicitHeight + 10)))
-                        : 46
-                    clip: true
+                    Layout.preferredHeight: 48
+                    visible: root.spotifySpdc && root.spotifySpdc.length > 10
 
-                    Behavior on Layout.preferredHeight { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-
-                    readonly property bool isConnected: root.spotifySpdc && root.spotifySpdc.length > 10
-
-                    // Header Row (Clickable, Gióng hàng trái và phải 100% thẳng hàng với các dòng dưới)
-                    Item {
-                        id: spotifyHeaderItem
+                    Row {
                         anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        height: 46
+                        anchors.right: spotifyLogoutBtn.left
+                        anchors.rightMargin: 14
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 14
 
-                        Column {
-                            anchors.left: parent.left
-                            anchors.right: spotifyDropdownBtn.left
-                            anchors.rightMargin: 16
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 2
+                        // Spotify Squircle (44x44, radius: 12)
+                        Item {
+                            width: 44
+                            height: 44
 
-                            Text {
-                                text: I18n.tr("Đăng nhập từ Spotify", "Log in with Spotify")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 13
-                                font.bold: true
-                                color: Theme.textPrimary
-                            }
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 12
+                                color: "#121214"
+                                border.color: Qt.rgba(30, 215, 96, 0.35)
+                                border.width: 1
 
-                            Text {
-                                text: spotifyRowItem.isConnected
-                                      ? I18n.tr("Đã liên kết tài khoản Spotify • Sẵn sàng đồng bộ Canvas & Lời bài hát", "Spotify account connected • Ready to sync Canvas & Lyrics")
-                                      : I18n.tr("Đăng nhập để dùng bài hát từ Spotify, Spotify Canvas và hơn thế nữa", "Log in to use songs from Spotify, Spotify Canvas, and more")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 11
-                                color: Theme.textSecondary
-                                elide: Text.ElideRight
+                                AppIcon {
+                                    anchors.centerIn: parent
+                                    source: "../assets/icons/spotify-symbolic.svg"
+                                    iconSize: 22
+                                    color: "#1ed760"
+                                }
                             }
                         }
 
-                        // Right-aligned Trigger Button (Khớp 100% kích thước và vị trí với langDropdownBtn)
-                        Rectangle {
-                            id: spotifyDropdownBtn
-                            anchors.right: parent.right
+                        // Account Name & Status
+                        Column {
                             anchors.verticalCenter: parent.verticalCenter
-                            height: 28
-                            width: spotifyBtnRow.implicitWidth + 16
-                            radius: 6
-                            color: (spotifyBtnMouse.containsMouse || root.spotifyExpanded)
-                                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
-                                   : "transparent"
-                            border.width: 0
+                            spacing: 2
+                            width: parent.width - 60
 
+                            Text {
+                                text: I18n.tr("Tài khoản Spotify", "Spotify Account")
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 15
+                                font.bold: true
+                                color: Theme.textPrimary
+                                elide: Text.ElideRight
+                                width: parent.width
+                            }
+
+                            Text {
+                                text: I18n.tr("Đã liên kết cookie • Sẵn sàng tải Canvas và Lời bài hát", "Cookie linked • Ready for Canvas & Lyrics")
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                color: Theme.textSecondary
+                                elide: Text.ElideRight
+                                width: parent.width
+                            }
+                        }
+                    }
+
+                    // Logout Button (Matching Google Logout button 1:1)
+                    Rectangle {
+                        id: spotifyLogoutBtn
+                        anchors.right: parent.right
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        height: 28
+                        width: spotifyLogoutTxt.implicitWidth + 18
+                        radius: 6
+                        color: spotifyLogoutMouse.containsMouse ? Qt.rgba(244, 63, 94, 0.14) : "transparent"
+                        border.width: 0
+                        Behavior on color { ColorAnimation { duration: 120 } }
+
+                        Text {
+                            id: spotifyLogoutTxt
+                            anchors.centerIn: parent
+                            text: I18n.tr("Đăng xuất", "Log out")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 12
+                            font.bold: true
+                            color: spotifyLogoutMouse.containsMouse ? "#fda4af" : "#f87171"
                             Behavior on color { ColorAnimation { duration: 120 } }
+                        }
 
-                            Row {
-                                id: spotifyBtnRow
-                                anchors.centerIn: parent
-                                spacing: 6
-
-                                Text {
-                                    text: spotifyRowItem.isConnected
-                                          ? I18n.tr("Đã kết nối", "Connected")
-                                          : I18n.tr("Chưa kết nối", "Not connected")
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 12
-                                    font.bold: true
-                                    color: spotifyRowItem.isConnected
-                                           ? root.accentColor
-                                           : ((spotifyBtnMouse.containsMouse || root.spotifyExpanded) ? "#ffffff" : Qt.rgba(255, 255, 255, 0.85))
-                                    Behavior on color { ColorAnimation { duration: 120 } }
+                        MouseArea {
+                            id: spotifyLogoutMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                root.spotifySpdc = "";
+                                root.saveSpotifySpdcRequested("");
+                                if (typeof spotifyInput !== "undefined" && spotifyInput) {
+                                    spotifyInput.text = "";
                                 }
+                                root.spotifyStatusSuccess = true;
+                                root.spotifyStatusMessage = I18n.tr("Đã đăng xuất tài khoản Spotify.", "Logged out of Spotify account.");
+                            }
+                        }
+                    }
+                }
 
-                                AppIcon {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    source: "../assets/icons/go-down-symbolic.svg"
-                                    iconSize: 10
-                                    color: root.accentColor
-                                    rotation: root.spotifyExpanded ? 180 : 0
-                                    Behavior on rotation { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                // Spotify Browser Login Block (When NOT Logged In)
+                ColumnLayout {
+                    id: spotifyDisconnectedCol
+                    Layout.fillWidth: true
+                    spacing: 8
+                    visible: !(root.spotifySpdc && root.spotifySpdc.length > 10)
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 44
+                        radius: 12
+                        color: root.spotifyAutoSyncing
+                               ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                               : (spotifyBrowserMouse.containsMouse ? Qt.lighter(root.accentColor, 1.12) : root.accentColor)
+                        border.color: Qt.rgba(255, 255, 255, 0.16)
+                        border.width: 1
+                        Behavior on color { ColorAnimation { duration: 120 } }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 16
+                            anchors.rightMargin: 12
+                            spacing: 8
+
+                            AppIcon {
+                                source: root.spotifyAutoSyncing
+                                        ? "../assets/icons/process-working-symbolic.svg"
+                                        : "../assets/icons/arrow-outward-symbolic.svg"
+                                iconSize: 14
+                                color: "#000000"
+                                rotation: 0
+                                RotationAnimation on rotation {
+                                    loops: Animation.Infinite
+                                    from: 0
+                                    to: 360
+                                    duration: 900
+                                    running: root.spotifyAutoSyncing
                                 }
                             }
 
-                            MouseArea {
-                                id: spotifyBtnMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.spotifyExpanded = !root.spotifyExpanded
+                            Text {
+                                Layout.fillWidth: true
+                                text: root.spotifyAutoSyncing
+                                      ? I18n.tr("Đang chờ đăng nhập Spotify trên trình duyệt...", "Waiting for Spotify browser login...")
+                                      : I18n.tr("Đăng nhập Spotify qua Trình duyệt (1-Chạm)", "Sign in to Spotify via Browser (1-Click)")
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 13
+                                font.bold: true
+                                color: "#000000"
+                                elide: Text.ElideRight
+                            }
+
+                            // Quick Cancel Button when process is waiting
+                            Rectangle {
+                                Layout.preferredWidth: 64
+                                Layout.preferredHeight: 28
+                                radius: 6
+                                visible: root.spotifyAutoSyncing
+                                color: cancelSpotifyWaitMouse.containsMouse ? Qt.rgba(244, 63, 94, 0.35) : Qt.rgba(244, 63, 94, 0.20)
+                                border.color: Qt.rgba(244, 63, 94, 0.40)
+                                border.width: 1
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: I18n.tr("Hủy", "Cancel")
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                    color: "#ffffff"
+                                }
+
+                                MouseArea {
+                                    id: cancelSpotifyWaitMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root.cancelSpotifyBrowserLoginRequested();
+                                        root.spotifyAutoSyncing = false;
+                                        root.spotifyStatusMessage = I18n.tr("Đã hủy chờ đăng nhập Spotify.", "Spotify login cancelled.");
+                                    }
+                                }
                             }
                         }
 
                         MouseArea {
-                            anchors.left: parent.left
-                            anchors.right: spotifyDropdownBtn.left
-                            anchors.top: parent.top
-                            anchors.bottom: parent.bottom
+                            id: spotifyBrowserMouse
+                            anchors.fill: parent
                             hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.spotifyExpanded = !root.spotifyExpanded
+                            cursorShape: root.spotifyAutoSyncing ? Qt.ArrowCursor : Qt.PointingHandCursor
+                            enabled: !root.spotifyAutoSyncing
+                            onClicked: {
+                                root.autoSyncSpotifyFromBrowsers();
+                            }
                         }
                     }
 
-                    // Collapsible Details Panel (100% Frameless Dark Glass)
-                    ColumnLayout {
-                        id: spotifyDetailCol
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: spotifyHeaderItem.bottom
-                        anchors.topMargin: 4
-                        spacing: 10
-                        visible: root.spotifyExpanded
-                        opacity: root.spotifyExpanded ? 1.0 : 0.0
-                        Behavior on opacity { NumberAnimation { duration: 150 } }
+                    // Status Feedback Message for Spotify
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: spotifyStatusTxt.implicitHeight + 6
+                        visible: root.spotifyStatusMessage.length > 0
 
-                        // CASE 1: ĐÃ KẾT NỐI (Connected Profile Card with Log Out button only)
-                        Rectangle {
-                            id: spotifyConnectedCard
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 64
-                            radius: 10
-                            color: Qt.rgba(255, 255, 255, 0.03)
-                            border.color: Qt.rgba(255, 255, 255, 0.08)
-                            border.width: 1
-                            visible: spotifyRowItem.isConnected
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 16
-                                anchors.rightMargin: 16
-                                spacing: 14
-
-                                Column {
-                                    Layout.fillWidth: true
-                                    spacing: 3
-
-                                    Text {
-                                        text: I18n.tr("Tài khoản Spotify", "Spotify Account")
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 13
-                                        font.bold: true
-                                        color: Theme.textPrimary
-                                    }
-
-                                    Text {
-                                        text: I18n.tr("Đã liên kết cookie • Sẵn sàng tải Canvas và Lời bài hát", "Cookie linked • Ready for Canvas & Lyrics")
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 11
-                                        color: Theme.textSecondary
-                                        elide: Text.ElideRight
-                                    }
-
-                                    Text {
-                                        text: "sp_dc: " + (root.spotifySpdc.length > 12 ? (root.spotifySpdc.substring(0, 8) + "••••••••" + root.spotifySpdc.substring(root.spotifySpdc.length - 4)) : "••••••••")
-                                        font.family: "Monospace"
-                                        font.pixelSize: 10
-                                        color: Qt.rgba(255, 255, 255, 0.40)
-                                    }
-                                }
-
-                                // Import Playlists Button (Frameless Text Button matching Logout style)
-                                Rectangle {
-                                    Layout.preferredHeight: 28
-                                    Layout.preferredWidth: spotifyImportTxt.implicitWidth + 18
-                                    radius: 6
-                                    color: spotifyImportMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.14) : "transparent"
-                                    border.width: 0
-                                    Behavior on color { ColorAnimation { duration: 120 } }
-
-                                    Text {
-                                        id: spotifyImportTxt
-                                        anchors.centerIn: parent
-                                        text: I18n.tr("Nhập Playlist", "Import Playlists")
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 12
-                                        font.bold: true
-                                        color: spotifyImportMouse.containsMouse ? Qt.lighter(root.accentColor, 1.2) : root.accentColor
-                                        Behavior on color { ColorAnimation { duration: 120 } }
-                                    }
-
-                                    MouseArea {
-                                        id: spotifyImportMouse
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            root.closeRequested();
-                                            root.spotifyImportRequested();
-                                        }
-                                    }
-                                }
-
-                                // Logout Button (Borderless Text Button Style matching Google Logout)
-                                Rectangle {
-                                    Layout.preferredHeight: 28
-                                    Layout.preferredWidth: spotifyLogoutTxt.implicitWidth + 18
-                                    radius: 6
-                                    color: spotifyLogoutMouse.containsMouse ? Qt.rgba(244, 63, 94, 0.14) : "transparent"
-                                    border.width: 0
-                                    Behavior on color { ColorAnimation { duration: 120 } }
-
-                                    Text {
-                                        id: spotifyLogoutTxt
-                                        anchors.centerIn: parent
-                                        text: I18n.tr("Đăng xuất", "Log out")
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 12
-                                        font.bold: true
-                                        color: spotifyLogoutMouse.containsMouse ? "#fda4af" : "#f87171"
-                                        Behavior on color { ColorAnimation { duration: 120 } }
-                                    }
-
-                                    MouseArea {
-                                        id: spotifyLogoutMouse
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            root.spotifySpdc = "";
-                                            root.saveSpotifySpdcRequested("");
-                                            if (typeof spotifyInput !== "undefined" && spotifyInput) {
-                                                spotifyInput.text = "";
-                                            }
-                                            root.spotifyStatusSuccess = true;
-                                            root.spotifyStatusMessage = I18n.tr("Đã đăng xuất tài khoản Spotify.", "Logged out of Spotify account.");
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // CASE 2: CHƯA KẾT NỐI (1-Click Native Browser Login Card matching Google Login)
-                        ColumnLayout {
-                            id: spotifyDisconnectedCol
-                            Layout.fillWidth: true
-                            spacing: 8
-                            visible: !spotifyRowItem.isConnected
-
-                            // 1-Click Native Browser Login Card (Reusing Google Login visual design & dimensions)
-                            Rectangle {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 44
-                                radius: 12
-                                color: root.spotifyAutoSyncing
-                                       ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
-                                       : (spotifyBrowserMouse.containsMouse ? Qt.lighter(root.accentColor, 1.12) : root.accentColor)
-                                border.color: Qt.rgba(255, 255, 255, 0.16)
-                                border.width: 1
-                                Behavior on color { ColorAnimation { duration: 120 } }
-
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 16
-                                    anchors.rightMargin: 12
-                                    spacing: 8
-
-                                    AppIcon {
-                                        source: root.spotifyAutoSyncing
-                                                ? "../assets/icons/process-working-symbolic.svg"
-                                                : "../assets/icons/arrow-outward-symbolic.svg"
-                                        iconSize: 14
-                                        color: "#000000"
-                                        rotation: 0
-                                        RotationAnimation on rotation {
-                                            loops: Animation.Infinite
-                                            from: 0
-                                            to: 360
-                                            duration: 900
-                                            running: root.spotifyAutoSyncing
-                                        }
-                                    }
-
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: root.spotifyAutoSyncing
-                                              ? I18n.tr("Đang chờ đăng nhập Spotify trên trình duyệt...", "Waiting for Spotify browser login...")
-                                              : I18n.tr("Đăng nhập Spotify qua Trình duyệt (1-Chạm)", "Sign in to Spotify via Browser (1-Click)")
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 13
-                                        font.bold: true
-                                        color: "#000000"
-                                        elide: Text.ElideRight
-                                    }
-
-                                    // Quick Cancel Button when process is waiting
-                                    Rectangle {
-                                        Layout.preferredWidth: 64
-                                        Layout.preferredHeight: 28
-                                        radius: 6
-                                        visible: root.spotifyAutoSyncing
-                                        color: cancelSpotifyWaitMouse.containsMouse ? Qt.rgba(244, 63, 94, 0.35) : Qt.rgba(244, 63, 94, 0.20)
-                                        border.color: Qt.rgba(244, 63, 94, 0.40)
-                                        border.width: 1
-
-                                        Text {
-                                            anchors.centerIn: parent
-                                            text: I18n.tr("Hủy", "Cancel")
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: 11
-                                            font.bold: true
-                                            color: "#ffffff"
-                                        }
-
-                                        MouseArea {
-                                            id: cancelSpotifyWaitMouse
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: {
-                                                root.cancelSpotifyBrowserLoginRequested();
-                                                root.spotifyAutoSyncing = false;
-                                                root.spotifyStatusMessage = I18n.tr("Đã hủy chờ đăng nhập Spotify.", "Spotify login cancelled.");
-                                            }
-                                        }
-                                    }
-                                }
-
-                                MouseArea {
-                                    id: spotifyBrowserMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: root.spotifyAutoSyncing ? Qt.ArrowCursor : Qt.PointingHandCursor
-                                    enabled: !root.spotifyAutoSyncing
-                                    onClicked: {
-                                        root.autoSyncSpotifyFromBrowsers();
-                                    }
-                                }
-                            }
-
-                            // Status Feedback Message for Spotify
-                            Item {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: spotifyStatusTxt.implicitHeight + 6
-                                visible: root.spotifyStatusMessage.length > 0
-
-                                Text {
-                                    id: spotifyStatusTxt
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    anchors.leftMargin: 2
-                                    anchors.rightMargin: 2
-                                    text: root.spotifyStatusMessage
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 11
-                                    font.bold: true
-                                    color: root.spotifyStatusSuccess ? root.accentColor : "#f87171"
-                                    wrapMode: Text.Wrap
-                                }
-                            }
+                        Text {
+                            id: spotifyStatusTxt
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.leftMargin: 2
+                            anchors.rightMargin: 2
+                            text: root.spotifyStatusMessage
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            font.bold: true
+                            color: root.spotifyStatusSuccess ? root.accentColor : "#f87171"
+                            wrapMode: Text.Wrap
                         }
                     }
                 }

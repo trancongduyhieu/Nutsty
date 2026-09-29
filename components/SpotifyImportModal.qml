@@ -239,38 +239,38 @@ Rectangle {
         z: 1
     }
 
-    // Modal Main Container (LiquidGlass R=20px)
+    // Modal Main Container: Keo 502 Optical Resin (LiquidGlass, 20px Radius matching PostNoteModal)
     LiquidGlass {
         id: dialogCard
-        width: 520
-        height: root.isImporting || root.importCompleted ? 320 : (root.resolvedPlaylist ? 370 : 230)
+        width: 440
+        height: root.importCompleted ? 260 : (root.isImporting ? 300 : (root.resolvedPlaylist ? 360 : 230))
         anchors.centerIn: parent
         radius: 20
         displacement: 22.0
         aberration: 0.03
         bevelWidth: 26.0
-        tintColor: Qt.rgba(0.04, 0.05, 0.08, 0.94)
+        tintColor: Qt.rgba(0.04, 0.05, 0.08, 0.88)
         backgroundSourceItem: root.backgroundSourceItem
         isFlowActive: (typeof win !== "undefined" && win.isPlaying && win.currentTrack !== null)
         clip: true
         z: 2
 
-        Behavior on height { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+        Behavior on height { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
 
-        // Shaded Tint Overlay
+        // Shaded Tint Overlay: Ensures effortless text contrast (matching PostNoteModal)
         Rectangle {
             anchors.fill: parent
             radius: dialogCard.radius
-            color: Qt.rgba(0.05, 0.06, 0.09, 0.88)
+            color: Qt.rgba(0.04, 0.05, 0.08, 0.75)
             z: 1
         }
 
-        // 1px Hairline Border
+        // 1px Hairline Border: Keo 502 Surface Tension Rim
         Rectangle {
             anchors.fill: parent
             radius: dialogCard.radius
             color: "transparent"
-            border.color: Qt.rgba(255, 255, 255, 0.16)
+            border.color: Qt.rgba(255, 255, 255, 0.18)
             border.width: 1
             z: 20
         }
@@ -278,13 +278,13 @@ Rectangle {
         MouseArea {
             anchors.fill: parent
             z: 2
-            onClicked: {} // Block clicks from passing to scrim
+            onClicked: (mouse) => { mouse.accepted = true; } // Block clicks from passing to scrim
         }
 
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 20
-            spacing: 16
+            spacing: 14
             z: 5
 
             // --- HEADER ---
@@ -297,7 +297,7 @@ Rectangle {
                     height: 36
                     radius: 10
                     color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18)
-                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40)
                     border.width: 1
 
                     AppIcon {
@@ -310,18 +310,23 @@ Rectangle {
 
                 ColumnLayout {
                     spacing: 2
+                    Layout.fillWidth: true
 
                     Text {
                         text: I18n.tr("Chuyển Giao Playlist Spotify", "Transfer Spotify Playlists")
                         color: "#ffffff"
-                        font.pixelSize: 16
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 15
                         font.bold: true
+                        elide: Text.ElideRight
                     }
 
                     Text {
-                        text: I18n.tr("Lưu danh sách phát về Nutsty để nghe vĩnh viễn", "Save playlists to Nutsty for permanent offline/online playback")
-                        color: "#9ca3af"
-                        font.pixelSize: 12
+                        text: I18n.tr("Lưu danh sách phát về Nutsty để nghe vĩnh viễn", "Save playlists to Nutsty for playback")
+                        color: Theme.textSecondary
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 11
+                        elide: Text.ElideRight
                     }
                 }
 
@@ -332,19 +337,20 @@ Rectangle {
                 // Close Button (aligned to far right)
                 Rectangle {
                     Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                    width: 32
-                    height: 32
+                    width: 28
+                    height: 28
                     radius: 8
-                    color: closeBtnArea.containsMouse ? Qt.rgba(255, 255, 255, 0.1) : "transparent"
-                    border.color: closeBtnArea.containsMouse ? Qt.rgba(255, 255, 255, 0.2) : "transparent"
-                    border.width: 1
+                    color: closeBtnArea.containsMouse ? Qt.rgba(244, 63, 94, 0.14) : "transparent"
+                    border.width: 0
                     visible: !root.isImporting
+                    Behavior on color { ColorAnimation { duration: 120 } }
 
                     AppIcon {
                         anchors.centerIn: parent
                         source: "../assets/icons/window-close-symbolic.svg"
-                        iconSize: 14
-                        color: closeBtnArea.containsMouse ? "#ffffff" : "#9ca3af"
+                        iconSize: 13
+                        color: closeBtnArea.containsMouse ? "#f43f5e" : Qt.rgba(255, 255, 255, 0.70)
+                        Behavior on color { ColorAnimation { duration: 120 } }
                     }
 
                     MouseArea {
@@ -387,7 +393,7 @@ Rectangle {
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                spacing: 16
+                spacing: 14
                 visible: root.isImporting
 
                 Item { Layout.fillHeight: true }
@@ -395,10 +401,10 @@ Rectangle {
                 // Playlist Info Card with Cover Art & Live Spinner
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 74
+                    Layout.preferredHeight: 68
                     radius: 12
-                    color: Qt.rgba(255, 255, 255, 0.04)
-                    border.color: Qt.rgba(255, 255, 255, 0.08)
+                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
+                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
                     border.width: 1
 
                     RowLayout {
@@ -408,8 +414,8 @@ Rectangle {
 
                         // Cover Art Thumbnail with Rounded Mask
                         Rectangle {
-                            width: 54
-                            height: 54
+                            width: 48
+                            height: 48
                             radius: 8
                             color: Qt.rgba(255, 255, 255, 0.06)
                             border.color: Qt.rgba(255, 255, 255, 0.12)
@@ -470,17 +476,17 @@ Rectangle {
                 // Progress Bar Container
                 Rectangle {
                     Layout.fillWidth: true
-                    height: 10
-                    radius: 5
-                    color: Qt.rgba(255, 255, 255, 0.08)
-                    border.color: Qt.rgba(255, 255, 255, 0.12)
+                    height: 8
+                    radius: 4
+                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.15)
+                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
                     border.width: 1
                     clip: true
 
                     Rectangle {
                         height: parent.height
                         width: parent.width * (Math.max(0, Math.min(100, root.importPercent)) / 100.0)
-                        radius: 5
+                        radius: 4
                         color: root.accentColor
 
                         Behavior on width { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
@@ -495,15 +501,15 @@ Rectangle {
                         Layout.fillWidth: true
                         elide: Text.ElideRight
                         text: root.importCurrentTrack ? (I18n.tr("Đang xử lý: ", "Processing: ") + root.importCurrentTrack) : ""
-                        color: "#9ca3af"
+                        color: Theme.textSecondary
                         font.family: Theme.fontFamily
-                        font.pixelSize: 12
+                        font.pixelSize: 11
                     }
 
                     Text {
                         text: (root.importTotal > 0 ? (root.importCurrent + "/" + root.importTotal) : (root.importPercent + "%"))
                         color: "#ffffff"
-                        font.pixelSize: 12
+                        font.pixelSize: 11
                         font.bold: true
                     }
                 }
@@ -513,7 +519,7 @@ Rectangle {
                 // Cancel Button (Squircle Design System: radius 12, muted rose)
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 40
+                    Layout.preferredHeight: 38
                     radius: 12
                     color: cancelMouse.containsMouse ? Qt.rgba(244, 63, 94, 0.22) : Qt.rgba(244, 63, 94, 0.12)
                     border.color: cancelMouse.containsMouse ? Qt.rgba(244, 63, 94, 0.50) : Qt.rgba(244, 63, 94, 0.30)
@@ -535,7 +541,7 @@ Rectangle {
                             text: I18n.tr("Hủy Quá Trình Chuyển Giao", "Cancel Transfer")
                             color: cancelMouse.containsMouse ? "#fda4af" : "#f87171"
                             font.family: Theme.fontFamily
-                            font.pixelSize: 13
+                            font.pixelSize: 12
                             font.bold: true
                         }
                     }
@@ -554,19 +560,19 @@ Rectangle {
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                spacing: 14
+                spacing: 12
                 visible: root.importCompleted && !root.isImporting
 
                 Item { Layout.fillHeight: true }
 
                 Rectangle {
                     Layout.alignment: Qt.AlignHCenter
-                    width: 52
-                    height: 52
-                    radius: 16
-                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.2)
-                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.4)
-                    border.width: 1
+                    width: 56
+                    height: 56
+                    radius: 18
+                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
+                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                    border.width: 1.5
 
                     AppIcon {
                         anchors.centerIn: parent
@@ -580,30 +586,35 @@ Rectangle {
                     Layout.alignment: Qt.AlignHCenter
                     text: I18n.tr("Chuyển Giao Hoàn Tất!", "Transfer Completed!")
                     color: "#ffffff"
-                    font.pixelSize: 17
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 16
                     font.bold: true
                 }
 
                 Text {
                     Layout.alignment: Qt.AlignHCenter
                     text: I18n.tr("Playlist đã sẵn sàng trong Danh Sách Phát của Nutsty.", "Playlist is ready in your Nutsty Custom Playlists.")
-                    color: "#9ca3af"
-                    font.pixelSize: 13
+                    color: Theme.textSecondary
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 12
+                    horizontalAlignment: Text.AlignHCenter
                 }
 
                 Item { Layout.fillHeight: true }
 
                 Rectangle {
                     Layout.alignment: Qt.AlignHCenter
-                    width: 150
-                    height: 38
-                    radius: 10
-                    color: doneMouse.containsMouse ? Qt.darker(root.accentColor, 1.15) : root.accentColor
+                    Layout.preferredWidth: 140
+                    Layout.preferredHeight: 38
+                    radius: 12
+                    color: doneMouse.containsMouse ? Qt.lighter(root.accentColor, 1.12) : root.accentColor
+                    Behavior on color { ColorAnimation { duration: 150 } }
 
                     Text {
                         anchors.centerIn: parent
                         text: I18n.tr("Xong", "Done")
-                        color: "#ffffff"
+                        color: (root.accentColor.r * 0.299 + root.accentColor.g * 0.587 + root.accentColor.b * 0.114) > 0.6 ? "#000000" : "#ffffff"
+                        font.family: Theme.fontFamily
                         font.pixelSize: 13
                         font.bold: true
                     }
@@ -627,7 +638,8 @@ Rectangle {
 
                 Text {
                     text: I18n.tr("Dán đường link playlist Spotify (công khai hoặc chia sẻ):", "Paste a Spotify playlist link (public or shared):")
-                    color: "#9ca3af"
+                    color: Theme.textSecondary
+                    font.family: Theme.fontFamily
                     font.pixelSize: 12
                 }
 
@@ -638,11 +650,12 @@ Rectangle {
 
                     Rectangle {
                         Layout.fillWidth: true
-                        height: 40
-                        radius: 10
-                        color: Qt.rgba(255, 255, 255, 0.05)
-                        border.color: linkInput.activeFocus ? root.accentColor : Qt.rgba(255, 255, 255, 0.15)
+                        height: 42
+                        radius: 12
+                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.10)
+                        border.color: linkInput.activeFocus ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.30)
                         border.width: 1
+                        Behavior on border.color { ColorAnimation { duration: 150 } }
 
                         TextInput {
                             id: linkInput
@@ -651,6 +664,7 @@ Rectangle {
                             anchors.rightMargin: 12
                             verticalAlignment: TextInput.AlignVCenter
                             color: "#ffffff"
+                            font.family: Theme.fontFamily
                             font.pixelSize: 13
                             clip: true
                             selectByMouse: true
@@ -659,7 +673,8 @@ Rectangle {
                                 anchors.fill: parent
                                 verticalAlignment: Text.AlignVCenter
                                 text: I18n.tr("Ví dụ: https://open.spotify.com/playlist/...", "E.g. https://open.spotify.com/playlist/...")
-                                color: "#6b7280"
+                                color: Qt.rgba(255, 255, 255, 0.35)
+                                font.family: Theme.fontFamily
                                 font.pixelSize: 13
                                 visible: !linkInput.text && !linkInput.activeFocus
                             }
@@ -670,12 +685,13 @@ Rectangle {
 
                     // Check/Resolve Button
                     Rectangle {
-                        width: 80
-                        height: 40
-                        radius: 10
-                        color: checkMouse.containsMouse ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.2)
-                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.4)
+                        width: 88
+                        height: 42
+                        radius: 12
+                        color: checkMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18)
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
                         border.width: 1
+                        Behavior on color { ColorAnimation { duration: 120 } }
 
                         RowLayout {
                             anchors.centerIn: parent
@@ -683,7 +699,7 @@ Rectangle {
 
                             CircularSpinner {
                                 size: 14
-                                color: "#ffffff"
+                                color: root.accentColor
                                 visible: root.isResolvingLink
                                 running: root.isResolvingLink
                             }
@@ -691,9 +707,11 @@ Rectangle {
                             Text {
                                 text: I18n.tr("Kiểm tra", "Check")
                                 color: checkMouse.containsMouse ? "#ffffff" : root.accentColor
+                                font.family: Theme.fontFamily
                                 font.pixelSize: 12
                                 font.bold: true
                                 visible: !root.isResolvingLink
+                                Behavior on color { ColorAnimation { duration: 120 } }
                             }
                         }
 
@@ -710,10 +728,10 @@ Rectangle {
                 // Preview Card for resolved playlist
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 120
+                    Layout.preferredHeight: 114
                     radius: 12
-                    color: Qt.rgba(255, 255, 255, 0.04)
-                    border.color: Qt.rgba(255, 255, 255, 0.08)
+                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
+                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.30)
                     border.width: 1
                     visible: root.resolvedPlaylist !== null
 
@@ -727,8 +745,8 @@ Rectangle {
                             spacing: 12
 
                             RoundedImage {
-                                width: 52
-                                height: 52
+                                width: 48
+                                height: 48
                                 radius: 8
                                 source: root.resolvedPlaylist ? (root.resolvedPlaylist.image || "") : ""
                                 fallbackIcon: "../assets/icons/folder-music-symbolic.svg"
@@ -736,20 +754,22 @@ Rectangle {
 
                             ColumnLayout {
                                 Layout.fillWidth: true
-                                spacing: 4
+                                spacing: 3
 
                                 Text {
                                     Layout.fillWidth: true
                                     elide: Text.ElideRight
                                     text: root.resolvedPlaylist ? (root.resolvedPlaylist.title || "") : ""
                                     color: "#ffffff"
+                                    font.family: Theme.fontFamily
                                     font.pixelSize: 14
                                     font.bold: true
                                 }
 
                                 Text {
                                     text: root.resolvedPlaylist ? (root.resolvedPlaylist.trackCount + " " + I18n.tr("bài hát", "tracks")) : ""
-                                    color: "#9ca3af"
+                                    color: Theme.textSecondary
+                                    font.family: Theme.fontFamily
                                     font.pixelSize: 12
                                 }
                             }
@@ -758,13 +778,15 @@ Rectangle {
                         Rectangle {
                             Layout.fillWidth: true
                             height: 36
-                            radius: 8
-                            color: importLinkMouse.containsMouse ? Qt.darker(root.accentColor, 1.15) : root.accentColor
+                            radius: 10
+                            color: importLinkMouse.containsMouse ? Qt.lighter(root.accentColor, 1.12) : root.accentColor
+                            Behavior on color { ColorAnimation { duration: 150 } }
 
                             Text {
                                 anchors.centerIn: parent
                                 text: I18n.tr("Bắt Đầu Chuyển Giao", "Start Transfer")
-                                color: "#ffffff"
+                                color: (root.accentColor.r * 0.299 + root.accentColor.g * 0.587 + root.accentColor.b * 0.114) > 0.6 ? "#000000" : "#ffffff"
+                                font.family: Theme.fontFamily
                                 font.pixelSize: 13
                                 font.bold: true
                             }

@@ -805,6 +805,28 @@ def main():
         tray_icon.activated.connect(_on_tray_activated)
         tray_icon.show()
 
+    # Periodic RAM optimization timer (Runs gc & trims Working Set on Windows every 60s)
+    def _trim_ram():
+        try:
+            import gc
+            gc.collect()
+            if sys.platform == "win32":
+                import ctypes
+                kernel32 = ctypes.windll.kernel32
+                psapi = ctypes.windll.psapi
+                kernel32.GetCurrentProcess.restype = ctypes.c_void_p
+                psapi.EmptyWorkingSet.argtypes = [ctypes.c_void_p]
+                psapi.EmptyWorkingSet.restype = ctypes.c_bool
+                psapi.EmptyWorkingSet(kernel32.GetCurrentProcess())
+        except Exception:
+            pass
+
+    mem_timer = QTimer(app)
+    mem_timer.setInterval(60000)
+    mem_timer.timeout.connect(_trim_ram)
+    mem_timer.start()
+    QTimer.singleShot(8000, _trim_ram)
+
     sys.exit(app.exec())
 
 if __name__ == "__main__":

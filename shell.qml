@@ -40,6 +40,9 @@ Scope {
 
     property string currentView: "home" // "home", "library", "playlist", "search"
     property string previousView: "home"
+    property string lastLibrarySubTab: "tracks" // "tracks", "playlists", "favorites"
+    property string lastLibraryView: "library"  // "library", "custom_playlist_detail"
+    property var lastLibraryPlaylist: null
     property var homeMoods: []
     property string selectedMood: "All"
     property var homeSections: []
@@ -1799,25 +1802,47 @@ Scope {
                     win.isNowPlayingOpen = false;
                     if (win.currentView !== "search") win.previousView = win.currentView;
                     win.currentView = "search";
-                    win.searchViewMode = "suggestions";
-                    Qt.callLater(function() {
-                        if (searchView) searchView.focusInput();
-                    });
+                    if (win.lastYTQuery && win.lastYTQuery.trim().length > 0 && win.categorizedSearchData && win.categorizedSearchData.songs) {
+                        win.searchViewMode = "results";
+                        if (searchView) searchView.viewMode = "results";
+                    } else {
+                        win.searchViewMode = "suggestions";
+                        if (searchView) searchView.viewMode = "suggestions";
+                        Qt.callLater(function() {
+                            if (searchView) searchView.focusInput();
+                        });
+                    }
                 }
                 onLibraryClicked: {
                     win.isNowPlayingOpen = false;
-                    if (win.currentView !== "library") win.previousView = win.currentView;
-                    win.currentView = "library";
-                    win.currentAlbumMetadata = null;
-                    mainGrid.albumMetadata = null;
-                    mainGrid.downloadsSubTab = "tracks";
-                    libLoader.reload();
-                    win.browsingTracks = win.allTracks;
-                    win.mainSectionTitle = "Downloads";
-                    mainGrid.sectionTitle = "Downloads";
-                    win.loadCustomPlaylists();
-                    win.loadFavoritePlaylists();
-                    win.refreshLocalAlbums();
+                    var inLibSection = (win.currentView === "library" || win.currentView === "custom_playlist_detail");
+                    if (!inLibSection) {
+                        if (win.currentView !== "library") win.previousView = win.currentView;
+                        if (win.lastLibraryView === "custom_playlist_detail" && win.selectedCustomPlaylist) {
+                            win.currentView = "custom_playlist_detail";
+                        } else {
+                            win.currentView = "library";
+                            win.currentAlbumMetadata = null;
+                            mainGrid.albumMetadata = null;
+                            mainGrid.downloadsSubTab = win.lastLibrarySubTab || "tracks";
+                            if (mainGrid.downloadsSubTab === "tracks") {
+                                win.browsingTracks = win.allTracks;
+                            }
+                            win.mainSectionTitle = "Downloads";
+                            mainGrid.sectionTitle = "Downloads";
+                            win.loadCustomPlaylists();
+                            win.loadFavoritePlaylists();
+                            win.refreshLocalAlbums();
+                        }
+                    } else {
+                        // Already in library: if inside a custom playlist detail, pop back to playlists list
+                        if (win.currentView === "custom_playlist_detail") {
+                            win.currentView = "library";
+                            win.lastLibraryView = "library";
+                            win.lastLibraryPlaylist = null;
+                            mainGrid.downloadsSubTab = win.lastLibrarySubTab || "playlists";
+                        }
+                    }
                 }
                 onSettingsClicked: {
                     settingsModal.visible = true;
@@ -2186,6 +2211,8 @@ Scope {
 
                             onBackRequested: {
                                 win.currentView = "library";
+                                win.lastLibraryView = "library";
+                                win.lastLibraryPlaylist = null;
                                 mainGrid.downloadsSubTab = "playlists";
                                 win.browsingTracks = win.allTracks;
                             }
@@ -3362,6 +3389,8 @@ Scope {
         }
         win.selectedCustomPlaylist = fullPl;
         win.currentView = "custom_playlist_detail";
+        win.lastLibraryView = "custom_playlist_detail";
+        win.lastLibraryPlaylist = fullPl;
     }
 
     function createCustomPlaylist(title, desc, cover, tracks) {
@@ -3904,7 +3933,7 @@ Scope {
             win.currentView = "library";
             libLoader.reload();
             win.browsingTracks = win.allTracks;
-            mainGrid.downloadsSubTab = "tracks";
+            mainGrid.downloadsSubTab = win.lastLibrarySubTab || "tracks";
             mainGrid.sectionTitle = "Downloads";
         }
         function showHome() {
