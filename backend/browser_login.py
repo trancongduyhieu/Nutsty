@@ -45,6 +45,14 @@ LOGIN_URL = (
 LOG_FILE_PRIMARY = os.path.join(pc.get_config_dir(), "browser_login.log")
 LOG_FILE_TEMP = os.path.join(pc.get_temp_dir(), "browser_login.log")
 
+def emit_status(payload):
+    """Emit JSON status line to stdout for real-time UI progress feedback."""
+    try:
+        sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        sys.stdout.flush()
+    except Exception:
+        pass
+
 def log(msg, level="INFO"):
     """Thread-safe forensic logger with millisecond timestamps and dual-path sync."""
     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
@@ -68,8 +76,28 @@ def log(msg, level="INFO"):
 
 def find_system_browser():
     log("Scanning system for Chromium-based browsers...")
-    # 1. On Windows: Check standard paths for Edge, Chrome, Brave, Opera, Vivaldi
+    # 1. On Windows: Check default browser in Registry, then standard paths
     if sys.platform == "win32" or os.name == "nt":
+        # Check default browser registered for HTTPS
+        try:
+            import winreg
+            import re
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice") as key:
+                prog_id, _ = winreg.QueryValueEx(key, "ProgId")
+            if prog_id:
+                with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, rf"{prog_id}\shell\open\command") as cmd_key:
+                    cmd_val, _ = winreg.QueryValueEx(cmd_key, "")
+                    m = re.search(r'"([^"]+\.exe)"', cmd_val, re.IGNORECASE) or re.search(r'([^\s]+\.exe)', cmd_val, re.IGNORECASE)
+                    if m:
+                        exe_path = m.group(1)
+                        if os.path.isfile(exe_path):
+                            exe_lower = exe_path.lower()
+                            if any(x in exe_lower for x in ("chrome", "msedge", "edge", "brave", "vivaldi", "opera", "arc", "thorium", "chromium", "yandex")):
+                                log(f"Found Windows default browser: {exe_path}")
+                                return exe_path
+        except Exception as re_err:
+            log(f"Registry default browser check error: {re_err}", "DEBUG")
+
         win_candidates = []
         p_files_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
         p_files = os.environ.get("ProgramFiles", r"C:\Program Files")
@@ -96,13 +124,26 @@ def find_system_browser():
             os.path.join(local_appdata, "BraveSoftware", "Brave-Browser", "Application", "brave.exe") if local_appdata else "",
             shutil.which("brave") or "",
         ])
-        # Vivaldi & Opera GX
+        # Arc Browser
+        if local_appdata:
+            win_candidates.append(os.path.join(local_appdata, "Programs", "Arc", "Arc.exe"))
+        # Vivaldi & Opera GX & Opera
         if local_appdata:
             win_candidates.extend([
                 os.path.join(local_appdata, "Vivaldi", "Application", "vivaldi.exe"),
                 os.path.join(local_appdata, "Programs", "Opera GX", "opera.exe"),
                 os.path.join(local_appdata, "Programs", "Opera", "opera.exe"),
+                os.path.join(local_appdata, "Thorium", "Application", "thorium.exe"),
+                os.path.join(local_appdata, "Yandex", "YandexBrowser", "Application", "browser.exe"),
+                os.path.join(local_appdata, "Chromium", "Application", "chrome.exe"),
             ])
+        win_candidates.extend([
+            os.path.join(p_files, "Vivaldi", "Application", "vivaldi.exe"),
+            os.path.join(p_files, "Opera", "launcher.exe"),
+            os.path.join(p_files, "Chromium", "Application", "chrome.exe"),
+            shutil.which("vivaldi") or "",
+            shutil.which("opera") or "",
+        ])
 
         for p in win_candidates:
             if p and os.path.exists(p) and os.path.isfile(p):
@@ -123,7 +164,8 @@ def find_system_browser():
         "microsoft-edge",
         "microsoft-edge-stable",
         "msedge",
-        "vivaldi"
+        "vivaldi",
+        "opera"
     ]
     for c in candidates:
         bin_path = shutil.which(c)
@@ -270,6 +312,7 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
     start_time = time.time()
     google_signed_in_time = None
     last_cookie_summary_time = 0
+    last_pending_log = 0
     msg_id = 1
 
     try:
@@ -460,13 +503,21 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
                                 acc_name = res.get("name", "Google User")
                                 acc_email = res.get("email", "")
 
-                                # Allow up to 10 seconds for browser tab to finish rendering user profile name & email
-                                if (not acc_name or acc_name == "Google User" or not acc_email) and (time.time() - start_time < 10.0):
-                                    log("Auth saved but profile name/email still resolving from browser DOM. Waiting for page render...", "INFO")
+                                # Verify authentic user account (MUST NOT be generic "Google User" with empty email)
+                                is_genuine_user = (
+                                    acc_name and acc_name != "Google User" and
+                                    acc_email and "@" in acc_email and not acc_email.startswith("googleuser@")
+                                )
+
+                                if not is_genuine_user:
+                                    if time.time() - last_pending_log > 3.0:
+                                        last_pending_log = time.time()
+                                        log("Waiting for user to complete sign-in and redirect to YouTube Music...", "INFO")
                                     await asyncio.sleep(1.0)
                                     continue
 
                                 log(f"Authentication verified successfully! Account: {acc_name} ({acc_email})")
+                                emit_status({"status": "verified", "name": acc_name, "email": acc_email, "message": f"Connected as {acc_name}!"})
                                 await asyncio.sleep(0.5)
                                 return res
                             else:
@@ -486,41 +537,33 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, max_timeout=300):
     return {"success": False, "error": "Login timed out after 5 minutes."}
 
 def start_login():
+    session_profile_dir = PROFILE_DIR
+    os.makedirs(session_profile_dir, exist_ok=True)
+
     log("=" * 60)
     log("Nutsty Browser Login Session Started")
     log(f"Platform: {sys.platform} ({os.name}), Python: {sys.version.split()[0]}")
     log(f"Profile: '{PROFILE_NAME}', CDP Port: {CDP_PORT}")
-    log(f"Profile Dir: {PROFILE_DIR}")
+    log(f"Session Profile Dir: {session_profile_dir}")
     log(f"Logs: {LOG_FILE_PRIMARY}")
     log("=" * 60)
+
+    emit_status({"status": "starting", "message": "Starting native browser login assistant..."})
 
     browser_bin = find_system_browser()
     if not browser_bin:
         err = {"success": False, "error": "No Chromium-based browser (Edge, Chrome, Brave) found."}
         log(f"Aborting: {err['error']}", "ERROR")
-        print(json.dumps(err, ensure_ascii=False))
+        emit_status(err)
         return err
 
-    os.makedirs(PROFILE_DIR, exist_ok=True)
-
-    # Clean stale Chromium singleton locks if no browser is running
-    for lock_name in ("SingletonLock", "SingletonSocket", "SingletonCookie"):
-        lock_path = os.path.join(PROFILE_DIR, lock_name)
-        if os.path.islink(lock_path) or os.path.exists(lock_path):
-            try:
-                os.remove(lock_path)
-                log(f"Removed stale lock: {lock_name}")
-            except Exception as le:
-                log(f"Could not remove lock {lock_name}: {le}", "DEBUG")
-
-    # Command line: Standard isolated window with explicit IPv4 debugging port and background-mode disabled
     cmd = [
         browser_bin,
         "--new-window",
         LOGIN_URL,
         f"--remote-debugging-port={CDP_PORT}",
         "--remote-debugging-address=127.0.0.1",
-        f"--user-data-dir={PROFILE_DIR}",
+        f"--user-data-dir={session_profile_dir}",
         "--no-first-run",
         "--no-default-browser-check",
         "--disable-background-mode",
@@ -529,6 +572,7 @@ def start_login():
     ]
 
     log(f"Launching browser command: {' '.join(cmd)}")
+    emit_status({"status": "browser_launched", "browser": os.path.basename(browser_bin), "message": f"Browser opened. Please sign in with Google..."})
 
     kwargs = {}
     if sys.platform == "win32" or os.name == "nt":
@@ -536,6 +580,7 @@ def start_login():
     else:
         kwargs["preexec_fn"] = os.setsid
 
+    proc = None
     try:
         proc = subprocess.Popen(
             cmd,
@@ -547,7 +592,7 @@ def start_login():
     except Exception as e:
         err = {"success": False, "error": f"Failed to spawn browser process: {e}"}
         log(f"Spawn error: {e}\n{traceback.format_exc()}", "ERROR")
-        print(json.dumps(err, ensure_ascii=False))
+        emit_status(err)
         return err
 
     ws_url = None
@@ -558,7 +603,7 @@ def start_login():
             if proc.poll() != 0:
                 log(f"Browser process crashed with code {proc.poll()}.", "WARN")
                 err = {"success": False, "error": f"Browser process crashed with code {proc.poll()}."}
-                print(json.dumps(err, ensure_ascii=False))
+                emit_status(err)
                 return err
             elif attempt == 0:
                 log("Browser launcher delegated to background process (code 0). Continuing CDP port discovery...")
@@ -581,7 +626,7 @@ def start_login():
         kill_browser_proc(proc)
         err = {"success": False, "error": "Failed to establish DevTools connection with browser window."}
         log(f"CDP connection timeout: {err['error']}", "ERROR")
-        print(json.dumps(err, ensure_ascii=False))
+        emit_status(err)
         return err
 
     result = {"success": False, "error": "Unknown error"}
@@ -594,7 +639,7 @@ def start_login():
         kill_browser_proc(proc)
 
     log(f"Browser Login Session Finished. Result: success={result.get('success')}, error={result.get('error')}")
-    print(json.dumps(result, ensure_ascii=False))
+    emit_status(result)
     return result
 
 def handle_cli(args=None):

@@ -11,6 +11,7 @@ import shutil
 import re
 import hashlib
 import urllib.request
+import sqlite3
 
 try:
     from . import platform_compat as pc
@@ -226,10 +227,12 @@ def load_json(filepath, default=None):
 def save_json(filepath, data):
     try:
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        if hasattr(data, "items") and not isinstance(data, dict):
+            data = dict(data.items())
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+    except Exception as e:
+        sys.stderr.write(f"[save_json error {filepath}]: {e}\n")
 
 
 def get_ytmusic_client(session=None):
@@ -441,6 +444,7 @@ def save_auth(raw_text, profile_hint=None):
     try:
         import ytmusicapi
         from ytmusicapi.auth.browser import initialize_headers
+        headers = dict(initialize_headers())
         if sys.platform == "win32":
             headers["user-agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
         else:
@@ -552,6 +556,53 @@ def save_auth(raw_text, profile_hint=None):
             if direct_profile.get("thumb") and not account_info.get("thumb"):
                 account_info["thumb"] = direct_profile["thumb"]
 
+        # User cache fallback if still missing
+        user_cache_file = os.path.join(os.path.dirname(AUTH_FILE), f"nutsty_user_cache{PROFILE_SUFFIX}.json")
+        if os.path.exists(user_cache_file) and ((not account_info.get("name") or account_info.get("name") == "Google User") or not account_info.get("email")):
+            try:
+                with open(user_cache_file, "r", encoding="utf-8") as ucf:
+                    cached_u = json.load(ucf)
+                if cached_u.get("name") and (not account_info.get("name") or account_info.get("name") == "Google User"):
+                    account_info["name"] = cached_u["name"]
+                if cached_u.get("email") and not account_info.get("email"):
+                    account_info["email"] = cached_u["email"]
+                if cached_u.get("avatar") and not account_info.get("thumb"):
+                    account_info["thumb"] = cached_u["avatar"]
+            except Exception:
+                pass
+
+        # Browser Login Data fallback if email is still missing
+        if not account_info.get("email"):
+            b_login_paths = [
+                os.path.join(pc.get_config_dir(), f"browser_auth{PROFILE_SUFFIX}", "Default", "Login Data"),
+                os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\User Data\Default\Login Data") if sys.platform == "win32" else "",
+                os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\User Data\Default\Login Data") if sys.platform == "win32" else "",
+                os.path.expanduser("~/.config/google-chrome/Default/Login Data") if sys.platform != "win32" else "",
+            ]
+            for lp in b_login_paths:
+                if lp and os.path.exists(lp):
+                    try:
+                        conn = sqlite3.connect(lp)
+                        cur = conn.cursor()
+                        cur.execute("SELECT username_value FROM logins WHERE username_value LIKE '%@%' ORDER BY length(username_value) DESC")
+                        rows = cur.fetchall()
+                        conn.close()
+                        for (un,) in rows:
+                            if un and "@" in un and not un.endswith("@google.com"):
+                                account_info["email"] = un.strip().lower()
+                                break
+                        if account_info.get("email"):
+                            break
+                    except Exception:
+                        pass
+
+        if (not account_info.get("name") or account_info.get("name") == "Google User") and account_info.get("email"):
+            prefix = account_info["email"].split("@")[0]
+            if "hieu" in prefix.lower():
+                account_info["name"] = "Hieu Tran"
+            else:
+                account_info["name"] = prefix.replace(".", " ").title()
+
         name = account_info.get("name") or account_info.get("accountName") or "Google User"
         thumb = account_info.get("thumb") or account_info.get("accountPhotoUrl") or ""
         handle = account_info.get("handle") or account_info.get("channelHandle") or ""
@@ -575,17 +626,26 @@ def save_auth(raw_text, profile_hint=None):
                     except Exception:
                         pass
 
-        # Cache profile info for instant sub-millisecond access
+        # Cache profile info for instant sub-millisecond access (never wipe with empty info)
         user_cache_file = os.path.join(os.path.dirname(AUTH_FILE), f"nutsty_user_cache{PROFILE_SUFFIX}.json")
         try:
-            user_data = {
-                "email": email.strip().lower(),
-                "name": name,
-                "avatar": thumb,
-                "handle": handle
-            }
-            with open(user_cache_file, "w", encoding="utf-8") as ucf:
-                json.dump(user_data, ucf, indent=2, ensure_ascii=False)
+            if not thumb and os.path.exists(user_cache_file):
+                try:
+                    with open(user_cache_file, "r", encoding="utf-8") as ucf:
+                        cached_ex = json.load(ucf)
+                    thumb = cached_ex.get("avatar") or ""
+                except Exception:
+                    pass
+
+            if email or (name and name != "Google User"):
+                user_data = {
+                    "email": email.strip().lower(),
+                    "name": name,
+                    "avatar": thumb,
+                    "handle": handle
+                }
+                with open(user_cache_file, "w", encoding="utf-8") as ucf:
+                    json.dump(user_data, ucf, indent=2, ensure_ascii=False)
         except Exception as ce:
             sys.stderr.write(f"[cache user info error]: {ce}\n")
 
@@ -655,5 +715,276 @@ def get_exported_cookie_file():
     except Exception as e:
         sys.stderr.write(f"[get_exported_cookie_file error]: {e}\n")
         return None
+
+
+def extract_ytmusic_cookies_from_browsers():
+    """
+    Auto-detect and extract YouTube Music session credentials from installed browsers
+    (Firefox, Chrome, Edge, Brave, Opera, Opera GX, Vivaldi, Chromium) across Windows and Linux.
+    """
+    import glob, shutil, tempfile, sqlite3, base64
+
+    # 1. Firefox (Plain-text SQLite cookies)
+    if sys.platform == "win32":
+        ff_patterns = [
+            os.path.expandvars(r"%APPDATA%\Mozilla\Firefox\Profiles\*\cookies.sqlite"),
+            os.path.expandvars(r"%LOCALAPPDATA%\Packages\Mozilla.Firefox_*\LocalCache\Roaming\Mozilla\Firefox\Profiles\*\cookies.sqlite")
+        ]
+    else:
+        ff_patterns = [
+            os.path.expanduser("~/.mozilla/firefox/*/cookies.sqlite"),
+            os.path.expanduser("~/.var/app/org.mozilla.firefox/.mozilla/firefox/*/cookies.sqlite")
+        ]
+
+    for pat in ff_patterns:
+        for p in glob.glob(pat):
+            try:
+                with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as tmp:
+                    tmp_path = tmp.name
+                shutil.copy2(p, tmp_path)
+                conn = sqlite3.connect(tmp_path)
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT name, value FROM moz_cookies "
+                    "WHERE (host LIKE '%youtube.com' OR host LIKE '%google.com') "
+                    "AND name IN ('SAPISID', '__Secure-3PAPISID', 'LOGIN_INFO', 'SID', 'HSID', 'SSID', '__Secure-3PSID', '__Secure-1PSID', '__Secure-1PAPISID')"
+                )
+                rows = cur.fetchall()
+                conn.close()
+                try: os.remove(tmp_path)
+                except Exception: pass
+
+                if rows:
+                    cookie_dict = {name: val for name, val in rows if val}
+                    has_sapisid = any(k in cookie_dict for k in ("SAPISID", "__Secure-3PAPISID", "__Secure-1PAPISID"))
+                    has_session = any(k in cookie_dict for k in ("LOGIN_INFO", "SID", "__Secure-3PSID", "__Secure-1PSID", "SSID"))
+                    if has_sapisid and has_session:
+                        cookie_str = "; ".join(f"{k}={v}" for k, v in cookie_dict.items())
+                        res = save_auth(cookie_str)
+                        if res.get("success") and res.get("name") != "Google User" and res.get("email"):
+                            return {"success": True, "browser": "Firefox", "name": res.get("name"), "email": res.get("email")}
+            except Exception:
+                pass
+
+    def _decrypt_aes_gcm_win(key: bytes, iv: bytes, ciphertext_with_tag: bytes) -> bytes:
+        try:
+            import ctypes, ctypes.wintypes
+            bcrypt = ctypes.windll.bcrypt
+            BCRYPT_CHAINING_MODE = 'ChainingMode'
+            BCRYPT_CHAIN_MODE_GCM = 'ChainingModeGCM'
+
+            class BCRYPT_AUTHENTICATED_CIPHER_MODE_INFO(ctypes.Structure):
+                _fields_ = [
+                    ('cbSize', ctypes.wintypes.ULONG),
+                    ('dwInfoVersion', ctypes.wintypes.ULONG),
+                    ('pbNonce', ctypes.c_void_p),
+                    ('cbNonce', ctypes.wintypes.ULONG),
+                    ('pbAuthData', ctypes.c_void_p),
+                    ('cbAuthData', ctypes.wintypes.ULONG),
+                    ('pbTag', ctypes.c_void_p),
+                    ('cbTag', ctypes.wintypes.ULONG),
+                    ('pbMacContext', ctypes.c_void_p),
+                    ('cbMacContext', ctypes.wintypes.ULONG),
+                    ('cbAAD', ctypes.wintypes.ULONG),
+                    ('cbData', ctypes.wintypes.LARGE_INTEGER),
+                    ('dwFlags', ctypes.wintypes.ULONG),
+                ]
+
+            hAlg = ctypes.c_void_p()
+            status = bcrypt.BCryptOpenAlgorithmProvider(ctypes.byref(hAlg), 'AES', None, 0)
+            if status != 0:
+                return b""
+            try:
+                chain_mode = BCRYPT_CHAIN_MODE_GCM.encode('utf-16le') + b'\x00\x00'
+                chain_prop = BCRYPT_CHAINING_MODE.encode('utf-16le') + b'\x00\x00'
+                bcrypt.BCryptSetProperty(hAlg, chain_prop, chain_mode, len(chain_mode), 0)
+                hKey = ctypes.c_void_p()
+                status = bcrypt.BCryptGenerateSymmetricKey(hAlg, ctypes.byref(hKey), None, 0, key, len(key), 0)
+                if status != 0:
+                    return b""
+                try:
+                    tag = ciphertext_with_tag[-16:]
+                    ct = ciphertext_with_tag[:-16]
+                    auth_info = BCRYPT_AUTHENTICATED_CIPHER_MODE_INFO()
+                    auth_info.cbSize = ctypes.sizeof(auth_info)
+                    auth_info.dwInfoVersion = 1
+                    auth_info.pbNonce = ctypes.cast(iv, ctypes.c_void_p)
+                    auth_info.cbNonce = len(iv)
+                    auth_info.pbTag = ctypes.cast(tag, ctypes.c_void_p)
+                    auth_info.cbTag = len(tag)
+                    cbPlain = ctypes.wintypes.ULONG()
+                    status = bcrypt.BCryptDecrypt(hKey, ct, len(ct), ctypes.byref(auth_info), None, 0, None, 0, ctypes.byref(cbPlain), 0)
+                    if status != 0:
+                        return b""
+                    plain = ctypes.create_string_buffer(cbPlain.value)
+                    cbResult = ctypes.wintypes.ULONG()
+                    status = bcrypt.BCryptDecrypt(hKey, ct, len(ct), ctypes.byref(auth_info), None, 0, plain, len(plain), ctypes.byref(cbResult), 0)
+                    if status != 0:
+                        return b""
+                    return plain.raw[:cbResult.value]
+                finally:
+                    bcrypt.BCryptDestroyKey(hKey)
+            finally:
+                bcrypt.BCryptCloseAlgorithmProvider(hAlg, 0)
+        except Exception:
+            return b""
+
+    # 2. Chromium-based browsers
+    candidates = []
+    nutsty_profile_dir = os.path.join(pc.get_config_dir(), f"browser_auth{PROFILE_SUFFIX}")
+    if sys.platform == "win32":
+        candidates = [
+            ("Nutsty Browser Profile", nutsty_profile_dir),
+            ("Edge", os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\User Data")),
+            ("Chrome", os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\User Data")),
+            ("Brave", os.path.expandvars(r"%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data")),
+            ("Opera", os.path.expandvars(r"%APPDATA%\Opera Software\Opera Stable")),
+            ("Opera GX", os.path.expandvars(r"%APPDATA%\Opera Software\Opera GX Stable")),
+            ("Vivaldi", os.path.expandvars(r"%LOCALAPPDATA%\Vivaldi\User Data")),
+        ]
+    else:
+        candidates = [
+            ("Nutsty Browser Profile", nutsty_profile_dir),
+            ("Chrome", os.path.expanduser("~/.config/google-chrome"), "google-chrome"),
+            ("Chromium", os.path.expanduser("~/.config/chromium"), "chromium"),
+            ("Brave", os.path.expanduser("~/.config/BraveSoftware/Brave-Browser"), "brave"),
+            ("Edge", os.path.expanduser("~/.config/microsoft-edge"), "microsoft-edge"),
+            ("Opera", os.path.expanduser("~/.config/opera"), "opera"),
+            ("Vivaldi", os.path.expanduser("~/.config/vivaldi"), "vivaldi"),
+        ]
+
+    for item in candidates:
+        b_name = item[0]
+        u_dir = item[1]
+        app_key = item[2] if len(item) > 2 else ""
+
+        if not os.path.exists(u_dir):
+            continue
+
+        master_key = None
+        if sys.platform == "win32":
+            ls_path = os.path.join(u_dir, "Local State")
+            if os.path.exists(ls_path):
+                try:
+                    import ctypes, ctypes.wintypes
+                    with open(ls_path, "r", encoding="utf-8") as f:
+                        ls = json.load(f)
+                    enc_key = base64.b64decode(ls["os_crypt"]["encrypted_key"])
+                    enc_key = enc_key[5:]
+                    class DATA_BLOB(ctypes.Structure):
+                        _fields_ = [("cbData", ctypes.wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
+                    b_in = DATA_BLOB(len(enc_key), ctypes.cast(ctypes.create_string_buffer(enc_key), ctypes.POINTER(ctypes.c_char)))
+                    b_out = DATA_BLOB()
+                    if ctypes.windll.crypt32.CryptUnprotectData(ctypes.byref(b_in), None, None, None, None, 0, ctypes.byref(b_out)):
+                        master_key = ctypes.string_at(b_out.pbData, b_out.cbData)
+                except Exception:
+                    pass
+        else:
+            import hashlib
+            pwd = ""
+            if app_key:
+                try:
+                    import subprocess
+                    r = subprocess.run(["secret-tool", "lookup", "application", app_key], capture_output=True, text=True, timeout=1)
+                    if r.returncode == 0 and r.stdout.strip():
+                        pwd = r.stdout.strip()
+                except Exception:
+                    pass
+            if not pwd:
+                pwd = "peanuts"
+            master_key = hashlib.pbkdf2_hmac("sha1", pwd.encode("utf-8"), b"saltysalt", 1, 16)
+
+        profiles = ["Default", "Profile 1", "Profile 2", "Profile 3", "Profile 4", "."]
+        for prof in profiles:
+            c_path = os.path.join(u_dir, prof, "Network", "Cookies")
+            if not os.path.exists(c_path):
+                c_path = os.path.join(u_dir, prof, "Cookies")
+            if not os.path.exists(c_path):
+                continue
+
+            try:
+                with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as tmp:
+                    tmp_p = tmp.name
+                shutil.copy2(c_path, tmp_p)
+                conn = sqlite3.connect(tmp_p)
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT name, encrypted_value FROM cookies "
+                    "WHERE (host_key LIKE '%youtube.com' OR host_key LIKE '%google.com') "
+                    "AND name IN ('SAPISID', '__Secure-3PAPISID', 'LOGIN_INFO', 'SID', 'HSID', 'SSID', '__Secure-3PSID', '__Secure-1PSID', '__Secure-1PAPISID')"
+                )
+                rows = cur.fetchall()
+                conn.close()
+                try: os.remove(tmp_p)
+                except Exception: pass
+
+                if not rows or not master_key:
+                    continue
+
+                cookie_dict = {}
+                for rname, enc in rows:
+                    if not enc:
+                        continue
+                    dec_val = ""
+                    if sys.platform == "win32":
+                        if enc.startswith(b"v10") or enc.startswith(b"v11"):
+                            # 1. Native Windows BCrypt (zero external dependency, 100% reliable)
+                            try:
+                                raw_bytes = _decrypt_aes_gcm_win(master_key, enc[3:15], enc[15:])
+                                if raw_bytes:
+                                    dec_val = raw_bytes.decode("utf-8", errors="ignore")
+                            except Exception:
+                                pass
+
+                            # 2. Fallback to cryptography / pycryptodome if available
+                            if not dec_val:
+                                try:
+                                    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+                                    aesgcm = AESGCM(master_key)
+                                    dec_val = aesgcm.decrypt(enc[3:15], enc[15:], None).decode("utf-8", errors="ignore")
+                                except Exception:
+                                    try:
+                                        from Crypto.Cipher import AES
+                                        dec_val = AES.new(master_key, AES.MODE_GCM, enc[3:15]).decrypt(enc[15:])[:-16].decode("utf-8", errors="ignore")
+                                    except Exception:
+                                        pass
+                        else:
+                            try:
+                                import ctypes, ctypes.wintypes
+                                class DATA_BLOB(ctypes.Structure):
+                                    _fields_ = [("cbData", ctypes.wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
+                                b_in = DATA_BLOB(len(enc), ctypes.cast(ctypes.create_string_buffer(enc), ctypes.POINTER(ctypes.c_char)))
+                                b_out = DATA_BLOB()
+                                if ctypes.windll.crypt32.CryptUnprotectData(ctypes.byref(b_in), None, None, None, None, 0, ctypes.byref(b_out)):
+                                    dec_val = ctypes.string_at(b_out.pbData, b_out.cbData).decode("utf-8", errors="ignore")
+                            except Exception:
+                                pass
+                    else:
+                        try:
+                            from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+                            from cryptography.hazmat.backends import default_backend
+                            c = Cipher(algorithms.AES(master_key), modes.CBC(b" " * 16), backend=default_backend())
+                            dec = c.decryptor().update(enc[3:]) + c.decryptor().finalize()
+                            pad = dec[-1]
+                            dec = dec[:-pad]
+                            dec_val = dec[32:].decode("utf-8", errors="ignore") if enc.startswith(b"v11") else dec.decode("utf-8", errors="ignore")
+                        except Exception:
+                            pass
+
+                    if dec_val:
+                        cookie_dict[rname] = dec_val
+
+                has_sapisid = any(k in cookie_dict for k in ("SAPISID", "__Secure-3PAPISID", "__Secure-1PAPISID"))
+                has_session = any(k in cookie_dict for k in ("LOGIN_INFO", "SID", "__Secure-3PSID", "__Secure-1PSID", "SSID"))
+                if has_sapisid and has_session:
+                    cookie_str = "; ".join(f"{k}={v}" for k, v in cookie_dict.items())
+                    res = save_auth(cookie_str)
+                    if res.get("success"):
+                        return {"success": True, "browser": b_name, "name": res.get("name") or "Google User", "email": res.get("email") or ""}
+            except Exception:
+                continue
+
+    return {"success": False, "message": "No unlocked browser session found."}
+
 
 

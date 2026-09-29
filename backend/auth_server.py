@@ -190,6 +190,8 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path in ("/api/auth/cookies", "/api/auth/sync"):
             music_routes.handle_post_auth_cookies(self, self._read_post_body())
+        elif self.path in ("/api/auth/auto-sync", "/api/auth/auto_sync"):
+            music_routes.handle_post_auth_auto_sync(self)
         elif self.path == "/api/spotify/auto-sync":
             music_routes.handle_post_spotify_auto_sync(self)
         elif self.path == "/api/spotify/validate":

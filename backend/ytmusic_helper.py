@@ -21,7 +21,7 @@ try:
         create_resilient_session, sanitize_cookie_for_ytmusic, safe_sapisid_from_cookie,
         fetch_google_profile_from_cookies, get_ytmusic_client,
         extract_account_details_from_client, get_auth_status, save_auth, logout,
-        get_exported_cookie_file
+        get_exported_cookie_file, extract_ytmusic_cookies_from_browsers
     )
     from .catalog_engine import (
         HOME_CACHE_FILE, ONLINE_TRACKS_FILE, MOOD_CACHE_DIR, MOOD_CATS_FILE,
@@ -56,7 +56,7 @@ except (ImportError, ValueError):
         create_resilient_session, sanitize_cookie_for_ytmusic, safe_sapisid_from_cookie,
         fetch_google_profile_from_cookies, get_ytmusic_client,
         extract_account_details_from_client, get_auth_status, save_auth, logout,
-        get_exported_cookie_file
+        get_exported_cookie_file, extract_ytmusic_cookies_from_browsers
     )
     from catalog_engine import (
         HOME_CACHE_FILE, ONLINE_TRACKS_FILE, MOOD_CACHE_DIR, MOOD_CATS_FILE,
@@ -197,6 +197,10 @@ def execute_command(args):
     elif cmd == "save_auth" and len(args) > 1:
         text = args[1]
         res = save_auth(text)
+        print(json.dumps(res, ensure_ascii=False))
+
+    elif cmd in ("auto_sync", "auto_sync_browser"):
+        res = extract_ytmusic_cookies_from_browsers()
         print(json.dumps(res, ensure_ascii=False))
 
     elif cmd == "logout":

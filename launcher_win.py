@@ -448,8 +448,8 @@ class NutstyBridge(QObject):
             threading.Thread(target=_status_worker, daemon=True).start()
             return
 
-        # Fast unified in-process execution for all backend scripts in BACKEND_MAP
-        if target_script:
+        # Fast unified in-process execution for all backend scripts in BACKEND_MAP (except browser_login which requires isolated subprocess)
+        if target_script and target_script != "browser_login.py":
             mod_name = BACKEND_MAP[target_script]
             def _in_proc_run():
                 import io, importlib
@@ -518,7 +518,8 @@ class NutstyBridge(QObject):
 
         def _worker():
             try:
-                res = subprocess.run(cmd, capture_output=True, text=True, timeout=60, **pc.get_daemon_popen_kwargs())
+                proc_timeout = 360 if any("browser_login" in str(x) for x in cmd) else 60
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=proc_timeout, **pc.get_daemon_popen_kwargs())
                 out = res.stdout or ""
                 err = res.stderr or ""
                 code = res.returncode

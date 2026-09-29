@@ -13,3 +13,16 @@ todo.md
 .codegraph/
 .wrangler/
 cloud_relay/.wrangler/
+bin/
+scratch/
+*.png
+docs/plans/
+tests/test_*.py
+scripts/test_*.py
+scripts/*_desktop.ps1
+scripts/capture_screen.ps1
+scripts/diag_desktop.ps1
+scripts/focus_nutsty.ps1
+scripts/inspect_*.ps1
+.agent/
+

@@ -45,7 +45,13 @@ def handle_get_suggestions(handler, query):
 def handle_get_filter_search(handler, query):
     q = query.get("q", [""])[0]
     flt = query.get("filter", ["songs"])[0]
-    data = ytmusic_helper.filter_search(q, flt)
+    limit_val = 30
+    if "limit" in query:
+        try:
+            limit_val = int(query.get("limit", [30])[0])
+        except (ValueError, TypeError):
+            limit_val = 30
+    data = ytmusic_helper.filter_search(q, flt, limit=limit_val)
     handler._send_json(data, 200)
 
 
@@ -93,6 +99,11 @@ def handle_post_auth_cookies(handler, post_body):
     res = ytmusic_helper.save_auth(raw_data)
     status_code = 200 if res.get("success") else 400
     handler._send_json(res, status_code)
+
+
+def handle_post_auth_auto_sync(handler):
+    res = ytmusic_helper.extract_ytmusic_cookies_from_browsers()
+    handler._send_json(res, 200)
 
 
 def handle_get_clipboard(handler):

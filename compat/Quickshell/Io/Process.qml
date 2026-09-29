@@ -6,6 +6,7 @@ Item {
     property bool running: false
     property var stdout: null
     property var stderr: null
+    property var _activeCallback: null
 
     signal exited(int code, int status)
 
@@ -13,7 +14,8 @@ Item {
         if (running) {
             if (typeof __NutstyBridge !== "undefined" && __NutstyBridge.runProcess) {
                 var cmdCopy = root.command;
-                __NutstyBridge.runProcess(cmdCopy, function(outData, errData, exitCode) {
+                root._activeCallback = function(outData, errData, exitCode) {
+                    root._activeCallback = null;
                     if (outData && root.stdout) {
                         if (typeof root.stdout.feed === "function") {
                             root.stdout.feed(outData);
@@ -26,7 +28,8 @@ Item {
                     }
                     root.running = false;
                     root.exited(exitCode || 0, 0);
-                });
+                };
+                __NutstyBridge.runProcess(cmdCopy, root._activeCallback);
             } else {
                 root.running = false;
             }

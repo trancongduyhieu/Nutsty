@@ -700,16 +700,25 @@ Scope {
             onRead: data => {
                 try {
                     var res = JSON.parse(data);
+                    if (res.status === "browser_launched") {
+                        settingsModal.statusMessage = res.message || I18n.tr("Đã mở trình duyệt. Vui lòng đăng nhập Google...", "Browser opened. Please sign in with Google...");
+                        return;
+                    }
+                    if (res.status === "redirecting" || res.status === "verified") {
+                        settingsModal.statusMessage = res.message || I18n.tr("Đang xác thực thông tin tài khoản...", "Verifying account credentials...");
+                        return;
+                    }
                     if (res.success) {
-                        settingsModal.statusMessage = "Connected as " + (res.name || "Google User") + "!";
+                        settingsModal.statusMessage = I18n.tr("Đã kết nối thành công: ", "Connected successfully as ") + (res.name || "Google User") + "!";
+                        settingsModal.isProcessing = false;
                         win.checkAuthStatus();
                         win.loadHomeFeed();
-                    } else {
-                        settingsModal.statusMessage = "Login: " + (res.error || "Failed");
+                    } else if (res.error) {
+                        settingsModal.statusMessage = I18n.tr("Đăng nhập: ", "Login: ") + res.error;
+                        settingsModal.isProcessing = false;
                     }
                 } catch(e) {
                     settingsModal.statusMessage = "Error: " + e;
-                } finally {
                     settingsModal.isProcessing = false;
                 }
             }
@@ -2371,10 +2380,15 @@ Scope {
             }
             onLaunchBrowserLoginRequested: {
                 settingsModal.isProcessing = true;
-                settingsModal.statusMessage = "Opening Google login window... Please sign in in the popup.";
+                settingsModal.statusMessage = I18n.tr("Đang mở trình duyệt đăng nhập... Vui lòng đăng nhập Google.", "Opening browser window... Please sign in with Google.");
                 browserLoginProc.running = false;
                 browserLoginProc.command = ["python3", "-u", win.appDir + "/backend/browser_login.py"];
                 browserLoginProc.running = true;
+            }
+            onCancelBrowserLoginRequested: {
+                browserLoginProc.running = false;
+                settingsModal.isProcessing = false;
+                settingsModal.statusMessage = I18n.tr("Đã hủy chờ đăng nhập.", "Login cancelled.");
             }
         }
 

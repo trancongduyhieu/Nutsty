@@ -73,18 +73,65 @@ Rectangle {
 
     Timer {
         id: loginTimeoutTimer
-        interval: 60000 // 60 seconds fail-safe timeout
+        interval: 180000 // 180 seconds fail-safe timeout
         running: root.isProcessing
         repeat: false
         onTriggered: {
             if (root.isProcessing) {
+                root.cancelBrowserLoginRequested();
                 root.isProcessing = false;
                 root.statusMessage = I18n.tr(
-                    "Đã hết thời gian chờ trình duyệt (60s). Hãy thử lại hoặc dùng dán cookie dự phòng ở dưới.",
-                    "Browser login timed out (60s). Please try again or use backup cookie paste below."
+                    "Đã hết thời gian chờ trình duyệt (180s). Hãy thử lại hoặc dùng dán cookie dự phòng ở dưới.",
+                    "Browser login timed out (180s). Please try again or use backup cookie paste below."
                 );
             }
         }
+    }
+
+    function startBrowserLoginFlow() {
+        root.isProcessing = true;
+        root.statusMessage = I18n.tr("Đang tự động quét phiên đăng nhập từ các trình duyệt...", "Scanning active session from installed browsers...");
+        loginTimeoutTimer.restart();
+
+        // Phase 1: Try instant 0-second auto-sync from browser databases
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", "http://127.0.0.1:17890/api/auth/auto-sync");
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200) {
+                    try {
+                        var res = JSON.parse(xhr.responseText);
+                        if (res.success) {
+                            root.isProcessing = false;
+                            root.statusMessage = I18n.tr(
+                                "Đã kết nối tài khoản " + (res.name || "") + " từ " + (res.browser || "trình duyệt") + "!",
+                                "Connected account " + (res.name || "") + " from " + (res.browser || "browser") + "!"
+                            );
+                            if (typeof win !== "undefined" && win.checkAuthStatus) {
+                                win.checkAuthStatus();
+                                win.loadHomeFeed();
+                            }
+                            return;
+                        }
+                    } catch(e) {}
+                }
+
+                // Phase 2: Launch the native login assistant window with CDP
+                root.statusMessage = I18n.tr(
+                    "Đang mở trình duyệt đăng nhập... Vui lòng đăng nhập Google.",
+                    "Opening browser window... Please sign in with Google."
+                );
+                root.launchBrowserLoginRequested();
+            }
+        };
+        xhr.onerror = function() {
+            root.statusMessage = I18n.tr(
+                "Đang mở trình duyệt đăng nhập... Vui lòng đăng nhập Google.",
+                "Opening browser window... Please sign in with Google."
+            );
+            root.launchBrowserLoginRequested();
+        };
+        xhr.send();
     }
 
     function pasteAndConnectFromClipboard() {
@@ -276,6 +323,7 @@ Rectangle {
     signal connectRequested(string rawAuth)
     signal logoutRequested()
     signal launchBrowserLoginRequested()
+    signal cancelBrowserLoginRequested()
     signal toggleSyncHistoryRequested(bool enabled)
     signal toggleAnimatedCoverRequested(bool enabled)
     signal saveCanvasPreferenceRequested(string pref)
@@ -846,6 +894,7 @@ Rectangle {
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
+                                        root.cancelBrowserLoginRequested();
                                         root.isProcessing = false;
                                         root.statusMessage = I18n.tr("Đã hủy chờ đăng nhập.", "Login cancelled.");
                                     }
@@ -860,8 +909,7 @@ Rectangle {
                             cursorShape: root.isProcessing ? Qt.ArrowCursor : Qt.PointingHandCursor
                             enabled: !root.isProcessing
                             onClicked: {
-                                loginTimeoutTimer.restart();
-                                root.launchBrowserLoginRequested();
+                                root.startBrowserLoginFlow();
                             }
                         }
                     }

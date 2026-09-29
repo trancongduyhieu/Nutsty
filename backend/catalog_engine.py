@@ -1641,28 +1641,53 @@ def search_categorized(query):
         sys.stderr.write(f"[search_categorized error]: {e}\n")
         return {"query": q, "top_result": None, "songs": [], "albums": [], "artists": [], "community_playlists": [], "featured_playlists": [], "playlists": []}
 
-def filter_search(query, category="songs"):
+_FILTER_SEARCH_CACHE = {}
+_FILTER_SEARCH_CACHE_TTL = 180.0
+
+def filter_search(query, category="songs", limit=30):
     q = str(query or "").strip()
     if not q:
         return []
+
+    cat_map = {
+        "songs": "songs",
+        "albums": "albums",
+        "artists": "artists",
+        "community_playlists": "community_playlists",
+        "playlists": "community_playlists",
+        "featured_playlists": "featured_playlists"
+    }
+    flt = cat_map.get(category, "songs")
+
+    safe_limit = 30
+    try:
+        safe_limit = min(max(10, int(limit)), 60)
+    except (TypeError, ValueError):
+        safe_limit = 30
+
+    cache_key = (q.lower(), flt, safe_limit)
+    now = time.time()
+    if cache_key in _FILTER_SEARCH_CACHE:
+        cached_ts, cached_data = _FILTER_SEARCH_CACHE[cache_key]
+        if now - cached_ts < _FILTER_SEARCH_CACHE_TTL:
+            return cached_data
+
     try:
         ytm = get_ytmusic_client()
-        cat_map = {
-            "songs": "songs",
-            "albums": "albums",
-            "artists": "artists",
-            "community_playlists": "community_playlists",
-            "playlists": "community_playlists",
-            "featured_playlists": "featured_playlists"
-        }
-        flt = cat_map.get(category, "songs")
         try:
-            raw = ytm.search(q, filter=flt, limit=60)
+            raw = ytm.search(q, filter=flt, limit=safe_limit)
         except Exception as se:
             sys.stderr.write(f"[filter_search auth error, guest fallback]: {se}\n")
             from ytmusicapi import YTMusic
             guest_yt = YTMusic(requests_session=create_resilient_session())
-            raw = guest_yt.search(q, filter=flt, limit=60)
+            raw = guest_yt.search(q, filter=flt, limit=safe_limit)
+
+        # Pre-load disliked songs once before the loop (avoids up to 60 disk reads!)
+        try:
+            disliked_set = set(load_disliked_songs().keys())
+        except Exception:
+            disliked_set = set()
+
         items = []
         for r in raw:
             rtype = r.get("resultType")
@@ -1672,7 +1697,7 @@ def filter_search(query, category="songs"):
 
             if flt == "songs" or rtype in ("song", "video"):
                 norm = normalize_track(r)
-                if norm and not is_song_disliked(norm.get("videoId")):
+                if norm and (norm.get("videoId") not in disliked_set):
                     norm["type"] = "song"
                     items.append(norm)
             elif flt == "albums" or rtype == "album":
@@ -1718,6 +1743,11 @@ def filter_search(query, category="songs"):
                     "itemCount": r.get("itemCount", ""),
                     "image": turl
                 })
+
+        if len(_FILTER_SEARCH_CACHE) > 128:
+            _FILTER_SEARCH_CACHE.clear()
+        _FILTER_SEARCH_CACHE[cache_key] = (now, items)
+
         return items
     except Exception as e:
         sys.stderr.write(f"[filter_search error]: {e}\n")

@@ -94,16 +94,21 @@ Rectangle {
     function performOnlineSearch() {
         var q = root.trackSearchQuery.trim();
         if (!q) {
+            searchDebounceTimer.stop();
             root.onlineSearchResults = [];
             root.isSearchingOnline = false;
             return;
         }
         root.isSearchingOnline = true;
         var xhr = new XMLHttpRequest();
-        var url = "http://127.0.0.1:17890/api/filter_search?q=" + encodeURIComponent(q) + "&filter=songs";
+        var url = "http://127.0.0.1:17890/api/filter_search?q=" + encodeURIComponent(q) + "&filter=songs&limit=25";
         xhr.open("GET", url, true);
         xhr.onreadystatechange = function() {
             if (xhr.readyState === XMLHttpRequest.DONE) {
+                // Ignore stale out-of-order responses if user has typed a newer query
+                if (root.trackSearchQuery.trim() !== q) {
+                    return;
+                }
                 root.isSearchingOnline = false;
                 if (xhr.status === 200) {
                     try {
@@ -122,7 +127,7 @@ Rectangle {
 
     Timer {
         id: searchDebounceTimer
-        interval: 200
+        interval: 320
         repeat: false
         onTriggered: root.performOnlineSearch()
     }
