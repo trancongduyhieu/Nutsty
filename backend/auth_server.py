@@ -182,6 +182,10 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             music_routes.handle_get_clipboard(self)
         elif path == "/api/spotify/profile":
             music_routes.handle_get_spotify_profile(self, query)
+        elif path == "/api/spotify/playlists":
+            music_routes.handle_get_spotify_playlists(self, query)
+        elif path == "/api/spotify/import_status":
+            music_routes.handle_get_spotify_import_status(self)
         else:
             self.send_response(404)
             self._send_cors_headers()
@@ -196,6 +200,12 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             music_routes.handle_post_spotify_auto_sync(self)
         elif self.path == "/api/spotify/validate":
             music_routes.handle_post_spotify_validate(self)
+        elif self.path == "/api/spotify/resolve_url":
+            music_routes.handle_post_spotify_resolve_url(self)
+        elif self.path == "/api/spotify/import_playlist":
+            music_routes.handle_post_spotify_import(self)
+        elif self.path == "/api/spotify/cancel_import":
+            music_routes.handle_post_spotify_cancel_import(self)
         elif self.path == "/api/users/update_profile":
             social_routes.handle_post_update_profile(self, self._read_post_json())
         elif self.path == "/api/users/regenerate_pin":

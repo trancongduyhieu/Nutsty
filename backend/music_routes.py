@@ -216,3 +216,59 @@ def handle_post_spotify_validate(handler):
     }, 200)
 
 
+def handle_get_spotify_playlists(handler, query):
+    try:
+        from . import spotify_importer
+    except (ImportError, ValueError):
+        import spotify_importer
+    spdc = query.get("spdc", [""])[0]
+    res = spotify_importer.fetch_user_spotify_playlists(spdc)
+    handler._send_json(res, 200)
+
+
+def handle_post_spotify_resolve_url(handler):
+    try:
+        from . import spotify_importer
+    except (ImportError, ValueError):
+        import spotify_importer
+    body = handler._read_post_json()
+    url = body.get("url", "") if isinstance(body, dict) else ""
+    spdc = body.get("spdc", "") if isinstance(body, dict) else ""
+    res = spotify_importer.fetch_spotify_playlist_details(url, spdc=spdc)
+    handler._send_json(res, 200 if res.get("success") else 400)
+
+
+def handle_post_spotify_import(handler):
+    try:
+        from . import spotify_importer
+    except (ImportError, ValueError):
+        import spotify_importer
+    body = handler._read_post_json()
+    if not isinstance(body, dict):
+        handler._send_json({"success": False, "error": "Dữ liệu không hợp lệ."}, 400)
+        return
+    playlist_id = body.get("playlist_id", "")
+    playlist_title = body.get("playlist_title", "")
+    spdc = body.get("spdc", "")
+    res = spotify_importer.importer.start_import(playlist_id, playlist_title, spdc)
+    handler._send_json(res, 200 if res.get("success") else 400)
+
+
+def handle_get_spotify_import_status(handler):
+    try:
+        from . import spotify_importer
+    except (ImportError, ValueError):
+        import spotify_importer
+    st = spotify_importer.importer.get_status()
+    handler._send_json(st, 200)
+
+
+def handle_post_spotify_cancel_import(handler):
+    try:
+        from . import spotify_importer
+    except (ImportError, ValueError):
+        import spotify_importer
+    spotify_importer.importer.cancel()
+    handler._send_json({"success": True, "message": "Đã yêu cầu hủy."}, 200)
+
+
