@@ -738,46 +738,40 @@ def ensure_cloud_identity(profile_suffix="", fallback_name=None, fallback_avatar
         except Exception:
             pass
 
-    # If identity exists, only sync username from Google account if current username is still a generic placeholder and not custom-renamed
+    # If identity exists, sync username (if placeholder) and sync avatar (if available and changed)
     if ident and ident.get("user_id") and ident.get("secret_key"):
         cur_uname = (ident.get("username") or "").strip()
         is_placeholder = cur_uname in ("", "User", "Nutsty User", "Khách", "Guest")
+        target_name = None
         if not ident.get("custom_username") and is_placeholder and user_name and user_name not in ("User", "Nutsty User", "Shiraori", "Khách", "Guest"):
+            target_name = user_name
+
+        current_avatar = (ident.get("avatar_url") or "").strip()
+        target_avatar = (avatar_url or "").strip()
+
+        needs_avatar_sync = bool(target_avatar and target_avatar != current_avatar)
+        needs_name_sync = bool(target_name and target_name != cur_uname)
+
+        if needs_avatar_sync or needs_name_sync:
             try:
                 up_res = GLOBAL_RELAY_CLIENT.update_profile(
                     user_id=ident["user_id"],
                     secret_key=ident["secret_key"],
-                    new_username=user_name,
-                    avatar_url=avatar_url or ident.get("avatar_url")
+                    new_username=target_name if needs_name_sync else None,
+                    avatar_url=target_avatar if needs_avatar_sync else (current_avatar or None)
                 )
                 if up_res and up_res.get("success") and up_res.get("user"):
                     u = up_res["user"]
                     ident["username"] = u["username"]
                     ident["tag"] = u["tag"]
                     ident["discriminator"] = u["discriminator"]
-                    if u.get("avatar_url"):
-                        ident["avatar_url"] = u["avatar_url"]
+                    if "avatar_url" in u:
+                        ident["avatar_url"] = u.get("avatar_url") or ""
                     save_cloud_identity(ident, profile_suffix)
                 elif up_res and up_res.get("unauthorized"):
                     sys.stderr.write(f"[CloudRelay] Cloud identity unauthorized for {ident.get('user_id')}. Re-registering as {user_name}...\n")
-                    return ensure_cloud_identity(profile_suffix, fallback_name=user_name, fallback_avatar=avatar_url, force_recreate=True)
-            except Exception:
-                pass
-
-        # Always synchronize avatar_url to Cloud Relay if updated or missing
-        if avatar_url and avatar_url != ident.get("avatar_url"):
-            try:
-                up_res = GLOBAL_RELAY_CLIENT.update_profile(
-                    user_id=ident["user_id"],
-                    secret_key=ident["secret_key"],
-                    avatar_url=avatar_url
-                )
-                if up_res and up_res.get("success"):
-                    ident["avatar_url"] = avatar_url
-                    save_cloud_identity(ident, profile_suffix)
-            except Exception:
-                pass
-
+            except Exception as e:
+                sys.stderr.write(f"[CloudRelay] Sync profile error: {e}\n")
         return ident
 
     if not user_name:

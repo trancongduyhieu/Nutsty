@@ -186,7 +186,8 @@ Item {
                         Layout.preferredHeight: 32
                         radius: 16
                         source: root.userAvatar
-                        fallbackIcon: "../assets/icons/preferences-system-symbolic.svg"
+                        initialsText: root.userName
+                        fallbackIcon: "../assets/icons/contact-new-symbolic.svg"
                         fallbackIconColor: root.accentColor
                     }
 
@@ -472,9 +473,10 @@ Item {
                         Layout.topMargin: 6
                         radius: 40
                         source: root.userAvatar
+                        initialsText: root.userName
                         borderColor: Qt.rgba(255, 255, 255, 0.15)
                         borderWidth: 1
-                        fallbackIcon: "../assets/icons/preferences-system-symbolic.svg"
+                        fallbackIcon: "../assets/icons/contact-new-symbolic.svg"
                         fallbackIconColor: root.accentColor
                         fallbackIconSize: 32
                     }

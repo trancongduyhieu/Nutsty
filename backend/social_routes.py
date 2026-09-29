@@ -59,11 +59,14 @@ def handle_get_friends(handler, query):
         caller_ident = ensure_cloud_identity(suffix, fallback_name=preferred_name or None, force_recreate=True)
         relay_res = GLOBAL_RELAY_CLIENT.get_friends(caller_ident["user_id"], caller_ident["secret_key"])
     friends_data = []
-    notes_vault = load_notes_vault()
+    feed_notes = SOCIAL_RELAY_CORE._notes_cache or {}
 
     for f in (relay_res or {}).get("friends", []):
-        f_tag = f["tag"]
-        note_item = notes_vault.get(f"note:{f_tag}") or notes_vault.get(f"note:{f['id']}") or notes_vault.get(f"note:{f['username'].lower()}")
+        f_id = f.get("id") or ""
+        f_tag = f.get("tag") or ""
+        note_item = feed_notes.get(f_id)
+        if not note_item and f_tag:
+            note_item = next((n for n in feed_notes.values() if n.get("tag") == f_tag or n.get("email") == f_tag), None)
         friends_data.append({
             "id": f["id"],
             "user_id": f["id"],
@@ -322,13 +325,6 @@ def handle_post_user_offline(handler, req_data):
         GLOBAL_RELAY_CLIENT.set_offline(ident["user_id"], ident["secret_key"])
     except Exception as e:
         print(f"[auth_server offline error] {e}")
-
-    vault = load_notes_vault()
-    key = f"note:{email}" if email else f"note:{ident['user_id']}"
-    if key in vault:
-        vault[key]["last_active_ts"] = 0
-        vault[key]["now_playing"] = ""
-        save_notes_vault(vault)
 
     handler._send_json({"success": True, "message": "User is offline"}, 200)
 

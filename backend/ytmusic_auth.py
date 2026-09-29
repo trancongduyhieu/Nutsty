@@ -708,13 +708,13 @@ def save_auth(raw_text, profile_hint=None):
         # Automatically sync avatar to Cloud Identity and Global Relay
         if thumb:
             try:
-                from . import cloud_relay_client as crc
-            except (ImportError, ValueError):
-                import cloud_relay_client as crc
-            try:
-                crc.ensure_cloud_identity(PROFILE_SUFFIX, fallback_name=name, fallback_avatar=thumb)
-            except Exception:
-                pass
+                try:
+                    from .cloud_relay_client import ensure_cloud_identity
+                except ImportError:
+                    from cloud_relay_client import ensure_cloud_identity
+                ensure_cloud_identity(PROFILE_SUFFIX, fallback_name=name, fallback_avatar=thumb)
+            except Exception as cie:
+                sys.stderr.write(f"[ytmusic_auth] ensure_cloud_identity error: {cie}\n")
 
         try:
             with open(AUTH_CHANGED_FILE, "w") as f:

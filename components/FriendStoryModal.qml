@@ -218,7 +218,8 @@ Item {
                             Layout.preferredHeight: 32
                             radius: 16
                             source: root.currentFriend ? (root.currentFriend.avatar_url || "") : ""
-                            fallbackIcon: "../assets/icons/preferences-system-symbolic.svg"
+                            initialsText: root.currentFriend ? (root.currentFriend.user_name || "") : ""
+                            fallbackIcon: "../assets/icons/contact-new-symbolic.svg"
                             fallbackIconColor: root.accentColor
                         }
 
@@ -483,9 +484,10 @@ Item {
                             Layout.topMargin: friendBubbleContainer.hasNoteContent ? 6 : 0
                             radius: 40
                             source: root.currentFriend ? (root.currentFriend.avatar_url || "") : ""
+                            initialsText: root.currentFriend ? (root.currentFriend.user_name || "") : ""
                             borderColor: Qt.rgba(255, 255, 255, 0.15)
                             borderWidth: 1
-                            fallbackIcon: "../assets/icons/preferences-system-symbolic.svg"
+                            fallbackIcon: "../assets/icons/contact-new-symbolic.svg"
                             fallbackIconColor: root.accentColor
                             fallbackIconSize: 32
                         }
