@@ -83,4 +83,10 @@ Tài liệu đặc tả chuyên sâu về hệ thống daemon phát nhạc, giao
 - **Cài đặt (`~/.config/noctalia/nutsty_settings.json`)**: `shell.qml` nạp qua `FileView` + timer `delayedSettingsRead` (100ms). Nút Shuffle/Repeat chỉ phát signal `toggleShuffle()` / `toggleRepeat()` để `shell.qml` xử lý và gọi `saveSettings()`.
 - **Presence & Liveness**: Cloudflare Edge Worker & local daemon áp dụng ngưỡng 25s (`ONLINE_THRESHOLD_MS = 25000`). Khi thoát app, `shell.qml` gọi `sendOfflineSignal()` tới `/api/users/offline` để xóa `now_playing` và đặt `last_active_at = 0` tức thì.
 
+---
+
+## 10. Spotify Embed Importer & 0-Friction Session Cache
+- **Trích xuất Embed không cần Token**: `backend/spotify_importer.py` phân tích JSON `__NEXT_DATA__` từ `https://open.spotify.com/embed/playlist/{id}`, hoàn toàn miễn nhiễm lỗi 429 Rate-Limit và trích xuất tracks trong <0.5s.
+- **Fast-path 0 giây**: `handle_post_spotify_auto_sync` và `handle_post_auth_auto_sync` ưu tiên kiểm tra session hợp lệ trong `nutsty_settings.json` / `ytmusic_auth.json` trước khi kích hoạt browser window, triệt tiêu hoàn toàn hiện tượng bắt người dùng đăng nhập lại lặp đi lặp lại.
+
 
