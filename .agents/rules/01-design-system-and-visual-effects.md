@@ -4,12 +4,17 @@ Tài liệu đặc tả chuyên sâu về hệ thống đồ họa, ngôn ngữ 
 
 ---
 
-## 1. Thuật Toán Kính Lỏng Liquid Glass (Kế Thừa SimpMusic)
-- **Tệp cốt lõi**: `components/LiquidGlassContainer.qml` (tham chiếu: `SimpMusic/LiquidGlassContainer.kt`).
-- **Nguyên lý quang học**:
-  - Tăng cường độ rực rỡ màu sắc quang học (`Vibrancy 1.6x`) kết hợp bù trừ bão hòa để triệt tiêu hiện tượng màng sữa đục trắng (`milky fog`) thường gặp trong Qt Quick và Wayland layer-shell.
-  - Tán sắc viền quang học (Chromatic Dispersion Compensation): Giữ cho viền kính luôn trong suốt, không tạo quầng trắng quanh các góc bo.
-- **Quy tắc tuyệt đối**: Tuyệt đối không thay thế Liquid Glass bằng các khối `Rectangle` đơn giản mang màu đục `rgba(255,255,255,0.1)` vì sẽ làm phá hủy hiệu ứng chiều sâu điện ảnh của ứng dụng.
+## 1. Thuật Toán Kính Lỏng Liquid Glass & Keo 502 Trong Suốt
+- **Tệp cốt lõi**: `components/LiquidGlassContainer.qml`, `assets/shaders/liquid_glass.frag` (chuẩn GLSL 440 Qt 6 RHI).
+- **Kiến trúc đệm nền 3 tầng (Triple-Tier Backdrop)**:
+  - Container ngầm `glassCompositeBackdrop` bắt buộc đặt `visible: true, opacity: 0.001, z: -999`. Tuyệt đối không dùng `visible: false` vì Scene Graph sẽ bỏ qua không vẽ vào GPU FBO, khiến shader lấy mẫu pixel rỗng `(0,0,0,0)` thành đen xì.
+  - Hòa trộn 3 tầng: Đáy (hình nền desktop) $\to$ Giữa (ảnh bìa fade in/out 900ms khi play/pause) $\to$ Đỉnh (card bài hát cuộn).
+- **Giải thuật GLSL Shader quang học**:
+  - *Inigo Quilez SDF Rounded Box* `sdRoundedBox` kết hợp gradient giải tích `gradSdRoundedRect` chống răng cưa góc bo.
+  - *Khúc xạ thấu kính Circle Map*: $\text{circleMap}(x) = 1.0 - \sqrt{\max(0.0, 1.0 - x^2)}$ bẻ cong tọa độ UV theo độ vồng giọt nước.
+  - *Quang sai tán sắc (Chromatic Aberration)*: Tách 3 kênh RGB lệch pha khi ánh sáng khúc xạ qua rìa mép kính.
+  - *Phản quang bề mặt cong (`rimSheen` & `topReflect`)*: Mô phỏng độ bóng dẻo keo 502 trong suốt, triệt tiêu màng sữa đục trắng (`Vibrancy 1.6x`).
+- **Quy tắc tuyệt đối**: Tuyệt đối không thay thế Liquid Glass bằng các khối `Rectangle` đơn giản mang màu đục `rgba(255,255,255,0.1)`.
 
 ---
 

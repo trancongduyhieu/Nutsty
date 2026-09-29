@@ -55,17 +55,17 @@ cloud_relay/.wrangler/
 node_modules/
 cloud_relay/node_modules/
 
-# Local planning, tests & dev tools
+# Local planning, assistant prompts & dev tools
 TODO.md
 todo.md
+GEMINI.md
+CONTEXT.md
+LIQUID_GLASS_SPEC.md
 .codegraph/
 .agent/
+references/
+tests/
+scripts/
+cloudflare/
 docs/plans/
-tests/test_*.py
-scripts/test_*.py
-scripts/*_desktop.ps1
-scripts/capture_screen.ps1
-scripts/diag_desktop.ps1
-scripts/focus_nutsty.ps1
-scripts/inspect_*.ps1
 
