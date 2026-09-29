@@ -11,8 +11,8 @@
 | Phase 7: Fix DesktopMusicWidget square mini-widget when closing/minimizing main window | Completed | Fixed onCloseWindowRequested/onMinimizeWindowRequested in shell.qml, added screen-bounds clamping and 1.34x letterbox crop in DesktopMusicWidget.qml |
 | Phase 8: Stop previous song immediately in mpv when switching to a new online song | Completed | Added immediate send_mpv_cmd(["stop"]) and stale-request timestamp guard before resolve_media_path() in backend/player_daemon.py |
 | Phase 9: Prioritize local downloaded audio files (0ms latency) on both Windows and Linux | Completed | Added findLocalDownloadedTrack in shell.qml and find_local_downloaded_file in backend/player_daemon.py |
-| Phase 10: Task 1 - Backend Spotify Importer Module (`backend/spotify_importer.py`) | Pending | Spotify playlist fetch, track extraction, and SpotDL-style YouTube Music matching engine |
-| Phase 10: Task 2 - API Routes Registration (`backend/music_routes.py` & `backend/auth_server.py`) | Pending | Expose /api/spotify/playlists, /api/spotify/import_playlist, and /api/spotify/import_status |
-| Phase 10: Task 3 - UI Modal Component (`components/SpotifyImportModal.qml`) | Pending | Liquid glass modal with bimodal i18n, no emoji, and real-time progress bar |
-| Phase 10: Task 4 - UI Triggers Integration (`components/SettingsModal.qml` & `components/NavSidebar.qml`) | Pending | Trigger buttons in Settings and NavSidebar with auto-reload of custom playlists |
-| Phase 10: Task 5 - Comprehensive Verification & Desktop Screenshot | Pending | verify_codebase.py, API verification, and live UI screenshot verification |
+| Phase 10: Task 1 - Backend Spotify Importer Module (`backend/spotify_importer.py`) | Completed | Spotify playlist fetch, track extraction, and SpotDL-style YouTube Music matching engine |
+| Phase 10: Task 2 - API Routes Registration (`backend/music_routes.py` & `backend/auth_server.py`) | Completed | Expose /api/spotify/playlists, /api/spotify/import_playlist, and /api/spotify/import_status |
+| Phase 10: Task 3 - UI Modal Component (`components/SpotifyImportModal.qml`) | Completed | Liquid glass modal with bimodal i18n, no emoji, and real-time progress bar |
+| Phase 10: Task 4 - UI Triggers Integration (`components/SettingsModal.qml` & `components/NavSidebar.qml`) | Completed | Trigger buttons in Settings and NavSidebar with auto-reload of custom playlists |
+| Phase 10: Task 5 - Comprehensive Verification & Desktop Screenshot | Completed | verify_codebase.py, API verification, and live UI screenshot verification |
