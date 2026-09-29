@@ -2005,6 +2005,7 @@ Scope {
                             onPlayPlaylistRequested: (pl, shuffle) => win.playCustomPlaylist(pl, shuffle)
                             onEditPlaylistRequested: pl => createPlaylistModal.openEdit(pl)
                             onDeletePlaylistRequested: plId => win.deleteCustomPlaylist(plId)
+                            onSpotifyImportRequested: spotifyImportModal.openModal()
                         }
 
                         ArtistDetailView {
@@ -2310,6 +2311,9 @@ Scope {
             lyricsSource: win.lyricsSource
 
             onCloseRequested: settingsModal.visible = false
+            onSpotifyImportRequested: {
+                spotifyImportModal.openModal();
+            }
             onSaveSpotifySpdcRequested: spdc => {
                 win.spotifySpdc = spdc;
                 win.saveSettings();
@@ -2466,6 +2470,16 @@ Scope {
             }
             onPlayTrackRequested: trk => {
                 win.playOnlineTrack(trk, true);
+            }
+        }
+
+        SpotifyImportModal {
+            id: spotifyImportModal
+            backgroundSourceItem: nutstyAppSurface
+            accentColor: win.accentColor
+            onCloseRequested: spotifyImportModal.closeModal()
+            onPlaylistImported: playlistId => {
+                win.loadCustomPlaylists();
             }
         }
 

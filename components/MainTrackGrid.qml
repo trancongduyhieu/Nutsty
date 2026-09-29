@@ -29,6 +29,7 @@ Rectangle {
     signal editPlaylistRequested(var playlist)
     signal deletePlaylistRequested(string plId)
     signal toggleFavoritePlaylistRequested(var playlist)
+    signal spotifyImportRequested()
 
     property var albumMetadata: null
     property string downloadsSubTab: "tracks" // "tracks", "playlists", "favorites"
@@ -1206,6 +1207,96 @@ Rectangle {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: root.createPlaylistRequested([])
+                        }
+                    }
+
+                    // 1b. Action Card: Nhập từ Spotify
+                    Rectangle {
+                        id: spotifyImportCard
+                        width: 176
+                        height: 250
+                        radius: Theme.radiusCard
+                        color: spotifyCardMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12) : Qt.rgba(1.0, 1.0, 1.0, 0.02)
+                        border.color: spotifyCardMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.4) : Qt.rgba(1.0, 1.0, 1.0, 0.06)
+                        border.width: 1
+
+                        Behavior on color { ColorAnimation { duration: 150 } }
+                        Behavior on border.color { ColorAnimation { duration: 150 } }
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 12
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: width
+                                radius: 10
+                                color: spotifyCardMouse.containsMouse 
+                                       ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) 
+                                       : Qt.rgba(255, 255, 255, 0.04)
+                                border.color: Qt.rgba(255, 255, 255, 0.1)
+                                border.width: 1
+
+                                Behavior on color { ColorAnimation { duration: 150 } }
+
+                                ColumnLayout {
+                                    anchors.centerIn: parent
+                                    spacing: 8
+
+                                    Rectangle {
+                                        Layout.alignment: Qt.AlignHCenter
+                                        width: 44
+                                        height: 44
+                                        radius: 22
+                                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
+                                        border.color: root.accentColor
+                                        border.width: 1
+
+                                        AppIcon {
+                                            anchors.centerIn: parent
+                                            source: "../assets/icons/media-playlist-consecutive-symbolic.svg"
+                                            iconSize: 20
+                                            color: root.accentColor
+                                        }
+                                    }
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 3
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: I18n.tr("Nhập từ Spotify", "Import from Spotify")
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 13
+                                    font.weight: Font.Bold
+                                    color: spotifyCardMouse.containsMouse ? root.accentColor : "#ffffff"
+                                    elide: Text.ElideRight
+                                    Behavior on color { ColorAnimation { duration: 120 } }
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: I18n.tr("Chuyển giao playlist", "Transfer playlist")
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    color: Theme.textSecondary
+                                    elide: Text.ElideRight
+                                }
+                            }
+
+                            Item { Layout.fillHeight: true }
+                        }
+
+                        MouseArea {
+                            id: spotifyCardMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.spotifyImportRequested()
                         }
                     }
 

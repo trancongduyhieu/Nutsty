@@ -332,6 +332,7 @@ Rectangle {
     signal resetLyricsPositionRequested()
     signal saveSpotifySpdcRequested(string spdc)
     signal saveLyricsSourceRequested(string source)
+    signal spotifyImportRequested()
 
     function getCanvasPrefLabel(pref) {
         var p = (pref || "apple_first").toLowerCase().trim();
@@ -1345,6 +1346,48 @@ Rectangle {
                                         font.family: "Monospace"
                                         font.pixelSize: 10
                                         color: Qt.rgba(255, 255, 255, 0.40)
+                                    }
+                                }
+
+                                // Import Playlists Button (Dynamic Accent)
+                                Rectangle {
+                                    Layout.preferredHeight: 28
+                                    Layout.preferredWidth: spotifyImportTxt.implicitWidth + 24
+                                    radius: 6
+                                    color: spotifyImportMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
+                                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.4)
+                                    border.width: 1
+                                    Behavior on color { ColorAnimation { duration: 120 } }
+
+                                    RowLayout {
+                                        anchors.centerIn: parent
+                                        spacing: 6
+
+                                        AppIcon {
+                                            source: "assets/icons/media-playlist-consecutive-symbolic.svg"
+                                            iconSize: 13
+                                            color: root.accentColor
+                                        }
+
+                                        Text {
+                                            id: spotifyImportTxt
+                                            text: I18n.tr("Nhập Playlist", "Import Playlists")
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 12
+                                            font.bold: true
+                                            color: root.accentColor
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: spotifyImportMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            root.closeRequested();
+                                            root.spotifyImportRequested();
+                                        }
                                     }
                                 }
 

@@ -83,6 +83,7 @@ Rectangle {
     signal customPlaylistDeleteRequested(string playlistId)
     signal trackSelected(var trk)
     signal trackContextMenuRequested(var trk, real globalX, real globalY, bool isQueue)
+    signal spotifyImportRequested()
 
     ColumnLayout {
         anchors.fill: parent
@@ -361,6 +362,31 @@ Rectangle {
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             color: Theme.textMuted
+                        }
+
+                        // Spotify Import Button (Subtle Glass Icon)
+                        Rectangle {
+                            width: 22
+                            height: 22
+                            radius: 6
+                            color: spotifyImportNavMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) : "transparent"
+                            border.color: spotifyImportNavMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45) : "transparent"
+                            border.width: 1
+
+                            AppIcon {
+                                anchors.centerIn: parent
+                                source: "assets/icons/arrow-outward-symbolic.svg"
+                                iconSize: 12
+                                color: spotifyImportNavMouse.containsMouse ? root.accentColor : Theme.textMuted
+                            }
+
+                            MouseArea {
+                                id: spotifyImportNavMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.spotifyImportRequested()
+                            }
                         }
                     }
 
