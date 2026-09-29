@@ -87,11 +87,16 @@ Hệ thống phân tách rạch ròi 2 nhóm dữ liệu với đặc tính th�
 
 ## 4. Kế Hoạch Kiểm Thử & Nghiệm Thu (Verification Plan)
 
-1. **Kiểm tra cú pháp & tính toàn vẹn**:
+1. **Bộ Test Script Python Chuyên Biệt Tự Động (`tests/test_adaptive_polling.py`)**:
+   - Viết script Python mô phỏng toàn bộ State Machine của polling intervals và tính toán request quota:
+     - **Case 1 (Co-Listening Mode)**: Kiểm tra khi `isCoListeningActive = true`, interval sự kiện bắt buộc là 800ms, friends 4000ms, notes 2000ms.
+     - **Case 2 (Active User Boost)**: Kiểm tra khi có sự kiện tương tác (`triggerUserActiveBoost`), interval sự kiện lập tức chuyển sang 1000ms, và sau 15s tự động hết hạn quay về 2000ms.
+     - **Case 3 (Idle Steady State)**: Kiểm tra khi không tương tác, interval sự kiện duy trì 2000ms, notes 8000ms, friends 10000ms.
+     - **Case 4 (Frequency & Daily Quota Simulation)**: Mô phỏng kịch bản phát nhạc 24 giờ liên tục (gồm cả thời gian tương tác và idle) $\rightarrow$ khẳng định tổng request $\le 28,000$ (tiết kiệm $\ge 66\%$ so với baseline cũ $\approx 90,000$).
+     - **Case 5 (AST & Contract Check)**: Kiểm tra tĩnh các thuộc tính và timer mới trong `shell.qml` đảm bảo không bị thiếu biến hay gãy binding.
+
+2. **Kiểm tra cú pháp & tính toàn vẹn hệ thống**:
    - Chạy `python scripts/verify_codebase.py` để đảm bảo hợp đồng QML/JS và Python backend pass 100%.
-2. **Kiểm tra thực tế trạng thái Timer**:
-   - Mở Nutsty, theo dõi log debug của timer khi không thao tác $\rightarrow$ chu kỳ nhịp đập giãn về đúng 2000ms / 8000ms.
-   - Thao tác di chuột/đổi bài $\rightarrow$ chu kỳ co về 1000ms (Active Boost) trong đúng 15 giây rồi tự trở lại 2000ms.
-   - Kích hoạt chế độ Nghe Cùng $\rightarrow$ chu kỳ co về 800ms.
+
 3. **Đo đạc lưu lượng thực nghiệm**:
-   - Chạy `npx wrangler tail` trong 30 giây để đo đạc số lượng request thực tế gửi lên Cloudflare Worker, xác nhận tần suất đã giảm $\ge 65\%$.
+   - Đo đạc thực tế tần suất request qua `npx wrangler tail` trong 15–30 giây để xác nhận lưu lượng thực tế đã giảm mạnh đúng theo tính toán.
