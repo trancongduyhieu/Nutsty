@@ -31,6 +31,29 @@ Rectangle {
     property bool importCompleted: false
     property string importedPlaylistId: ""
 
+    // Cloudy Spiral Vortex animation & recent track history
+    property real spiralPhase: 0.0
+    property var recentTracks: []
+
+    NumberAnimation on spiralPhase {
+        from: 0.0
+        to: 2 * Math.PI
+        duration: 8000
+        loops: Animation.Infinite
+        running: root.isImporting
+    }
+
+    onImportCurrentTrackChanged: {
+        if (root.importCurrentTrack && root.importCurrentTrack.length > 0) {
+            var list = root.recentTracks ? root.recentTracks.slice(0) : [];
+            if (list.length === 0 || list[0] !== root.importCurrentTrack) {
+                list.unshift(root.importCurrentTrack);
+                if (list.length > 6) list.pop();
+                root.recentTracks = list;
+            }
+        }
+    }
+
     // Resolved link preview
     property var resolvedPlaylist: null
     property bool isResolvingLink: false
@@ -48,6 +71,7 @@ Rectangle {
         root.isImporting = false;
         root.importCompleted = false;
         root.importPlaylistCover = "";
+        root.recentTracks = [];
         root.resolvedPlaylist = null;
         if (linkInput) {
             linkInput.text = "";
@@ -243,7 +267,7 @@ Rectangle {
     LiquidGlass {
         id: dialogCard
         width: 440
-        height: root.importCompleted ? 260 : (root.isImporting ? 300 : (root.resolvedPlaylist ? 360 : 230))
+        height: root.importCompleted ? 260 : (root.isImporting ? 420 : (root.resolvedPlaylist ? 360 : 230))
         anchors.centerIn: parent
         radius: 20
         displacement: 22.0
@@ -393,91 +417,186 @@ Rectangle {
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                spacing: 14
+                spacing: 10
                 visible: root.isImporting
 
-                Item { Layout.fillHeight: true }
-
-                // Playlist Info Card with Cover Art & Live Spinner
-                Rectangle {
+                // 1. Header: Playlist Title & Subtitle
+                ColumnLayout {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 68
-                    radius: 12
-                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
-                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
-                    border.width: 1
+                    spacing: 3
 
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 10
-                        spacing: 12
+                    Text {
+                        Layout.fillWidth: true
+                        text: root.importPlaylistTitle || I18n.tr("Playlist Spotify", "Spotify Playlist")
+                        color: "#ffffff"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 15
+                        font.bold: true
+                        horizontalAlignment: Text.AlignHCenter
+                        elide: Text.ElideRight
+                    }
 
-                        // Cover Art Thumbnail with Rounded Mask
+                    Text {
+                        Layout.fillWidth: true
+                        text: I18n.tr("Đang hút và khớp nguồn âm thanh chất lượng cao...", "Siphoning and matching high-quality audio streams...")
+                        color: Theme.textSecondary
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 11
+                        horizontalAlignment: Text.AlignHCenter
+                        elide: Text.ElideRight
+                    }
+                }
+
+                // 2. Cloudy Spiral Vortex Stage (Hakim El Hattab Inward Convergence)
+                Item {
+                    id: vortexStage
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 180
+                    clip: true
+
+                    // Center Aurora Ambient Glow
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: 110
+                        height: 110
+                        radius: 55
+                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
+                        z: 1
+                    }
+
+                    // Center Rotating Vinyl Disc
+                    Rectangle {
+                        id: centerVinylDisc
+                        anchors.centerIn: parent
+                        width: 62
+                        height: 62
+                        radius: 31
+                        color: "#111116"
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                        border.width: 1.5
+                        z: 5
+
+                        // Vinyl Grooves
                         Rectangle {
-                            width: 48
-                            height: 48
-                            radius: 8
-                            color: Qt.rgba(255, 255, 255, 0.06)
-                            border.color: Qt.rgba(255, 255, 255, 0.12)
+                            anchors.centerIn: parent
+                            width: 52
+                            height: 52
+                            radius: 26
+                            color: "transparent"
+                            border.color: Qt.rgba(255, 255, 255, 0.08)
                             border.width: 1
-                            clip: true
-
-                            Image {
-                                id: importCoverImg
-                                anchors.fill: parent
-                                source: root.importPlaylistCover || (root.resolvedPlaylist ? root.resolvedPlaylist.image : "")
-                                fillMode: Image.PreserveAspectCrop
-                                visible: status === Image.Ready
-                            }
-
-                            AppIcon {
-                                anchors.centerIn: parent
-                                source: "../assets/icons/media-playlist-consecutive-symbolic.svg"
-                                iconSize: 22
-                                color: root.accentColor
-                                visible: !importCoverImg.visible
-                            }
                         }
 
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 4
+                        // Center Playlist Cover via RoundedImage
+                        RoundedImage {
+                            anchors.centerIn: parent
+                            width: 42
+                            height: 42
+                            radius: 12
+                            source: root.importPlaylistCover || (root.resolvedPlaylist ? root.resolvedPlaylist.image : "")
+                            fallbackIcon: "../assets/icons/media-playlist-consecutive-symbolic.svg"
+                        }
 
-                            Text {
-                                Layout.fillWidth: true
-                                text: root.importPlaylistTitle || I18n.tr("Playlist Spotify", "Spotify Playlist")
-                                color: "#ffffff"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 14
-                                font.bold: true
-                                elide: Text.ElideRight
-                            }
+                        // Spindle Hole
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: 8
+                            height: 8
+                            radius: 4
+                            color: "#09090c"
+                            border.color: Qt.rgba(255, 255, 255, 0.35)
+                            border.width: 1
+                            z: 6
+                        }
 
-                            RowLayout {
-                                spacing: 6
-                                CircularSpinner {
-                                    size: 13
-                                    strokeWidth: 2
-                                    color: root.accentColor
-                                    running: root.isImporting
-                                }
-                                Text {
-                                    text: I18n.tr("Đang khớp nguồn âm thanh chất lượng cao...", "Matching high-quality audio streams...")
-                                    color: Theme.textSecondary
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 11
-                                    elide: Text.ElideRight
+                        RotationAnimation on rotation {
+                            from: 0
+                            to: 360
+                            duration: 10000
+                            loops: Animation.Infinite
+                            running: root.isImporting
+                        }
+                    }
+
+                    // Parametric Spiral Orbit Nodes (6 Track Particles)
+                    Repeater {
+                        model: 6
+                        delegate: Item {
+                            id: trackParticle
+                            property int idx: index
+                            // Normalize progression [0..1]
+                            property real prog: ((root.spiralPhase / (2 * Math.PI)) + (idx / 6.0)) % 1.0
+                            // Inward radial convergence: R_max -> R_min
+                            property real r: 140.0 - (prog * (140.0 - 34.0))
+                            // Orbit angle with rotation speed
+                            property real angle: (root.spiralPhase * 1.4) + (idx * (2 * Math.PI / 6.0))
+                            // 3D Tilt perspective projection
+                            property real cx: vortexStage.width / 2.0
+                            property real cy: vortexStage.height / 2.0
+                            property real orbitX: cx + (r * Math.cos(angle))
+                            property real orbitY: cy + (r * Math.sin(angle) * 0.40)
+                            // Depth of Field (DoF): sin > 0 is foreground, sin < 0 is background
+                            property real sinVal: Math.sin(angle)
+                            property real dofScale: 0.72 + (0.32 * ((sinVal + 1.0) / 2.0))
+                            // Near-center fade factor: disappears as it is swallowed by vinyl disc
+                            property real fadeNearCenter: Math.min(1.0, Math.max(0.0, (r - 34.0) / 22.0))
+                            property real baseOpacity: idx === 0 ? 1.0 : (0.35 + (0.50 * ((sinVal + 1.0) / 2.0)))
+
+                            x: orbitX - (width / 2.0)
+                            y: orbitY - (height / 2.0)
+                            z: sinVal > 0 ? (10 + Math.round(sinVal * 4)) : 2
+                            scale: dofScale
+                            opacity: baseOpacity * fadeNearCenter
+                            visible: r > 32.0
+
+                            // Track Pill Bubble
+                            Rectangle {
+                                width: Math.min(125, trackPillContent.implicitWidth + 16)
+                                height: 22
+                                radius: 11
+                                color: idx === 0 ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28) : Qt.rgba(20, 20, 25, 0.75)
+                                border.color: idx === 0 ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.65) : Qt.rgba(255, 255, 255, 0.12)
+                                border.width: 1
+
+                                RowLayout {
+                                    id: trackPillContent
+                                    anchors.centerIn: parent
+                                    spacing: 4
+
+                                    AppIcon {
+                                        source: idx === 0 ? "../assets/icons/audio-volume-high-symbolic.svg" : "../assets/icons/folder-music-symbolic.svg"
+                                        iconSize: 10
+                                        color: idx === 0 ? root.accentColor : Theme.textSecondary
+                                    }
+
+                                    Text {
+                                        text: {
+                                            if (idx === 0) {
+                                                return root.importCurrentTrack ? root.importCurrentTrack : I18n.tr("Đang nạp...", "Loading...")
+                                            }
+                                            if (root.recentTracks && root.recentTracks[idx]) {
+                                                return root.recentTracks[idx]
+                                            }
+                                            return I18n.tr("Bài hát ", "Track ") + "#" + Math.max(1, root.importCurrent - idx)
+                                        }
+                                        color: idx === 0 ? "#ffffff" : Theme.textSecondary
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 10
+                                        font.bold: idx === 0
+                                        elide: Text.ElideRight
+                                        Layout.maximumWidth: 90
+                                    }
                                 }
                             }
                         }
                     }
                 }
 
-                // Progress Bar Container
+                // 3. Progress Bar Container
                 Rectangle {
                     Layout.fillWidth: true
-                    height: 8
-                    radius: 4
+                    height: 6
+                    radius: 3
                     color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.15)
                     border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
                     border.width: 1
@@ -486,14 +605,14 @@ Rectangle {
                     Rectangle {
                         height: parent.height
                         width: parent.width * (Math.max(0, Math.min(100, root.importPercent)) / 100.0)
-                        radius: 4
+                        radius: 3
                         color: root.accentColor
 
                         Behavior on width { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
                     }
                 }
 
-                // Stats text
+                // 4. Stats & Current Track Text
                 RowLayout {
                     Layout.fillWidth: true
 
@@ -514,27 +633,31 @@ Rectangle {
                     }
                 }
 
-                Item { Layout.fillHeight: true }
+                // Cancel Button (Flat Ghost Text Button, Muted Rose)
+                Item {
+                    Layout.alignment: Qt.AlignHCenter
+                    implicitWidth: cancelRow.implicitWidth + 24
+                    implicitHeight: 30
 
-                // Cancel Button (Squircle Design System: radius 12, muted rose)
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 38
-                    radius: 12
-                    color: cancelMouse.containsMouse ? Qt.rgba(244, 63, 94, 0.22) : Qt.rgba(244, 63, 94, 0.12)
-                    border.color: cancelMouse.containsMouse ? Qt.rgba(244, 63, 94, 0.50) : Qt.rgba(244, 63, 94, 0.30)
-                    border.width: 1
-                    Behavior on color { ColorAnimation { duration: 120 } }
-                    Behavior on border.color { ColorAnimation { duration: 120 } }
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 8
+                        color: cancelMouse.containsMouse ? Qt.rgba(244, 63, 94, 0.10) : "transparent"
+                        Behavior on color { ColorAnimation { duration: 120 } }
+                    }
 
                     RowLayout {
+                        id: cancelRow
                         anchors.centerIn: parent
-                        spacing: 8
+                        spacing: 6
 
                         AppIcon {
                             source: "../assets/icons/window-close-symbolic.svg"
-                            iconSize: 13
+                            iconSize: 12
                             color: cancelMouse.containsMouse ? "#fda4af" : "#f87171"
+                            opacity: cancelMouse.containsMouse ? 1.0 : 0.75
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on opacity { NumberAnimation { duration: 120 } }
                         }
 
                         Text {
@@ -542,7 +665,10 @@ Rectangle {
                             color: cancelMouse.containsMouse ? "#fda4af" : "#f87171"
                             font.family: Theme.fontFamily
                             font.pixelSize: 12
-                            font.bold: true
+                            font.bold: false
+                            opacity: cancelMouse.containsMouse ? 1.0 : 0.80
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on opacity { NumberAnimation { duration: 120 } }
                         }
                     }
 
@@ -747,7 +873,7 @@ Rectangle {
                             RoundedImage {
                                 width: 48
                                 height: 48
-                                radius: 8
+                                radius: 10
                                 source: root.resolvedPlaylist ? (root.resolvedPlaylist.image || "") : ""
                                 fallbackIcon: "../assets/icons/folder-music-symbolic.svg"
                             }

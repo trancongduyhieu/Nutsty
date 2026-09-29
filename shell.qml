@@ -3628,6 +3628,11 @@ Scope {
         function scrollArtworkDown() { frostifyIpc.scrollArtworkDown(); }
         function dislikeCurrentTrack() { frostifyIpc.dislikeCurrentTrack(); }
         function openSettings() { frostifyIpc.openSettings(); }
+        function openSpotifyImport() { frostifyIpc.openSpotifyImport(); }
+        function cancelSpotifyImport() { frostifyIpc.cancelSpotifyImport(); }
+        function closeSpotifyImport() { frostifyIpc.closeSpotifyImport(); }
+        function testSpotifyImporting(title: string, track: string, percent: int) { frostifyIpc.testSpotifyImporting(title, track, percent); }
+        function testSpotifyPreview(title: string, trackCount: int, image: string) { frostifyIpc.testSpotifyPreview(title, trackCount, image); }
         function expandSpotifySettings() { frostifyIpc.expandSpotifySettings(); }
         function testSpotifyConnected(spdc: string) { frostifyIpc.testSpotifyConnected(spdc); }
         function testSpotifyDisconnected() { frostifyIpc.testSpotifyDisconnected(); }
@@ -3880,6 +3885,42 @@ Scope {
         function openSettings() {
             settingsModal.currentTab = 0;
             settingsModal.visible = true;
+        }
+        function openSpotifyImport() {
+            win.visible = true;
+            spotifyImportModal.openModal();
+        }
+        function cancelSpotifyImport() {
+            spotifyImportModal.cancelImport();
+        }
+        function closeSpotifyImport() {
+            spotifyImportModal.closeModal();
+        }
+        function testSpotifyImporting(title: string, track: string, percent: int) {
+            win.visible = true;
+            spotifyImportModal.openModal();
+            spotifyImportModal.isImporting = true;
+            spotifyImportModal.importPlaylistTitle = title || "Top Hits 2026";
+            spotifyImportModal.importCurrentTrack = track || "Nơi Này Có Anh - Sơn Tùng M-TP";
+            spotifyImportModal.importPercent = percent > 0 ? percent : 45;
+            spotifyImportModal.importCurrent = 37;
+            spotifyImportModal.importTotal = 82;
+            spotifyImportModal.recentTracks = [
+                "Nơi Này Có Anh - Sơn Tùng M-TP",
+                "Chúng Ta Của Hiện Tại - Sơn Tùng M-TP",
+                "Âm Thầm Bên Em - Sơn Tùng M-TP",
+                "Chạy Ngay Đi - Sơn Tùng M-TP",
+                "Lạc Trôi - Sơn Tùng M-TP"
+            ];
+        }
+        function testSpotifyPreview(title: string, trackCount: int, image: string) {
+            win.visible = true;
+            spotifyImportModal.openModal();
+            spotifyImportModal.resolvedPlaylist = {
+                "title": title || "Cyberpunk Neon Mix",
+                "trackCount": trackCount > 0 ? trackCount : 24,
+                "image": image || ""
+            };
         }
         function expandSpotifySettings() {
             settingsModal.currentTab = 0;
