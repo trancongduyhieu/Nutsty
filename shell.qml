@@ -884,6 +884,22 @@ Scope {
     property bool allowCoListenerControl: true
     property bool guestCanControlHost: true
 
+    property bool isUserActiveBoost: false
+
+    Timer {
+        id: activeBoostTimer
+        interval: 15000
+        repeat: false
+        onTriggered: {
+            win.isUserActiveBoost = false;
+        }
+    }
+
+    function triggerUserActiveBoost() {
+        win.isUserActiveBoost = true;
+        activeBoostTimer.restart();
+    }
+
     function fetchCurrentUserProfile() { SocialEngine.fetchCurrentUserProfile(win); }
     function updateUserProfile(newUsername, newDiscriminator, callback) { SocialEngine.updateUserProfile(win, newUsername, newDiscriminator, callback); }
     function regenerateUserPin() { SocialEngine.regenerateUserPin(win); }
@@ -895,7 +911,7 @@ Scope {
 
     Timer {
         id: socialEventsFastTimer
-        interval: 850
+        interval: win.isCoListeningActive ? 800 : (win.isUserActiveBoost ? 1000 : 2000)
         repeat: true
         running: true
         triggeredOnStart: true
@@ -906,7 +922,7 @@ Scope {
 
     Timer {
         id: friendsNotesTimer
-        interval: win.isCoListeningActive ? 900 : 3000
+        interval: win.isCoListeningActive ? 2000 : 10000
         repeat: true
         running: true
         triggeredOnStart: true
@@ -918,7 +934,7 @@ Scope {
 
     Timer {
         id: friendsSyncTimer
-        interval: 3000
+        interval: win.isCoListeningActive ? 4000 : 15000
         repeat: true
         running: true
         triggeredOnStart: true
@@ -1220,6 +1236,7 @@ Scope {
     property string currentResolvedCover: ""
     onCurrentTrackChanged: {
         win.currentResolvedCover = "";
+        win.triggerUserActiveBoost();
         var coverUrl = win.getTrackCoverUrl(win.currentTrack);
         if (coverUrl) {
             win.fetchSongPalette(coverUrl);
@@ -1230,6 +1247,7 @@ Scope {
     }
     property bool isPlaying: false
     onIsPlayingChanged: {
+        win.triggerUserActiveBoost();
         if (win.isPlaying && win.currentTrack) {
             var coverUrl = win.getTrackCoverUrl(win.currentTrack);
             if (coverUrl && (!win.songAccentColor || win.songAccentColor === win.wallpaperAccentColor)) {
@@ -1341,6 +1359,15 @@ Scope {
                 event.accepted = true;
                 win.togglePlay();
             }
+        }
+
+        MouseArea {
+            id: userActivitySniffer
+            anchors.fill: parent
+            z: -1
+            hoverEnabled: true
+            acceptedButtons: Qt.NoButton
+            onPositionChanged: win.triggerUserActiveBoost()
         }
         layer.enabled: !(win.maximized || win.fullscreen)
         layer.smooth: true
