@@ -19,10 +19,14 @@ try:
     from . import lyrics_helper
     from . import playlist_manager
     from . import ytmusic_helper
+    from . import platform_compat as pc
 except (ImportError, ValueError):
     import lyrics_helper
     import playlist_manager
     import ytmusic_helper
+    import platform_compat as pc
+
+pc.configure_windows_ssl()
 
 
 def extract_playlist_id(url_or_id):
@@ -107,7 +111,7 @@ def fetch_user_spotify_playlists(spdc=None, limit=50):
     })
 
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=10, context=pc.get_ssl_context()) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             items = data.get("items", [])
             playlists = []
@@ -148,7 +152,7 @@ def fetch_spotify_playlist_details(playlist_id, token=None, spdc=None):
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     })
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=10, context=pc.get_ssl_context()) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             images = data.get("images") or []
             cover_url = images[0].get("url") if images else ""
@@ -181,7 +185,7 @@ def fetch_spotify_playlist_tracks(playlist_id, token):
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         })
         try:
-            with urllib.request.urlopen(req, timeout=12) as resp:
+            with urllib.request.urlopen(req, timeout=12, context=pc.get_ssl_context()) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 items = data.get("items", [])
                 if not items:
