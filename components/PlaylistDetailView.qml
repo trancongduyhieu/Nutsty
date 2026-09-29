@@ -251,48 +251,13 @@ Rectangle {
                             }
                         }
 
-                        // Shuffle Button
-                        Rectangle {
+                        // Shuffle Button (Unified SSOT)
+                        ShuffleButton {
                             id: shufBtn
-                            readonly property bool hasTracks: root.playlistTracks.length > 0
-                            Layout.preferredHeight: 38
-                            Layout.preferredWidth: shufRow.implicitWidth + 24
-                            radius: 19
-                            color: shufArea.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.06)
-                            border.color: Qt.rgba(255, 255, 255, 0.1)
-                            border.width: 1
-                            opacity: hasTracks ? 1.0 : 0.4
-
-                            Row {
-                                id: shufRow
-                                anchors.centerIn: parent
-                                spacing: 8
-
-                                AppIcon {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    source: "../assets/icons/media-playlist-shuffle-symbolic.svg"
-                                    iconSize: 14
-                                    color: "#ffffff"
-                                }
-
-                                Text {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: I18n.tr("Trộn bài", "Shuffle")
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 13
-                                    font.weight: Font.Medium
-                                    color: "#ffffff"
-                                }
-                            }
-
-                            MouseArea {
-                                id: shufArea
-                                anchors.fill: parent
-                                enabled: shufBtn.hasTracks
-                                hoverEnabled: true
-                                cursorShape: shufBtn.hasTracks ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                onClicked: root.shuffleRequested(root.playlistTracks)
-                            }
+                            hasTracks: root.playlistTracks.length > 0
+                            accentColor: root.accentColor
+                            text: I18n.tr("Trộn bài", "Shuffle")
+                            onClicked: root.shuffleRequested(root.playlistTracks)
                         }
 
                         // Add Tracks Button

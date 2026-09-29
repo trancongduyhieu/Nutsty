@@ -15,7 +15,7 @@ PanelWindow {
     property bool isPlaying: false
     property var currentTrack: null
     property bool enabled: true
-    property int lyricsPreset: 2 // 1: Gacha / Anime Pop, 2: Apple Music 5-Line Fluid Sync, 3: Minimalist Slide-Up Motion Blur, 4: Anime MV Kinetic Typography
+    property int lyricsPreset: 2 // 1: Cinematic Serif, 2: Apple Music 5-Line Fluid Sync, 3: Minimalist Slide-Up Motion Blur, 4: Motion Typography
     property int customX: -1
     property int customY: -1
 
@@ -235,7 +235,7 @@ PanelWindow {
         }
 
         // =====================================================================
-        // Preset 1: Gacha / Anime Pop View Plugin
+        // Preset 1: Cinematic Serif View Plugin
         // =====================================================================
         GachaAnimeLyricsView {
             id: gachaView
@@ -294,7 +294,7 @@ PanelWindow {
         }
 
         // =====================================================================
-        // Preset 4: Anime MV Kinetic Typography View Plugin
+        // Preset 4: Motion Typography View Plugin
         // =====================================================================
         AnimeMVKineticLyrics {
             id: animeMVView

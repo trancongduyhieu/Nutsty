@@ -577,48 +577,15 @@ Rectangle {
                         }
                     }
 
-                    // Shuffle Play Button (Secondary Glass Style)
-                    Rectangle {
+                    // Shuffle Play Button (Unified SSOT)
+                    ShuffleButton {
                         id: shuffleBtn
                         implicitHeight: 36
-                        implicitWidth: shuffleRow.implicitWidth + 28
                         Layout.preferredHeight: 36
                         Layout.preferredWidth: implicitWidth
-                        radius: 18
-                        color: shufH.hovered ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.08)
-                        border.color: Qt.rgba(1, 1, 1, 0.15)
-                        border.width: 1
-                        scale: shufH.hovered ? 1.03 : 1.0
-                        Behavior on scale { NumberAnimation { duration: 100 } }
-
-                        Row {
-                            id: shuffleRow
-                            anchors.centerIn: parent
-                            spacing: 8
-
-                            AppIcon {
-                                source: "../assets/icons/media-playlist-shuffle-symbolic.svg"
-                                iconSize: 15
-                                anchors.verticalCenter: parent.verticalCenter
-                                color: "#ffffff"
-                            }
-
-                            Text {
-                                text: I18n.tr("Phát ngẫu nhiên", "Shuffle")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 13
-                                font.bold: true
-                                anchors.verticalCenter: parent.verticalCenter
-                                color: "#ffffff"
-                            }
-                        }
-
-                        HoverHandler { id: shufH }
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.shufflePlayRequested()
-                        }
+                        accentColor: root.accentColor
+                        text: I18n.tr("Phát ngẫu nhiên", "Shuffle")
+                        onClicked: root.shufflePlayRequested()
                     }
 
                     // Add All to Queue Button

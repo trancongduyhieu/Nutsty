@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """
-Test Suite: Spotify Import Cloudy Spiral Vortex & UI Polish Verification.
+Test Suite: Spotify Import Arc Rail Gunshot Projectile & Completed View Polish.
 Tests:
-  1. RoundedImage component reuse check (eliminates square unmasked images).
+  1. RoundedImage component reuse check (for vinyl disc label & summary card).
   2. Flat Ghost Cancel Button structure & color tokens (no pill borders).
-  3. Vortex mathematical model & parametric orbit parameters (Hakim El Hattab).
-  4. Dynamic modal height scaling (>= 420px during import).
+  3. Arc Rail Gunshot Stage (Left vinyl disc, shockwave ripple, arc queue, projectile gunshot, no grey dead colors).
+  4. Completed View Polish (auto-shrink width=380, height=240, hide top-right 'x', playlist summary card).
   5. Static syntax and contract validation.
 """
 import unittest
 import os
 import re
-import math
 
 class TestSpotifyImportVortex(unittest.TestCase):
     @classmethod
@@ -23,7 +22,6 @@ class TestSpotifyImportVortex(unittest.TestCase):
     def test_case_1_rounded_image_reuse(self):
         """Case 1: Must use RoundedImage component with radius >= 10 for playlist covers."""
         self.assertIn("RoundedImage", self.content, "Must reuse RoundedImage component in SpotifyImportModal.qml")
-        # Ensure raw unmasked Rectangle clip is eliminated in importing view
         self.assertNotIn("id: importCoverImg", self.content, "Old unmasked Rectangle clip image should be replaced")
 
     def test_case_2_flat_cancel_button_structure(self):
@@ -35,28 +33,48 @@ class TestSpotifyImportVortex(unittest.TestCase):
         self.assertIn("window-close-symbolic.svg", block, "Must retain close icon")
         self.assertTrue("#f87171" in block or "#fda4af" in block or "244, 63, 94" in block, "Must use Muted Rose palette")
 
-    def test_case_3_vortex_parametric_math(self):
-        """Case 3: Verify the mathematical model of the Cloudy Spiral (tilt, radius decay, angle)."""
-        angles = [i * (2 * math.pi / 6) for i in range(6)]
-        tilt = 0.40
-        for i, a in enumerate(angles):
-            r = 140 - (i / 6.0) * (140 - 36)
-            x = r * math.cos(a)
-            y = r * math.sin(a) * tilt
-            self.assertTrue(-140 <= x <= 140)
-            self.assertTrue(-60 <= y <= 60)
-
+    def test_case_3_arc_gunshot_stage(self):
+        """Case 3: Verify the Arc Rail Gunshot Stage (Left vinyl disc, shockwave, curved arc, projectile)."""
+        # Left Vinyl Disc exists
         self.assertTrue(
-            "vortexStage" in self.content or "spiral" in self.content.lower() or "orbit" in self.content.lower(),
-            "SpotifyImportModal must contain spiral vortex stage"
+            "leftVinylDisc" in self.content or "discContainer" in self.content or "vinylDisc" in self.content,
+            "Must have left vinyl disc container"
         )
+        # Shockwave ripple exists
+        self.assertTrue(
+            "shockwave" in self.content.lower() or "ripple" in self.content.lower(),
+            "Must have shockwave ripple animation for disc impact"
+        )
+        # Projectile gunshot animation exists
+        self.assertTrue(
+            "projectile" in self.content.lower() or "gunshot" in self.content.lower() or "bullet" in self.content.lower(),
+            "Must have projectile gunshot animation from arc to vinyl disc"
+        )
+        # Arc curved queue exists
+        self.assertTrue(
+            "arc" in self.content.lower() or "curved" in self.content.lower() or "rail" in self.content.lower(),
+            "Must have right-hand curved arc queue"
+        )
+        # Eliminate dead grey color (20, 20, 25)
+        self.assertNotIn("20, 20, 25", self.content, "Dead grey color (20, 20, 25) must be replaced with dynamic accent palette")
 
-    def test_case_4_modal_height_scaling(self):
-        """Case 4: Dialog height during import must scale up to >= 400px to house the vortex stage."""
-        height_match = re.search(r"height:\s*root\.importCompleted\s*\?\s*\d+\s*:\s*\(\s*root\.isImporting\s*\?\s*(\d+)", self.content)
-        self.assertTrue(bool(height_match), "Dialog height expression must branch on root.isImporting")
-        import_height = int(height_match.group(1))
-        self.assertGreaterEqual(import_height, 400, f"Import height must be >= 400px (got {import_height}px)")
+    def test_case_4_completed_view_polish(self):
+        """Case 4: Completed View auto-shrinks width to 380px, height to 240px, hides 'x', and shows summary."""
+        # Auto-shrink width to 380px on completed
+        width_match = re.search(r"width:\s*root\.importCompleted\s*\?\s*(\d+)", self.content)
+        self.assertTrue(bool(width_match), "Dialog width must branch on root.importCompleted")
+        self.assertEqual(int(width_match.group(1)), 380, "Completed width must be 380px")
+
+        # Auto-shrink height to 240px on completed
+        height_match = re.search(r"height:\s*root\.importCompleted\s*\?\s*(\d+)", self.content)
+        self.assertTrue(bool(height_match), "Dialog height must branch on root.importCompleted")
+        self.assertEqual(int(height_match.group(1)), 240, "Completed height must be 240px")
+
+        # Top-right 'x' close button hidden on completed view
+        self.assertTrue(
+            re.search(r"visible:\s*!root\.importCompleted", self.content) is not None,
+            "Top-right close button must be hidden when importCompleted is true"
+        )
 
     def test_case_5_static_contract(self):
         """Case 5: Must retain all critical functional signals and properties."""

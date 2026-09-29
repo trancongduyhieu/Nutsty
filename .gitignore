@@ -1,21 +1,65 @@
+# Byte-compiled / optimized / DLL files
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging / virtual environments
+dist/
+build/
+*.egg-info/
+*.egg
 .venv/
 venv/
-*.log
-.DS_Store
+ENV/
+env/
 
-# Local planning
+# Logs, runtime sockets, processes
+*.log
+*.qslog
+*.sock
+*.pid
+
+# Operating System & Editor caches
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Audio & media files (prevent downloaded audio bloat)
+*.mp3
+*.flac
+*.m4a
+*.opus
+*.ogg
+*.wav
+*.webm
+!assets/**
+
+# Screenshots and temp images (keep assets untouched)
+*.png
+!assets/**
+
+# Temporary caches, scratch spaces & downloads
+.tempmediaStorage/
+.system_generated/
+scratch/
+downloads/
+cache/
+
+# Cloudflare & Node modules
+.wrangler/
+cloud_relay/.wrangler/
+node_modules/
+cloud_relay/node_modules/
+
+# Local planning, tests & dev tools
 TODO.md
 todo.md
 .codegraph/
-.wrangler/
-cloud_relay/.wrangler/
-bin/
-scratch/
-*.png
+.agent/
 docs/plans/
 tests/test_*.py
 scripts/test_*.py
@@ -24,5 +68,4 @@ scripts/capture_screen.ps1
 scripts/diag_desktop.ps1
 scripts/focus_nutsty.ps1
 scripts/inspect_*.ps1
-.agent/
 

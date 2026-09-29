@@ -31,7 +31,96 @@ Rectangle {
     property bool importCompleted: false
     property string importedPlaylistId: ""
 
-    // Cloudy Spiral Vortex animation & recent track history
+    // Arc Rail Gunshot & Morphing properties
+    property bool discAtCenter: false
+    property bool isTransitioningToLeft: false
+    property var arcQueueTracks: [
+        "Nơi Này Có Anh - Sơn Tùng M-TP",
+        "Chúng Ta Của Hiện Tại - Sơn Tùng M-TP",
+        "Âm Thầm Bên Em - Sơn Tùng M-TP",
+        "Chạy Ngay Đi - Sơn Tùng M-TP",
+        "Lạc Trôi - Sơn Tùng M-TP",
+        "Cơn Mưa Ngang Qua - Sơn Tùng M-TP"
+    ]
+    property int nextQueueTrackIndex: 6
+    property var allPlaylistTracks: []
+    property string lastFiredTrack: ""
+
+    function formatTrackTitle(t) {
+        if (!t) return "";
+        if (typeof t === "string") return t;
+        var name = t.name || "";
+        var artist = t.artist || "";
+        return (name && artist) ? (name + " - " + artist) : (name || artist);
+    }
+
+    NumberAnimation {
+        id: slideAnim
+        target: leftVinylDisc
+        property: "slideT"
+        from: 0.0
+        to: 1.0
+        duration: 1400
+        easing.type: Easing.InOutCubic
+        onFinished: {
+            root.isTransitioningToLeft = false;
+            if (root.isImporting && typeof arcGunshotStage !== "undefined" && arcGunshotStage && typeof arcGunshotStage.fireGunshot === "function") {
+                var firstTrack = (root.arcQueueTracks && root.arcQueueTracks.length > 0) ? root.arcQueueTracks[0] : root.importCurrentTrack;
+                root.lastFiredTrack = firstTrack;
+                arcGunshotStage.fireGunshot(firstTrack);
+            }
+        }
+    }
+
+    function triggerCenterSlide() {
+        slideAnim.stop();
+        if (typeof leftVinylDisc !== "undefined" && leftVinylDisc) {
+            leftVinylDisc.slideT = 0.0;
+        }
+        if (typeof gunshotProjectile !== "undefined" && gunshotProjectile) {
+            gunshotProjectile.projOpacity = 0.0;
+        }
+        if (typeof projectileAnim !== "undefined" && projectileAnim) {
+            projectileAnim.stop();
+        }
+        root.discAtCenter = true;
+        root.isTransitioningToLeft = true;
+        discSlideTimer.interval = 800;
+        discSlideTimer.restart();
+    }
+
+    function shiftQueue() {
+        var list = root.arcQueueTracks ? root.arcQueueTracks.slice(0) : [];
+        if (list.length > 0) {
+            list.shift();
+        }
+        if (root.allPlaylistTracks && root.nextQueueTrackIndex < root.allPlaylistTracks.length) {
+            var nextItem = root.allPlaylistTracks[root.nextQueueTrackIndex];
+            root.nextQueueTrackIndex++;
+            var nextTitle = root.formatTrackTitle(nextItem);
+            if (nextTitle) {
+                list.push(nextTitle);
+            }
+        }
+        root.arcQueueTracks = list;
+    }
+
+    function testGunshot(track) {
+        if (typeof arcGunshotStage !== "undefined" && arcGunshotStage && typeof arcGunshotStage.fireGunshot === "function") {
+            arcGunshotStage.fireGunshot(track);
+        }
+    }
+
+    Timer {
+        id: discSlideTimer
+        interval: 800
+        repeat: false
+        onTriggered: {
+            root.discAtCenter = false;
+            slideAnim.restart();
+        }
+    }
+
     property real spiralPhase: 0.0
     property var recentTracks: []
 
@@ -50,6 +139,14 @@ Rectangle {
                 list.unshift(root.importCurrentTrack);
                 if (list.length > 6) list.pop();
                 root.recentTracks = list;
+                if (!root.discAtCenter && !root.isTransitioningToLeft) {
+                    if (root.lastFiredTrack !== root.importCurrentTrack) {
+                        root.lastFiredTrack = root.importCurrentTrack;
+                        if (typeof arcGunshotStage !== "undefined" && arcGunshotStage && typeof arcGunshotStage.fireGunshot === "function") {
+                            arcGunshotStage.fireGunshot(root.importCurrentTrack);
+                        }
+                    }
+                }
             }
         }
     }
@@ -69,6 +166,18 @@ Rectangle {
         root.opacity = 1.0;
         root.errorMessage = "";
         root.isImporting = false;
+        root.discAtCenter = false;
+        root.isTransitioningToLeft = false;
+        slideAnim.stop();
+        if (typeof leftVinylDisc !== "undefined" && leftVinylDisc) {
+            leftVinylDisc.slideT = 1.0;
+        }
+        if (typeof gunshotProjectile !== "undefined" && gunshotProjectile) {
+            gunshotProjectile.projOpacity = 0.0;
+        }
+        if (typeof projectileAnim !== "undefined" && projectileAnim) {
+            projectileAnim.stop();
+        }
         root.importCompleted = false;
         root.importPlaylistCover = "";
         root.recentTracks = [];
@@ -141,6 +250,7 @@ Rectangle {
 
     function startImport(playlistId, playlistTitle, coverUrl) {
         if (!playlistId) return;
+        root.triggerCenterSlide();
         root.isImporting = true;
         root.importCompleted = false;
         root.errorMessage = "";
@@ -148,9 +258,28 @@ Rectangle {
         root.importPlaylistTitle = playlistTitle || "Spotify Playlist";
         root.importPlaylistCover = coverUrl || (root.resolvedPlaylist ? root.resolvedPlaylist.image : "");
         root.importCurrent = 0;
-        root.importTotal = 0;
+        root.importTotal = (root.resolvedPlaylist && root.resolvedPlaylist.trackCount) ? root.resolvedPlaylist.trackCount : 0;
         root.importPercent = 0;
-        root.importCurrentTrack = I18n.tr("Đang kết nối...", "Connecting...");
+        root.allPlaylistTracks = (root.resolvedPlaylist && root.resolvedPlaylist.tracks) ? root.resolvedPlaylist.tracks : [];
+        root.nextQueueTrackIndex = 0;
+        root.lastFiredTrack = "";
+        if (root.allPlaylistTracks.length > 0) {
+            var realList = [];
+            var initialCount = Math.min(6, root.allPlaylistTracks.length);
+            for (var i = 0; i < initialCount; i++) {
+                realList.push(root.formatTrackTitle(root.allPlaylistTracks[i]));
+            }
+            root.arcQueueTracks = realList;
+            root.nextQueueTrackIndex = initialCount;
+        } else {
+            root.arcQueueTracks = [
+                I18n.tr("Đang kết nối...", "Connecting..."),
+                I18n.tr("Đang nạp dữ liệu...", "Loading tracks..."),
+                I18n.tr("Đang chuẩn bị danh sách...", "Preparing queue..."),
+                I18n.tr("Đang phân giải audio...", "Resolving audio..."),
+                I18n.tr("Sắp hoàn tất kết nối...", "Almost ready...")
+            ];
+        }
 
         var xhr = new XMLHttpRequest();
         xhr.open("POST", "http://127.0.0.1:17890/api/spotify/import_playlist", true);
@@ -205,8 +334,18 @@ Rectangle {
                         root.importTotal = st.total || 0;
                         root.importPercent = st.percent || 0;
                         root.importCurrentTrack = st.currentTrack || "";
+                        if (st.upcomingTracks && Array.isArray(st.upcomingTracks) && st.upcomingTracks.length > 0) {
+                            if (!root.arcQueueTracks || root.arcQueueTracks.length === 0 || 
+                                (root.arcQueueTracks.length > 0 && root.arcQueueTracks[0].indexOf("...") !== -1)) {
+                                root.arcQueueTracks = st.upcomingTracks.slice(0, 6);
+                                if (!root.allPlaylistTracks || root.allPlaylistTracks.length === 0) {
+                                    root.allPlaylistTracks = st.upcomingTracks.slice(0);
+                                    root.nextQueueTrackIndex = Math.min(6, st.upcomingTracks.length);
+                                }
+                            }
+                        }
                         statusPollTimer.start();
-                    } else if (st.completed && root.isImporting) {
+                    } else if (st.completed && root.isImporting && (!root.importPlaylistId || !st.playlistId || st.playlistId === root.importPlaylistId)) {
                         root.isImporting = false;
                         root.importCompleted = true;
                         root.importPercent = 100;
@@ -266,8 +405,8 @@ Rectangle {
     // Modal Main Container: Keo 502 Optical Resin (LiquidGlass, 20px Radius matching PostNoteModal)
     LiquidGlass {
         id: dialogCard
-        width: 440
-        height: root.importCompleted ? 260 : (root.isImporting ? 420 : (root.resolvedPlaylist ? 360 : 230))
+        width: root.importCompleted ? 380 : 440
+        height: root.importCompleted ? 240 : (root.isImporting ? 420 : (root.resolvedPlaylist ? 360 : 230))
         anchors.centerIn: parent
         radius: 20
         displacement: 22.0
@@ -279,7 +418,8 @@ Rectangle {
         clip: true
         z: 2
 
-        Behavior on height { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+        Behavior on width { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+        Behavior on height { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
 
         // Shaded Tint Overlay: Ensures effortless text contrast (matching PostNoteModal)
         Rectangle {
@@ -365,8 +505,7 @@ Rectangle {
                     height: 28
                     radius: 8
                     color: closeBtnArea.containsMouse ? Qt.rgba(244, 63, 94, 0.14) : "transparent"
-                    border.width: 0
-                    visible: !root.isImporting
+                    visible: !root.importCompleted && !root.isImporting
                     Behavior on color { ColorAnimation { duration: 120 } }
 
                     AppIcon {
@@ -447,54 +586,128 @@ Rectangle {
                     }
                 }
 
-                // 2. Cloudy Spiral Vortex Stage (Hakim El Hattab Inward Convergence)
+                // 2. Arc Rail Gunshot Projectile Stage (Vinyl Disc + Shockwave + Curved Arc + Gunshot Projectile)
                 Item {
-                    id: vortexStage
+                    id: arcGunshotStage
                     Layout.fillWidth: true
                     Layout.preferredHeight: 180
                     clip: true
 
-                    // Center Aurora Ambient Glow
-                    Rectangle {
-                        anchors.centerIn: parent
-                        width: 110
-                        height: 110
-                        radius: 55
-                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
-                        z: 1
+                    property real arcShiftProgress: 0.0
+
+                    NumberAnimation {
+                        id: shiftAnim
+                        target: arcGunshotStage
+                        property: "arcShiftProgress"
+                        from: 0.0
+                        to: 1.0
+                        duration: 320
+                        easing.type: Easing.OutCubic
+                        onFinished: {
+                            root.shiftQueue();
+                            arcGunshotStage.arcShiftProgress = 0.0;
+                        }
                     }
 
-                    // Center Rotating Vinyl Disc
+                    // Shockwave Ripple Ring (Impact feedback)
                     Rectangle {
-                        id: centerVinylDisc
-                        anchors.centerIn: parent
-                        width: 62
-                        height: 62
-                        radius: 31
+                        id: shockwaveRipple
+                        property real rippleSize: 88
+                        property real rippleOpacity: 0.0
+
+                        x: leftVinylDisc.x + (leftVinylDisc.width - rippleSize) / 2
+                        y: leftVinylDisc.y + (leftVinylDisc.height - rippleSize) / 2
+                        width: rippleSize
+                        height: rippleSize
+                        radius: rippleSize / 2
+                        color: "transparent"
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, rippleOpacity)
+                        border.width: 2
+                        z: 3
+                        visible: shockwaveAnim.running
+                    }
+
+                    ParallelAnimation {
+                        id: shockwaveAnim
+                        NumberAnimation {
+                            target: shockwaveRipple
+                            property: "rippleSize"
+                            from: 88
+                            to: 175
+                            duration: 380
+                            easing.type: Easing.OutCubic
+                        }
+                        NumberAnimation {
+                            target: shockwaveRipple
+                            property: "rippleOpacity"
+                            from: 0.85
+                            to: 0.0
+                            duration: 380
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+
+
+                    // Left Rotating Vinyl Disc (Recoil Pulse on impact & Morphing Center to Left)
+                    Rectangle {
+                        id: leftVinylDisc
+                        property real discRecoilScale: 1.0
+                        property real slideT: 1.0
+
+                        readonly property real centerDiscX: (arcGunshotStage.width > 100 ? (arcGunshotStage.width - width) / 2 : 156)
+                        x: (1.0 - slideT) * centerDiscX + slideT * 28
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 88
+                        height: 88
+                        radius: 44
                         color: "#111116"
-                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
-                        border.width: 1.5
+                        border.color: Qt.rgba(255, 255, 255, 0.16)
+                        border.width: 1
+                        scale: discRecoilScale
                         z: 5
 
-                        // Vinyl Grooves
+                        // Outer Vinyl Groove
                         Rectangle {
                             anchors.centerIn: parent
-                            width: 52
-                            height: 52
-                            radius: 26
+                            width: 74
+                            height: 74
+                            radius: 37
                             color: "transparent"
                             border.color: Qt.rgba(255, 255, 255, 0.08)
                             border.width: 1
                         }
 
-                        // Center Playlist Cover via RoundedImage
-                        RoundedImage {
+                        // Inner Vinyl Groove
+                        Rectangle {
                             anchors.centerIn: parent
-                            width: 42
-                            height: 42
-                            radius: 12
-                            source: root.importPlaylistCover || (root.resolvedPlaylist ? root.resolvedPlaylist.image : "")
-                            fallbackIcon: "../assets/icons/media-playlist-consecutive-symbolic.svg"
+                            width: 60
+                            height: 60
+                            radius: 30
+                            color: "transparent"
+                            border.color: Qt.rgba(255, 255, 255, 0.06)
+                            border.width: 1
+                        }
+
+                        // Center Playlist Cover via RoundedImage
+                        Item {
+                            anchors.centerIn: parent
+                            width: 44
+                            height: 44
+
+                            RoundedImage {
+                                anchors.fill: parent
+                                radius: 22
+                                source: root.importPlaylistCover || (root.resolvedPlaylist ? root.resolvedPlaylist.image : "")
+                                fallbackIcon: "../assets/icons/media-playlist-consecutive-symbolic.svg"
+                            }
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 22
+                                color: "transparent"
+                                border.color: Qt.rgba(255, 255, 255, 0.25)
+                                border.width: 1
+                            }
                         }
 
                         // Spindle Hole
@@ -504,7 +717,7 @@ Rectangle {
                             height: 8
                             radius: 4
                             color: "#09090c"
-                            border.color: Qt.rgba(255, 255, 255, 0.35)
+                            border.color: Qt.rgba(255, 255, 255, 0.40)
                             border.width: 1
                             z: 6
                         }
@@ -518,77 +731,195 @@ Rectangle {
                         }
                     }
 
-                    // Parametric Spiral Orbit Nodes (6 Track Particles)
-                    Repeater {
-                        model: 6
-                        delegate: Item {
-                            id: trackParticle
-                            property int idx: index
-                            // Normalize progression [0..1]
-                            property real prog: ((root.spiralPhase / (2 * Math.PI)) + (idx / 6.0)) % 1.0
-                            // Inward radial convergence: R_max -> R_min
-                            property real r: 140.0 - (prog * (140.0 - 34.0))
-                            // Orbit angle with rotation speed
-                            property real angle: (root.spiralPhase * 1.4) + (idx * (2 * Math.PI / 6.0))
-                            // 3D Tilt perspective projection
-                            property real cx: vortexStage.width / 2.0
-                            property real cy: vortexStage.height / 2.0
-                            property real orbitX: cx + (r * Math.cos(angle))
-                            property real orbitY: cy + (r * Math.sin(angle) * 0.40)
-                            // Depth of Field (DoF): sin > 0 is foreground, sin < 0 is background
-                            property real sinVal: Math.sin(angle)
-                            property real dofScale: 0.72 + (0.32 * ((sinVal + 1.0) / 2.0))
-                            // Near-center fade factor: disappears as it is swallowed by vinyl disc
-                            property real fadeNearCenter: Math.min(1.0, Math.max(0.0, (r - 34.0) / 22.0))
-                            property real baseOpacity: idx === 0 ? 1.0 : (0.35 + (0.50 * ((sinVal + 1.0) / 2.0)))
+                    SequentialAnimation {
+                        id: discRecoilAnim
+                        NumberAnimation {
+                            target: leftVinylDisc
+                            property: "discRecoilScale"
+                            to: 1.08
+                            duration: 80
+                            easing.type: Easing.OutQuad
+                        }
+                        NumberAnimation {
+                            target: leftVinylDisc
+                            property: "discRecoilScale"
+                            to: 1.0
+                            duration: 180
+                            easing.type: Easing.InOutQuad
+                        }
+                    }
 
-                            x: orbitX - (width / 2.0)
-                            y: orbitY - (height / 2.0)
-                            z: sinVal > 0 ? (10 + Math.round(sinVal * 4)) : 2
-                            scale: dofScale
-                            opacity: baseOpacity * fadeNearCenter
-                            visible: r > 32.0
+                    // Right Curved Arc Rail Queue (5 Upcoming Tracks)
+                    Item {
+                        id: rightArcRail
+                        anchors.fill: parent
+                        opacity: leftVinylDisc.slideT
+                        transform: Translate {
+                            x: (1.0 - leftVinylDisc.slideT) * 60
+                        }
 
-                            // Track Pill Bubble
-                            Rectangle {
-                                width: Math.min(125, trackPillContent.implicitWidth + 16)
-                                height: 22
-                                radius: 11
-                                color: idx === 0 ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28) : Qt.rgba(20, 20, 25, 0.75)
-                                border.color: idx === 0 ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.65) : Qt.rgba(255, 255, 255, 0.12)
-                                border.width: 1
+                        Repeater {
+                            model: root.arcQueueTracks ? Math.min(6, root.arcQueueTracks.length) : 0
+                            delegate: Item {
+                                id: arcTrackItem
+                                readonly property int k: index
+                                readonly property real slot: k - arcGunshotStage.arcShiftProgress
+                                readonly property real clampedSlot: Math.max(0.0, Math.min(4.0, slot))
+                                readonly property real arcOffset: Math.sin(clampedSlot / 4.0 * Math.PI) * 20.0
 
-                                RowLayout {
-                                    id: trackPillContent
-                                    anchors.centerIn: parent
-                                    spacing: 4
+                                x: arcGunshotStage.width - 230 + arcOffset
+                                y: 12 + slot * 31
+                                width: 175
+                                height: 26
+                                z: 10 - Math.min(6, Math.max(0, Math.floor(slot)))
+                                visible: slot >= -0.8 && slot <= 5.2
+                                opacity: {
+                                    if (slot < 0.0) return Math.max(0.0, 1.0 + slot);
+                                    if (slot > 4.0) return Math.max(0.0, 1.0 - (slot - 4.0));
+                                    return 1.0;
+                                }
 
-                                    AppIcon {
-                                        source: idx === 0 ? "../assets/icons/audio-volume-high-symbolic.svg" : "../assets/icons/folder-music-symbolic.svg"
-                                        iconSize: 10
-                                        color: idx === 0 ? root.accentColor : Theme.textSecondary
-                                    }
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: 13
+                                    readonly property real highlight: Math.max(0.0, Math.min(1.0, 1.0 - arcTrackItem.slot))
+                                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 
+                                                   0.08 + highlight * 0.20)
+                                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 
+                                                         0.20 + highlight * 0.55)
+                                    border.width: 1
 
-                                    Text {
-                                        text: {
-                                            if (idx === 0) {
-                                                return root.importCurrentTrack ? root.importCurrentTrack : I18n.tr("Đang nạp...", "Loading...")
-                                            }
-                                            if (root.recentTracks && root.recentTracks[idx]) {
-                                                return root.recentTracks[idx]
-                                            }
-                                            return I18n.tr("Bài hát ", "Track ") + "#" + Math.max(1, root.importCurrent - idx)
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 8
+                                        anchors.rightMargin: 8
+                                        spacing: 6
+
+                                        AppIcon {
+                                            source: arcTrackItem.slot <= 0.5 ? "../assets/icons/audio-volume-high-symbolic.svg" : "../assets/icons/folder-music-symbolic.svg"
+                                            iconSize: 11
+                                            color: arcTrackItem.slot <= 0.5 ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.70)
                                         }
-                                        color: idx === 0 ? "#ffffff" : Theme.textSecondary
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 10
-                                        font.bold: idx === 0
-                                        elide: Text.ElideRight
-                                        Layout.maximumWidth: 90
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: root.arcQueueTracks && root.arcQueueTracks[index] ? root.arcQueueTracks[index] : ""
+                                            color: arcTrackItem.slot <= 0.5 ? "#ffffff" : Qt.rgba(255, 255, 255, 0.75)
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 10
+                                            font.bold: arcTrackItem.slot <= 0.5
+                                            elide: Text.ElideRight
+                                        }
                                     }
                                 }
                             }
                         }
+                    }
+
+                    // Gunshot Projectile (Shoots directly into leftVinylDisc on track intake)
+                    Item {
+                        id: gunshotProjectile
+                        property string trackTitle: ""
+                        property real projX: 0
+                        property real projY: 0
+                        property real projScale: 1.0
+                        property real projOpacity: 0.0
+
+                        x: projX
+                        y: projY
+                        scale: projScale
+                        opacity: projOpacity
+                        width: 175
+                        height: 24
+                        z: 10
+                        visible: projOpacity > 0.01
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 12
+                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.85)
+                            border.color: "#ffffff"
+                            border.width: 1.5
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 8
+                                spacing: 4
+
+                                AppIcon {
+                                    source: "../assets/icons/media-playback-start-symbolic.svg"
+                                    iconSize: 10
+                                    color: "#ffffff"
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: gunshotProjectile.trackTitle || root.importCurrentTrack || I18n.tr("Nạp thành công", "Loaded")
+                                    color: "#ffffff"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 10
+                                    font.bold: true
+                                    elide: Text.ElideRight
+                                }
+                            }
+                        }
+                    }
+
+                    ParallelAnimation {
+                        id: projectileAnim
+                        NumberAnimation {
+                            target: gunshotProjectile
+                            property: "projX"
+                            to: leftVinylDisc.x + (leftVinylDisc.width - gunshotProjectile.width) / 2
+                            duration: 320
+                            easing.type: Easing.InQuad
+                        }
+                        NumberAnimation {
+                            target: gunshotProjectile
+                            property: "projY"
+                            to: leftVinylDisc.y + (leftVinylDisc.height - gunshotProjectile.height) / 2
+                            duration: 320
+                            easing.type: Easing.InQuad
+                        }
+                        NumberAnimation {
+                            target: gunshotProjectile
+                            property: "projScale"
+                            from: 1.0
+                            to: 0.3
+                            duration: 320
+                            easing.type: Easing.InQuad
+                        }
+                        NumberAnimation {
+                            target: gunshotProjectile
+                            property: "projOpacity"
+                            from: 1.0
+                            to: 0.2
+                            duration: 320
+                            easing.type: Easing.InQuad
+                        }
+                        onFinished: {
+                            gunshotProjectile.projOpacity = 0.0;
+                            shockwaveAnim.restart();
+                            discRecoilAnim.restart();
+                        }
+                    }
+
+                    function fireGunshot(loadedTitle) {
+                        if (root.discAtCenter || root.isTransitioningToLeft) return;
+                        if (shiftAnim.running) {
+                            shiftAnim.stop();
+                            root.shiftQueue();
+                            arcGunshotStage.arcShiftProgress = 0.0;
+                        }
+                        var trackName = loadedTitle || (root.arcQueueTracks && root.arcQueueTracks.length > 0 ? root.arcQueueTracks[0] : root.importCurrentTrack);
+                        gunshotProjectile.trackTitle = trackName;
+                        gunshotProjectile.projX = arcGunshotStage.width - 230;
+                        gunshotProjectile.projY = 12;
+                        gunshotProjectile.projScale = 1.0;
+                        gunshotProjectile.projOpacity = 1.0;
+                        projectileAnim.restart();
+                        shiftAnim.restart();
                     }
                 }
 
@@ -686,53 +1017,95 @@ Rectangle {
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                spacing: 12
+                spacing: 10
                 visible: root.importCompleted && !root.isImporting
 
                 Item { Layout.fillHeight: true }
 
-                Rectangle {
+                RowLayout {
                     Layout.alignment: Qt.AlignHCenter
-                    width: 56
-                    height: 56
-                    radius: 18
-                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
-                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
-                    border.width: 1.5
+                    spacing: 8
 
-                    AppIcon {
-                        anchors.centerIn: parent
-                        source: "../assets/icons/emblem-ok-symbolic.svg"
-                        iconSize: 26
-                        color: root.accentColor
+                    Rectangle {
+                        width: 28
+                        height: 28
+                        radius: 14
+                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                        border.width: 1
+
+                        AppIcon {
+                            anchors.centerIn: parent
+                            source: "../assets/icons/emblem-ok-symbolic.svg"
+                            iconSize: 15
+                            color: root.accentColor
+                        }
+                    }
+
+                    Text {
+                        text: I18n.tr("Chuyển Giao Hoàn Tất!", "Transfer Completed!")
+                        color: "#ffffff"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 15
+                        font.bold: true
                     }
                 }
 
-                Text {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: I18n.tr("Chuyển Giao Hoàn Tất!", "Transfer Completed!")
-                    color: "#ffffff"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 16
-                    font.bold: true
-                }
+                // Compact Playlist Summary Card
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 56
+                    radius: 12
+                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
+                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
+                    border.width: 1
 
-                Text {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: I18n.tr("Playlist đã sẵn sàng trong Danh Sách Phát của Nutsty.", "Playlist is ready in your Nutsty Custom Playlists.")
-                    color: Theme.textSecondary
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 12
-                    horizontalAlignment: Text.AlignHCenter
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 8
+                        spacing: 10
+
+                        RoundedImage {
+                            Layout.preferredWidth: 40
+                            Layout.preferredHeight: 40
+                            radius: 10
+                            source: root.importPlaylistCover || (root.resolvedPlaylist ? root.resolvedPlaylist.image : "")
+                            fallbackIcon: "../assets/icons/media-playlist-consecutive-symbolic.svg"
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: root.resolvedPlaylist ? (root.resolvedPlaylist.title || root.resolvedPlaylist.name || I18n.tr("Playlist của bạn", "Your Playlist")) : I18n.tr("Playlist Spotify", "Spotify Playlist")
+                                color: "#ffffff"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                font.bold: true
+                                elide: Text.ElideRight
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: I18n.tr("Đã nạp thành công %1 bài hát", "Successfully imported %1 tracks").arg(root.importTotal > 0 ? root.importTotal : root.importCurrent)
+                                color: root.accentColor
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 11
+                                elide: Text.ElideRight
+                            }
+                        }
+                    }
                 }
 
                 Item { Layout.fillHeight: true }
 
                 Rectangle {
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.preferredWidth: 140
-                    Layout.preferredHeight: 38
-                    radius: 12
+                    Layout.preferredWidth: 130
+                    Layout.preferredHeight: 34
+                    radius: 10
                     color: doneMouse.containsMouse ? Qt.lighter(root.accentColor, 1.12) : root.accentColor
                     Behavior on color { ColorAnimation { duration: 150 } }
 
@@ -741,7 +1114,7 @@ Rectangle {
                         text: I18n.tr("Xong", "Done")
                         color: (root.accentColor.r * 0.299 + root.accentColor.g * 0.587 + root.accentColor.b * 0.114) > 0.6 ? "#000000" : "#ffffff"
                         font.family: Theme.fontFamily
-                        font.pixelSize: 13
+                        font.pixelSize: 12
                         font.bold: true
                     }
 

@@ -92,11 +92,11 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 │   ├── DesktopLyricsWidget.qml     # Universal Lyrics Harness (Host Layer-Shell, kéo thả)
 │   ├── DownloadManager.qml         # State manager đồng bộ tải xuống từ download_manager.py
 │   ├── DownloadQueuePopover.qml    # Popover quản lý hàng đợi tải xuống Minimalist Clean
-│   ├── EnchantingSentence.qml      # Component từng câu lyric: staggered baselines, Gacha pop
+│   ├── EnchantingSentence.qml      # Component từng câu lyric: staggered baselines, elastic pop
 │   ├── FloatingChatBubble.qml      # Hiển thị bong bóng chat bay Danmaku khi nghe cùng
 │   ├── FriendsPulseBar.qml         # Thanh avatar bạn bè 24h pulse lướt ngang ở HomeFeed
 │   ├── FriendStoryModal.qml        # Modal xem ghi chú bạn bè, đĩa nhạc xoay & nút Nghe Cùng
-│   ├── GachaAnimeLyricsView.qml    # Mẫu 1: Gacha Anime Pop (Instrument Serif)
+│   ├── GachaAnimeLyricsView.qml    # Mẫu 1: Điện ảnh Serif (Instrument Serif)
 │   ├── HomeFeedView.qml            # Màn hình trang chủ online: Mood pills, carousels, grids
 │   ├── LibraryData.qml             # Model quản lý danh sách bài hát trong QML
 │   ├── LibraryLoader.qml           # Loader nạp dữ liệu từ library.json
@@ -108,6 +108,8 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 │   ├── PostNoteModal.qml           # Modal đăng ghi chú 24h kèm bài hát
 │   ├── RoundedImage.qml            # Bo góc Design System (HiDPI 2x, lazy VRAM, fallback)
 │   ├── SettingsModal.qml           # Modal đăng nhập Google Account Dark Glass
+│   ├── ShuffleButton.qml           # Nút phát ngẫu nhiên chuẩn Liquid Glass & Dynamic Accent
+│   ├── SpotifyImportModal.qml      # Modal chuyển giao Spotify Arc Gunshot Stage
 │   ├── SuggestTrackToast.qml       # Toast tương tác nhận đề xuất bài hát
 │   ├── Theme.qml                   # Hệ thống token màu, bo góc, padding
 │   ├── TrackCard.qml               # Card hiển thị bài hát trong grid
@@ -129,7 +131,7 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 | :--- | :--- | :--- |
 | **Giao diện, Đồ họa & Kính lỏng** | [01-design-system-and-visual-effects.md](file:///.agents/rules/01-design-system-and-visual-effects.md) | - Thuật toán Kính lỏng Liquid Glass (Vibrancy 1.6x, chống đục trắng SimpMusic).<br/>- Định lý bo góc đồng tâm $R_{\text{con}} = R_{\text{mẹ}} - \text{Padding}$ & viền hairline 1px.<br/>- **Footgun #1**: Cơ chế xuyên thấu hình nền khi pause (`win.isPlaying ? 1.0 : 0.0`).<br/>- Bo góc avatar người dùng qua `MultiEffect` không vỡ góc đen. |
 | **Âm thanh, IPC & Hàng đợi** | [02-audio-backend-and-queue-lifecycle.md](file:///.agents/rules/02-audio-backend-and-queue-lifecycle.md) | - Backend Python daemon & Unix Socket `/tmp/nutsty_mpv.sock` (gapless stream).<br/>- Modular Backend (`SocialRelayCore`, `stream_resolver`, `catalog_engine`) & 3 SSOT.<br/>- `playback_engine.js` hợp nhất audio/queue; loại bỏ CLI subprocess.<br/>- **Cơ chế Snapshot & Reset Queue an toàn** khi chuyển đổi Mood Chips.<br/>- Trình tải nhạc đa luồng `download_manager.py` & Lưu trữ cài đặt an toàn. |
-| **Lời bài hát Desktop Lyrics** | [03-desktop-lyrics-engine.md](file:///.agents/rules/03-desktop-lyrics-engine.md) | - Host Native Wayland Layer-Shell qua Quickshell.<br/>- 4 Presets: Gacha Anime Pop (Instrument Serif), Apple Music Multi-line DoF, Motion Blur, Kinetic Typography.<br/>- **Tuyệt đối cấm viền trắng (White Halo)**, dùng Universal Cinematic Shadows.<br/>- Đồng bộ âm tiết Syllable-level Karaoke & Elastic scaling (SimpMusic Footgun #217). |
+| **Lời bài hát Desktop Lyrics** | [03-desktop-lyrics-engine.md](file:///.agents/rules/03-desktop-lyrics-engine.md) | - Host Native Wayland Layer-Shell qua Quickshell.<br/>- 4 Presets: Điện ảnh Serif, Apple Music DoF, Minimal Glide, Motion Typography.<br/>- **Tuyệt đối cấm viền trắng (White Halo)**, dùng Universal Cinematic Shadows.<br/>- Đồng bộ âm tiết Syllable-level Karaoke & Elastic scaling (SimpMusic Footgun #217). |
 | **Kỹ Năng & Mẫu Code Chuẩn** | [04-code-recipes-and-patterns.md](file:///.agents/rules/04-code-recipes-and-patterns.md) | - Thẻ Pattern chuẩn cho các kỹ năng/giải pháp xuất sắc đã được kiểm chứng.<br/>- Code mẫu chuẩn Dynamic Accent & Liquid Glass Button.<br/>- Bố cục đa ngôn ngữ song ngữ co giãn (`Row` + `I18n.tr`). |
 
 ---

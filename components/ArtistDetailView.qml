@@ -250,45 +250,15 @@ Item {
                                 }
                             }
 
-                            // Button 2: Shuffle
-                            Rectangle {
+                            // Button 2: Shuffle (Unified SSOT)
+                            ShuffleButton {
                                 Layout.preferredHeight: 38
-                                Layout.preferredWidth: shuffleRow.implicitWidth + 28
-                                radius: 19
-                                color: shuffleBtnMouse.containsMouse ? "#2e2e34" : "#222226"
-                                border.color: Qt.rgba(1, 1, 1, 0.14)
-                                border.width: 1
-                                Behavior on color { ColorAnimation { duration: 120 } }
-
-                                RowLayout {
-                                    id: shuffleRow
-                                    anchors.centerIn: parent
-                                    spacing: 8
-
-                                    AppIcon {
-                                        source: "../assets/icons/media-playlist-shuffle-symbolic.svg"
-                                        iconSize: 16
-                                        color: "#ffffff"
-                                    }
-
-                                    Text {
-                                        text: I18n.tr("Xáo trộn", "Shuffle")
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 13
-                                        font.bold: true
-                                        color: "#ffffff"
-                                    }
-                                }
-
-                                MouseArea {
-                                    id: shuffleBtnMouse
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    hoverEnabled: true
-                                    onClicked: {
-                                        if (root.artistData) {
-                                            root.shuffleArtistRequested(root.artistData);
-                                        }
+                                Layout.preferredWidth: implicitWidth
+                                accentColor: root.accentColor
+                                text: I18n.tr("Xáo trộn", "Shuffle")
+                                onClicked: {
+                                    if (root.artistData) {
+                                        root.shuffleArtistRequested(root.artistData);
                                     }
                                 }
                             }

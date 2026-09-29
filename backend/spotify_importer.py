@@ -257,7 +257,8 @@ def fetch_spotify_playlist_details(playlist_id, token=None, spdc=None):
             "description": embed_res["description"],
             "image": embed_res["image"],
             "trackCount": embed_res["trackCount"],
-            "owner": embed_res["owner"]
+            "owner": embed_res["owner"],
+            "tracks": embed_res.get("tracks", [])
         }
 
     if not token:
@@ -278,6 +279,7 @@ def fetch_spotify_playlist_details(playlist_id, token=None, spdc=None):
             data = json.loads(resp.read().decode("utf-8"))
             images = data.get("images") or []
             cover_url = images[0].get("url") if images else ""
+            tracks = fetch_spotify_playlist_tracks(pid, token)
             return {
                 "success": True,
                 "id": data.get("id"),
@@ -285,7 +287,8 @@ def fetch_spotify_playlist_details(playlist_id, token=None, spdc=None):
                 "description": data.get("description", ""),
                 "image": cover_url,
                 "trackCount": data.get("tracks", {}).get("total", 0),
-                "owner": data.get("owner", {}).get("display_name", "")
+                "owner": data.get("owner", {}).get("display_name", ""),
+                "tracks": tracks
             }
     except Exception as e:
         return {"success": False, "error": f"Không thể lấy thông tin playlist: {str(e)}"}
@@ -430,6 +433,7 @@ class SpotifyImportManager:
         self.total = 0
         self.percent = 0
         self.current_track = ""
+        self.upcoming_tracks = []
         self.completed = False
         self.error = None
         self.imported_playlist_id = None
@@ -446,6 +450,7 @@ class SpotifyImportManager:
                 "total": self.total,
                 "percent": self.percent,
                 "currentTrack": self.current_track,
+                "upcomingTracks": list(self.upcoming_tracks),
                 "completed": self.completed,
                 "error": self.error,
                 "importedPlaylistId": self.imported_playlist_id
@@ -453,11 +458,11 @@ class SpotifyImportManager:
 
     def cancel(self):
         with self._lock:
-            if self.active:
-                self.cancel_requested = True
-                self.active = False
-                self.error = "Đã hủy bởi người dùng."
-                return True
+            self.cancel_requested = True
+            self.active = False
+            self.completed = False
+            self.error = "Đã hủy bởi người dùng."
+            return True
         return False
 
     def start_import(self, playlist_id, playlist_title=None, spdc=None, cover_url=None):
@@ -478,6 +483,7 @@ class SpotifyImportManager:
             self.total = 0
             self.percent = 0
             self.current_track = "Đang kết nối Spotify..."
+            self.upcoming_tracks = []
             self.completed = False
             self.error = None
             self.imported_playlist_id = None
@@ -518,6 +524,10 @@ class SpotifyImportManager:
 
             with self._lock:
                 self.total = total_tracks
+                self.upcoming_tracks = [
+                    f"{t.get('name', '')} - {t.get('artist', '')}".strip(" -")
+                    for t in sp_tracks[:6]
+                ]
 
             resolved_tracks = []
             for idx, sp_t in enumerate(sp_tracks):
@@ -525,10 +535,15 @@ class SpotifyImportManager:
                     break
 
                 track_label = f"{sp_t.get('name', '')} - {sp_t.get('artist', '')}".strip(" -")
+                upcoming = [
+                    f"{t.get('name', '')} - {t.get('artist', '')}".strip(" -")
+                    for t in sp_tracks[idx:idx+6]
+                ]
                 with self._lock:
                     self.current = idx + 1
                     self.current_track = track_label
                     self.percent = int((self.current / total_tracks) * 100)
+                    self.upcoming_tracks = upcoming
 
                 matched = match_spotify_track_to_ytmusic(sp_t)
                 if matched:

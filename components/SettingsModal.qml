@@ -2325,10 +2325,10 @@ Rectangle {
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 2
-                            width: 168
+                            width: 195
 
                             Text {
-                                text: I18n.tr("Mẫu 1: Gacha Pop", "Preset 1: Gacha Pop")
+                                text: I18n.tr("Mẫu 1: Điện ảnh Serif", "Preset 1: Cinematic Serif")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 13
                                 font.bold: true
@@ -2346,7 +2346,7 @@ Rectangle {
                         // Center: Live Lyric Typography Preview (Floating naturally on glass)
                         Text {
                             anchors.left: parent.left
-                            anchors.leftMargin: 178
+                            anchors.leftMargin: 205
                             anchors.right: check1.left
                             anchors.rightMargin: 16
                             anchors.verticalCenter: parent.verticalCenter
@@ -2412,32 +2412,14 @@ Rectangle {
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 2
-                            width: 168
+                            width: 195
 
-                            Row {
-                                spacing: 6
-                                Text {
-                                    text: I18n.tr("Mẫu 2: Apple Music", "Preset 2: Apple Music")
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 13
-                                    font.bold: true
-                                    color: root.lyricsPreset === 2 ? "#ffffff" : (p2Hover.hovered ? "#ffffff" : Theme.textPrimary)
-                                }
-                                Rectangle {
-                                    height: 14
-                                    width: 30
-                                    radius: 3
-                                    color: Qt.rgba(255, 255, 255, 0.16)
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: I18n.tr("MỚI", "NEW")
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 8
-                                        font.bold: true
-                                        color: "#ffffff"
-                                    }
-                                }
+                            Text {
+                                text: I18n.tr("Mẫu 2: Apple Music", "Preset 2: Apple Music")
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 13
+                                font.bold: true
+                                color: root.lyricsPreset === 2 ? "#ffffff" : (p2Hover.hovered ? "#ffffff" : Theme.textPrimary)
                             }
 
                             Text {
@@ -2451,7 +2433,7 @@ Rectangle {
                         // Center: Live Lyric Typography Preview (Floating naturally on glass)
                         Column {
                             anchors.left: parent.left
-                            anchors.leftMargin: 178
+                            anchors.leftMargin: 205
                             anchors.right: check2.left
                             anchors.rightMargin: 16
                             anchors.verticalCenter: parent.verticalCenter
@@ -2540,32 +2522,14 @@ Rectangle {
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 2
-                            width: 168
+                            width: 195
 
-                            Row {
-                                spacing: 6
-                                Text {
-                                    text: I18n.tr("Mẫu 3: Tối giản lướt", "Preset 3: Minimal Glide")
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 13
-                                    font.bold: true
-                                    color: root.lyricsPreset === 3 ? "#ffffff" : (p3Hover.hovered ? "#ffffff" : Theme.textPrimary)
-                                }
-                                Rectangle {
-                                    height: 14
-                                    width: 30
-                                    radius: 3
-                                    color: Qt.rgba(255, 255, 255, 0.16)
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: I18n.tr("MỚI", "NEW")
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 8
-                                        font.bold: true
-                                        color: "#ffffff"
-                                    }
-                                }
+                            Text {
+                                text: I18n.tr("Mẫu 3: Tối giản lướt", "Preset 3: Minimal Glide")
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 13
+                                font.bold: true
+                                color: root.lyricsPreset === 3 ? "#ffffff" : (p3Hover.hovered ? "#ffffff" : Theme.textPrimary)
                             }
 
                             Text {
@@ -2579,7 +2543,7 @@ Rectangle {
                         // Center: Live Lyric Typography Preview (Floating naturally on glass)
                         Column {
                             anchors.left: parent.left
-                            anchors.leftMargin: 178
+                            anchors.leftMargin: 205
                             anchors.right: check3.left
                             anchors.rightMargin: 16
                             anchors.verticalCenter: parent.verticalCenter
@@ -2659,32 +2623,14 @@ Rectangle {
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 2
-                            width: 168
+                            width: 195
 
-                            Row {
-                                spacing: 6
-                                Text {
-                                    text: I18n.tr("Mẫu 4: MV Kinetic", "Preset 4: MV Kinetic")
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 13
-                                    font.bold: true
-                                    color: root.lyricsPreset === 4 ? "#ffffff" : (p4Hover.hovered ? "#ffffff" : Theme.textPrimary)
-                                }
-                                Rectangle {
-                                    height: 14
-                                    width: 30
-                                    radius: 3
-                                    color: Qt.rgba(255, 255, 255, 0.16)
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: I18n.tr("MỚI", "NEW")
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 8
-                                        font.bold: true
-                                        color: "#ffffff"
-                                    }
-                                }
+                            Text {
+                                text: I18n.tr("Mẫu 4: Đồ họa Chuyển động", "Preset 4: Motion Typography")
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 13
+                                font.bold: true
+                                color: root.lyricsPreset === 4 ? "#ffffff" : (p4Hover.hovered ? "#ffffff" : Theme.textPrimary)
                             }
 
                             Text {
@@ -2698,11 +2644,11 @@ Rectangle {
                         // Center: Live Lyric Typography Preview (Floating naturally on glass)
                         Text {
                             anchors.left: parent.left
-                            anchors.leftMargin: 178
+                            anchors.leftMargin: 205
                             anchors.right: check4.left
                             anchors.rightMargin: 16
                             anchors.verticalCenter: parent.verticalCenter
-                            text: "[ KINETIC TYPO ]"
+                            text: "[ MOTION GRAPHICS ]"
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             font.bold: true

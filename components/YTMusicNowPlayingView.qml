@@ -1705,8 +1705,16 @@ Item {
                                     id: qRow
                                     width: delegateCol.width
                                     height: 48
-                                    radius: 12
-                                    readonly property bool isCurrent: root.track && (modelData.id === root.track.id || (modelData.videoId && modelData.videoId === root.track.videoId))
+                                    readonly property bool isCurrent: Boolean(root.track && modelData && (
+                                        (typeof win !== "undefined" && typeof win.isSameTrack === "function") 
+                                            ? win.isSameTrack(modelData, root.track)
+                                            : (
+                                                (modelData.id && root.track.id && modelData.id === root.track.id) ||
+                                                (modelData.videoId && root.track.videoId && modelData.videoId === root.track.videoId) ||
+                                                (modelData.path && root.track.path && modelData.path === root.track.path) ||
+                                                (modelData.title && root.track.title && modelData.title === root.track.title && modelData.artist && root.track.artist && modelData.artist === root.track.artist)
+                                            )
+                                    ))
                                     color: isCurrent 
                                            ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) 
                                            : (qRowMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent")

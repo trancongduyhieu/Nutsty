@@ -15,10 +15,10 @@ Tài liệu đặc tả chuyên sâu về hệ thống lời bài hát hiển th
 
 ## 2. Các Bộ Mẫu Hiển Thị (Lyrics Engine Presets)
 
-### Preset 1: Gacha / Anime Pop (`GachaAnimeLyricsView.qml`)
+### Preset 1: Điện ảnh Serif (`Cinematic Serif`)
 - **Font chữ**: *Instrument Serif* cổ điển nghệ thuật.
 - **Hiệu ứng**:
-  - Pop chữ Gacha khi bắt đầu câu mới (scale nảy nhẹ kèm chuyển động baseline so le - staggered baselines).
+  - Pop chữ nhịp điệu khi bắt đầu câu mới (scale nảy nhẹ kèm chuyển động baseline so le - staggered baselines).
   - Đổ bóng điện ảnh đa tầng Universal Cinematic Shadows (`#a6020305` và `#66000000`) giúp chữ luôn sắc nét và đọc rõ trên mọi loại hình nền sáng/tối.
   - > [!CAUTION]
     > **Tuyệt đối không dùng viền trắng (White Halo)** quanh chữ lyric vì gây thô ráp và phá hủy thẩm mỹ điện ảnh.
@@ -32,8 +32,8 @@ Tài liệu đặc tả chuyên sâu về hệ thống lời bài hát hiển th
 ### Preset 3: Minimalist Word-by-Word Motion Blur Engine
 - Hiển thị tối giản, làm nhòe chuyển động (motion blur) theo từng từ khi ca sĩ phát âm.
 
-### Preset 4: Anime MV Kinetic Typography Engine
-- Hiển thị theo phong cách Motion Graphic trong các MV Anime (chữ trượt, phóng to/thu nhỏ động học).
+### Preset 4: Đồ họa Chuyển động (`Motion Typography`)
+- Hiển thị theo phong cách Motion Graphics hiện đại trong khung Bento (chữ trượt, chuyển cảnh typographic nhịp điệu).
 
 ---
 

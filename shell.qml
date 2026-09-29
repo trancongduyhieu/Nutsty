@@ -68,7 +68,7 @@ Scope {
     property bool syncHistoryToGoogle: true
     property bool desktopLyricsEnabled: true
     property bool animatedCoverEnabled: true
-    property int desktopLyricsPreset: 2 // 1: Gacha Anime, 2: Apple Music 5-Line Parametric, 3: Broadway Pop, 4: Anime MV Kinetic
+    property int desktopLyricsPreset: 2 // 1: Cinematic Serif, 2: Apple Music 5-Line Parametric, 3: Minimal Glide, 4: Motion Typography
     property int desktopLyricsCustomX: -1
     property int desktopLyricsCustomY: -1
     property var desktopLyricsWallpaperPositions: ({})
@@ -3632,7 +3632,11 @@ Scope {
         function cancelSpotifyImport() { frostifyIpc.cancelSpotifyImport(); }
         function closeSpotifyImport() { frostifyIpc.closeSpotifyImport(); }
         function testSpotifyImporting(title: string, track: string, percent: int) { frostifyIpc.testSpotifyImporting(title, track, percent); }
+        function testSpotifyGunshot(track: string) { frostifyIpc.testSpotifyGunshot(track); }
         function testSpotifyPreview(title: string, trackCount: int, image: string) { frostifyIpc.testSpotifyPreview(title, trackCount, image); }
+        function testSpotifyCompleted(title: string, trackCount: int, image: string) { frostifyIpc.testSpotifyCompleted(title, trackCount, image); }
+        function testPlayCustomPlaylist() { frostifyIpc.testPlayCustomPlaylist(); }
+        function setNowPlayingTab(tab: string) { frostifyIpc.setNowPlayingTab(tab); }
         function expandSpotifySettings() { frostifyIpc.expandSpotifySettings(); }
         function testSpotifyConnected(spdc: string) { frostifyIpc.testSpotifyConnected(spdc); }
         function testSpotifyDisconnected() { frostifyIpc.testSpotifyDisconnected(); }
@@ -3899,19 +3903,32 @@ Scope {
         function testSpotifyImporting(title: string, track: string, percent: int) {
             win.visible = true;
             spotifyImportModal.openModal();
-            spotifyImportModal.isImporting = true;
             spotifyImportModal.importPlaylistTitle = title || "Top Hits 2026";
-            spotifyImportModal.importCurrentTrack = track || "Nơi Này Có Anh - Sơn Tùng M-TP";
-            spotifyImportModal.importPercent = percent > 0 ? percent : 45;
-            spotifyImportModal.importCurrent = 37;
-            spotifyImportModal.importTotal = 82;
-            spotifyImportModal.recentTracks = [
+            spotifyImportModal.allPlaylistTracks = [
                 "Nơi Này Có Anh - Sơn Tùng M-TP",
                 "Chúng Ta Của Hiện Tại - Sơn Tùng M-TP",
                 "Âm Thầm Bên Em - Sơn Tùng M-TP",
                 "Chạy Ngay Đi - Sơn Tùng M-TP",
-                "Lạc Trôi - Sơn Tùng M-TP"
+                "Lạc Trôi - Sơn Tùng M-TP",
+                "Cơn Mưa Ngang Qua - Sơn Tùng M-TP",
+                "Hãy Trao Cho Anh - Sơn Tùng M-TP",
+                "Buông Đôi Tay Nhau Ra - Sơn Tùng M-TP",
+                "Khuôn Mặt Đáng Thương - Sơn Tùng M-TP",
+                "Em Của Ngày Hôm Qua - Sơn Tùng M-TP"
             ];
+            spotifyImportModal.arcQueueTracks = spotifyImportModal.allPlaylistTracks.slice(0, 6);
+            spotifyImportModal.importPlaylistId = "test_mock_playlist";
+            spotifyImportModal.nextQueueTrackIndex = 6;
+            spotifyImportModal.lastFiredTrack = "";
+            spotifyImportModal.importPercent = percent > 0 ? percent : 45;
+            spotifyImportModal.importCurrent = 1;
+            spotifyImportModal.importTotal = 10;
+            spotifyImportModal.isImporting = true;
+            spotifyImportModal.triggerCenterSlide();
+            spotifyImportModal.importCurrentTrack = track || "Nơi Này Có Anh - Sơn Tùng M-TP";
+        }
+        function testSpotifyGunshot(track: string) {
+            spotifyImportModal.testGunshot(track);
         }
         function testSpotifyPreview(title: string, trackCount: int, image: string) {
             win.visible = true;
@@ -3921,6 +3938,38 @@ Scope {
                 "trackCount": trackCount > 0 ? trackCount : 24,
                 "image": image || ""
             };
+        }
+        function testSpotifyCompleted(title: string, trackCount: int, image: string) {
+            win.visible = true;
+            spotifyImportModal.openModal();
+            spotifyImportModal.isImporting = false;
+            spotifyImportModal.importCompleted = true;
+            spotifyImportModal.importTotal = trackCount > 0 ? trackCount : 50;
+            spotifyImportModal.importCurrent = spotifyImportModal.importTotal;
+            spotifyImportModal.resolvedPlaylist = {
+                "title": title || "Top Hits 2026",
+                "trackCount": spotifyImportModal.importTotal,
+                "image": image || ""
+            };
+        }
+        function testPlayCustomPlaylist() {
+            win.visible = true;
+            win.isNowPlayingOpen = true;
+            var testTracks = [
+                { "videoId": "vid_titanic", "title": "My Heart Will Go On - Love Theme from \"Titanic\"", "artist": "Céline Dion", "image": "" },
+                { "videoId": "vid_untold", "title": "แปลไม่ออก (Untold Answer)", "artist": "BILLKIN", "image": "" },
+                { "videoId": "vid_shinunoga", "title": "Shinunoga E-Wa", "artist": "Fujii Kaze", "image": "" },
+                { "videoId": "vid_justfriend", "title": "แค่เพื่อนมั้ง (Just Friend?)", "artist": "NANON", "image": "" }
+            ];
+            win.currentTracks = testTracks;
+            win.currentTrack = testTracks[0];
+            win.isPlaying = true;
+            nowPlayingView.activeTab = "up_next";
+        }
+        function setNowPlayingTab(tab: string) {
+            win.visible = true;
+            win.isNowPlayingOpen = true;
+            nowPlayingView.activeTab = tab || "up_next";
         }
         function expandSpotifySettings() {
             settingsModal.currentTab = 0;

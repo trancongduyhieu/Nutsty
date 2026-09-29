@@ -43,6 +43,7 @@ PreviewPane 1.0 PreviewPane.qml
 RoundedImage 1.0 RoundedImage.qml
 SettingsModal 1.0 SettingsModal.qml
 ShinyCardContainer 1.0 ShinyCardContainer.qml
+ShuffleButton 1.0 ShuffleButton.qml
 Sidebar 1.0 Sidebar.qml
 SkeletonTrackCard 1.0 SkeletonTrackCard.qml
 SkeletonTrackRow 1.0 SkeletonTrackRow.qml
