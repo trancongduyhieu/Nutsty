@@ -43,6 +43,13 @@ Rectangle {
     property bool spotifyAutoSyncing: false
     property bool manualSpotifyExpanded: false
     property bool spotifyValidating: false
+    property string appVersion: "1.0.0"
+    property string latestVersion: "1.0.0"
+    property bool hasAppUpdate: false
+    property bool isCheckingUpdate: false
+
+    signal checkUpdateRequested()
+    signal openUpdateUrlRequested()
 
     onVisibleChanged: {
         if (!visible) {
@@ -1990,6 +1997,184 @@ Rectangle {
                                             root.saveCanvasPreferenceRequested(modelData.key);
                                             canvasPrefRowItem.menuOpen = false;
                                         }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // =============================================================
+                // Application & Updates Card (Concentric Dark Glass / Frameless)
+                // =============================================================
+                Item {
+                    id: appUpdateRowItem
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 52
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: updateActionsRow.left
+                        anchors.rightMargin: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Row {
+                            spacing: 8
+
+                            Text {
+                                text: I18n.tr("Phiên bản ứng dụng", "Application Version")
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 13
+                                font.bold: true
+                                color: Theme.textPrimary
+                            }
+
+                            // Version Tag Badge
+                            Rectangle {
+                                anchors.verticalCenter: parent.verticalCenter
+                                height: 18
+                                width: verTagTxt.implicitWidth + 10
+                                radius: 4
+                                color: root.hasAppUpdate
+                                       ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
+                                       : Qt.rgba(255, 255, 255, 0.08)
+                                border.width: 1
+                                border.color: root.hasAppUpdate
+                                              ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40)
+                                              : Qt.rgba(255, 255, 255, 0.12)
+
+                                Text {
+                                    id: verTagTxt
+                                    anchors.centerIn: parent
+                                    text: "v" + (root.appVersion || "1.0.0")
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 10
+                                    font.bold: true
+                                    color: root.hasAppUpdate ? root.accentColor : Theme.textSecondary
+                                }
+                            }
+                        }
+
+                        Text {
+                            text: root.hasAppUpdate
+                                  ? I18n.tr("Đã có bản cập nhật mới (" + root.latestVersion + "). Bấm để tải về.",
+                                            "New update available (" + root.latestVersion + "). Click to download.")
+                                  : I18n.tr("Bạn đang sử dụng phiên bản mới nhất.", "You are using the latest version.")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: root.hasAppUpdate ? root.accentColor : Theme.textSecondary
+                            elide: Text.ElideRight
+                            width: parent.width
+                        }
+                    }
+
+                    // Action Buttons (Update Now / Check for Updates)
+                    Row {
+                        id: updateActionsRow
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 8
+
+                        // If update available: Download/Update Button
+                        Rectangle {
+                            id: downloadUpdateBtn
+                            visible: root.hasAppUpdate
+                            height: 28
+                            width: updDlBtnRow.implicitWidth + 16
+                            radius: 6
+                            color: updDlBtnMouse.containsMouse
+                                   ? Qt.tint(root.accentColor, Qt.rgba(1, 1, 1, 0.15))
+                                   : root.accentColor
+                            border.width: 0
+                            Behavior on color { ColorAnimation { duration: 120 } }
+
+                            Row {
+                                id: updDlBtnRow
+                                anchors.centerIn: parent
+                                spacing: 6
+
+                                AppIcon {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    source: "../assets/icons/download-symbolic.svg"
+                                    iconSize: 12
+                                    color: "#000000"
+                                }
+
+                                Text {
+                                    text: I18n.tr("Cập nhật ngay", "Update Now")
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: "#000000"
+                                }
+                            }
+
+                            MouseArea {
+                                id: updDlBtnMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.openUpdateUrlRequested()
+                            }
+                        }
+
+                        // Check for Updates Button
+                        Rectangle {
+                            id: checkUpdateBtn
+                            height: 28
+                            width: checkBtnRow.implicitWidth + 16
+                            radius: 6
+                            color: checkBtnMouse.containsMouse
+                                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
+                                   : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
+                            border.width: 1
+                            border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                            Behavior on color { ColorAnimation { duration: 120 } }
+
+                            Row {
+                                id: checkBtnRow
+                                anchors.centerIn: parent
+                                spacing: 6
+
+                                AppIcon {
+                                    id: checkUpdateIcon
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    source: root.isCheckingUpdate
+                                            ? "../assets/icons/process-working-symbolic.svg"
+                                            : "../assets/icons/view-refresh-symbolic.svg"
+                                    iconSize: 12
+                                    color: root.accentColor
+
+                                    NumberAnimation on rotation {
+                                        duration: 900
+                                        loops: Animation.Infinite
+                                        running: root.isCheckingUpdate
+                                        from: 0
+                                        to: 360
+                                    }
+                                }
+
+                                Text {
+                                    text: root.isCheckingUpdate
+                                          ? I18n.tr("Đang kiểm tra...", "Checking...")
+                                          : I18n.tr("Kiểm tra cập nhật", "Check for updates")
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: (checkBtnMouse.containsMouse || root.isCheckingUpdate) ? "#ffffff" : Qt.rgba(255, 255, 255, 0.85)
+                                    Behavior on color { ColorAnimation { duration: 120 } }
+                                }
+                            }
+
+                            MouseArea {
+                                id: checkBtnMouse
+                                anchors.fill: parent
+                                hoverEnabled: !root.isCheckingUpdate
+                                cursorShape: root.isCheckingUpdate ? Qt.ArrowCursor : Qt.PointingHandCursor
+                                onClicked: {
+                                    if (!root.isCheckingUpdate) {
+                                        root.checkUpdateRequested();
                                     }
                                 }
                             }

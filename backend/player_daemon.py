@@ -16,6 +16,14 @@ try:
 except (ImportError, ValueError):
     import platform_compat as pc
 
+try:
+    from . import ytmusic_helper
+except (ImportError, ValueError):
+    try:
+        import ytmusic_helper
+    except Exception:
+        ytmusic_helper = None
+
 PROFILE_NAME = os.getenv("NUTSTY_PROFILE", "").strip().lower()
 PROFILE_SUFFIX = f"_{PROFILE_NAME}" if PROFILE_NAME else ""
 
@@ -715,8 +723,11 @@ def execute_command(args):
 
     elif action == "prewarm" and len(args) > 1:
         vid = args[1]
-        if vid:
-            ytmusic_helper.resolve_stream_url(vid)
+        if vid and ytmusic_helper and hasattr(ytmusic_helper, "resolve_stream_url"):
+            try:
+                ytmusic_helper.resolve_stream_url(vid)
+            except Exception:
+                pass
 
     elif action == "status":
         print(get_status_json())

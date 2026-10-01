@@ -140,13 +140,37 @@ def handle_get_clipboard(handler):
     if sys.platform == "win32":
         try:
             import ctypes
-            ctypes.windll.user32.OpenClipboard(0)
-            try:
-                if ctypes.windll.user32.IsClipboardFormatAvailable(13): # CF_UNICODETEXT
-                    h = ctypes.windll.user32.GetClipboardData(13)
-                    text = ctypes.c_wchar_p(h).value or ""
-            finally:
-                ctypes.windll.user32.CloseClipboard()
+            from ctypes import wintypes
+            user32 = ctypes.windll.user32
+            kernel32 = ctypes.windll.kernel32
+
+            user32.OpenClipboard.argtypes = [wintypes.HWND]
+            user32.OpenClipboard.restype = wintypes.BOOL
+            user32.CloseClipboard.argtypes = []
+            user32.CloseClipboard.restype = wintypes.BOOL
+            user32.IsClipboardFormatAvailable.argtypes = [wintypes.UINT]
+            user32.IsClipboardFormatAvailable.restype = wintypes.BOOL
+            user32.GetClipboardData.argtypes = [wintypes.UINT]
+            user32.GetClipboardData.restype = wintypes.HANDLE
+            kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
+            kernel32.GlobalLock.restype = ctypes.c_void_p
+            kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+            kernel32.GlobalUnlock.restype = wintypes.BOOL
+
+            CF_UNICODETEXT = 13
+            if user32.OpenClipboard(None):
+                try:
+                    if user32.IsClipboardFormatAvailable(CF_UNICODETEXT):
+                        h = user32.GetClipboardData(CF_UNICODETEXT)
+                        if h:
+                            ptr = kernel32.GlobalLock(h)
+                            if ptr:
+                                try:
+                                    text = ctypes.c_wchar_p(ptr).value or ""
+                                finally:
+                                    kernel32.GlobalUnlock(h)
+                finally:
+                    user32.CloseClipboard()
         except Exception:
             pass
     else:

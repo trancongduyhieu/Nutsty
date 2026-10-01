@@ -96,6 +96,13 @@ Scope {
     property bool toastVisible: false
     property string localApiUrl: "http://127.0.0.1:17890"
     property string notesApiUrl: Quickshell.env("NUTSTY_WORKER_URL") || "http://127.0.0.1:17890"
+    property string appVersion: "1.0.0"
+    property string latestVersion: "1.0.0"
+    property bool hasAppUpdate: false
+    property bool isCheckingUpdate: false
+    property string updateUrl: ""
+    property string updateReleaseNotes: ""
+    property var appUpdateInfo: null
     property real lastNowPlayingSyncTime: 0
     property bool isFetchingNotesFast: false
     property bool isSyncingFromFriend: false
@@ -943,6 +950,26 @@ Scope {
         }
     }
 
+    Timer {
+        id: updateCheckStartupTimer
+        interval: 4500
+        running: true
+        repeat: false
+        onTriggered: {
+            win.checkForUpdates(false, false);
+        }
+    }
+
+    Timer {
+        id: updateCheckPeriodicTimer
+        interval: 21600000 // 6 hours
+        running: true
+        repeat: true
+        onTriggered: {
+            win.checkForUpdates(false, false);
+        }
+    }
+
     function trackPlayback(trk) {
         PlaybackEngine.trackPlayback(win, trk, playbackTrackingProc);
     }
@@ -1146,6 +1173,82 @@ Scope {
         win.toastMessage = msg;
         win.toastVisible = true;
         toastTimer.restart();
+    }
+
+    function openExternalUrl(targetUrl) {
+        if (!targetUrl || typeof targetUrl !== "string") return;
+        try {
+            if (typeof Qt !== "undefined" && typeof Qt.openUrlExternally === "function") {
+                if (Qt.openUrlExternally(targetUrl)) return;
+            }
+        } catch(e) {}
+        try {
+            if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && typeof __NutstyBridge.openUrl === "function") {
+                __NutstyBridge.openUrl(targetUrl);
+                return;
+            }
+        } catch(e) {}
+        try {
+            var xhr = new XMLHttpRequest();
+            xhr.open("POST", (win.localApiUrl || "http://127.0.0.1:17890") + "/api/open_url", true);
+            xhr.setRequestHeader("Content-Type", "application/json");
+            xhr.send(JSON.stringify({ url: targetUrl }));
+        } catch(e) {}
+    }
+
+    function checkForUpdates(force, isManual) {
+        if (win.isCheckingUpdate) return;
+        win.isCheckingUpdate = true;
+        var url = (win.localApiUrl || "http://127.0.0.1:17890") + "/api/check_update" + (force ? "?force=1" : "");
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", url, true);
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                win.isCheckingUpdate = false;
+                if (xhr.status === 200) {
+                    try {
+                        var data = JSON.parse(xhr.responseText);
+                        win.appUpdateInfo = data;
+                        win.appVersion = data.current_version || "1.0.0";
+                        win.latestVersion = data.latest_version || win.appVersion;
+                        win.updateUrl = data.download_url || data.release_url || "https://github.com/trancongduyhieu/Nutsty/releases";
+                        win.updateReleaseNotes = data.changelog || "";
+                        win.hasAppUpdate = !!data.has_update;
+
+                        if (data.has_update) {
+                            var title = I18n.tr("Cập nhật Nutsty khả dụng!", "Nutsty update available!");
+                            var msg = I18n.tr("Đã có phiên bản " + data.latest_version + ". Nhấn vào Cài đặt để cập nhật.",
+                                              "Version " + data.latest_version + " is available. Go to Settings to update.");
+                            win.showToast(title + " (" + data.latest_version + ")");
+
+                            if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && typeof __NutstyBridge.showTrayNotification === "function") {
+                                __NutstyBridge.showTrayNotification(title, msg);
+                            }
+                        } else if (isManual) {
+                            win.showToast(I18n.tr("Bạn đang dùng phiên bản mới nhất (" + win.appVersion + ")",
+                                                  "You are using the latest version (" + win.appVersion + ")"));
+                        }
+                    } catch(e) {
+                        if (isManual) {
+                            win.showToast(I18n.tr("Lỗi kiểm tra cập nhật", "Error checking for updates"));
+                        }
+                    }
+                } else if (isManual) {
+                    win.showToast(I18n.tr("Không thể kết nối đến máy chủ cập nhật", "Could not reach update server"));
+                }
+            }
+        };
+        xhr.onerror = function() {
+            win.isCheckingUpdate = false;
+            if (isManual) {
+                win.showToast(I18n.tr("Không thể kết nối đến máy chủ cập nhật", "Could not reach update server"));
+            }
+        };
+        try {
+            xhr.send();
+        } catch(e) {
+            win.isCheckingUpdate = false;
+        }
     }
 
     function startListeningAlong(friend) {
@@ -1874,9 +1977,17 @@ Scope {
                 onSettingsClicked: {
                     settingsModal.visible = true;
                 }
-                unreadNotificationsCount: win.unreadFriendRequestsCount
+                unreadNotificationsCount: win.unreadFriendRequestsCount + (win.hasAppUpdate ? 1 : 0)
                 onNotificationsClicked: (xPos, yPos) => {
-                    friendRequestsPopover.toggleAt(win.pendingFriendRequests, xPos, yPos);
+                    if (win.unreadFriendRequestsCount > 0) {
+                        friendRequestsPopover.toggleAt(win.pendingFriendRequests, xPos, yPos);
+                    } else if (win.hasAppUpdate) {
+                        settingsModal.currentTab = 0;
+                        settingsModal.visible = true;
+                        win.showToast(I18n.tr("Đã có bản cập nhật mới: " + win.latestVersion, "New update available: " + win.latestVersion));
+                    } else {
+                        friendRequestsPopover.toggleAt(win.pendingFriendRequests, xPos, yPos);
+                    }
                 }
 
                 onTabSelected: tab => win.filterByTab(tab)
@@ -2411,8 +2522,14 @@ Scope {
             downloadQuality: win.downloadQuality
             spotifySpdc: win.spotifySpdc
             lyricsSource: win.lyricsSource
+            appVersion: win.appVersion
+            latestVersion: win.latestVersion
+            hasAppUpdate: win.hasAppUpdate
+            isCheckingUpdate: win.isCheckingUpdate
 
             onCloseRequested: settingsModal.visible = false
+            onCheckUpdateRequested: win.checkForUpdates(true, true)
+            onOpenUpdateUrlRequested: win.openExternalUrl(win.updateUrl)
             onSpotifyImportRequested: {
                 spotifyImportModal.openModal();
             }

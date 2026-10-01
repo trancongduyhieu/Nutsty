@@ -175,10 +175,25 @@ def get_music_dir() -> str:
                 return m
     return os.path.expanduser("~/Music")
 
+APP_VERSION = "1.0.0"
+GITHUB_REPO = "trancongduyhieu/Nutsty"
+
 if IS_WINDOWS:
     import ctypes
+    from ctypes import wintypes
 
     kernel32 = ctypes.windll.kernel32
+    kernel32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+    kernel32.CreateFileW.restype = wintypes.HANDLE
+    kernel32.WaitNamedPipeW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD]
+    kernel32.WaitNamedPipeW.restype = wintypes.BOOL
+    kernel32.WriteFile.argtypes = [wintypes.HANDLE, wintypes.LPCVOID, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD), wintypes.LPVOID]
+    kernel32.WriteFile.restype = wintypes.BOOL
+    kernel32.ReadFile.argtypes = [wintypes.HANDLE, wintypes.LPVOID, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD), wintypes.LPVOID]
+    kernel32.ReadFile.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
     GENERIC_READ = 0x80000000
     GENERIC_WRITE = 0x40000000
     OPEN_EXISTING = 3

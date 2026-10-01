@@ -339,44 +339,51 @@ def remove_favorite_playlist(pl_id):
     save_favorite_playlists(filtered)
     return {"success": True, "favorites": filtered}
 
-def main():
-    cmd = sys.argv[1] if len(sys.argv) > 1 else "list"
+def handle_cli(args=None):
+    if args is None:
+        args = sys.argv[1:] if len(sys.argv) > 1 else []
+    cmd = args[0] if len(args) > 0 else "list"
+
     if cmd == "list":
         print(json.dumps(load_playlists(), ensure_ascii=False))
     elif cmd == "list_favorites":
         print(json.dumps(load_favorite_playlists(), ensure_ascii=False))
-    elif cmd == "toggle_favorite" and len(sys.argv) > 2:
-        print(json.dumps(toggle_favorite_playlist(sys.argv[2]), ensure_ascii=False))
-    elif cmd == "remove_favorite" and len(sys.argv) > 2:
-        print(json.dumps(remove_favorite_playlist(sys.argv[2]), ensure_ascii=False))
-    elif cmd == "create" and len(sys.argv) > 2:
-        title = sys.argv[2]
-        trks = sys.argv[3] if len(sys.argv) > 3 else None
-        desc = sys.argv[4] if len(sys.argv) > 4 else ""
-        cover = sys.argv[5] if len(sys.argv) > 5 else ""
+    elif cmd == "toggle_favorite" and len(args) > 1:
+        print(json.dumps(toggle_favorite_playlist(args[1]), ensure_ascii=False))
+    elif cmd == "remove_favorite" and len(args) > 1:
+        print(json.dumps(remove_favorite_playlist(args[1]), ensure_ascii=False))
+    elif cmd == "create" and len(args) > 1:
+        title = args[1]
+        trks = args[2] if len(args) > 2 else None
+        desc = args[3] if len(args) > 3 else ""
+        cover = args[4] if len(args) > 4 else ""
         print(json.dumps(create_playlist(title, trks, desc, cover), ensure_ascii=False))
-    elif cmd == "rename" and len(sys.argv) > 3:
-        pl_id = sys.argv[2]
-        new_title = sys.argv[3]
-        desc = sys.argv[4] if len(sys.argv) > 4 else None
+    elif cmd == "rename" and len(args) > 2:
+        pl_id = args[1]
+        new_title = args[2]
+        desc = args[3] if len(args) > 3 else None
         print(json.dumps(rename_playlist(pl_id, new_title, desc), ensure_ascii=False))
-    elif cmd == "set_cover" and len(sys.argv) > 3:
-        pl_id = sys.argv[2]
-        cover_path = sys.argv[3]
+    elif cmd == "set_cover" and len(args) > 2:
+        pl_id = args[1]
+        cover_path = args[2]
         print(json.dumps(set_playlist_cover(pl_id, cover_path), ensure_ascii=False))
-    elif cmd == "reorder" and len(sys.argv) > 4:
-        pl_id = sys.argv[2]
-        f_idx = int(sys.argv[3])
-        t_idx = int(sys.argv[4])
+    elif cmd == "reorder" and len(args) > 3:
+        pl_id = args[1]
+        f_idx = int(args[2])
+        t_idx = int(args[3])
         print(json.dumps(reorder_tracks(pl_id, f_idx, t_idx), ensure_ascii=False))
-    elif cmd == "delete" and len(sys.argv) > 2:
-        print(json.dumps(delete_playlist(sys.argv[2]), ensure_ascii=False))
-    elif cmd == "add" and len(sys.argv) > 3:
-        print(json.dumps(add_tracks_to_playlist(sys.argv[2], sys.argv[3]), ensure_ascii=False))
-    elif cmd == "remove" and len(sys.argv) > 3:
-        print(json.dumps(remove_track_from_playlist(sys.argv[2], sys.argv[3]), ensure_ascii=False))
+    elif cmd == "delete" and len(args) > 1:
+        print(json.dumps(delete_playlist(args[1]), ensure_ascii=False))
+    elif cmd == "add" and len(args) > 2:
+        print(json.dumps(add_tracks_to_playlist(args[1], args[2]), ensure_ascii=False))
+    elif cmd == "remove" and len(args) > 2:
+        print(json.dumps(remove_track_from_playlist(args[1], args[2]), ensure_ascii=False))
     else:
         print(json.dumps(load_playlists(), ensure_ascii=False))
 
+def main():
+    handle_cli(sys.argv[1:] if len(sys.argv) > 1 else [])
+
 if __name__ == "__main__":
     main()
+

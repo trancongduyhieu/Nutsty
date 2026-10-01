@@ -116,6 +116,8 @@ BACKEND_MAP = {
     "ytmusic_helper.py": "ytmusic_helper",
     "social_notes.py": "social_notes",
     "browser_login.py": "browser_login",
+    "spotify_importer.py": "spotify_importer",
+    "updater.py": "updater",
 }
 
 # Backend CLI Dispatcher: Prevents re-launching GUI when invoked as backend worker
@@ -171,6 +173,8 @@ except ImportError:
         sys.stderr.write("Fatal: Neither PySide6 nor PyQt6 is installed.\n")
         sys.stderr.write("Please run: pip install PySide6\n")
         sys.exit(1)
+
+tray_icon_ref = [None]
 
 class NutstyBridge(QObject):
     processFinished = Signal(int, str, str, int)
@@ -253,6 +257,26 @@ class NutstyBridge(QObject):
             sys.stderr.write(f"getClipboardText failed: {e}\n")
         return ""
 
+    @Slot(str, str)
+    def showTrayNotification(self, title: str, message: str):
+        try:
+            if tray_icon_ref[0] and hasattr(tray_icon_ref[0], "showMessage"):
+                tray_icon_ref[0].showMessage(str(title), str(message))
+        except Exception as e:
+            sys.stderr.write(f"showTrayNotification error: {e}\n")
+
+    @Slot(str)
+    def openUrl(self, url: str):
+        try:
+            if url:
+                if hasattr(os, "startfile"):
+                    os.startfile(url)
+                else:
+                    import webbrowser
+                    webbrowser.open(url)
+        except Exception as e:
+            sys.stderr.write(f"openUrl error: {e}\n")
+
     @Slot(QObject, int, int, int, int)
     def setWindowMaskRect(self, win_obj, x: int, y: int, w: int, h: int):
         try:
@@ -284,22 +308,43 @@ class NutstyBridge(QObject):
                 win_obj.lower()
             if pc.IS_WINDOWS and hasattr(win_obj, "winId"):
                 import ctypes
+                from ctypes import wintypes
                 hwnd = int(win_obj.winId())
-                if hwnd:
+                if hwnd > 0:
                     user32 = ctypes.windll.user32
                     GWL_EXSTYLE = -20
                     WS_EX_NOACTIVATE = 0x08000000
                     WS_EX_TOOLWINDOW = 0x00000080
                     WS_EX_APPWINDOW = 0x00040000
                     WS_EX_TOPMOST = 0x00000008
-                    ex_style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+
+                    # 64-bit safe Get/SetWindowLongPtr
+                    if hasattr(user32, "GetWindowLongPtrW"):
+                        user32.GetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int]
+                        user32.GetWindowLongPtrW.restype = ctypes.c_ssize_t
+                        ex_style = user32.GetWindowLongPtrW(hwnd, GWL_EXSTYLE)
+                    else:
+                        user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+                        user32.GetWindowLongW.restype = wintypes.LONG
+                        ex_style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+
                     target_ex = (ex_style | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW) & ~(WS_EX_APPWINDOW | WS_EX_TOPMOST)
                     if ex_style != target_ex:
-                        user32.SetWindowLongW(hwnd, GWL_EXSTYLE, target_ex)
+                        if hasattr(user32, "SetWindowLongPtrW"):
+                            user32.SetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t]
+                            user32.SetWindowLongPtrW.restype = ctypes.c_ssize_t
+                            user32.SetWindowLongPtrW(hwnd, GWL_EXSTYLE, target_ex)
+                        else:
+                            user32.SetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int, wintypes.LONG]
+                            user32.SetWindowLongW.restype = wintypes.LONG
+                            user32.SetWindowLongW(hwnd, GWL_EXSTYLE, target_ex)
+
                     HWND_BOTTOM = 1
                     SWP_NOSIZE = 0x0001
                     SWP_NOMOVE = 0x0002
                     SWP_NOACTIVATE = 0x0010
+                    user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
+                    user32.SetWindowPos.restype = wintypes.BOOL
                     user32.SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE)
         except Exception as e:
             sys.stderr.write(f"pinWindowToDesktopBottom error: {e}\n")
@@ -323,17 +368,25 @@ class NutstyBridge(QObject):
                 win_obj.requestActivate()
             if pc.IS_WINDOWS and hasattr(win_obj, "winId"):
                 import ctypes
+                from ctypes import wintypes
                 hwnd = int(win_obj.winId())
-                if hwnd:
+                if hwnd > 0:
                     user32 = ctypes.windll.user32
                     SW_RESTORE = 9
                     SW_SHOW = 5
+                    user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+                    user32.ShowWindow.restype = wintypes.BOOL
+                    user32.BringWindowToTop.argtypes = [wintypes.HWND]
+                    user32.BringWindowToTop.restype = wintypes.BOOL
+                    user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+                    user32.SetForegroundWindow.restype = wintypes.BOOL
                     user32.ShowWindow(hwnd, SW_RESTORE)
                     user32.ShowWindow(hwnd, SW_SHOW)
                     user32.BringWindowToTop(hwnd)
                     user32.SetForegroundWindow(hwnd)
         except Exception as e:
             sys.stderr.write(f"restoreWindow error: {e}\n")
+
 
     @Slot(list)
     def execDetached(self, args: list):
@@ -728,6 +781,7 @@ def main():
     tray_icon = None
     if has_widgets and QSystemTrayIcon.isSystemTrayAvailable():
         tray_icon = QSystemTrayIcon(app_icon, app)
+        tray_icon_ref[0] = tray_icon
         tray_icon.setToolTip("Nutsty Music Player")
 
         tray_menu = QMenu()

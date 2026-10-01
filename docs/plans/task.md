@@ -16,3 +16,11 @@
 | Phase 10: Task 3 - UI Modal Component (`components/SpotifyImportModal.qml`) | Completed | Liquid glass modal with bimodal i18n, no emoji, and real-time progress bar |
 | Phase 10: Task 4 - UI Triggers Integration (`components/SettingsModal.qml` & `components/NavSidebar.qml`) | Completed | Trigger buttons in Settings and NavSidebar with auto-reload of custom playlists |
 | Phase 10: Task 5 - Comprehensive Verification & Desktop Screenshot | Completed | verify_codebase.py, API verification, and live UI screenshot verification |
+| Phase 11: Task 1 - Fix Native 64-bit ctypes Marshalling in `launcher_win.py` & `backend/music_routes.py` | Completed | Added 64-bit argtypes/restype and GlobalLock/GlobalUnlock, resolving 0xc0000005 crash |
+| Phase 11: Task 2 - Fix Native Clipboard Access and Debounce in `SpotifyImportModal.qml` | Completed | Prioritize __NutstyBridge.getClipboardText() and add isImporting click guard |
+| Phase 11: Task 3 - Fix Missing `ytmusic_helper` Import in `backend/player_daemon.py` | Completed | Top-level import with fallback and guarded prewarming |
+| Phase 11: Task 4 - Concurrency Guards in `playlist_manager.py` | Completed | Implemented handle_cli(args) for safe in-process invocation |
+| Phase 11: Task 5 - Implement In-App Update Checker Backend (`updater.py`, `platform_compat.py`, API routes) | Completed | GitHub Releases API, semver parser, 6h cache, /api/check_update & /api/open_url |
+| Phase 11: Task 6 - Implement In-App Update UI in `shell.qml`, `TopHeaderBar`, `SettingsModal.qml` | Completed | Automatic 4s startup check, tray balloon notification, notification bell integration, and SettingsModal update card |
+| Phase 11: Task 7 - Portable Build Sync & Live Verification on Windows | Completed | Synced all modified backend & QML files to Nutsty_Windows_Portable, verified live execution and APIs |
+

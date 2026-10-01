@@ -196,6 +196,18 @@ Rectangle {
     }
 
     function checkClipboardLink() {
+        if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.getClipboardText) {
+            try {
+                var bridgeText = (__NutstyBridge.getClipboardText() || "").trim();
+                if (bridgeText && (bridgeText.includes("spotify.com/playlist") || bridgeText.includes("spotify:playlist"))) {
+                    if (linkInput && !linkInput.text) {
+                        linkInput.text = bridgeText;
+                        root.resolveUrl(bridgeText);
+                        return;
+                    }
+                }
+            } catch(e) {}
+        }
         var xhr = new XMLHttpRequest();
         xhr.open("GET", "http://127.0.0.1:17890/api/clipboard", true);
         xhr.onreadystatechange = function() {
@@ -1294,8 +1306,9 @@ Rectangle {
                                 id: importLinkMouse
                                 anchors.fill: parent
                                 hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
+                                cursorShape: root.isImporting ? Qt.ArrowCursor : Qt.PointingHandCursor
                                 onClicked: {
+                                    if (root.isImporting) return;
                                     if (root.resolvedPlaylist && root.resolvedPlaylist.id) {
                                         root.startImport(root.resolvedPlaylist.id, root.resolvedPlaylist.title, root.resolvedPlaylist.image);
                                     }

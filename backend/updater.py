@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+"""
+Nutsty Update Checker
+Queries GitHub Releases API, performs semantic version comparison,
+caches results (TTL 6 hours) to prevent GitHub rate-limiting,
+and returns structured update info with direct download assets.
+"""
+import os
+import sys
+import json
+import time
+import re
+import urllib.request
+import urllib.error
+
+try:
+    from . import platform_compat as pc
+except (ImportError, ValueError):
+    import platform_compat as pc
+
+CONFIG_DIR = pc.get_config_dir()
+CACHE_FILE = os.path.join(CONFIG_DIR, "nutsty_update_cache.json")
+CACHE_TTL = 6 * 3600  # 6 hours TTL
+
+def parse_semver(v_str):
+    """Parse version string like 'v1.0.11' or '1.0.0-beta.1' into comparable tuple."""
+    if not v_str:
+        return (0, 0, 0)
+    cleaned = re.sub(r"^[vV]", "", str(v_str).strip())
+    match = re.match(r"^(\d+)\.(\d+)(?:\.(\d+))?", cleaned)
+    if match:
+        major = int(match.group(1))
+        minor = int(match.group(2))
+        patch = int(match.group(3)) if match.group(3) else 0
+        return (major, minor, patch)
+    return (0, 0, 0)
+
+def is_newer_version(latest_tag, current_ver):
+    """Return True if latest_tag > current_ver."""
+    v_latest = parse_semver(latest_tag)
+    v_current = parse_semver(current_ver)
+    return v_latest > v_current
+
+def load_cached_update():
+    """Load cached update info if still valid within TTL."""
+    if not os.path.exists(CACHE_FILE):
+        return None
+    try:
+        with open(CACHE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            checked_at = data.get("checked_at", 0)
+            if time.time() - checked_at < CACHE_TTL:
+                return data
+    except Exception:
+        pass
+    return None
+
+def save_cached_update(data):
+    """Save update info to cache file."""
+    try:
+        os.makedirs(CONFIG_DIR, exist_ok=True)
+        with open(CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        sys.stderr.write(f"save_cached_update error: {e}\n")
+
+def check_for_updates(force=False):
+    """
+    Check GitHub Releases API for Nutsty updates.
+    Returns dictionary with update status, versions, changelog, and download link.
+    """
+    current_ver = getattr(pc, "APP_VERSION", "1.0.0")
+
+    if not force:
+        cached = load_cached_update()
+        if cached:
+            cached["current_version"] = current_ver
+            cached["has_update"] = is_newer_version(cached.get("latest_version", ""), current_ver)
+            return cached
+
+    repos = ["trancongduyhieu/FrostifyLocal", "trancongduyhieu/Nutsty"]
+    release_data = None
+    last_err = ""
+
+    for repo in repos:
+        api_url = f"https://api.github.com/repos/{repo}/releases"
+        try:
+            req = urllib.request.Request(
+                api_url,
+                headers={
+                    "User-Agent": "Nutsty-Desktop-App/1.0",
+                    "Accept": "application/vnd.github.v3+json"
+                }
+            )
+            with urllib.request.urlopen(req, timeout=4.0) as resp:
+                if resp.status == 200:
+                    releases = json.loads(resp.read().decode("utf-8"))
+                    if isinstance(releases, list) and len(releases) > 0:
+                        # Find first non-prerelease or the latest release
+                        non_pre = [r for r in releases if not r.get("prerelease", False)]
+                        release_data = non_pre[0] if non_pre else releases[0]
+                        break
+        except Exception as e:
+            last_err = str(e)
+            continue
+
+    if not release_data:
+        # Offline or GitHub rate limit
+        res = {
+            "has_update": False,
+            "current_version": current_ver,
+            "latest_version": current_ver,
+            "release_name": "",
+            "changelog": "",
+            "release_url": "https://github.com/trancongduyhieu/Nutsty/releases",
+            "download_url": "",
+            "checked_at": int(time.time()),
+            "error": last_err
+        }
+        return res
+
+    latest_tag = release_data.get("tag_name", "")
+    release_name = release_data.get("name") or latest_tag
+    body = (release_data.get("body") or "").strip()
+    html_url = release_data.get("html_url", "https://github.com/trancongduyhieu/Nutsty/releases")
+
+    # Find download asset
+    download_url = ""
+    assets = release_data.get("assets", [])
+    if isinstance(assets, list):
+        if pc.IS_WINDOWS:
+            for a in assets:
+                name = a.get("name", "").lower()
+                if "portable.zip" in name or ".zip" in name or ".exe" in name:
+                    download_url = a.get("browser_download_url", "")
+                    break
+        else:
+            for a in assets:
+                name = a.get("name", "").lower()
+                if ".tar.gz" in name or ".zip" in name:
+                    download_url = a.get("browser_download_url", "")
+                    break
+        if not download_url and assets:
+            download_url = assets[0].get("browser_download_url", "")
+
+    if not download_url:
+        download_url = html_url
+
+    has_update = is_newer_version(latest_tag, current_ver)
+
+    res = {
+        "has_update": has_update,
+        "current_version": current_ver,
+        "latest_version": latest_tag,
+        "release_name": release_name,
+        "changelog": body,
+        "release_url": html_url,
+        "download_url": download_url,
+        "checked_at": int(time.time())
+    }
+
+    save_cached_update(res)
+    return res
+
+if __name__ == "__main__":
+    force_check = "--force" in sys.argv
+    info = check_for_updates(force=force_check)
+    print(json.dumps(info, ensure_ascii=False, indent=2))

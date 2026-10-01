@@ -186,6 +186,14 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             music_routes.handle_get_spotify_playlists(self, query)
         elif path == "/api/spotify/import_status":
             music_routes.handle_get_spotify_import_status(self)
+        elif path == "/api/check_update":
+            force = query.get("force", ["0"])[0] in ("1", "true", "True")
+            try:
+                import updater
+                res = updater.check_for_updates(force=force)
+            except Exception as e:
+                res = {"has_update": False, "error": str(e)}
+            self._send_json(res, 200)
         else:
             self.send_response(404)
             self._send_cors_headers()
@@ -196,6 +204,19 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             music_routes.handle_post_auth_cookies(self, self._read_post_body())
         elif self.path in ("/api/auth/auto-sync", "/api/auth/auto_sync"):
             music_routes.handle_post_auth_auto_sync(self)
+        elif self.path == "/api/open_url":
+            try:
+                data = self._read_post_json()
+                target_url = data.get("url", "")
+                if target_url:
+                    if sys.platform == "win32" and hasattr(os, "startfile"):
+                        os.startfile(target_url)
+                    else:
+                        import webbrowser
+                        webbrowser.open(target_url)
+                self._send_json({"success": True}, 200)
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e)}, 500)
         elif self.path == "/api/spotify/auto-sync":
             music_routes.handle_post_spotify_auto_sync(self)
         elif self.path == "/api/spotify/validate":

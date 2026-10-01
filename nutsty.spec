@@ -85,6 +85,7 @@ hidden_imports = [
     'social_notes',
     'platform_compat',
     'browser_login',
+    'spotify_importer',
     'websockets',
     'websockets.client',
     'websockets.exceptions',
