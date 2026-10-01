@@ -47,9 +47,14 @@ Rectangle {
     property string latestVersion: "1.0.0"
     property bool hasAppUpdate: false
     property bool isCheckingUpdate: false
+    property bool isDownloadingUpdate: false
+    property real updateProgress: 0.0
+    property string updateStatusMessage: ""
 
     signal checkUpdateRequested()
     signal openUpdateUrlRequested()
+    signal startDirectUpdateRequested()
+    signal applyUpdateRequested()
 
     onVisibleChanged: {
         if (!visible) {
@@ -441,9 +446,9 @@ Rectangle {
         width: Math.min(600, root.width - 32)
         height: {
             if (root.currentTab === 1) {
-                return Math.min(540, root.height - 48);
+                return Math.min(560, root.height - 48);
             } else {
-                return root.isLoggedIn ? Math.min(590, root.height - 48) : Math.min(620, root.height - 48);
+                return root.isLoggedIn ? Math.min(660, root.height - 48) : Math.min(680, root.height - 48);
             }
         }
         anchors.centerIn: parent
@@ -2010,14 +2015,19 @@ Rectangle {
                 Item {
                     id: appUpdateRowItem
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 52
+                    Layout.preferredHeight: (root.isDownloadingUpdate || root.updateProgress > 0.0) ? 76 : 56
+                    Layout.topMargin: 4
+                    Layout.bottomMargin: 16
+
+                    Behavior on Layout.preferredHeight { NumberAnimation { duration: 160 } }
 
                     Column {
                         anchors.left: parent.left
                         anchors.right: updateActionsRow.left
                         anchors.rightMargin: 12
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 2
+                        anchors.verticalCenter: (root.isDownloadingUpdate || root.updateProgress > 0.0) ? undefined : parent.verticalCenter
+                        anchors.top: (root.isDownloadingUpdate || root.updateProgress > 0.0) ? parent.top : undefined
+                        spacing: 4
 
                         Row {
                             spacing: 8
@@ -2057,26 +2067,48 @@ Rectangle {
                         }
 
                         Text {
-                            text: root.hasAppUpdate
-                                  ? I18n.tr("Đã có bản cập nhật mới (" + root.latestVersion + "). Bấm để tải về.",
-                                            "New update available (" + root.latestVersion + "). Click to download.")
-                                  : I18n.tr("Bạn đang sử dụng phiên bản mới nhất.", "You are using the latest version.")
+                            text: root.isDownloadingUpdate
+                                  ? (root.updateStatusMessage || I18n.tr("Đang tải bản cập nhật...", "Downloading update..."))
+                                  : (root.updateProgress >= 1.0
+                                     ? I18n.tr("Đã tải xong! Bấm Khởi động lại để áp dụng.", "Download complete! Click Restart to apply.")
+                                     : (root.hasAppUpdate
+                                        ? I18n.tr("Đã có bản cập nhật mới (" + root.latestVersion + "). Bấm để cập nhật trực tiếp.",
+                                                  "New update available (" + root.latestVersion + "). Click to update directly.")
+                                        : I18n.tr("Bạn đang sử dụng phiên bản mới nhất.", "You are using the latest version.")))
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             color: root.hasAppUpdate ? root.accentColor : Theme.textSecondary
                             elide: Text.ElideRight
                             width: parent.width
                         }
+
+                        // Direct Update Progress Bar (Concentric radius, accent salience)
+                        Rectangle {
+                            visible: root.isDownloadingUpdate || root.updateProgress > 0.0
+                            width: Math.min(parent.width, 320)
+                            height: 4
+                            radius: 2
+                            color: Qt.rgba(255, 255, 255, 0.12)
+
+                            Rectangle {
+                                height: parent.height
+                                width: parent.width * Math.max(0.04, Math.min(1.0, root.updateProgress))
+                                radius: 2
+                                color: root.accentColor
+                                Behavior on width { NumberAnimation { duration: 180 } }
+                            }
+                        }
                     }
 
-                    // Action Buttons (Update Now / Check for Updates)
+                    // Action Buttons (Update Now / Check for Updates / View GitHub)
                     Row {
                         id: updateActionsRow
                         anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.verticalCenter: (root.isDownloadingUpdate || root.updateProgress > 0.0) ? undefined : parent.verticalCenter
+                        anchors.top: (root.isDownloadingUpdate || root.updateProgress > 0.0) ? parent.top : undefined
                         spacing: 8
 
-                        // If update available: Download/Update Button
+                        // 1. Direct Update / Restart Button
                         Rectangle {
                             id: downloadUpdateBtn
                             visible: root.hasAppUpdate
@@ -2096,13 +2128,21 @@ Rectangle {
 
                                 AppIcon {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    source: "../assets/icons/download-symbolic.svg"
+                                    source: root.updateProgress >= 1.0
+                                            ? "../assets/icons/emblem-ok-symbolic.svg"
+                                            : (root.isDownloadingUpdate
+                                               ? "../assets/icons/process-working-symbolic.svg"
+                                               : "../assets/icons/download-symbolic.svg")
                                     iconSize: 12
                                     color: "#000000"
                                 }
 
                                 Text {
-                                    text: I18n.tr("Cập nhật ngay", "Update Now")
+                                    text: root.updateProgress >= 1.0
+                                          ? I18n.tr("Khởi động lại ngay", "Restart Now")
+                                          : (root.isDownloadingUpdate
+                                             ? I18n.tr("Đang cập nhật...", "Updating...")
+                                             : I18n.tr("Cập nhật ngay", "Update Now"))
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 12
                                     font.bold: true
@@ -2114,12 +2154,48 @@ Rectangle {
                                 id: updDlBtnMouse
                                 anchors.fill: parent
                                 hoverEnabled: true
+                                cursorShape: root.isDownloadingUpdate ? Qt.ArrowCursor : Qt.PointingHandCursor
+                                onClicked: {
+                                    if (root.updateProgress >= 1.0) {
+                                        root.applyUpdateRequested();
+                                    } else if (!root.isDownloadingUpdate) {
+                                        root.startDirectUpdateRequested();
+                                    }
+                                }
+                            }
+                        }
+
+                        // 2. Optional GitHub release link button
+                        Rectangle {
+                            id: githubReleaseBtn
+                            visible: root.hasAppUpdate
+                            height: 28
+                            width: 28
+                            radius: 6
+                            color: ghBtnMouse.containsMouse
+                                   ? Qt.rgba(255, 255, 255, 0.14)
+                                   : Qt.rgba(255, 255, 255, 0.06)
+                            border.width: 1
+                            border.color: Qt.rgba(255, 255, 255, 0.12)
+                            Behavior on color { ColorAnimation { duration: 120 } }
+
+                            AppIcon {
+                                anchors.centerIn: parent
+                                source: "../assets/icons/arrow-outward-symbolic.svg"
+                                iconSize: 12
+                                color: Theme.textPrimary
+                            }
+
+                            MouseArea {
+                                id: ghBtnMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: root.openUpdateUrlRequested()
                             }
                         }
 
-                        // Check for Updates Button
+                        // 3. Check for Updates Button
                         Rectangle {
                             id: checkUpdateBtn
                             height: 28

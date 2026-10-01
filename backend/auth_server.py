@@ -104,6 +104,8 @@ pc.configure_windows_ssl()
 PORT = 17890
 HOST = "127.0.0.1"
 
+_pending_ui_action = None
+
 
 class AuthWebhookHandler(BaseHTTPRequestHandler):
     def _send_cors_headers(self):
@@ -148,6 +150,7 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        global _pending_ui_action
         parsed_url = urlparse(self.path)
         path = parsed_url.path
         query = parse_qs(parsed_url.query)
@@ -188,12 +191,62 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             music_routes.handle_get_spotify_import_status(self)
         elif path == "/api/check_update":
             force = query.get("force", ["0"])[0] in ("1", "true", "True")
+            mock = query.get("mock", ["0"])[0] in ("1", "true", "True")
             try:
                 import updater
-                res = updater.check_for_updates(force=force)
+                res = updater.check_for_updates(force=force, mock=mock)
             except Exception as e:
                 res = {"has_update": False, "error": str(e)}
             self._send_json(res, 200)
+        elif path == "/api/update/status":
+            try:
+                import updater
+                st = updater.direct_updater.get_status()
+            except Exception as e:
+                st = {"active": False, "status": "error", "error": str(e)}
+            self._send_json(st, 200)
+        elif path in ("/api/ui/open_settings", "/api/open_settings"):
+            tab = int(query.get("tab", [0])[0])
+            mock_upd = query.get("mock", ["0"])[0] in ("1", "true", "True")
+            _pending_ui_action = {
+                "action": "open_settings",
+                "tab": tab,
+                "mock_update": mock_upd,
+                "current_version": "1.0.0",
+                "latest_version": "v1.0.1",
+                "release_url": "https://github.com/trancongduyhieu/Nutsty/releases"
+            }
+            try:
+                import launcher_win
+                if hasattr(launcher_win, "request_open_settings"):
+                    launcher_win.request_open_settings(tab, mock_update=mock_upd)
+            except Exception:
+                pass
+            self._send_json({"success": True}, 200)
+        elif path == "/api/ui/pending_action":
+            act = _pending_ui_action
+            _pending_ui_action = None
+            self._send_json(act or {}, 200)
+        elif path in ("/api/ui/screenshot", "/api/screenshot"):
+            try:
+                import launcher_win
+                p = launcher_win.grab_screenshot() if hasattr(launcher_win, "grab_screenshot") else ""
+                self._send_json({"success": bool(p), "path": p}, 200)
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e)}, 500)
+        elif path == "/api/ui/debug":
+            try:
+                import launcher_win
+                res = {
+                    "bridge": str(launcher_win.bridge_ref[0]),
+                    "main_win": str(launcher_win.main_win_ref[0]),
+                    "engine": str(launcher_win.engine_ref[0]),
+                }
+                if launcher_win.engine_ref[0]:
+                    res["rootObjects"] = [str(o) for o in launcher_win.engine_ref[0].rootObjects()]
+                self._send_json(res, 200)
+            except Exception as e:
+                self._send_json({"error": str(e)}, 500)
         else:
             self.send_response(404)
             self._send_cors_headers()
@@ -214,6 +267,33 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                     else:
                         import webbrowser
                         webbrowser.open(target_url)
+                self._send_json({"success": True}, 200)
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e)}, 500)
+        elif self.path == "/api/update/start":
+            try:
+                import updater
+                data = self._read_post_json()
+                dl_url = data.get("download_url") if isinstance(data, dict) else None
+                tgt_ver = data.get("target_version") if isinstance(data, dict) else None
+                res = updater.direct_updater.start_download_update(dl_url, tgt_ver)
+                self._send_json(res, 200 if res.get("success") else 400)
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e)}, 500)
+        elif self.path == "/api/update/apply":
+            try:
+                import updater
+                res = updater.direct_updater.apply_update_and_restart()
+                self._send_json(res, 200 if res.get("success") else 400)
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e)}, 500)
+        elif self.path in ("/api/ui/open_settings", "/api/open_settings"):
+            try:
+                import launcher_win
+                data = self._read_post_json()
+                tab = int(data.get("tab", 0)) if isinstance(data, dict) else 0
+                if hasattr(launcher_win, "request_open_settings"):
+                    launcher_win.request_open_settings(tab)
                 self._send_json({"success": True}, 200)
             except Exception as e:
                 self._send_json({"success": False, "error": str(e)}, 500)

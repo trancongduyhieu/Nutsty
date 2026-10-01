@@ -12,6 +12,10 @@ import time
 import re
 import urllib.request
 import urllib.error
+import zipfile
+import shutil
+import subprocess
+import threading
 
 try:
     from . import platform_compat as pc
@@ -64,12 +68,24 @@ def save_cached_update(data):
     except Exception as e:
         sys.stderr.write(f"save_cached_update error: {e}\n")
 
-def check_for_updates(force=False):
+def check_for_updates(force=False, mock=False):
     """
     Check GitHub Releases API for Nutsty updates.
     Returns dictionary with update status, versions, changelog, and download link.
     """
     current_ver = getattr(pc, "APP_VERSION", "1.0.0")
+
+    if mock:
+        return {
+            "has_update": True,
+            "current_version": current_ver,
+            "latest_version": "v1.0.1",
+            "release_name": "Nutsty v1.0.1 (Hotfix & Direct Updates)",
+            "changelog": "- Khắc phục lỗi nhập playlist Spotify\n- Hỗ trợ cập nhật trực tiếp 1-chạm không cần trình duyệt\n- Tối ưu hóa bộ nhớ và độ trễ âm thanh",
+            "release_url": "https://github.com/trancongduyhieu/Nutsty/releases",
+            "download_url": "https://github.com/trancongduyhieu/Nutsty/releases/download/v1.0.0/Nutsty_Windows_Portable.zip",
+            "checked_at": int(time.time())
+        }
 
     if not force:
         cached = load_cached_update()
@@ -161,6 +177,190 @@ def check_for_updates(force=False):
 
     save_cached_update(res)
     return res
+
+
+class DirectUpdateManager:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self.active = False
+        self.status = "idle"  # idle, downloading, extracting, ready, error
+        self.progress = 0.0
+        self.percent = 0
+        self.message = ""
+        self.error = None
+        self.target_version = ""
+        self.staged_dir = None
+
+    def get_status(self):
+        with self._lock:
+            return {
+                "active": self.active,
+                "status": self.status,
+                "progress": self.progress,
+                "percent": self.percent,
+                "message": self.message,
+                "error": self.error,
+                "target_version": self.target_version
+            }
+
+    def start_download_update(self, download_url=None, target_version=None):
+        with self._lock:
+            if self.active:
+                return {"success": False, "error": "Đang có tiến trình cập nhật đang chạy."}
+            self.active = True
+            self.status = "downloading"
+            self.progress = 0.0
+            self.percent = 0
+            self.message = "Đang kết nối tới máy chủ cập nhật..."
+            self.error = None
+
+        thread = threading.Thread(target=self._worker_download, args=(download_url, target_version), daemon=True)
+        thread.start()
+        return {"success": True, "message": "Bắt đầu tải bản cập nhật."}
+
+    def _worker_download(self, download_url, target_version):
+        try:
+            if not download_url:
+                info = check_for_updates(force=True)
+                download_url = info.get("download_url")
+                target_version = info.get("latest_version")
+
+            if not download_url or not str(download_url).startswith("http"):
+                raise ValueError("Không tìm thấy tệp cập nhật hợp lệ.")
+
+            with self._lock:
+                self.target_version = target_version or "latest"
+                self.message = "Đang tải bản cập nhật..."
+
+            update_root = os.path.join(CONFIG_DIR, "updates")
+            os.makedirs(update_root, exist_ok=True)
+            zip_dest = os.path.join(update_root, "update.zip")
+            staged_dest = os.path.join(update_root, "staged")
+
+            if os.path.exists(zip_dest):
+                try:
+                    os.remove(zip_dest)
+                except Exception:
+                    pass
+            if os.path.exists(staged_dest):
+                try:
+                    shutil.rmtree(staged_dest, ignore_errors=True)
+                except Exception:
+                    pass
+
+            req = urllib.request.Request(
+                download_url,
+                headers={"User-Agent": "Nutsty-Desktop-App/1.0"}
+            )
+
+            with urllib.request.urlopen(req, timeout=60.0) as resp:
+                total_size = int(resp.headers.get("Content-Length", 0))
+                downloaded = 0
+                chunk_size = 65536
+                with open(zip_dest, "wb") as f_out:
+                    while True:
+                        chunk = resp.read(chunk_size)
+                        if not chunk:
+                            break
+                        f_out.write(chunk)
+                        downloaded += len(chunk)
+                        if total_size > 0:
+                            pct = min(100, int((downloaded / total_size) * 100))
+                            prog = min(1.0, downloaded / float(total_size))
+                            with self._lock:
+                                self.progress = prog
+                                self.percent = pct
+                                self.message = f"Đang tải bản cập nhật ({pct}%)..."
+
+            with self._lock:
+                self.status = "extracting"
+                self.message = "Đang giải nén bản cập nhật..."
+
+            os.makedirs(staged_dest, exist_ok=True)
+            with zipfile.ZipFile(zip_dest, "r") as zf:
+                zf.extractall(staged_dest)
+
+            entries = os.listdir(staged_dest)
+            final_stage = staged_dest
+            if len(entries) == 1 and os.path.isdir(os.path.join(staged_dest, entries[0])):
+                final_stage = os.path.join(staged_dest, entries[0])
+
+            with self._lock:
+                self.active = False
+                self.status = "ready"
+                self.staged_dir = final_stage
+                self.progress = 1.0
+                self.percent = 100
+                self.message = "Bản cập nhật đã tải xong! Bấm để áp dụng và khởi động lại."
+        except Exception as e:
+            with self._lock:
+                self.active = False
+                self.status = "error"
+                self.error = str(e)
+                self.message = f"Lỗi tải cập nhật: {str(e)}"
+
+    def apply_update_and_restart(self):
+        with self._lock:
+            staged = self.staged_dir
+        if not staged or not os.path.exists(staged):
+            return {"success": False, "error": "Chưa có bản cập nhật được giải nén sẵn sàng."}
+
+        if getattr(sys, "frozen", False):
+            app_dir = os.path.dirname(os.path.abspath(sys.executable))
+            exe_name = os.path.basename(sys.executable)
+        else:
+            app_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+            exe_name = "Nutsty.exe"
+
+        if pc.IS_WINDOWS:
+            bat_path = os.path.join(CONFIG_DIR, "updates", "apply_update.bat")
+            os.makedirs(os.path.dirname(bat_path), exist_ok=True)
+            script_content = f"""@echo off
+chcp 65001 >nul
+timeout /t 1 /nobreak >nul
+
+:wait_loop
+tasklist /fi "imagename eq {exe_name}" 2>nul | findstr /i "{exe_name}" >nul
+if %errorlevel% equ 0 (
+    timeout /t 1 /nobreak >nul
+    goto wait_loop
+)
+
+xcopy /s /e /y /q "{staged}\\*" "{app_dir}\\" >nul 2>&1
+timeout /t 1 /nobreak >nul
+
+if exist "{app_dir}\\{exe_name}" (
+    start "" "{app_dir}\\{exe_name}"
+) else if exist "{app_dir}\\start.bat" (
+    start "" "{app_dir}\\start.bat"
+)
+exit
+"""
+            with open(bat_path, "w", encoding="utf-8") as f:
+                f.write(script_content)
+
+            DETACHED_PROCESS = 0x00000008
+            CREATE_NEW_PROCESS_GROUP = 0x00000200
+            flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+            subprocess.Popen(["cmd.exe", "/c", bat_path], creationflags=flags, close_fds=True)
+            return {"success": True, "message": "Đang khởi động lại ứng dụng..."}
+        else:
+            sh_path = os.path.join(CONFIG_DIR, "updates", "apply_update.sh")
+            os.makedirs(os.path.dirname(sh_path), exist_ok=True)
+            sh_content = f"""#!/bin/sh
+sleep 1
+cp -rf "{staged}"/* "{app_dir}"/
+if [ -f "{app_dir}/run.sh" ]; then
+    sh "{app_dir}/run.sh" &
+fi
+"""
+            with open(sh_path, "w", encoding="utf-8") as f:
+                f.write(sh_content)
+            os.chmod(sh_path, 0o755)
+            subprocess.Popen(["/bin/sh", sh_path], start_new_session=True)
+            return {"success": True, "message": "Đang khởi động lại ứng dụng..."}
+
+direct_updater = DirectUpdateManager()
 
 if __name__ == "__main__":
     force_check = "--force" in sys.argv

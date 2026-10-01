@@ -14,6 +14,7 @@ Scope {
 
     FloatingWindow {
         id: win
+        objectName: "mainWindow"
         title: Quickshell.env("NUTSTY_PROFILE") ? ("Nutsty (" + Quickshell.env("NUTSTY_PROFILE") + ")") : "Nutsty"
         implicitWidth: Quickshell.env("NUTSTY_PROFILE") ? 810 : 1280
         implicitHeight: Quickshell.env("NUTSTY_PROFILE") ? 800 : 820
@@ -103,6 +104,9 @@ Scope {
     property string updateUrl: ""
     property string updateReleaseNotes: ""
     property var appUpdateInfo: null
+    property bool isDownloadingUpdate: false
+    property real updateDownloadProgress: 0.0
+    property string updateStatusMessage: ""
     property real lastNowPlayingSyncTime: 0
     property bool isFetchingNotesFast: false
     property bool isSyncingFromFriend: false
@@ -970,6 +974,72 @@ Scope {
         }
     }
 
+    Timer {
+        id: updateStatusPollTimer
+        interval: 400
+        repeat: true
+        running: win.isDownloadingUpdate
+        onTriggered: {
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", (win.localApiUrl || "http://127.0.0.1:17890") + "/api/update/status", true);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
+                    try {
+                        var st = JSON.parse(xhr.responseText);
+                        win.updateDownloadProgress = st.progress || 0.0;
+                        win.updateStatusMessage = st.message || "";
+                        if (st.status === "ready") {
+                            win.isDownloadingUpdate = false;
+                            win.showToast(I18n.tr("Đã tải xong bản cập nhật!", "Update download complete!"));
+                        } else if (st.status === "error") {
+                            win.isDownloadingUpdate = false;
+                            win.showToast(I18n.tr("Lỗi cập nhật: " + (st.error || ""), "Update error: " + (st.error || "")));
+                        }
+                    } catch(e) {}
+                }
+            };
+            try { xhr.send(); } catch(e) {}
+        }
+    }
+
+    Timer {
+        id: uiActionPollTimer
+        interval: 400
+        repeat: true
+        running: true
+        onTriggered: {
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", (win.localApiUrl || "http://127.0.0.1:17890") + "/api/ui/pending_action", true);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
+                    try {
+                        var res = JSON.parse(xhr.responseText);
+                        if (res && res.action) {
+                            if (res.action === "open_settings") {
+                                win.visible = true;
+                                if (res.mock_update) {
+                                    win.hasAppUpdate = true;
+                                    win.latestVersion = res.latest_version || "v1.0.1";
+                                    win.appVersion = res.current_version || "1.0.0";
+                                    win.updateUrl = res.release_url || "https://github.com/trancongduyhieu/Nutsty/releases";
+                                }
+                                settingsModal.currentTab = (typeof res.tab === "number") ? res.tab : 0;
+                                settingsModal.visible = true;
+                                if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && typeof __NutstyBridge.restoreWindow === "function") {
+                                    __NutstyBridge.restoreWindow(win);
+                                }
+                            } else if (res.action === "open_spotify_import") {
+                                win.visible = true;
+                                spotifyImportModal.openModal();
+                            }
+                        }
+                    } catch(e) {}
+                }
+            };
+            try { xhr.send(); } catch(e) {}
+        }
+    }
+
     function trackPlayback(trk) {
         PlaybackEngine.trackPlayback(win, trk, playbackTrackingProc);
     }
@@ -1249,6 +1319,44 @@ Scope {
         } catch(e) {
             win.isCheckingUpdate = false;
         }
+    }
+
+    function startDirectUpdate() {
+        if (win.isDownloadingUpdate) return;
+        win.isDownloadingUpdate = true;
+        win.updateDownloadProgress = 0.0;
+        win.updateStatusMessage = I18n.tr("Đang chuẩn bị tải bản cập nhật...", "Preparing update download...");
+
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", (win.localApiUrl || "http://127.0.0.1:17890") + "/api/update/start", true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200) {
+                    updateStatusPollTimer.restart();
+                } else {
+                    win.isDownloadingUpdate = false;
+                    win.showToast(I18n.tr("Không thể bắt đầu cập nhật", "Failed to start update"));
+                }
+            }
+        };
+        xhr.send(JSON.stringify({
+            download_url: win.updateUrl,
+            target_version: win.latestVersion
+        }));
+    }
+
+    function applyUpdateAndRestart() {
+        win.showToast(I18n.tr("Đang khởi động lại ứng dụng...", "Restarting app..."));
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", (win.localApiUrl || "http://127.0.0.1:17890") + "/api/update/apply", true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                Qt.quit();
+            }
+        };
+        xhr.send(JSON.stringify({}));
     }
 
     function startListeningAlong(friend) {
@@ -2505,6 +2613,7 @@ Scope {
         // Google Account / Cloud Settings Modal
         SettingsModal {
             id: settingsModal
+            objectName: "settingsModal"
             backgroundSourceItem: nutstyAppSurface
             isLoggedIn: win.isAuthLoggedIn
             accountName: win.authAccountName
@@ -2526,10 +2635,15 @@ Scope {
             latestVersion: win.latestVersion
             hasAppUpdate: win.hasAppUpdate
             isCheckingUpdate: win.isCheckingUpdate
+            isDownloadingUpdate: win.isDownloadingUpdate
+            updateProgress: win.updateDownloadProgress
+            updateStatusMessage: win.updateStatusMessage
 
             onCloseRequested: settingsModal.visible = false
             onCheckUpdateRequested: win.checkForUpdates(true, true)
             onOpenUpdateUrlRequested: win.openExternalUrl(win.updateUrl)
+            onStartDirectUpdateRequested: win.startDirectUpdate()
+            onApplyUpdateRequested: win.applyUpdateAndRestart()
             onSpotifyImportRequested: {
                 spotifyImportModal.openModal();
             }
@@ -2625,6 +2739,19 @@ Scope {
                 spotifyBrowserLoginProc.running = false;
                 settingsModal.spotifyAutoSyncing = false;
                 settingsModal.spotifyStatusMessage = I18n.tr("Đã hủy kết nối Spotify.", "Spotify login cancelled.");
+            }
+        }
+
+        Connections {
+            target: (typeof __NutstyBridge !== "undefined" && __NutstyBridge) ? __NutstyBridge : null
+            function onOpenSettingsRequested(tab) {
+                console.log("[Nutsty QML] onOpenSettingsRequested triggered! tab=" + tab);
+                win.visible = true;
+                settingsModal.currentTab = (typeof tab === "number") ? tab : 0;
+                settingsModal.visible = true;
+                if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && typeof __NutstyBridge.restoreWindow === "function") {
+                    __NutstyBridge.restoreWindow(win);
+                }
             }
         }
 
@@ -4004,8 +4131,24 @@ Scope {
             win.handleDislikedTrack(win.currentTrack);
         }
         function openSettings() {
+            win.visible = true;
             settingsModal.currentTab = 0;
             settingsModal.visible = true;
+            if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && typeof __NutstyBridge.restoreWindow === "function") {
+                __NutstyBridge.restoreWindow(win);
+            }
+        }
+        function testUpdatePreview() {
+            win.visible = true;
+            win.hasAppUpdate = true;
+            win.latestVersion = "v1.0.1";
+            win.appVersion = "1.0.0";
+            win.updateUrl = "https://github.com/trancongduyhieu/Nutsty/releases";
+            settingsModal.currentTab = 0;
+            settingsModal.visible = true;
+            if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && typeof __NutstyBridge.restoreWindow === "function") {
+                __NutstyBridge.restoreWindow(win);
+            }
         }
         function openSpotifyImport() {
             win.visible = true;

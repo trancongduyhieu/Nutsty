@@ -12,6 +12,9 @@ import subprocess
 import threading
 from pathlib import Path
 
+# Register active launcher instance in sys.modules so background threads (like auth_server) get the active instance
+sys.modules["launcher_win"] = sys.modules[__name__]
+
 # Safe logging for Windows PyInstaller GUI mode (where sys.stdout/stderr are None)
 class SafeLogWriter:
     def __init__(self, log_path=None):
@@ -175,9 +178,96 @@ except ImportError:
         sys.exit(1)
 
 tray_icon_ref = [None]
+bridge_ref = [None]
+main_win_ref = [None]
+engine_ref = [None]
+
+def request_open_settings(tab: int = 0, mock_update: bool = False):
+    try:
+        from PySide6.QtCore import QTimer, QObject
+        def _do():
+            if bridge_ref[0]:
+                try:
+                    bridge_ref[0].openSettingsRequested.emit(tab)
+                except Exception:
+                    pass
+            w = main_win_ref[0]
+            if not w:
+                try:
+                    from PySide6.QtGui import QGuiApplication
+                    for tw in QGuiApplication.topLevelWindows():
+                        if tw.width() >= 500:
+                            w = tw
+                            main_win_ref[0] = tw
+                            break
+                except Exception:
+                    pass
+            if w:
+                try:
+                    w.setProperty("visible", True)
+                    if bridge_ref[0]:
+                        bridge_ref[0].restoreWindow(w)
+                    search_targets = [w]
+                    if hasattr(w, "contentItem") and w.contentItem():
+                        search_targets.append(w.contentItem())
+                    if engine_ref[0]:
+                        search_targets.extend(engine_ref[0].rootObjects())
+                    
+                    found_modal = False
+                    for st in search_targets:
+                        if hasattr(st, "findChildren"):
+                            for child in st.findChildren(QObject):
+                                oname = child.objectName() if hasattr(child, "objectName") else ""
+                                if oname == "settingsModal":
+                                    child.setProperty("currentTab", tab)
+                                    child.setProperty("visible", True)
+                                    found_modal = True
+                                elif oname == "mainWindow":
+                                    child.setProperty("visible", True)
+                                    if mock_update:
+                                        child.setProperty("hasAppUpdate", True)
+                                        child.setProperty("latestVersion", "v1.0.1")
+                                        child.setProperty("appVersion", "1.0.0")
+                                        child.setProperty("updateUrl", "https://github.com/trancongduyhieu/Nutsty/releases")
+                    sys.stderr.write(f"request_open_settings: found_modal={found_modal}\n")
+                except Exception as e:
+                    sys.stderr.write(f"request_open_settings _do error: {e}\n")
+        QTimer.singleShot(0, _do)
+    except Exception as e:
+        sys.stderr.write(f"request_open_settings error: {e}\n")
+
+def grab_screenshot(save_path: str = "") -> str:
+    import tempfile
+    if not save_path:
+        save_path = os.path.join(tempfile.gettempdir(), "nutsty_rendered.png")
+    w = main_win_ref[0]
+    if not w:
+        try:
+            from PySide6.QtGui import QGuiApplication
+            for tw in QGuiApplication.topLevelWindows():
+                if tw.width() >= 500:
+                    w = tw
+                    main_win_ref[0] = tw
+                    break
+        except Exception:
+            pass
+    if w:
+        try:
+            if hasattr(w, "grabWindow"):
+                img = w.grabWindow()
+                img.save(save_path)
+                return save_path
+        except Exception as e:
+            sys.stderr.write(f"grab_screenshot error: {e}\n")
+    return ""
 
 class NutstyBridge(QObject):
     processFinished = Signal(int, str, str, int)
+    openSettingsRequested = Signal(int)
+
+    @Slot(int)
+    def openSettings(self, tab: int = 0):
+        self.openSettingsRequested.emit(tab)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -708,6 +798,7 @@ def main():
     start_daemons()
 
     engine = QQmlApplicationEngine()
+    engine_ref[0] = engine
     engine.warnings.connect(lambda warns: [sys.stderr.write(f"QML Warning: {w.toString()}\n") for w in warns])
 
     compat_path = os.path.join(APP_ROOT, "compat")
@@ -725,6 +816,7 @@ def main():
             engine.addImportPath(alt_pyside_qml)
 
     bridge = NutstyBridge()
+    bridge_ref[0] = bridge
     engine.rootContext().setContextProperty("__NutstyBridge", bridge)
 
     shell_qml = os.path.join(APP_ROOT, "shell.qml")
@@ -766,7 +858,7 @@ def main():
             w.raise_()
             w.requestActivate()
 
-    main_win_ref = [None]
+    main_win_ref[0] = None
     for obj in engine.rootObjects():
         if isinstance(obj, (QWindow, QQuickWindow)):
             _init_win(obj)
@@ -840,6 +932,10 @@ def main():
         act_open = QAction("Mở cửa sổ chính (Open Full)", tray_menu)
         act_open.triggered.connect(_open_full_window)
         tray_menu.addAction(act_open)
+
+        act_settings = QAction("Cài đặt & Cập nhật (Settings)", tray_menu)
+        act_settings.triggered.connect(lambda: request_open_settings(0))
+        tray_menu.addAction(act_settings)
 
         tray_menu.addSeparator()
 
