@@ -212,9 +212,9 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                 "action": "open_settings",
                 "tab": tab,
                 "mock_update": mock_upd,
-                "current_version": "1.0.0",
-                "latest_version": "v1.0.1",
-                "release_url": "https://github.com/trancongduyhieu/Nutsty/releases"
+                "current_version": "1.0.1",
+                "latest_version": "v1.0.2",
+                "release_url": "https://github.com/trancongduyhieu/FrostifyLocal/releases"
             }
             try:
                 import launcher_win

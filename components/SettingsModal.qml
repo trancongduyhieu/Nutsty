@@ -43,8 +43,8 @@ Rectangle {
     property bool spotifyAutoSyncing: false
     property bool manualSpotifyExpanded: false
     property bool spotifyValidating: false
-    property string appVersion: "1.0.1"
-    property string latestVersion: "1.0.1"
+    property string appVersion: "1.0.2"
+    property string latestVersion: "1.0.2"
     property bool hasAppUpdate: false
     property bool isCheckingUpdate: false
     property bool isDownloadingUpdate: false

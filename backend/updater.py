@@ -79,11 +79,11 @@ def check_for_updates(force=False, mock=False):
         return {
             "has_update": True,
             "current_version": current_ver,
-            "latest_version": "v1.0.1",
-            "release_name": "Nutsty v1.0.1 (Hotfix & Direct Updates)",
-            "changelog": "- Khắc phục lỗi nhập playlist Spotify\n- Hỗ trợ cập nhật trực tiếp 1-chạm không cần trình duyệt\n- Tối ưu hóa bộ nhớ và độ trễ âm thanh",
-            "release_url": "https://github.com/trancongduyhieu/Nutsty/releases",
-            "download_url": "https://github.com/trancongduyhieu/Nutsty/releases/download/v1.0.0/Nutsty_Windows_Portable.zip",
+            "latest_version": "v1.0.2",
+            "release_name": "Nutsty v1.0.2 (Windows Hotfixes & Stability)",
+            "changelog": "- Khắc phục lỗi lệch bài hát / desync metadata\n- Sửa lỗi trỏ chuột đồng hồ cát và mở duplicate cửa sổ\n- Sửa lỗi nền trắng và giật rung ở Desktop Lyrics Widget\n- Tối ưu hóa CPU, loại bỏ rò rỉ luồng và chống nóng máy\n- Khắc phục lỗi không phát nhạc sau khi khởi động lại máy",
+            "release_url": "https://github.com/trancongduyhieu/FrostifyLocal/releases",
+            "download_url": "https://github.com/trancongduyhieu/FrostifyLocal/releases/download/v1.0.2/Nutsty_Windows_Portable.zip",
             "checked_at": int(time.time())
         }
 
