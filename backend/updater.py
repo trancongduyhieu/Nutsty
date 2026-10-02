@@ -121,6 +121,46 @@ def check_for_updates(force=False, mock=False):
             continue
 
     if not release_data:
+        # Fallback to releases.atom (HTML-based RSS feed, not subject to 60 req/hr REST API rate limits)
+        import xml.etree.ElementTree as ET
+        for repo in repos:
+            atom_url = f"https://github.com/{repo}/releases.atom"
+            try:
+                req = urllib.request.Request(
+                    atom_url,
+                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+                )
+                with urllib.request.urlopen(req, timeout=5.0) as resp:
+                    if resp.status == 200:
+                        root = ET.fromstring(resp.read())
+                        ns = {'atom': 'http://www.w3.org/2005/Atom'}
+                        entry = root.find('atom:entry', ns)
+                        if entry is not None:
+                            title_elem = entry.find('atom:title', ns)
+                            if title_elem is not None and title_elem.text:
+                                tag = title_elem.text.strip()
+                                link_elem = entry.find('atom:link', ns)
+                                atom_html = link_elem.attrib.get('href') if link_elem is not None else f"https://github.com/{repo}/releases/tag/{tag}"
+                                content_elem = entry.find('atom:content', ns)
+                                atom_body = ""
+                                if content_elem is not None and content_elem.text:
+                                    atom_body = re.sub(r'<[^>]+>', '', content_elem.text).strip()
+                                
+                                asset_name = "Nutsty_Windows_Portable.zip" if getattr(pc, "IS_WINDOWS", False) else "Nutsty_Linux.zip"
+                                atom_download = f"https://github.com/{repo}/releases/download/{tag}/{asset_name}"
+                                release_data = {
+                                    "tag_name": tag,
+                                    "name": tag,
+                                    "body": atom_body,
+                                    "html_url": atom_html,
+                                    "assets": [{"name": asset_name, "browser_download_url": atom_download}]
+                                }
+                                break
+            except Exception as e:
+                last_err = str(e)
+                continue
+
+    if not release_data:
         # Offline or GitHub rate limit
         res = {
             "has_update": False,
