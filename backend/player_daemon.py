@@ -135,7 +135,7 @@ def ensure_mpv():
             "--loop-playlist=inf",
             "--gapless-audio=yes",
             f"--ytdl-format={ytdl_fmt}",
-            "--ytdl-raw-options=extractor-args=youtube:player_client=android,ios,tv_embedded,android_creator",
+            "--ytdl-raw-options=extractor-args=youtube:player_client=android",
             f"--user-agent={DEFAULT_UA}",
             "--referrer=https://www.youtube.com/",
             f"--log-file={LOG_FILE}"
@@ -150,7 +150,7 @@ def ensure_mpv():
             if cookie_file and os.path.exists(cookie_file):
                 safe_cookie = cookie_file.replace("\\", "/")
                 cmd.append(f"--cookies-file={safe_cookie}")
-                cmd.append(f"--ytdl-raw-options=cookies={safe_cookie},extractor-args=youtube:player_client=android,ios,tv_embedded,android_creator")
+                cmd.append(f"--ytdl-raw-options=cookies={safe_cookie},extractor-args=youtube:player_client=android")
         except Exception:
             pass
 

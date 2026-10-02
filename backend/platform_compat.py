@@ -197,7 +197,10 @@ if IS_WINDOWS:
     GENERIC_READ = 0x80000000
     GENERIC_WRITE = 0x40000000
     OPEN_EXISTING = 3
-    INVALID_HANDLE_VALUE = -1
+    INVALID_HANDLE_VALUE = wintypes.HANDLE(-1).value
+
+    def is_invalid_handle(h):
+        return h in (None, 0, -1, 0xFFFFFFFFFFFFFFFF, INVALID_HANDLE_VALUE)
 
     class WindowsNamedPipeClient:
         def __init__(self, pipe_name: str, timeout: float = 2.0):
@@ -214,7 +217,7 @@ if IS_WINDOWS:
                 0,
                 None
             )
-            if self.handle == INVALID_HANDLE_VALUE:
+            if is_invalid_handle(self.handle):
                 err = ctypes.GetLastError()
                 raise OSError(f"Failed to open named pipe {pipe_name}, win32 error: {err}")
 
@@ -222,6 +225,8 @@ if IS_WINDOWS:
             self.timeout = max(0.1, float(timeout))
 
         def sendall(self, data: bytes):
+            if is_invalid_handle(self.handle):
+                raise OSError("Cannot write to invalid named pipe handle")
             bytes_written = ctypes.c_ulong()
             res = kernel32.WriteFile(self.handle, data, len(data), ctypes.byref(bytes_written), None)
             if not res:
@@ -229,7 +234,7 @@ if IS_WINDOWS:
                 raise OSError(f"WriteFile to named pipe failed, error: {err}")
 
         def recv(self, bufsize: int = 4096) -> bytes:
-            if self.handle == INVALID_HANDLE_VALUE:
+            if is_invalid_handle(self.handle):
                 return b""
 
             buf = ctypes.create_string_buffer(bufsize)
@@ -261,7 +266,7 @@ if IS_WINDOWS:
             return b""
 
         def close(self):
-            if self.handle != INVALID_HANDLE_VALUE:
+            if not is_invalid_handle(self.handle):
                 kernel32.CloseHandle(self.handle)
                 self.handle = INVALID_HANDLE_VALUE
 else:
