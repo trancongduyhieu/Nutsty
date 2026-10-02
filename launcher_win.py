@@ -372,6 +372,25 @@ class NutstyBridge(QObject):
             return APP_ROOT
         return os.environ.get(key, "")
 
+    @Slot(result=str)
+    def getAppDir(self) -> str:
+        if getattr(sys, "frozen", False):
+            return os.path.dirname(os.path.abspath(sys.executable))
+        return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+    @Slot()
+    def quitApp(self):
+        try:
+            from PySide6.QtCore import QCoreApplication
+            QCoreApplication.quit()
+        except Exception:
+            pass
+        def _force_exit():
+            time.sleep(0.5)
+            os._exit(0)
+        t = threading.Thread(target=_force_exit, daemon=True)
+        t.start()
+
     @Slot(str, result=str)
     def readFile(self, path: str) -> str:
         if not path:

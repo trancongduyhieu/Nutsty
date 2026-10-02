@@ -1347,16 +1347,24 @@ Scope {
     }
 
     function applyUpdateAndRestart() {
-        win.showToast(I18n.tr("Đang khởi động lại ứng dụng...", "Restarting app..."));
+        win.showToast(I18n.tr("Đang áp dụng bản cập nhật...", "Applying update..."));
+        var appPath = "";
+        if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && typeof __NutstyBridge.getAppDir === "function") {
+            appPath = __NutstyBridge.getAppDir();
+        }
         var xhr = new XMLHttpRequest();
         xhr.open("POST", (win.localApiUrl || "http://127.0.0.1:17890") + "/api/update/apply", true);
         xhr.setRequestHeader("Content-Type", "application/json");
         xhr.onreadystatechange = function() {
             if (xhr.readyState === XMLHttpRequest.DONE) {
-                Qt.quit();
+                if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && typeof __NutstyBridge.quitApp === "function") {
+                    __NutstyBridge.quitApp();
+                } else {
+                    Qt.quit();
+                }
             }
         };
-        xhr.send(JSON.stringify({}));
+        xhr.send(JSON.stringify({ app_dir: appPath }));
     }
 
     function startListeningAlong(friend) {

@@ -286,7 +286,9 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
         elif self.path == "/api/update/apply":
             try:
                 import updater
-                res = updater.direct_updater.apply_update_and_restart()
+                data = self._read_post_json()
+                target_dir = data.get("app_dir") if isinstance(data, dict) else None
+                res = updater.direct_updater.apply_update_and_restart(target_dir=target_dir)
                 self._send_json(res, 200 if res.get("success") else 400)
             except Exception as e:
                 self._send_json({"success": False, "error": str(e)}, 500)

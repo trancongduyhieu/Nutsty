@@ -339,36 +339,56 @@ class DirectUpdateManager:
                 self.error = str(e)
                 self.message = f"Lỗi tải cập nhật: {str(e)}"
 
-    def apply_update_and_restart(self):
+    def apply_update_and_restart(self, target_dir=None):
         with self._lock:
             staged = self.staged_dir
         if not staged or not os.path.exists(staged):
-            return {"success": False, "error": "Chưa có bản cập nhật được giải nén sẵn sàng."}
+            default_staged = os.path.join(CONFIG_DIR, "updates", "staged")
+            if os.path.exists(default_staged):
+                entries = os.listdir(default_staged)
+                if len(entries) == 1 and os.path.isdir(os.path.join(default_staged, entries[0])):
+                    staged = os.path.join(default_staged, entries[0])
+                else:
+                    staged = default_staged
+            else:
+                return {"success": False, "error": "Chưa có bản cập nhật được giải nén sẵn sàng."}
 
-        if getattr(sys, "frozen", False):
+        if target_dir and os.path.exists(target_dir):
+            app_dir = os.path.abspath(target_dir)
+            exe_name = "Nutsty.exe"
+        elif getattr(sys, "frozen", False):
             app_dir = os.path.dirname(os.path.abspath(sys.executable))
             exe_name = os.path.basename(sys.executable)
         else:
             app_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
             exe_name = "Nutsty.exe"
 
+        staged = os.path.normpath(staged)
+        app_dir = os.path.normpath(app_dir)
+
         if pc.IS_WINDOWS:
-            bat_path = os.path.join(CONFIG_DIR, "updates", "apply_update.bat")
+            bat_path = os.path.normpath(os.path.join(CONFIG_DIR, "updates", "apply_update.bat"))
             os.makedirs(os.path.dirname(bat_path), exist_ok=True)
             script_content = f"""@echo off
 chcp 65001 >nul
+title Nutsty Updater
+cls
+echo ========================================================
+echo    Nutsty - Dang cap nhat len phien ban moi...
+echo ========================================================
+echo.
 timeout /t 1 /nobreak >nul
 
-:wait_loop
-tasklist /fi "imagename eq {exe_name}" 2>nul | findstr /i "{exe_name}" >nul
-if %errorlevel% equ 0 (
-    timeout /t 1 /nobreak >nul
-    goto wait_loop
-)
-
-xcopy /s /e /y /q "{staged}\\*" "{app_dir}\\" >nul 2>&1
+echo [*] Dang dong tien trinh cu / Terminating old processes...
+taskkill /f /im Nutsty.exe >nul 2>&1
+taskkill /f /im mpv.exe >nul 2>&1
 timeout /t 1 /nobreak >nul
 
+echo [*] Dang ghi de tep cap nhat / Applying update files...
+robocopy "{staged}" "{app_dir}" /E /IS /IT /NP /R:2 /W:1 >nul
+
+echo [*] Hoan tat! Dang khoi dong lai Nutsty / Launching new version...
+timeout /t 1 /nobreak >nul
 if exist "{app_dir}\\{exe_name}" (
     start "" "{app_dir}\\{exe_name}"
 ) else if exist "{app_dir}\\start.bat" (
@@ -379,9 +399,9 @@ exit
             with open(bat_path, "w", encoding="utf-8") as f:
                 f.write(script_content)
 
-            DETACHED_PROCESS = 0x00000008
+            CREATE_NEW_CONSOLE = 0x00000010
             CREATE_NEW_PROCESS_GROUP = 0x00000200
-            flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+            flags = CREATE_NEW_CONSOLE | CREATE_NEW_PROCESS_GROUP
             subprocess.Popen(["cmd.exe", "/c", bat_path], creationflags=flags, close_fds=True)
             return {"success": True, "message": "Đang khởi động lại ứng dụng..."}
         else:
