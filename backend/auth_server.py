@@ -194,6 +194,9 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             mock = query.get("mock", ["0"])[0] in ("1", "true", "True")
             try:
                 import updater
+                if force:
+                    import importlib
+                    importlib.reload(updater)
                 res = updater.check_for_updates(force=force, mock=mock)
             except Exception as e:
                 res = {"has_update": False, "error": str(e)}
