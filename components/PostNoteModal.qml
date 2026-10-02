@@ -415,11 +415,13 @@ Rectangle {
                         Item {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 34
-                            visible: root.attachedTrack !== null
+                            visible: true
 
+                            // Case 1: Track attached -> Show track info, change button and remove button
                             RowLayout {
                                 anchors.fill: parent
                                 spacing: 8
+                                visible: !!root.attachedTrack
 
                                 // Album Art Thumbnail (28x28, R=6 using unified RoundedImage with border)
                                 RoundedImage {
@@ -551,80 +553,115 @@ Rectangle {
                                 }
                             }
 
-                            // Case 2: No track attached -> Subtle options to attach
+                            // Case 2: No track attached -> Centered subtle action pills to attach/search music
                             RowLayout {
                                 anchors.fill: parent
                                 spacing: 8
-                                visible: root.attachedTrack === null
+                                visible: !root.attachedTrack
 
-                                // Option A: Attach currently playing song (if playing)
-                                MouseArea {
+                                Item { Layout.fillWidth: true }
+
+                                // Option A: Attach currently playing song (if playing in background)
+                                Rectangle {
                                     id: attachCurBtn
-                                    visible: root.currentTrack !== null
-                                    Layout.preferredHeight: 22
-                                    Layout.preferredWidth: attachCurRow.implicitWidth + 8
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        root.attachedTrack = root.currentTrack;
+                                    visible: !!root.currentTrack
+                                    Layout.preferredHeight: 26
+                                    Layout.preferredWidth: attachCurRow.implicitWidth + 18
+                                    radius: 13
+                                    color: attachCurMouse.containsMouse 
+                                        ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) 
+                                        : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.10)
+                                    border.color: attachCurMouse.containsMouse 
+                                        ? root.accentColor 
+                                        : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
+                                    border.width: 1
+
+                                    Behavior on color { ColorAnimation { duration: 120 } }
+                                    Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                                    MouseArea {
+                                        id: attachCurMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            root.attachedTrack = root.currentTrack;
+                                        }
                                     }
 
                                     Row {
                                         id: attachCurRow
                                         anchors.centerIn: parent
-                                        spacing: 4
+                                        spacing: 5
 
                                         AppIcon {
                                             anchors.verticalCenter: parent.verticalCenter
                                             source: "../assets/icons/folder-music-symbolic.svg"
-                                            iconSize: 11
-                                            color: attachCurBtn.containsMouse ? "#ffffff" : root.accentColor
+                                            iconSize: 12
+                                            color: attachCurMouse.containsMouse ? "#ffffff" : root.accentColor
                                         }
 
                                         Text {
                                             anchors.verticalCenter: parent.verticalCenter
                                             text: I18n.tr("Bài đang phát", "Current song")
-                                            color: attachCurBtn.containsMouse ? "#ffffff" : root.accentColor
+                                            color: attachCurMouse.containsMouse ? "#ffffff" : root.accentColor
                                             font.family: Theme.fontFamily
-                                            font.pixelSize: 10
+                                            font.pixelSize: 11
                                             font.bold: true
                                         }
                                     }
                                 }
 
                                 // Option B: Search & pick song
-                                MouseArea {
+                                Rectangle {
                                     id: pickOtherBtn
-                                    Layout.preferredHeight: 22
-                                    Layout.preferredWidth: pickOtherRow.implicitWidth + 8
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        root.trackSearchQuery = "";
-                                        pickerSearchInput.text = "";
-                                        root.onlineSearchResults = [];
-                                        root.isPickingTrack = true;
-                                        pickerSearchInput.forceActiveFocus();
+                                    Layout.preferredHeight: 26
+                                    Layout.preferredWidth: pickOtherRow.implicitWidth + 18
+                                    radius: 13
+                                    color: pickOtherMouse.containsMouse 
+                                        ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) 
+                                        : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.10)
+                                    border.color: pickOtherMouse.containsMouse 
+                                        ? root.accentColor 
+                                        : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
+                                    border.width: 1
+
+                                    Behavior on color { ColorAnimation { duration: 120 } }
+                                    Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                                    MouseArea {
+                                        id: pickOtherMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            root.trackSearchQuery = "";
+                                            pickerSearchInput.text = "";
+                                            root.onlineSearchResults = [];
+                                            root.isPickingTrack = true;
+                                            pickerSearchInput.forceActiveFocus();
+                                        }
                                     }
 
                                     Row {
                                         id: pickOtherRow
                                         anchors.centerIn: parent
-                                        spacing: 4
+                                        spacing: 5
 
                                         AppIcon {
                                             anchors.verticalCenter: parent.verticalCenter
                                             source: "../assets/icons/system-search-symbolic.svg"
-                                            iconSize: 11
-                                            color: pickOtherBtn.containsMouse ? "#ffffff" : Qt.rgba(1, 1, 1, 0.6)
+                                            iconSize: 12
+                                            color: pickOtherMouse.containsMouse ? "#ffffff" : root.accentColor
                                         }
 
                                         Text {
                                             anchors.verticalCenter: parent.verticalCenter
-                                            text: I18n.tr("Chọn bài...", "Pick song...")
-                                            color: pickOtherBtn.containsMouse ? "#ffffff" : Qt.rgba(1, 1, 1, 0.6)
+                                            text: I18n.tr("Thêm bài hát...", "Add song...")
+                                            color: pickOtherMouse.containsMouse ? "#ffffff" : Qt.rgba(1, 1, 1, 0.85)
                                             font.family: Theme.fontFamily
-                                            font.pixelSize: 10
+                                            font.pixelSize: 11
+                                            font.bold: true
                                         }
                                     }
                                 }

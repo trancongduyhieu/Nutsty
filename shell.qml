@@ -97,8 +97,8 @@ Scope {
     property bool toastVisible: false
     property string localApiUrl: "http://127.0.0.1:17890"
     property string notesApiUrl: Quickshell.env("NUTSTY_WORKER_URL") || "http://127.0.0.1:17890"
-    property string appVersion: "1.0.2"
-    property string latestVersion: "1.0.2"
+    property string appVersion: "1.0.3"
+    property string latestVersion: "1.0.3"
     property bool hasAppUpdate: false
     property bool isCheckingUpdate: false
     property string updateUrl: ""
@@ -1019,8 +1019,8 @@ Scope {
                                 win.visible = true;
                                 if (res.mock_update) {
                                     win.hasAppUpdate = true;
-                                    win.latestVersion = res.latest_version || "v1.0.2";
-                                    win.appVersion = res.current_version || "1.0.1";
+                                    win.latestVersion = res.latest_version || "v1.0.3";
+                                    win.appVersion = res.current_version || "1.0.3";
                                     win.updateUrl = res.release_url || "https://github.com/trancongduyhieu/Nutsty/releases";
                                 }
                                 settingsModal.currentTab = (typeof res.tab === "number") ? res.tab : 0;
@@ -4155,8 +4155,8 @@ Scope {
         function testUpdatePreview() {
             win.visible = true;
             win.hasAppUpdate = true;
-            win.latestVersion = "v1.0.2";
-            win.appVersion = "1.0.1";
+            win.latestVersion = "v1.0.3";
+            win.appVersion = "1.0.3";
             win.updateUrl = "https://github.com/trancongduyhieu/Nutsty/releases";
             settingsModal.currentTab = 0;
             settingsModal.visible = true;

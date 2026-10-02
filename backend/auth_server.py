@@ -215,8 +215,8 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                 "action": "open_settings",
                 "tab": tab,
                 "mock_update": mock_upd,
-                "current_version": "1.0.1",
-                "latest_version": "v1.0.2",
+                "current_version": "1.0.3",
+                "latest_version": "v1.0.3",
                 "release_url": "https://github.com/trancongduyhieu/FrostifyLocal/releases"
             }
             try:
