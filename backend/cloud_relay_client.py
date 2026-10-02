@@ -410,6 +410,18 @@ def invalidate_cloud_identity_by_user_id(user_id):
             pass
 
 
+_LAST_CLOUD_ERROR_LOG = 0
+_CLOUD_FAIL_COUNT = 0
+_CLOUD_COOLDOWN_UNTIL = 0
+
+def _log_cloud_error(msg):
+    global _LAST_CLOUD_ERROR_LOG
+    now = time.time()
+    if now - _LAST_CLOUD_ERROR_LOG > 60:
+        _LAST_CLOUD_ERROR_LOG = now
+        sys.stderr.write(f"[CloudRelayClient] {msg}\n")
+
+
 class CloudRelayClient:
     """Client bridge: forwards to Cloudflare Worker if configured, else uses CloudRelayEngine."""
     def __init__(self, relay_url=None):
@@ -431,8 +443,13 @@ class CloudRelayClient:
         return self.relay_url.startswith("http://") or self.relay_url.startswith("https://")
 
     def _http_request(self, method, endpoint, data=None, params=None):
+        global _CLOUD_FAIL_COUNT, _CLOUD_COOLDOWN_UNTIL
         if not self.is_external():
             return None
+        now = time.time()
+        if now < _CLOUD_COOLDOWN_UNTIL:
+            return None
+
         url = self.relay_url.rstrip("/") + endpoint
         if params:
             url += "?" + urllib.parse.urlencode(params)
@@ -452,6 +469,8 @@ class CloudRelayClient:
                         invalidate_cloud_identity_by_user_id(uid)
                     return {"success": False, "error": "Unauthorized", "unauthorized": True}
                 if r.status_code < 500:
+                    _CLOUD_FAIL_COUNT = 0
+                    _CLOUD_COOLDOWN_UNTIL = 0
                     return r.json()
             except Exception as req_err:
                 if "CERTIFICATE_VERIFY_FAILED" in str(req_err) or "SSLError" in type(req_err).__name__:
@@ -465,6 +484,8 @@ class CloudRelayClient:
                                 invalidate_cloud_identity_by_user_id(uid)
                             return {"success": False, "error": "Unauthorized", "unauthorized": True}
                         if r.status_code < 500:
+                            _CLOUD_FAIL_COUNT = 0
+                            _CLOUD_COOLDOWN_UNTIL = 0
                             return r.json()
                     except Exception:
                         pass
@@ -486,8 +507,17 @@ class CloudRelayClient:
             except Exception:
                 ctx = None
 
+        def _record_cloud_failure(err_msg):
+            global _CLOUD_FAIL_COUNT, _CLOUD_COOLDOWN_UNTIL
+            _CLOUD_FAIL_COUNT += 1
+            if _CLOUD_FAIL_COUNT >= 3:
+                _CLOUD_COOLDOWN_UNTIL = time.time() + 25.0  # 25s backoff
+            _log_cloud_error(err_msg)
+
         try:
             with urllib.request.urlopen(req, data=body, timeout=5.0, context=ctx) as resp:
+                _CLOUD_FAIL_COUNT = 0
+                _CLOUD_COOLDOWN_UNTIL = 0
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as he:
             if he.code == 401:
@@ -495,7 +525,7 @@ class CloudRelayClient:
                 if uid:
                     invalidate_cloud_identity_by_user_id(uid)
                 return {"success": False, "error": "Unauthorized", "unauthorized": True}
-            sys.stderr.write(f"[CloudRelayClient request failed]: {he}\n")
+            _record_cloud_failure(f"HTTP {he.code}: {he}")
             return None
         except Exception as e:
             if "CERTIFICATE_VERIFY_FAILED" in str(e) or "SSL" in type(e).__name__:
@@ -505,6 +535,8 @@ class CloudRelayClient:
                     req_retry.add_header("Content-Type", "application/json")
                     req_retry.add_header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) NutstyClient/1.0")
                     with urllib.request.urlopen(req_retry, data=body, timeout=5.0, context=unverified_ctx) as resp:
+                        _CLOUD_FAIL_COUNT = 0
+                        _CLOUD_COOLDOWN_UNTIL = 0
                         return json.loads(resp.read().decode("utf-8"))
                 except urllib.error.HTTPError as he2:
                     if he2.code == 401:
@@ -512,17 +544,17 @@ class CloudRelayClient:
                         if uid:
                             invalidate_cloud_identity_by_user_id(uid)
                         return {"success": False, "error": "Unauthorized", "unauthorized": True}
-                    sys.stderr.write(f"[CloudRelayClient request failed]: {he2}\n")
+                    _record_cloud_failure(f"HTTP {he2.code}: {he2}")
                     return None
                 except Exception as e2:
-                    sys.stderr.write(f"[CloudRelayClient request failed]: {e2}\n")
+                    _record_cloud_failure(str(e2))
                     return None
             if "401" in str(e):
                 uid = (data or {}).get("user_id") or (params or {}).get("user_id") or (data or {}).get("from_user_id")
                 if uid:
                     invalidate_cloud_identity_by_user_id(uid)
                 return {"success": False, "error": "Unauthorized", "unauthorized": True}
-            sys.stderr.write(f"[CloudRelayClient request failed]: {e}\n")
+            _record_cloud_failure(str(e))
             return None
 
     def register(self, username, avatar_url="", client_secret=None, user_id=None, preferred_discriminator=None):

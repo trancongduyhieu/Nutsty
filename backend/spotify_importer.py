@@ -66,51 +66,86 @@ def parse_duration_to_seconds(val):
     return 0.0
 
 
+def normalize_text_tokens(text):
+    if not text:
+        return set()
+    cleaned = re.sub(r"[\(\[\{].*?[\)\]\}]", " ", str(text).lower())
+    cleaned = re.sub(r"[^\w\s]", " ", cleaned)
+    return {w.strip() for w in cleaned.split() if len(w.strip()) > 1}
+
+
 def calculate_track_match_score(sp_track, yt_candidate):
     """
     Scores how well a YouTube Music search candidate matches the Spotify track.
-    Considers title similarity, artist presence, and duration delta (SpotDL matching heuristic).
+    Strictly verifies title token overlap and artist matching to eliminate language/track desync.
     """
-    score = 100.0
+    sp_name = str(sp_track.get("name") or sp_track.get("title") or "").strip().lower()
+    yt_name = str(yt_candidate.get("title") or yt_candidate.get("name") or "").strip().lower()
+    if not sp_name or not yt_name:
+        return -1000.0
 
-    # 1. Duration delta penalty/bonus
+    sp_tokens = normalize_text_tokens(sp_name)
+    yt_tokens = normalize_text_tokens(yt_name)
+
+    title_match = False
+    if sp_tokens and yt_tokens:
+        overlap = sp_tokens.intersection(yt_tokens)
+        overlap_ratio = len(overlap) / max(1, len(sp_tokens))
+        if overlap_ratio >= 0.5 or sp_name in yt_name or yt_name in sp_name:
+            title_match = True
+    elif sp_name in yt_name or yt_name in sp_name:
+        title_match = True
+
+    sp_artist = str(sp_track.get("artist") or "").strip().lower().replace("\xa0", " ")
+    yt_artist = str(yt_candidate.get("artist") or "").strip().lower().replace("\xa0", " ")
+    sp_art_tokens = normalize_text_tokens(sp_artist)
+    yt_art_tokens = normalize_text_tokens(yt_artist)
+
+    artist_match = False
+    if sp_art_tokens and yt_art_tokens:
+        if sp_art_tokens.intersection(yt_art_tokens) or sp_artist in yt_artist or yt_artist in sp_artist:
+            artist_match = True
+    elif sp_artist and yt_artist and (sp_artist in yt_artist or yt_artist in sp_artist):
+        artist_match = True
+
+    # Critical Guard: Reject immediately if NEITHER title nor artist matches
+    if not title_match and not artist_match:
+        return -1000.0
+
+    # Duration comparison
     sp_sec = int(sp_track.get("duration_ms", 0)) / 1000.0
     if yt_candidate.get("durationMs"):
         yt_sec = float(yt_candidate["durationMs"]) / 1000.0
     else:
         yt_sec = parse_duration_to_seconds(yt_candidate.get("duration", 0))
 
-    delta = abs(sp_sec - yt_sec)
-    if delta <= 2.0:
-        score += 20.0
-    elif delta <= 5.0:
-        score += 10.0
-    elif delta <= 10.0:
-        score -= 10.0
-    else:
-        score -= min(50.0, delta * 3.0)
+    delta = abs(sp_sec - yt_sec) if (sp_sec > 0 and yt_sec > 0) else 0.0
 
-    # 2. Title matching
-    sp_title = sp_track.get("name", "").lower()
-    yt_title = yt_candidate.get("title", "").lower()
+    score = 0.0
+    if title_match:
+        score += 55.0
+    if artist_match:
+        score += 35.0
 
-    if sp_title in yt_title or yt_title in sp_title:
-        score += 15.0
-
-    # 3. Artist matching
-    sp_artist = sp_track.get("artist", "").lower().replace("\xa0", " ")
-    yt_artist = yt_candidate.get("artist", "").lower()
-
-    if sp_artist and yt_artist:
-        sp_parts = [p.strip() for p in sp_artist.split(",") if p.strip()]
-        if any(p in yt_artist for p in sp_parts) or yt_artist in sp_artist:
+    if sp_sec > 0 and yt_sec > 0:
+        if delta <= 2.5:
+            score += 25.0
+        elif delta <= 6.0:
             score += 15.0
+        elif delta <= 12.0:
+            score -= 10.0
+        elif delta <= 25.0:
+            score -= 35.0
+        else:
+            score -= min(70.0, delta * 2.5)
 
     # Penalize karaoke / instrumental unless requested
-    if "karaoke" in yt_title and "karaoke" not in sp_title:
+    if "karaoke" in yt_name and "karaoke" not in sp_name:
+        score -= 50.0
+    if "instrumental" in yt_name and "instrumental" not in sp_name:
         score -= 40.0
-    if "instrumental" in yt_title and "instrumental" not in sp_title:
-        score -= 30.0
+    if "cover" in yt_name and "cover" not in sp_name:
+        score -= 25.0
 
     return score
 
@@ -381,7 +416,7 @@ def match_spotify_track_to_ytmusic(sp_track):
                 best_score = score
                 best_candidate = cand
 
-        if best_candidate and best_candidate.get("videoId"):
+        if best_candidate and best_score >= 50.0 and best_candidate.get("videoId"):
             vid = best_candidate["videoId"]
             if best_candidate.get("durationMs"):
                 cand_dur = int(best_candidate["durationMs"] // 1000)

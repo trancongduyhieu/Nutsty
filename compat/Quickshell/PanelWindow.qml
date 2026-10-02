@@ -22,7 +22,6 @@ Window {
 
     function updateMask() {
         if (typeof __NutstyBridge === "undefined") return;
-        __NutstyBridge.pinWindowToDesktopBottom(root);
         if (!mask || !mask.item) {
             __NutstyBridge.clearWindowMask(root);
         } else {
@@ -45,17 +44,6 @@ Window {
     onActiveChanged: {
         if (active && typeof __NutstyBridge !== "undefined") {
             __NutstyBridge.pinWindowToDesktopBottom(root);
-        }
-    }
-
-    Timer {
-        interval: 250
-        running: root.visible
-        repeat: true
-        onTriggered: {
-            if (typeof __NutstyBridge !== "undefined") {
-                __NutstyBridge.pinWindowToDesktopBottom(root);
-            }
         }
     }
 

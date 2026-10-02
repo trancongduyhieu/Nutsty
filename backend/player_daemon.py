@@ -10,6 +10,7 @@ import time
 import math
 import socket
 import subprocess
+import threading
 
 try:
     from . import platform_compat as pc
@@ -63,6 +64,12 @@ def get_current_streaming_quality():
 
 DEFAULT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
 
+_MPV_LOCK = threading.Lock()
+_PLAY_REQ_LOCK = threading.Lock()
+_ACTIVE_PLAY_REQ_ID = 0
+_CURRENT_PLAYING_VID = ""
+_CURRENT_PLAYING_PATH = ""
+
 def is_mpv_running():
     if pc.IS_WINDOWS:
         return pc.is_process_running("mpv.exe")
@@ -70,118 +77,126 @@ def is_mpv_running():
 
 def ensure_mpv():
     """Ensure background MPV process is running with IPC socket safely without process thrashing"""
-    # 1. If socket responds, we are good
-    try:
-        s = pc.connect_mpv_socket(IPC_TYPE, IPC_TARGET, timeout=1.0)
-        s.close()
-        return True
-    except Exception:
-        pass
-
-    # 2. If MPV process is alive but socket is dead/unresponsive, kill it and restart fresh
-    if is_mpv_running():
+    with _MPV_LOCK:
+        # 1. If socket responds, we are good
         try:
-            if pc.IS_WINDOWS:
-                pc.kill_process("mpv.exe")
-            else:
-                pc.kill_process(MPV_TITLE)
-            time.sleep(0.1)
-        except Exception:
-            pass
-
-    # 3. Only if MPV process is definitely not running, clean up stale socket file (if Unix socket)
-    if IPC_TYPE == "unix" and os.path.exists(IPC_TARGET):
-        try:
-            os.remove(IPC_TARGET)
-        except Exception:
-            pass
-
-    streaming_quality = get_current_streaming_quality()
-    ytdl_fmt = YTDL_FORMAT_MAP.get(streaming_quality, "774/141/251/140/bestaudio/best")
-
-    mpv_bin = pc.get_binary_path("mpv")
-    ytdl_bin = pc.get_binary_path("yt-dlp")
-    ipc_arg = pc.get_mpv_ipc_arg(IPC_TYPE, IPC_TARGET)
-
-    cmd = [
-        mpv_bin,
-        "--no-config",
-        "--idle=yes",
-        "--pause=no",
-        "--no-video",
-        "--no-terminal",
-        "--force-window=no",
-        ipc_arg,
-        "--audio-buffer=0.4",
-        "--demuxer-max-bytes=16M",
-        "--demuxer-max-back-bytes=4M",
-        f"--title={MPV_TITLE}",
-        "--loop-playlist=inf",
-        "--gapless-audio=yes",
-        f"--ytdl-format={ytdl_fmt}",
-        f"--user-agent={DEFAULT_UA}",
-        "--referrer=https://www.youtube.com/",
-        f"--log-file={LOG_FILE}"
-    ]
-    if ytdl_bin and os.path.exists(ytdl_bin):
-        safe_ytdl = ytdl_bin.replace("\\", "/")
-        cmd.append(f"--script-opts=ytdl_hook-ytdl_path={safe_ytdl}")
-
-    try:
-        import ytmusic_helper
-        cookie_file = ytmusic_helper.get_exported_cookie_file()
-        if cookie_file and os.path.exists(cookie_file):
-            safe_cookie = cookie_file.replace("\\", "/")
-            cmd.append(f"--cookies-file={safe_cookie}")
-            cmd.append(f"--ytdl-raw-options=cookies={safe_cookie}")
-    except Exception:
-        pass
-
-    popen_kwargs = pc.get_daemon_popen_kwargs()
-    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **popen_kwargs)
-    
-    # Wait for socket to appear and accept connection
-    for _ in range(25):
-        time.sleep(0.1)
-        try:
-            s = pc.connect_mpv_socket(IPC_TYPE, IPC_TARGET, timeout=1.0)
+            s = pc.connect_mpv_socket(IPC_TYPE, IPC_TARGET, timeout=0.8)
             s.close()
             return True
         except Exception:
             pass
-    return False
 
-def send_mpv_cmd(command_args):
+        # 2. If MPV process is alive, give it time to initialize before considering it dead
+        if is_mpv_running():
+            for _ in range(8):
+                time.sleep(0.2)
+                try:
+                    s = pc.connect_mpv_socket(IPC_TYPE, IPC_TARGET, timeout=0.5)
+                    s.close()
+                    return True
+                except Exception:
+                    pass
+            try:
+                if pc.IS_WINDOWS:
+                    pc.kill_process("mpv.exe")
+                else:
+                    pc.kill_process(MPV_TITLE)
+                time.sleep(0.15)
+            except Exception:
+                pass
+
+        # 3. Only if MPV process is definitely not running, clean up stale socket file (if Unix socket)
+        if IPC_TYPE == "unix" and os.path.exists(IPC_TARGET):
+            try:
+                os.remove(IPC_TARGET)
+            except Exception:
+                pass
+
+        streaming_quality = get_current_streaming_quality()
+        ytdl_fmt = YTDL_FORMAT_MAP.get(streaming_quality, "774/141/251/140/bestaudio/best")
+
+        mpv_bin = pc.get_binary_path("mpv")
+        ytdl_bin = pc.get_binary_path("yt-dlp")
+        ipc_arg = pc.get_mpv_ipc_arg(IPC_TYPE, IPC_TARGET)
+
+        cmd = [
+            mpv_bin,
+            "--no-config",
+            "--idle=yes",
+            "--pause=no",
+            "--no-video",
+            "--no-terminal",
+            "--force-window=no",
+            ipc_arg,
+            "--audio-buffer=0.4",
+            "--demuxer-max-bytes=16M",
+            "--demuxer-max-back-bytes=4M",
+            f"--title={MPV_TITLE}",
+            "--loop-playlist=inf",
+            "--gapless-audio=yes",
+            f"--ytdl-format={ytdl_fmt}",
+            "--ytdl-raw-options=extractor-args=youtube:player_client=android,ios,tv_embedded,android_creator",
+            f"--user-agent={DEFAULT_UA}",
+            "--referrer=https://www.youtube.com/",
+            f"--log-file={LOG_FILE}"
+        ]
+        if ytdl_bin and os.path.exists(ytdl_bin):
+            safe_ytdl = ytdl_bin.replace("\\", "/")
+            cmd.append(f"--script-opts=ytdl_hook-ytdl_path={safe_ytdl}")
+
+        try:
+            import ytmusic_helper
+            cookie_file = ytmusic_helper.get_exported_cookie_file()
+            if cookie_file and os.path.exists(cookie_file):
+                safe_cookie = cookie_file.replace("\\", "/")
+                cmd.append(f"--cookies-file={safe_cookie}")
+                cmd.append(f"--ytdl-raw-options=cookies={safe_cookie},extractor-args=youtube:player_client=android,ios,tv_embedded,android_creator")
+        except Exception:
+            pass
+
+        popen_kwargs = pc.get_daemon_popen_kwargs()
+        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **popen_kwargs)
+        
+        # Wait for socket to appear and accept connection
+        for _ in range(25):
+            time.sleep(0.1)
+            try:
+                s = pc.connect_mpv_socket(IPC_TYPE, IPC_TARGET, timeout=1.0)
+                s.close()
+                return True
+            except Exception:
+                pass
+        return False
+
+def send_mpv_cmd(command_args, timeout=2.0):
     """Send JSON IPC command to MPV"""
     ensure_mpv()
-    try:
-        s = pc.connect_mpv_socket(IPC_TYPE, IPC_TARGET, timeout=2.0)
-        payload = json.dumps({"command": command_args}) + "\n"
-        s.sendall(payload.encode("utf-8"))
-        data = s.recv(4096)
-        s.close()
-        return json.loads(data.decode("utf-8"))
-    except Exception as e:
-        return {"error": str(e)}
+    with _MPV_LOCK:
+        try:
+            s = pc.connect_mpv_socket(IPC_TYPE, IPC_TARGET, timeout=timeout)
+            payload = json.dumps({"command": command_args}) + "\n"
+            s.sendall(payload.encode("utf-8"))
+            data = s.recv(4096)
+            s.close()
+            return json.loads(data.decode("utf-8"))
+        except Exception as e:
+            return {"error": str(e)}
 
 def get_mpv_properties_batch(props):
-    """Retrieve multiple MPV properties in a single socket connection (0.3ms batch query)"""
+    """Retrieve multiple MPV properties in a single socket connection (non-destructive read-only query)"""
     s = None
     try:
-        s = pc.connect_mpv_socket(IPC_TYPE, IPC_TARGET, timeout=0.8)
+        s = pc.connect_mpv_socket(IPC_TYPE, IPC_TARGET, timeout=0.6)
     except Exception:
-        ensure_mpv()
-        try:
-            s = pc.connect_mpv_socket(IPC_TYPE, IPC_TARGET, timeout=1.0)
-        except Exception:
-            return {}
+        # Non-destructive: Never kill MPV during read-only status poll!
+        return {}
 
     try:
         payload = "".join(json.dumps({"command": ["get_property", p], "request_id": i}) + "\n" for i, p in enumerate(props))
         s.sendall(payload.encode("utf-8"))
         buf = ""
         results = {}
-        deadline = time.time() + 0.8
+        deadline = time.time() + 0.6
         while len(results) < len(props) and time.time() < deadline:
             data = s.recv(4096)
             if not data:
@@ -447,12 +462,12 @@ def get_status_dict():
     vol = batch.get("volume") if batch.get("volume") is not None else 100
     idle = batch.get("idle-active")
 
-    is_stream_playback = ("googlevideo" in path) or (filename == "videoplayback")
+    global _CURRENT_PLAYING_VID, _CURRENT_PLAYING_PATH
     is_target_active = True
     if target_vid:
-        is_target_active = (target_vid in path) or (target_vid in filename) or is_stream_playback
+        is_target_active = bool((_CURRENT_PLAYING_VID and _CURRENT_PLAYING_VID == target_vid) or (target_vid in path) or (target_vid in filename))
     elif target_path:
-        is_target_active = (path == target_path) or (filename and target_path.endswith(filename)) or is_stream_playback
+        is_target_active = bool((_CURRENT_PLAYING_PATH and _CURRENT_PLAYING_PATH == target_path) or (path == target_path) or (filename and target_path.endswith(filename)))
 
     if is_loading and (is_target_active or (time_pos is not None and time_pos > 0.5)):
         if duration is not None and duration > 0 and pause is True:
@@ -498,6 +513,11 @@ def execute_command(args):
     action = args[0].lower()
 
     if action == "play" and len(args) > 1:
+        global _ACTIVE_PLAY_REQ_ID, _CURRENT_PLAYING_VID, _CURRENT_PLAYING_PATH
+        with _PLAY_REQ_LOCK:
+            _ACTIVE_PLAY_REQ_ID += 1
+            my_req_id = _ACTIVE_PLAY_REQ_ID
+
         file_path = args[1]
         title_arg = args[2] if len(args) > 2 else ""
         artist_arg = args[3] if len(args) > 3 else ""
@@ -525,29 +545,26 @@ def execute_command(args):
         except Exception:
             pass
 
-        # CRITICAL FIX: Stop MPV immediately BEFORE resolving online stream URL!
-        # Prevents previous song ("Tìm Em") from continuing to play in the background
-        # while yt-dlp is decoding the new song ("Tràn Bộ Nhớ") for 2-4 seconds.
+        # Stop MPV immediately BEFORE resolving online stream URL to clear previous audio
         if is_online:
             send_mpv_cmd(["stop"])
 
         meta = update_current_track_metadata(file_path, title_arg, artist_arg, art_arg)
         stream_target = resolve_media_path(file_path, title_arg, artist_arg) if is_online else file_path
 
-        # Guard against stale concurrent play requests if user clicked another song while resolving
-        if is_online and os.path.exists(state_file):
-            try:
-                with open(state_file, "r", encoding="utf-8") as f:
-                    latest_st = json.load(f)
-                if latest_st.get("timestamp", 0) > req_ts + 0.005:
-                    print("Aborted stale play request for:", file_path)
-                    return
-            except Exception:
-                pass
+        # Guard against stale concurrent play requests
+        with _PLAY_REQ_LOCK:
+            if my_req_id != _ACTIVE_PLAY_REQ_ID:
+                sys.stderr.write(f"Aborted superseded play request #{my_req_id} (active is #{_ACTIVE_PLAY_REQ_ID}) for: {file_path}\n")
+                return
 
         send_mpv_cmd(["loadfile", stream_target, "replace"])
         send_mpv_cmd(["set_property", "loop-playlist", "inf"])
         send_mpv_cmd(["set_property", "pause", False])
+
+        _CURRENT_PLAYING_VID = target_vid
+        _CURRENT_PLAYING_PATH = file_path
+
         if meta and meta.get("title"):
             disp_title = f"{meta['title']} - {meta.get('artist', '')}".strip(" -")
             send_mpv_cmd(["set_property", "force-media-title", disp_title])

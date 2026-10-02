@@ -110,10 +110,14 @@ Rectangle {
         var data = JSON.stringify(list, null, 2);
         searchRoot.lastSavedJson = data;
         searchRoot.lastSaveTime = Date.now();
-        Quickshell.execDetached(["python3", "-c",
-            "import sys, os, tempfile\np = os.path.expanduser('~/.config/noctalia/nutsty_search_history.json')\nd = os.path.dirname(p)\nos.makedirs(d, exist_ok=True)\ntmp = None\ntry:\n    with tempfile.NamedTemporaryFile('w', dir=d, delete=False, encoding='utf-8') as tf:\n        tf.write(sys.argv[1])\n        tmp = tf.name\n    os.replace(tmp, p)\nexcept Exception:\n    if tmp and os.path.exists(tmp):\n        try: os.remove(tmp)\n        except Exception: pass\n",
-            data
-        ]);
+        if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && typeof __NutstyBridge.writeConfigFile === "function") {
+            __NutstyBridge.writeConfigFile("nutsty_search_history.json", data);
+        } else {
+            Quickshell.execDetached(["python3", "-c",
+                "import sys, os, tempfile\np = os.path.expanduser('~/.config/noctalia/nutsty_search_history.json')\nd = os.path.dirname(p)\nos.makedirs(d, exist_ok=True)\ntmp = None\ntry:\n    with tempfile.NamedTemporaryFile('w', dir=d, delete=False, encoding='utf-8') as tf:\n        tf.write(sys.argv[1])\n        tmp = tf.name\n    os.replace(tmp, p)\nexcept Exception:\n    if tmp and os.path.exists(tmp):\n        try: os.remove(tmp)\n        except Exception: pass\n",
+                data
+            ]);
+        }
     }
 
     function addSearchHistory(query) {

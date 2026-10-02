@@ -155,18 +155,17 @@ def resolve_stream_url(video_id, quality=None):
 
         attempts = []
 
-        # Attempt 1: Ultra-fast mobile solver (ios, android) without remote network overhead
-        # iOS and Android APIs return direct stream URLs instantly (~1.3s - 1.6s) without JS player deciphering!
+        # Attempt 1: Fast mobile + TV solver (android, ios, tv_embedded)
         attempts.append({
             "quiet": True,
             "no_warnings": True,
             "skip_download": True,
             "check_formats": False,
             "noplaylist": True,
-            "extractor_args": {"youtube": {"player_client": ["ios", "android"]}}
+            "extractor_args": {"youtube": {"player_client": ["android", "ios", "tv_embedded"]}}
         })
 
-        # Attempt 2: User cookie file with mweb/web_embedded if Google Account session exists
+        # Attempt 2: User cookie file with mweb/web_embedded/android if Google Account session exists
         if cookie_file and os.path.exists(cookie_file):
             attempts.append({
                 "quiet": True,
@@ -175,17 +174,26 @@ def resolve_stream_url(video_id, quality=None):
                 "check_formats": False,
                 "noplaylist": True,
                 "cookiefile": cookie_file,
-                "extractor_args": {"youtube": {"player_client": ["mweb", "web_embedded", "android"]}}
+                "extractor_args": {"youtube": {"player_client": ["mweb", "web_embedded", "android", "tv_embedded"]}}
             })
 
-        # Attempt 3: Fast web_embedded / mweb fallback
+        # Attempt 3: Creator + TV embedded fallback (bypasses bot detection and SABR restrictions)
         attempts.append({
             "quiet": True,
             "no_warnings": True,
             "skip_download": True,
             "check_formats": False,
             "noplaylist": True,
-            "extractor_args": {"youtube": {"player_client": ["web_embedded", "mweb"]}}
+            "extractor_args": {"youtube": {"player_client": ["android_creator", "tv_embedded"]}}
+        })
+
+        # Attempt 4: Resilient broad fallback
+        attempts.append({
+            "quiet": True,
+            "no_warnings": True,
+            "skip_download": True,
+            "check_formats": False,
+            "noplaylist": True
         })
 
         for ydl_opts in attempts:

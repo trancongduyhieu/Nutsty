@@ -10,6 +10,9 @@ import json
 import time
 import subprocess
 import threading
+import concurrent.futures
+import ctypes
+from ctypes import wintypes
 from pathlib import Path
 
 # Register active launcher instance in sys.modules so background threads (like auth_server) get the active instance
@@ -133,6 +136,17 @@ def check_cli_dispatch():
     args = sys.argv[1:]
     if not args:
         return
+    if args and args[0] == "-c":
+        cmd_code = args[1] if len(args) > 1 else ""
+        sys.argv = [sys.argv[0]] + list(args[2:])
+        try:
+            exec(cmd_code, {"__name__": "__main__", "sys": sys, "os": os})
+            sys.exit(0)
+        except SystemExit as se:
+            sys.exit(se.code if isinstance(se.code, int) else 0)
+        except Exception as e:
+            sys.stderr.write(f"Error executing CLI -c: {e}\n")
+            sys.exit(1)
     for i, a in enumerate(args):
         base_a = os.path.basename(a)
         if base_a in BACKEND_MAP:
@@ -160,14 +174,14 @@ check_cli_dispatch()
 
 # Detect Qt bindings (PySide6 or PyQt6)
 try:
-    from PySide6.QtCore import QObject, Signal, Property, Slot, QUrl, QTimer, QThread, QRect
+    from PySide6.QtCore import QObject, Signal, Property, Slot, QUrl, QTimer, QThread, QRect, QAbstractNativeEventFilter
     from PySide6.QtGui import QGuiApplication, QIcon, QWindow, QRegion
     from PySide6.QtQml import QQmlApplicationEngine, qmlRegisterType, QmlAttached
     from PySide6.QtQuick import QQuickWindow
     IS_PYSIDE = True
 except ImportError:
     try:
-        from PyQt6.QtCore import QObject, pyqtSignal as Signal, pyqtProperty as Property, pyqtSlot as Slot, QUrl, QTimer, QThread, QRect
+        from PyQt6.QtCore import QObject, pyqtSignal as Signal, pyqtProperty as Property, pyqtSlot as Slot, QUrl, QTimer, QThread, QRect, QAbstractNativeEventFilter
         from PyQt6.QtGui import QGuiApplication, QIcon, QWindow, QRegion
         from PyQt6.QtQml import QQmlApplicationEngine, qmlRegisterType
         from PyQt6.QtQuick import QQuickWindow
@@ -176,6 +190,65 @@ except ImportError:
         sys.stderr.write("Fatal: Neither PySide6 nor PyQt6 is installed.\n")
         sys.stderr.write("Please run: pip install PySide6\n")
         sys.exit(1)
+
+class NativeHitTestFilter(QAbstractNativeEventFilter):
+    """
+    Win32 WM_NCHITTEST filter for transparent layered windows (DesktopLyricsWidget & PanelWindow).
+    Allows interactive areas to receive mouse clicks/dragging while passing through clicks outside
+    to the Windows desktop/background without breaking DWM per-pixel alpha or causing white boxes.
+    """
+    def __init__(self):
+        super().__init__()
+        self._masks = {}  # hwnd -> (x, y, w, h)
+        self._lock = threading.Lock()
+
+    def set_mask(self, hwnd: int, x: int, y: int, w: int, h: int):
+        with self._lock:
+            if w <= 0 or h <= 0:
+                self._masks[hwnd] = None
+            else:
+                self._masks[hwnd] = (int(x), int(y), int(w), int(h))
+
+    def clear_mask(self, hwnd: int):
+        with self._lock:
+            self._masks.pop(hwnd, None)
+
+    def nativeEventFilter(self, eventType, message):
+        if eventType == b"windows_generic_MSG" or eventType == "windows_generic_MSG":
+            try:
+                msg = wintypes.MSG.from_address(int(message))
+                if msg.message == 0x0084:  # WM_NCHITTEST
+                    target_hwnd = int(msg.hWnd)
+                    with self._lock:
+                        if target_hwnd in self._masks:
+                            rect = self._masks[target_hwnd]
+                            if rect is None:
+                                return True, -1  # HTTRANSPARENT: clicks pass through
+                            pt = wintypes.POINT()
+                            pt.x = ctypes.c_short(msg.lParam & 0xFFFF).value
+                            pt.y = ctypes.c_short((msg.lParam >> 16) & 0xFFFF).value
+                            ctypes.windll.user32.ScreenToClient(target_hwnd, ctypes.byref(pt))
+                            rx, ry, rw, rh = rect
+                            if rx <= pt.x <= (rx + rw) and ry <= pt.y <= (ry + rh):
+                                return False, 0  # Inside interactive box: process event
+                            return True, -1  # Outside: pass through to desktop/window below
+            except Exception:
+                pass
+        return False, 0
+
+native_filter = NativeHitTestFilter()
+
+# Reusable Thread Pool for background tasks and IPC status queries (prevents 14,400 OS threads/hour)
+_WORKER_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="NutstyWorker")
+
+def _safe_submit(fn, *args, **kwargs):
+    try:
+        return _WORKER_POOL.submit(fn, *args, **kwargs)
+    except RuntimeError:
+        return None
+    except Exception as e:
+        sys.stderr.write(f"_safe_submit error: {e}\n")
+        return None
 
 tray_icon_ref = [None]
 bridge_ref = [None]
@@ -367,24 +440,39 @@ class NutstyBridge(QObject):
         except Exception as e:
             sys.stderr.write(f"openUrl error: {e}\n")
 
+    @Slot(str, str)
+    def writeConfigFile(self, rel_path: str, content: str):
+        """Atomically write a configuration file into ~/.config/noctalia/ or specified path."""
+        def _write_worker():
+            try:
+                if rel_path.startswith("~") or os.path.isabs(rel_path):
+                    target_path = os.path.expanduser(rel_path)
+                else:
+                    target_path = os.path.expanduser(os.path.join("~/.config/noctalia", rel_path))
+                os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                tmp_path = target_path + ".tmp"
+                with open(tmp_path, "w", encoding="utf-8") as f:
+                    f.write(content)
+                os.replace(tmp_path, target_path)
+            except Exception as e:
+                sys.stderr.write(f"writeConfigFile failed for {rel_path}: {e}\n")
+        _safe_submit(_write_worker)
+
     @Slot(QObject, int, int, int, int)
     def setWindowMaskRect(self, win_obj, x: int, y: int, w: int, h: int):
         try:
-            if win_obj and hasattr(win_obj, "setMask"):
-                if w <= 0 or h <= 0:
-                    win_obj.setMask(QRegion(QRect(-100, -100, 1, 1)))
-                else:
-                    win_obj.setMask(QRegion(QRect(int(x), int(y), int(w), int(h))))
-                self.pinWindowToDesktopBottom(win_obj)
+            if win_obj and hasattr(win_obj, "winId"):
+                hwnd = int(win_obj.winId())
+                native_filter.set_mask(hwnd, x, y, w, h)
         except Exception as e:
             sys.stderr.write(f"setWindowMaskRect error: {e}\n")
 
     @Slot(QObject)
     def clearWindowMask(self, win_obj):
         try:
-            if win_obj and hasattr(win_obj, "setMask"):
-                win_obj.setMask(QRegion())
-                self.pinWindowToDesktopBottom(win_obj)
+            if win_obj and hasattr(win_obj, "winId"):
+                hwnd = int(win_obj.winId())
+                native_filter.clear_mask(hwnd)
         except Exception as e:
             sys.stderr.write(f"clearWindowMask error: {e}\n")
 
@@ -497,6 +585,23 @@ class NutstyBridge(QObject):
                 sys.stderr.write(f"xdg-open failed: {e}\n")
             return
 
+        # Fast path for python3 -c inline commands (prevents spawning Nutsty.exe subprocess and hourglass cursor)
+        if args and args[0] in ("python3", "python") and len(args) >= 3 and args[1] == "-c":
+            code_str = args[2]
+            code_argv = [args[0]] + list(args[3:])
+            def _in_proc_c():
+                with sys_argv_lock:
+                    old_argv = sys.argv
+                    sys.argv = code_argv
+                    try:
+                        exec(code_str, {"__name__": "__main__", "sys": sys, "os": os})
+                    except Exception as e:
+                        sys.stderr.write(f"In-process execDetached -c failed: {e}\n")
+                    finally:
+                        sys.argv = old_argv
+            _safe_submit(_in_proc_c)
+            return
+
         # In-process fast path for backend Python scripts (prevents heavy Nutsty.exe subprocess spawn)
         target_script = ""
         script_args = []
@@ -539,7 +644,7 @@ class NutstyBridge(QObject):
                     pass
                 except Exception as e:
                     sys.stderr.write(f"In-process execDetached {target_script} failed: {e}\n")
-            threading.Thread(target=_in_proc_detached, daemon=True).start()
+            _safe_submit(_in_proc_detached)
             return
 
         cmd = list(args)
@@ -588,7 +693,7 @@ class NutstyBridge(QObject):
                     err = str(e)
                     code = 1
                 self.processFinished.emit(cb_id, out, err, code)
-            threading.Thread(target=_status_worker, daemon=True).start()
+            _safe_submit(_status_worker)
             return
 
         # Fast unified in-process execution for all backend scripts in BACKEND_MAP (except browser_login which requires isolated subprocess)
@@ -652,7 +757,7 @@ class NutstyBridge(QObject):
                         pass
                 self.processFinished.emit(cb_id, out, err, code)
 
-            threading.Thread(target=_in_proc_run, daemon=True).start()
+            _safe_submit(_in_proc_run)
             return
 
         cmd = list(args)
@@ -673,7 +778,7 @@ class NutstyBridge(QObject):
             
             self.processFinished.emit(cb_id, out, err, code)
 
-        threading.Thread(target=_worker, daemon=True).start()
+        _safe_submit(_worker)
 
 # Quickshell Compatibility Classes
 class WlrLayershellAttached(QObject):
@@ -783,6 +888,7 @@ def main():
         app = QGuiApplication(sys.argv)
         has_widgets = False
 
+    app.installNativeEventFilter(native_filter)
     app.setQuitOnLastWindowClosed(False)
     app.setApplicationName("Nutsty")
     app.setOrganizationName("Nutsty")

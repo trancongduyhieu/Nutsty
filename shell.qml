@@ -922,7 +922,7 @@ Scope {
 
     Timer {
         id: socialEventsFastTimer
-        interval: win.isCoListeningActive ? 800 : (win.isUserActiveBoost ? 1000 : 2000)
+        interval: win.isCoListeningActive ? 800 : (win.isUserActiveBoost ? 1000 : 10000)
         repeat: true
         running: true
         triggeredOnStart: true
@@ -1004,7 +1004,7 @@ Scope {
 
     Timer {
         id: uiActionPollTimer
-        interval: 400
+        interval: 2000
         repeat: true
         running: true
         onTriggered: {
@@ -2744,6 +2744,7 @@ Scope {
 
         Connections {
             target: (typeof __NutstyBridge !== "undefined" && __NutstyBridge) ? __NutstyBridge : null
+            ignoreUnknownSignals: true
             function onOpenSettingsRequested(tab) {
                 console.log("[Nutsty QML] onOpenSettingsRequested triggered! tab=" + tab);
                 win.visible = true;
@@ -3253,10 +3254,15 @@ Scope {
             lyricsSource: win.lyricsSource
         });
         var profSuffix = Quickshell.env("NUTSTY_PROFILE") ? ("_" + Quickshell.env("NUTSTY_PROFILE").toLowerCase()) : "";
-        Quickshell.execDetached(["python3", "-c",
-            "import sys, os\np = os.path.expanduser('~/.config/noctalia/nutsty_settings" + profSuffix + ".json')\nos.makedirs(os.path.dirname(p), exist_ok=True)\nwith open(p, 'w', encoding='utf-8') as f: f.write(sys.argv[1])",
-            data
-        ]);
+        var settingsFileName = "nutsty_settings" + profSuffix + ".json";
+        if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && typeof __NutstyBridge.writeConfigFile === "function") {
+            __NutstyBridge.writeConfigFile(settingsFileName, data);
+        } else {
+            Quickshell.execDetached(["python3", "-c",
+                "import sys, os\np = os.path.expanduser('~/.config/noctalia/" + settingsFileName + "')\nos.makedirs(os.path.dirname(p), exist_ok=True)\nwith open(p, 'w', encoding='utf-8') as f: f.write(sys.argv[1])",
+                data
+            ]);
+        }
     }
 
     function toggleFollowArtist(channelId, artistName, isCurrentlyFollowed) {

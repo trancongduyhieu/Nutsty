@@ -23,4 +23,10 @@
 | Phase 11: Task 5 - Implement In-App Update Checker Backend (`updater.py`, `platform_compat.py`, API routes) | Completed | GitHub Releases API, semver parser, 6h cache, /api/check_update & /api/open_url |
 | Phase 11: Task 6 - Implement In-App Update UI in `shell.qml`, `TopHeaderBar`, `SettingsModal.qml` | Completed | Automatic 4s startup check, tray balloon notification, notification bell integration, and SettingsModal update card |
 | Phase 11: Task 7 - Portable Build Sync & Live Verification on Windows | Completed | Synced all modified backend & QML files to Nutsty_Windows_Portable, verified live execution and APIs |
+| Phase 12: Task 1 - Fix Audio/Metadata Desync (Strict Spotify Matching & PlayerDaemon Concurrency) | Completed | Enforce token-overlap & minimum score in spotify_importer; monotonic request IDs in player_daemon |
+| Phase 12: Task 2 - Fix Hourglass Cursor & Duplicate Windows (Handle -c & Native File Writing) | Completed | Support -c in check_cli_dispatch and in-process execution in launcher_win.py |
+| Phase 12: Task 3 - Fix Desktop Lyrics White Box & Jitter (Native WM_NCHITTEST & Timer Cleanup) | Completed | Replace GDI SetWindowRgn with WM_NCHITTEST HTTRANSPARENT filter; remove 250ms SetWindowPos loop |
+| Phase 12: Task 4 - Fix Laptop Overheating & CPU Usage (Thread Pool, SSL 401 Backoff, Idle Polling) | Completed | Reuse ThreadPool in runProcess, back off cloud relay on 401, optimize QML poll intervals |
+| Phase 12: Task 5 - Fix Audio Failure After Reboot (Non-destructive Status Poll, Lock, Resilient Clients) | Completed | Never kill MPV on status timeout; add _MPV_LOCK; add tv_embedded/android_creator to yt-dlp |
+| Phase 12: Task 6 - Verify App Update Detection & Verification | Completed | Verified /api/check_update returns v1.0.1, mock update triggers QML update modal |
 
