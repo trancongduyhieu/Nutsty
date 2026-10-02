@@ -29,4 +29,6 @@
 | Phase 12: Task 4 - Fix Laptop Overheating & CPU Usage (Thread Pool, SSL 401 Backoff, Idle Polling) | Completed | Reuse ThreadPool in runProcess, back off cloud relay on 401, optimize QML poll intervals |
 | Phase 12: Task 5 - Fix Audio Failure After Reboot (Non-destructive Status Poll, Lock, Resilient Clients) | Completed | Never kill MPV on status timeout; add _MPV_LOCK; add tv_embedded/android_creator to yt-dlp |
 | Phase 12: Task 6 - Verify App Update Detection & Verification | Completed | Verified /api/check_update returns v1.0.1, mock update triggers QML update modal |
+| Phase 13: Task 1 - Fix Direct Updater Execution (`updater.py`, `auth_server.py`, `launcher_win.py`) | Completed | Replaced xcopy with robocopy, normalized paths, eliminated timeout redirection bug, added getAppDir |
+| Phase 13: Task 2 - Fix Windows Audio Loading & MPV Crash (`player_daemon.py`, `platform_compat.py`) | Completed | Fixed 64-bit INVALID_HANDLE_VALUE (18446744073709551615 != -1) and MPV ytdl-raw-options comma crash, music starts in < 1s |
 
