@@ -795,7 +795,7 @@ Rectangle {
                                             anchors.fill: parent
                                             radius: 6
                                             color: Qt.rgba(0, 0, 0, 0.45)
-                                            visible: rowMouse.containsMouse || (root.currentTrack && modelData && (root.currentTrack.path === modelData.path || (modelData.videoId && root.currentTrack.videoId === modelData.videoId)))
+                                            visible: !!(rowMouse.containsMouse || (root.currentTrack && modelData && (root.currentTrack.path === modelData.path || (modelData.videoId && root.currentTrack.videoId === modelData.videoId))))
 
                                             readonly property bool isThisTrack: !!(root.currentTrack && modelData && (root.currentTrack.path === modelData.path || (modelData.videoId && root.currentTrack.videoId === modelData.videoId)))
                                             readonly property bool isThisLoading: isThisTrack && root.isLoadingAudio
