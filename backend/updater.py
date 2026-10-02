@@ -377,18 +377,18 @@ echo ========================================================
 echo    Nutsty - Dang cap nhat len phien ban moi...
 echo ========================================================
 echo.
-timeout /t 1 /nobreak >nul
+ping 127.0.0.1 -n 2 >nul
 
 echo [*] Dang dong tien trinh cu / Terminating old processes...
 taskkill /f /im Nutsty.exe >nul 2>&1
 taskkill /f /im mpv.exe >nul 2>&1
-timeout /t 1 /nobreak >nul
+ping 127.0.0.1 -n 2 >nul
 
 echo [*] Dang ghi de tep cap nhat / Applying update files...
 robocopy "{staged}" "{app_dir}" /E /IS /IT /NP /R:2 /W:1 >nul
 
 echo [*] Hoan tat! Dang khoi dong lai Nutsty / Launching new version...
-timeout /t 1 /nobreak >nul
+ping 127.0.0.1 -n 2 >nul
 if exist "{app_dir}\\{exe_name}" (
     start "" "{app_dir}\\{exe_name}"
 ) else if exist "{app_dir}\\start.bat" (
