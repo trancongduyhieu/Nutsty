@@ -87,11 +87,12 @@ def resolve_app_root():
         if meipass and os.path.exists(os.path.join(meipass, "shell.qml")):
             return meipass
         exe_dir = os.path.dirname(sys.executable)
+        # Prioritize root portable directory if shell.qml is present
+        if os.path.exists(os.path.join(exe_dir, "shell.qml")):
+            return exe_dir
         internal_dir = os.path.join(exe_dir, "_internal")
         if os.path.exists(os.path.join(internal_dir, "shell.qml")):
             return internal_dir
-        if os.path.exists(os.path.join(exe_dir, "shell.qml")):
-            return exe_dir
         return meipass or exe_dir
     return os.path.dirname(os.path.abspath(__file__))
 
@@ -962,6 +963,17 @@ def _create_nutsty_app_icon(icon_save_path: str) -> QIcon:
 def main():
     os.environ["QT_QUICK_CONTROLS_STYLE"] = "Basic"
     if sys.platform == "win32":
+        # In VirtualBox, VirtualBox's WDDM Direct3D 11 driver is known to crash with complex shaders.
+        # Fall back to OpenGL or Software if VirtualBox is detected, or let user set QSG_RHI_BACKEND.
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\BIOS") as k:
+                vendor = str(winreg.QueryValueEx(k, "SystemManufacturer")[0]).lower()
+                prod = str(winreg.QueryValueEx(k, "SystemProductName")[0]).lower()
+                if any(vm in vendor or vm in prod for vm in ("virtualbox", "innotek")):
+                    os.environ.setdefault("QSG_RHI_BACKEND", "opengl")
+        except Exception:
+            pass
         os.environ.setdefault("QSG_RHI_BACKEND", "d3d11")
 
     try:
