@@ -37,32 +37,46 @@ Window {
 
     onMaskChanged: updateMask()
     onVisibleChanged: {
-        if (visible && typeof __NutstyBridge !== "undefined") {
-            __NutstyBridge.pinWindowToDesktopBottom(root);
+        if (visible) {
+            root.lower();
+            if (typeof __NutstyBridge !== "undefined") {
+                __NutstyBridge.pinWindowToDesktopBottom(root);
+            }
+            updateMask();
+            Qt.callLater(updateMask);
+        } else {
+            if (typeof __NutstyBridge !== "undefined") {
+                __NutstyBridge.clearWindowMask(root);
+            }
         }
     }
     onActiveChanged: {
-        if (active && typeof __NutstyBridge !== "undefined") {
+        if (active && visible && typeof __NutstyBridge !== "undefined") {
             __NutstyBridge.pinWindowToDesktopBottom(root);
         }
     }
 
     Connections {
         target: (mask && mask.item) ? mask.item : null
-        function onXChanged() { if (mask && mask.item) root.updateMask(); }
-        function onYChanged() { if (mask && mask.item) root.updateMask(); }
-        function onWidthChanged() { if (mask && mask.item) root.updateMask(); }
-        function onHeightChanged() { if (mask && mask.item) root.updateMask(); }
-        function onVisibleChanged() { if (mask && mask.item) root.updateMask(); }
+        function onXChanged() { if (mask && mask.item && root.visible) root.updateMask(); }
+        function onYChanged() { if (mask && mask.item && root.visible) root.updateMask(); }
+        function onWidthChanged() { if (mask && mask.item && root.visible) root.updateMask(); }
+        function onHeightChanged() { if (mask && mask.item && root.visible) root.updateMask(); }
+        function onVisibleChanged() { if (mask && mask.item && root.visible) root.updateMask(); }
     }
 
     Component.onCompleted: {
-        root.show();
-        root.lower();
-        if (typeof __NutstyBridge !== "undefined") {
-            __NutstyBridge.pinWindowToDesktopBottom(root);
+        if (visible) {
+            root.lower();
+            if (typeof __NutstyBridge !== "undefined") {
+                __NutstyBridge.pinWindowToDesktopBottom(root);
+            }
+            updateMask();
+            Qt.callLater(updateMask);
+        } else {
+            if (typeof __NutstyBridge !== "undefined") {
+                __NutstyBridge.clearWindowMask(root);
+            }
         }
-        updateMask();
-        Qt.callLater(updateMask);
     }
 }

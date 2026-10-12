@@ -152,7 +152,7 @@ Item {
                 to: 360
                 duration: root.duration
                 loops: Animation.Infinite
-                running: true
+                running: root.hovered || cardMouse.containsMouse
             }
         }
     }

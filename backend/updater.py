@@ -79,11 +79,11 @@ def check_for_updates(force=False, mock=False):
         return {
             "has_update": True,
             "current_version": current_ver,
-            "latest_version": "v1.0.3",
-            "release_name": "Nutsty v1.0.3 (PostNoteModal Music Picker & Playback Parity)",
-            "changelog": "- Khắc phục lỗi chọn bài hát trong Ghi chú mới khi không có nhạc phát\n- Tinh chỉnh giao diện nút tìm kiếm nhạc Liquid Glass trong thought bubble\n- Khắc phục lỗi khởi chạy và đồng bộ phát nhạc đa luồng trên Windows",
+            "latest_version": "v1.0.4",
+            "release_name": "Nutsty v1.0.4 (Windows Thermal Optimization, Audio Stream Cache & Widget Restore)",
+            "changelog": "- Tối ưu hóa GPU/CPU, hạ nhiệt độ phần cứng và đóng băng animation ẩn\n- Kích hoạt đệm ghi đĩa MPV Disk Cache 128MB, tăng tốc giải mã luồng thuần Opus 160kbps\n- Khắc phục lỗi click sóng âm trên Desktop Music Widget khôi phục cửa sổ chính trên Windows (High-DPI scaling)\n- Loại bỏ hoàn toàn rò rỉ cửa sổ native QWindow trên Windows",
             "release_url": "https://github.com/trancongduyhieu/FrostifyLocal/releases",
-            "download_url": "https://github.com/trancongduyhieu/FrostifyLocal/releases/download/v1.0.3/Nutsty_Windows_Portable.zip",
+            "download_url": "https://github.com/trancongduyhieu/FrostifyLocal/releases/download/v1.0.4/Nutsty_Windows_Portable.zip",
             "checked_at": int(time.time())
         }
 

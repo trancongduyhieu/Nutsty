@@ -196,14 +196,21 @@ class NativeHitTestFilter(QAbstractNativeEventFilter):
     Win32 WM_NCHITTEST filter for transparent layered windows (DesktopLyricsWidget & PanelWindow).
     Allows interactive areas to receive mouse clicks/dragging while passing through clicks outside
     to the Windows desktop/background without breaking DWM per-pixel alpha or causing white boxes.
+    Supports Windows Per-Monitor High-DPI display scaling (125%, 150%, 200%).
     """
     def __init__(self):
         super().__init__()
         self._masks = {}  # hwnd -> (x, y, w, h)
+        self._panel_hwnds = set()
         self._lock = threading.Lock()
+
+    def register_panel_hwnd(self, hwnd: int):
+        with self._lock:
+            self._panel_hwnds.add(hwnd)
 
     def set_mask(self, hwnd: int, x: int, y: int, w: int, h: int):
         with self._lock:
+            self._panel_hwnds.add(hwnd)
             if w <= 0 or h <= 0:
                 self._masks[hwnd] = None
             else:
@@ -211,7 +218,7 @@ class NativeHitTestFilter(QAbstractNativeEventFilter):
 
     def clear_mask(self, hwnd: int):
         with self._lock:
-            self._masks.pop(hwnd, None)
+            self._masks[hwnd] = None
 
     def nativeEventFilter(self, eventType, message):
         if eventType == b"windows_generic_MSG" or eventType == "windows_generic_MSG":
@@ -220,16 +227,27 @@ class NativeHitTestFilter(QAbstractNativeEventFilter):
                 if msg.message == 0x0084:  # WM_NCHITTEST
                     target_hwnd = int(msg.hWnd)
                     with self._lock:
-                        if target_hwnd in self._masks:
-                            rect = self._masks[target_hwnd]
-                            if rect is None:
-                                return True, -1  # HTTRANSPARENT: clicks pass through
+                        if target_hwnd in self._panel_hwnds or target_hwnd in self._masks:
+                            rect = self._masks.get(target_hwnd)
+                            if not rect:
+                                return True, -1  # HTTRANSPARENT: clicks pass through to desktop
                             pt = wintypes.POINT()
                             pt.x = ctypes.c_short(msg.lParam & 0xFFFF).value
                             pt.y = ctypes.c_short((msg.lParam >> 16) & 0xFFFF).value
-                            ctypes.windll.user32.ScreenToClient(target_hwnd, ctypes.byref(pt))
+                            user32 = ctypes.windll.user32
+                            user32.ScreenToClient(target_hwnd, ctypes.byref(pt))
+
+                            # Handle Windows High-DPI scaling (physical pixels -> DIP logical pixels)
+                            dpr = 1.0
+                            if hasattr(user32, "GetDpiForWindow"):
+                                dpi = user32.GetDpiForWindow(target_hwnd)
+                                if dpi > 0:
+                                    dpr = dpi / 96.0
+
+                            px = pt.x / dpr
+                            py = pt.y / dpr
                             rx, ry, rw, rh = rect
-                            if rx <= pt.x <= (rx + rw) and ry <= pt.y <= (ry + rh):
+                            if rx <= px <= (rx + rw) and ry <= py <= (ry + rh):
                                 return False, 0  # Inside interactive box: process event
                             return True, -1  # Outside: pass through to desktop/window below
             except Exception:
@@ -299,8 +317,8 @@ def request_open_settings(tab: int = 0, mock_update: bool = False):
                                     child.setProperty("visible", True)
                                     if mock_update:
                                         child.setProperty("hasAppUpdate", True)
-                                        child.setProperty("latestVersion", "v1.0.3")
-                                        child.setProperty("appVersion", "1.0.3")
+                                        child.setProperty("latestVersion", "v1.0.4")
+                                        child.setProperty("appVersion", "1.0.4")
                                         child.setProperty("updateUrl", "https://github.com/trancongduyhieu/FrostifyLocal/releases")
                     sys.stderr.write(f"request_open_settings: found_modal={found_modal}\n")
                 except Exception as e:
@@ -508,6 +526,7 @@ class NutstyBridge(QObject):
                 from ctypes import wintypes
                 hwnd = int(win_obj.winId())
                 if hwnd > 0:
+                    native_filter.register_panel_hwnd(hwnd)
                     user32 = ctypes.windll.user32
                     GWL_EXSTYLE = -20
                     WS_EX_NOACTIVATE = 0x08000000
@@ -546,13 +565,27 @@ class NutstyBridge(QObject):
         except Exception as e:
             sys.stderr.write(f"pinWindowToDesktopBottom error: {e}\n")
 
+    @Slot()
     @Slot(QObject)
-    def restoreWindow(self, win_obj):
+    def restoreWindow(self, win_obj=None):
         try:
+            if not win_obj:
+                win_obj = main_win_ref[0]
+            if not win_obj:
+                for tw in QGuiApplication.topLevelWindows():
+                    try:
+                        if not bool(tw.property("isDesktopBottomPanel")) and tw.width() >= 500:
+                            win_obj = tw
+                            main_win_ref[0] = tw
+                            break
+                    except Exception:
+                        pass
             if not win_obj:
                 return
             if hasattr(win_obj, "setVisible"):
                 win_obj.setVisible(True)
+            if hasattr(win_obj, "setProperty"):
+                win_obj.setProperty("visible", True)
             if hasattr(win_obj, "showNormal"):
                 win_obj.showNormal()
             if hasattr(win_obj, "show"):
@@ -563,14 +596,22 @@ class NutstyBridge(QObject):
                 getattr(win_obj, "raise")()
             if hasattr(win_obj, "requestActivate"):
                 win_obj.requestActivate()
-            if pc.IS_WINDOWS and hasattr(win_obj, "winId"):
+            if pc.IS_WINDOWS:
                 import ctypes
                 from ctypes import wintypes
-                hwnd = int(win_obj.winId())
+                user32 = ctypes.windll.user32
+                hwnd = 0
+                if hasattr(win_obj, "winId"):
+                    try:
+                        hwnd = int(win_obj.winId())
+                    except Exception:
+                        hwnd = 0
                 if hwnd > 0:
-                    user32 = ctypes.windll.user32
                     SW_RESTORE = 9
                     SW_SHOW = 5
+                    user32.AllowSetForegroundWindow.argtypes = [wintypes.DWORD]
+                    user32.AllowSetForegroundWindow.restype = wintypes.BOOL
+                    user32.AllowSetForegroundWindow(0xFFFFFFFF)  # ASFW_ANY = -1
                     user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
                     user32.ShowWindow.restype = wintypes.BOOL
                     user32.BringWindowToTop.argtypes = [wintypes.HWND]
@@ -579,8 +620,18 @@ class NutstyBridge(QObject):
                     user32.SetForegroundWindow.restype = wintypes.BOOL
                     user32.ShowWindow(hwnd, SW_RESTORE)
                     user32.ShowWindow(hwnd, SW_SHOW)
-                    user32.BringWindowToTop(hwnd)
-                    user32.SetForegroundWindow(hwnd)
+
+                    fg_hwnd = user32.GetForegroundWindow()
+                    fg_thread = user32.GetWindowThreadProcessId(fg_hwnd, None)
+                    cur_thread = ctypes.windll.kernel32.GetCurrentThreadId()
+                    if fg_thread and fg_thread != cur_thread:
+                        user32.AttachThreadInput(cur_thread, fg_thread, True)
+                        user32.BringWindowToTop(hwnd)
+                        user32.SetForegroundWindow(hwnd)
+                        user32.AttachThreadInput(cur_thread, fg_thread, False)
+                    else:
+                        user32.BringWindowToTop(hwnd)
+                        user32.SetForegroundWindow(hwnd)
         except Exception as e:
             sys.stderr.write(f"restoreWindow error: {e}\n")
 
@@ -897,6 +948,8 @@ def _create_nutsty_app_icon(icon_save_path: str) -> QIcon:
 
 def main():
     os.environ["QT_QUICK_CONTROLS_STYLE"] = "Basic"
+    if sys.platform == "win32":
+        os.environ.setdefault("QSG_RHI_BACKEND", "d3d11")
 
     try:
         from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
@@ -974,8 +1027,8 @@ def main():
 
     def _init_win(w):
         if _is_bottom_panel(w):
-            w.show()
-            bridge.pinWindowToDesktopBottom(w)
+            if w.property("visible"):
+                bridge.pinWindowToDesktopBottom(w)
         else:
             if main_win_ref[0] is None and w.width() >= 500:
                 main_win_ref[0] = w

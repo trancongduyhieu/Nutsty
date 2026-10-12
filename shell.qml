@@ -27,11 +27,20 @@ Scope {
 
         onVisibleChanged: {
             if (win.visible) {
+                if (typeof desktopMusicWidget !== "undefined" && desktopMusicWidget) {
+                    desktopMusicWidget.visible = false;
+                    if (typeof desktopMusicWidget.hide === "function") desktopMusicWidget.hide();
+                }
                 if (!statusProcess.running) {
                     statusProcess.command = ["python3", win.appDir + "/backend/player_daemon.py", "status"];
                     statusProcess.running = true;
                 }
                 Qt.callLater(function() { if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) ytNowPlayingView.updateActiveLyric(true); });
+            } else {
+                if (typeof desktopMusicWidget !== "undefined" && desktopMusicWidget) {
+                    desktopMusicWidget.visible = true;
+                    if (typeof desktopMusicWidget.show === "function") desktopMusicWidget.show();
+                }
             }
         }
 
@@ -83,6 +92,15 @@ Scope {
     property string spotifySpdc: ""
     property string lyricsSource: "auto"
     property string canvasPreference: "apple_first"
+    readonly property bool isAnyModalOpen: (typeof settingsModal !== "undefined" && settingsModal.visible)
+                                        || (typeof spotifyImportModal !== "undefined" && spotifyImportModal.visible)
+                                        || (typeof manageFriendsModal !== "undefined" && manageFriendsModal.visible)
+                                        || (typeof friendStoryModal !== "undefined" && friendStoryModal.visible)
+                                        || (typeof userNoteDetailModal !== "undefined" && userNoteDetailModal.visible)
+                                        || (typeof postNoteModal !== "undefined" && postNoteModal.visible)
+                                        || (typeof playlistTrackSearchModal !== "undefined" && playlistTrackSearchModal.visible)
+                                        || (typeof friendRequestsPopover !== "undefined" && friendRequestsPopover.visible)
+                                        || (typeof coListenersPopover !== "undefined" && coListenersPopover.visible)
     property bool showSidebar: true
     property var friendsNotes: []
     property var friendsList: []
@@ -97,8 +115,8 @@ Scope {
     property bool toastVisible: false
     property string localApiUrl: "http://127.0.0.1:17890"
     property string notesApiUrl: Quickshell.env("NUTSTY_WORKER_URL") || "http://127.0.0.1:17890"
-    property string appVersion: "1.0.3"
-    property string latestVersion: "1.0.3"
+    property string appVersion: "1.0.4"
+    property string latestVersion: "1.0.4"
     property bool hasAppUpdate: false
     property bool isCheckingUpdate: false
     property string updateUrl: ""
@@ -1019,8 +1037,8 @@ Scope {
                                 win.visible = true;
                                 if (res.mock_update) {
                                     win.hasAppUpdate = true;
-                                    win.latestVersion = res.latest_version || "v1.0.3";
-                                    win.appVersion = res.current_version || "1.0.3";
+                                    win.latestVersion = res.latest_version || "v1.0.4";
+                                    win.appVersion = res.current_version || "1.0.4";
                                     win.updateUrl = res.release_url || "https://github.com/trancongduyhieu/Nutsty/releases";
                                 }
                                 settingsModal.currentTab = (typeof res.tab === "number") ? res.tab : 0;
@@ -1655,7 +1673,7 @@ Scope {
                 id: wallpaperAtmosphereEffect
                 anchors.fill: parent
                 source: wallpaperAtmosphereWrapper
-                visible: wallpaperAtmosphereImg.status === Image.Ready
+                visible: wallpaperAtmosphereImg.status === Image.Ready && opacity > 0.01
                 blurEnabled: true
                 blur: 1.0
                 blurMax: 64
@@ -1693,7 +1711,7 @@ Scope {
                 id: songAtmosphereEffect
                 anchors.fill: parent
                 source: songAtmosphereWrapper
-                visible: songAtmosphereImg.status === Image.Ready
+                visible: songAtmosphereImg.status === Image.Ready && opacity > 0.01
                 blurEnabled: true
                 blur: 1.0
                 blurMax: 64
@@ -1860,15 +1878,7 @@ Scope {
                 }
             }
 
-            // 2. Live Content Layer (Card bài hát, header, etc.)
-            ShaderEffectSource {
-                id: liveContentTexture
-                anchors.fill: parent
-                sourceItem: mainContentBackdrop
-                live: true
-                hideSource: false
-                smooth: true
-            }
+            // 2. Fallback static content placeholder (liveContentTexture removed to prevent dual full-window FBO overhead)
         }
 
         // =====================================================================
@@ -1892,7 +1902,7 @@ Scope {
             // 2. Active Song Atmosphere Aurora Glow (when playing)
             Item {
                 anchors.fill: parent
-                opacity: (win.currentTrack && win.isPlaying) ? 0.70 : 0.0
+                opacity: (win.isAnyModalOpen && win.currentTrack && win.isPlaying) ? 0.70 : 0.0
                 Behavior on opacity {
                     NumberAnimation { duration: 400; easing.type: Easing.InOutQuad }
                 }
@@ -1910,7 +1920,7 @@ Scope {
                 MultiEffect {
                     anchors.fill: parent
                     source: nutstySurfaceArtwork
-                    visible: nutstySurfaceArtwork.status === Image.Ready
+                    visible: win.isAnyModalOpen && nutstySurfaceArtwork.status === Image.Ready
                     blurEnabled: true
                     blur: 1.0
                     blurMax: 64
@@ -1924,7 +1934,7 @@ Scope {
                 id: liveContentRaw
                 anchors.fill: parent
                 sourceItem: mainContentBackdrop
-                live: true
+                live: win.isAnyModalOpen
                 hideSource: false
                 smooth: true
                 visible: false
@@ -1933,6 +1943,7 @@ Scope {
             MultiEffect {
                 anchors.fill: parent
                 source: liveContentRaw
+                visible: win.isAnyModalOpen
                 blurEnabled: true
                 blur: 1.0
                 blurMax: 64
@@ -4155,8 +4166,8 @@ Scope {
         function testUpdatePreview() {
             win.visible = true;
             win.hasAppUpdate = true;
-            win.latestVersion = "v1.0.3";
-            win.appVersion = "1.0.3";
+            win.latestVersion = "v1.0.4";
+            win.appVersion = "1.0.4";
             win.updateUrl = "https://github.com/trancongduyhieu/Nutsty/releases";
             settingsModal.currentTab = 0;
             settingsModal.visible = true;
@@ -4489,41 +4500,41 @@ Scope {
 
     // =========================================================================
     // Nutsty Desktop Music Mini Controller Widget (Layer Bottom)
-    // Active when Full Nutsty window is closed/minimized (!win.visible) and track is loaded
+    // Visible when Full Nutsty window is closed/minimized (!win.visible)
     // =========================================================================
-    Loader {
-        id: desktopMusicWidgetLoader
-        active: !win.visible
-        sourceComponent: Component {
-            DesktopMusicWidget {
-                currentTrack: win.currentTrack
-                nextTrack: win.nextTrack
-                currentTime: win.currentTime
-                duration: win.totalDuration
-                isPlaying: win.isPlaying
-                widgetX: win.widgetX
-                widgetY: win.widgetY
+    DesktopMusicWidget {
+        id: desktopMusicWidget
+        visible: false
+        currentTrack: win.currentTrack
+        nextTrack: win.nextTrack
+        currentTime: win.currentTime
+        duration: win.totalDuration
+        isPlaying: win.isPlaying
+        widgetX: win.widgetX
+        widgetY: win.widgetY
 
-                onPlayPauseClicked: win.togglePlay()
-                onNextClicked: win.playNext()
-                onPrevClicked: win.playPrev()
-                onSeekRequested: (sec) => win.seekAudio(sec)
-                onOpenFullAppRequested: {
-                    win.visible = true;
-                    if (typeof win.showNormal === "function") win.showNormal();
-                    if (typeof win.show === "function") win.show();
-                    if (typeof win.raise === "function") win.raise();
-                    if (typeof win.requestActivate === "function") win.requestActivate();
-                    if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.restoreWindow) {
-                        __NutstyBridge.restoreWindow(win);
-                    }
-                }
-                onSavePositionRequested: (newX, newY) => {
-                    win.widgetX = newX;
-                    win.widgetY = newY;
-                    win.saveSettings();
-                }
+        onPlayPauseClicked: win.togglePlay()
+        onNextClicked: win.playNext()
+        onPrevClicked: win.playPrev()
+        onSeekRequested: (sec) => win.seekAudio(sec)
+        onOpenFullAppRequested: {
+            if (typeof desktopMusicWidget !== "undefined" && desktopMusicWidget) {
+                desktopMusicWidget.visible = false;
+                if (typeof desktopMusicWidget.hide === "function") desktopMusicWidget.hide();
             }
+            win.visible = true;
+            if (typeof win.showNormal === "function") win.showNormal();
+            if (typeof win.show === "function") win.show();
+            if (typeof win.raise === "function") win.raise();
+            if (typeof win.requestActivate === "function") win.requestActivate();
+            if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.restoreWindow) {
+                __NutstyBridge.restoreWindow(win);
+            }
+        }
+        onSavePositionRequested: (newX, newY) => {
+            win.widgetX = newX;
+            win.widgetY = newY;
+            win.saveSettings();
         }
     }
 } // end appScope

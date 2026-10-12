@@ -494,7 +494,7 @@ Rectangle {
                                             anchors.bottom: parent.bottom
 
                                             SequentialAnimation on height {
-                                                running: plItem.isCurrentlyPlaying && root.isPlaying
+                                                running: root.visible && plItem.isCurrentlyPlaying && root.isPlaying
                                                 loops: Animation.Infinite
                                                 NumberAnimation { to: index === 0 ? 14 : (index === 1 ? 7 : 13); duration: 240 + index * 90; easing.type: Easing.InOutQuad }
                                                 NumberAnimation { to: index === 0 ? 6 : (index === 1 ? 14 : 5); duration: 240 + index * 90; easing.type: Easing.InOutQuad }
@@ -752,7 +752,7 @@ Rectangle {
                                                         anchors.bottom: parent.bottom
 
                                                         SequentialAnimation on height {
-                                                            running: qItem.isCurrent && root.isPlaying
+                                                            running: root.visible && root.activeTab === "queue" && qItem.isCurrent && root.isPlaying
                                                             loops: Animation.Infinite
                                                             NumberAnimation { to: index === 0 ? 12 : (index === 1 ? 6 : 11); duration: 220 + index * 80; easing.type: Easing.InOutQuad }
                                                             NumberAnimation { to: index === 0 ? 5 : (index === 1 ? 12 : 4); duration: 220 + index * 80; easing.type: Easing.InOutQuad }

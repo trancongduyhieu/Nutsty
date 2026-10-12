@@ -1572,7 +1572,7 @@ Item {
 
                                             SequentialAnimation on opacity {
                                                 loops: Animation.Infinite
-                                                running: root.isLoadingMoodChips
+                                                running: root.visible && root.isLoadingMoodChips
                                                 NumberAnimation { from: 0.35; to: 0.75; duration: 650; easing.type: Easing.InOutQuad }
                                                 NumberAnimation { from: 0.75; to: 0.35; duration: 650; easing.type: Easing.InOutQuad }
                                             }
@@ -1779,7 +1779,7 @@ Item {
                                                             radius: 1.2
                                                             color: root.accentColor
                                                             SequentialAnimation on height {
-                                                                running: qRow.isCurrent && root.isPlaying
+                                                                running: root.visible && qRow.isCurrent && root.isPlaying
                                                                 loops: Animation.Infinite
                                                                 NumberAnimation { from: 4; to: 14; duration: 320 + index * 120; easing.type: Easing.InOutQuad }
                                                                 NumberAnimation { from: 14; to: 4; duration: 320 + index * 120; easing.type: Easing.InOutQuad }

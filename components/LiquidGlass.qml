@@ -26,18 +26,20 @@ Item {
     property real flowProgress: isFlowActive ? 1.0 : 0.0
     Behavior on flowProgress { NumberAnimation { duration: 950; easing.type: Easing.InOutQuad } }
 
+    readonly property bool isEffectActive: root.visible && root.opacity > 0.01 && root.width > 0 && root.height > 0
+
     property real time: 0.0
     NumberAnimation on time {
         from: 0.0
         to: 100000.0
         duration: 100000000
         loops: Animation.Infinite
-        running: true
+        running: root.isEffectActive && root.isFlowActive
     }
 
     // Coordinate mapping to track where this glass sits inside backgroundSourceItem
     readonly property point globalOffset: {
-        if (!backgroundSourceItem) return Qt.point(0, 0);
+        if (!backgroundSourceItem || !root.isEffectActive) return Qt.point(0, 0);
         var _dep = root.extraDependency;
         // Explicitly create reactive binding dependencies on geometry of self, parent and source
         var _rx = root.x, _ry = root.y, _rw = root.width, _rh = root.height;
@@ -49,13 +51,13 @@ Item {
     // Capture the background item as a GPU texture with linear filtering
     ShaderEffectSource {
         id: bgSource
-        sourceItem: root.backgroundSourceItem
+        sourceItem: root.isEffectActive ? root.backgroundSourceItem : null
         recursive: false
-        live: true
+        live: root.isEffectActive
         hideSource: false
         visible: false
         smooth: true
-        mipmap: true
+        mipmap: false
     }
 
     // Hardware-accelerated GLSL Liquid Glass Refraction Shader with 9-Tap Frosted Blur
@@ -79,7 +81,7 @@ Item {
         property real u_flowActive: root.flowProgress
 
         fragmentShader: Qt.resolvedUrl("../assets/shaders/liquid_glass.frag.qsb")
-        visible: root.backgroundSourceItem !== null
+        visible: root.isEffectActive && root.backgroundSourceItem !== null
     }
 
     // Fallback when no backgroundSourceItem is provided

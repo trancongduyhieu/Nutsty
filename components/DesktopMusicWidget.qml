@@ -233,13 +233,13 @@ PanelWindow {
         // =====================================================================
         Item {
             id: soundwaveButton
-            z: 10
+            z: 50
             anchors.top: parent.top
-            anchors.topMargin: 14
+            anchors.topMargin: 12
             anchors.left: parent.left
-            anchors.leftMargin: 14
-            width: 36
-            height: 28
+            anchors.leftMargin: 12
+            width: 44
+            height: 34
             HoverHandler { id: waveH }
 
             // 3-Bar Equalizer Visualizer (|||)
@@ -305,6 +305,7 @@ PanelWindow {
             MouseArea {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
+                preventStealing: true
                 onClicked: root.openFullAppRequested()
             }
         }

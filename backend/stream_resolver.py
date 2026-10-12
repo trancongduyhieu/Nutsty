@@ -136,15 +136,23 @@ def resolve_stream_url(video_id, quality=None):
     quality = quality if quality in QUALITY_ITAG_PRIORITIES else "high_opus"
     cache_key = f"{video_id}_{quality}"
 
+    now = time.time()
+    with _STREAM_CACHE_LOCK:
+        if cache_key in _MEMORY_STREAM_CACHE:
+            entry = _MEMORY_STREAM_CACHE[cache_key]
+            if (now - entry.get("timestamp", 0)) < 10800:
+                return entry
+
     cache = load_json(STREAM_CACHE_FILE, {})
     cached = cache.get(cache_key)
     if not cached:
         legacy = cache.get(video_id)
         if legacy and legacy.get("quality") == quality:
             cached = legacy
-    now = time.time()
 
     if cached and (now - cached.get("timestamp", 0)) < 10800:
+        with _STREAM_CACHE_LOCK:
+            _MEMORY_STREAM_CACHE[cache_key] = cached
         return cached
 
     try:
@@ -155,17 +163,17 @@ def resolve_stream_url(video_id, quality=None):
 
         attempts = []
 
-        # Attempt 1: Fast mobile + TV solver (android, ios, tv_embedded)
+        # Attempt 1: Fast JS-less audio solver (visionos yields genuine 251 opus & 140 aac without SABR/PO-Token blocks)
         attempts.append({
             "quiet": True,
             "no_warnings": True,
             "skip_download": True,
             "check_formats": False,
             "noplaylist": True,
-            "extractor_args": {"youtube": {"player_client": ["android", "ios", "tv_embedded"]}}
+            "extractor_args": {"youtube": {"player_client": ["visionos"]}}
         })
 
-        # Attempt 2: User cookie file with mweb/web_embedded/android if Google Account session exists
+        # Attempt 2: User cookie file if Google Account session exists
         if cookie_file and os.path.exists(cookie_file):
             attempts.append({
                 "quiet": True,
@@ -174,17 +182,17 @@ def resolve_stream_url(video_id, quality=None):
                 "check_formats": False,
                 "noplaylist": True,
                 "cookiefile": cookie_file,
-                "extractor_args": {"youtube": {"player_client": ["mweb", "web_embedded", "android", "tv_embedded"]}}
+                "extractor_args": {"youtube": {"player_client": ["android", "mweb"]}}
             })
 
-        # Attempt 3: Creator + TV embedded fallback (bypasses bot detection and SABR restrictions)
+        # Attempt 3: Resilient mobile android client fallback
         attempts.append({
             "quiet": True,
             "no_warnings": True,
             "skip_download": True,
             "check_formats": False,
             "noplaylist": True,
-            "extractor_args": {"youtube": {"player_client": ["android_creator", "tv_embedded"]}}
+            "extractor_args": {"youtube": {"player_client": ["android"]}}
         })
 
         # Attempt 4: Resilient broad fallback
@@ -235,6 +243,8 @@ def resolve_stream_url(video_id, quality=None):
                         }
                         cache[cache_key] = res
                         save_json(STREAM_CACHE_FILE, cache)
+                        with _STREAM_CACHE_LOCK:
+                            _MEMORY_STREAM_CACHE[cache_key] = res
                         return res
             except Exception:
                 continue

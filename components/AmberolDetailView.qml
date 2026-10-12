@@ -848,7 +848,7 @@ Rectangle {
                             visible: artistImg.status !== Image.Ready
                             
                             SequentialAnimation on opacity {
-                                running: artistImg.status !== Image.Ready
+                                running: root.visible && artistImg.status !== Image.Ready
                                 loops: Animation.Infinite
                                 NumberAnimation { from: 0.35; to: 0.70; duration: 900; easing.type: Easing.InOutQuad }
                                 NumberAnimation { from: 0.70; to: 0.35; duration: 900; easing.type: Easing.InOutQuad }
@@ -912,7 +912,7 @@ Rectangle {
                                     radius: 4
                                     color: "#38383e"
                                     SequentialAnimation on opacity {
-                                        running: root.isDetailsLoading
+                                        running: root.visible && root.isDetailsLoading
                                         loops: Animation.Infinite
                                         NumberAnimation { from: 0.35; to: 0.70; duration: 800; easing.type: Easing.InOutQuad }
                                         NumberAnimation { from: 0.70; to: 0.35; duration: 800; easing.type: Easing.InOutQuad }
@@ -925,7 +925,7 @@ Rectangle {
                                     radius: 3
                                     color: "#28282c"
                                     SequentialAnimation on opacity {
-                                        running: root.isDetailsLoading
+                                        running: root.visible && root.isDetailsLoading
                                         loops: Animation.Infinite
                                         NumberAnimation { from: 0.35; to: 0.70; duration: 800; easing.type: Easing.InOutQuad }
                                         NumberAnimation { from: 0.70; to: 0.35; duration: 800; easing.type: Easing.InOutQuad }
@@ -1012,7 +1012,7 @@ Rectangle {
                                     radius: 3
                                     color: "#28282c"
                                     SequentialAnimation on opacity {
-                                        running: root.isDetailsLoading
+                                        running: root.visible && root.isDetailsLoading
                                         loops: Animation.Infinite
                                         NumberAnimation { from: 0.35; to: 0.70; duration: 800; easing.type: Easing.InOutQuad }
                                         NumberAnimation { from: 0.70; to: 0.35; duration: 800; easing.type: Easing.InOutQuad }
@@ -1026,7 +1026,7 @@ Rectangle {
                                     radius: 4
                                     color: "#38383e"
                                     SequentialAnimation on opacity {
-                                        running: root.isDetailsLoading
+                                        running: root.visible && root.isDetailsLoading
                                         loops: Animation.Infinite
                                         NumberAnimation { from: 0.35; to: 0.70; duration: 800; easing.type: Easing.InOutQuad }
                                         NumberAnimation { from: 0.70; to: 0.35; duration: 800; easing.type: Easing.InOutQuad }
@@ -1043,7 +1043,7 @@ Rectangle {
                                         radius: 14
                                         color: "#242428"
                                         SequentialAnimation on opacity {
-                                            running: root.isDetailsLoading
+                                            running: root.visible && root.isDetailsLoading
                                             loops: Animation.Infinite
                                             NumberAnimation { from: 0.35; to: 0.70; duration: 800; easing.type: Easing.InOutQuad }
                                             NumberAnimation { from: 0.70; to: 0.35; duration: 800; easing.type: Easing.InOutQuad }
@@ -1056,7 +1056,7 @@ Rectangle {
                                         radius: 14
                                         color: "#242428"
                                         SequentialAnimation on opacity {
-                                            running: root.isDetailsLoading
+                                            running: root.visible && root.isDetailsLoading
                                             loops: Animation.Infinite
                                             NumberAnimation { from: 0.35; to: 0.70; duration: 800; easing.type: Easing.InOutQuad }
                                             NumberAnimation { from: 0.70; to: 0.35; duration: 800; easing.type: Easing.InOutQuad }
@@ -1071,7 +1071,7 @@ Rectangle {
                                     radius: 1.5
                                     color: "#28282c"
                                     SequentialAnimation on opacity {
-                                        running: root.isDetailsLoading
+                                        running: root.visible && root.isDetailsLoading
                                         loops: Animation.Infinite
                                         NumberAnimation { from: 0.35; to: 0.70; duration: 800; easing.type: Easing.InOutQuad }
                                         NumberAnimation { from: 0.70; to: 0.35; duration: 800; easing.type: Easing.InOutQuad }
@@ -1085,7 +1085,7 @@ Rectangle {
                                     radius: 3
                                     color: "#38383e"
                                     SequentialAnimation on opacity {
-                                        running: root.isDetailsLoading
+                                        running: root.visible && root.isDetailsLoading
                                         loops: Animation.Infinite
                                         NumberAnimation { from: 0.35; to: 0.70; duration: 800; easing.type: Easing.InOutQuad }
                                         NumberAnimation { from: 0.70; to: 0.35; duration: 800; easing.type: Easing.InOutQuad }
@@ -1103,7 +1103,7 @@ Rectangle {
                                         radius: 3
                                         color: "#28282c"
                                         SequentialAnimation on opacity {
-                                            running: root.isDetailsLoading
+                                            running: root.visible && root.isDetailsLoading
                                             loops: Animation.Infinite
                                             NumberAnimation { from: 0.35; to: 0.70; duration: 800; easing.type: Easing.InOutQuad }
                                             NumberAnimation { from: 0.70; to: 0.35; duration: 800; easing.type: Easing.InOutQuad }
@@ -1116,7 +1116,7 @@ Rectangle {
                                         radius: 3
                                         color: "#28282c"
                                         SequentialAnimation on opacity {
-                                            running: root.isDetailsLoading
+                                            running: root.visible && root.isDetailsLoading
                                             loops: Animation.Infinite
                                             NumberAnimation { from: 0.35; to: 0.70; duration: 800; easing.type: Easing.InOutQuad }
                                             NumberAnimation { from: 0.70; to: 0.35; duration: 800; easing.type: Easing.InOutQuad }
@@ -1129,7 +1129,7 @@ Rectangle {
                                         radius: 3
                                         color: "#28282c"
                                         SequentialAnimation on opacity {
-                                            running: root.isDetailsLoading
+                                            running: root.visible && root.isDetailsLoading
                                             loops: Animation.Infinite
                                             NumberAnimation { from: 0.35; to: 0.70; duration: 800; easing.type: Easing.InOutQuad }
                                             NumberAnimation { from: 0.70; to: 0.35; duration: 800; easing.type: Easing.InOutQuad }
@@ -1351,7 +1351,7 @@ Rectangle {
                                     radius: 3
                                     color: "#28282c"
                                     SequentialAnimation on opacity {
-                                        running: root.isDetailsLoading && (!root.track || !root.track.album)
+                                        running: root.visible && root.isDetailsLoading && (!root.track || !root.track.album)
                                         loops: Animation.Infinite
                                         NumberAnimation { from: 0.35; to: 0.70; duration: 800; easing.type: Easing.InOutQuad }
                                         NumberAnimation { from: 0.70; to: 0.35; duration: 800; easing.type: Easing.InOutQuad }

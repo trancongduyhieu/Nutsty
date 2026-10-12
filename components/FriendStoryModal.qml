@@ -405,7 +405,7 @@ Item {
                                                     color: root.accentColor
                                                     anchors.bottom: parent.bottom
                                                     SequentialAnimation on height {
-                                                        running: root.attachedTrack !== null
+                                                        running: root.visible && root.attachedTrack !== null
                                                         loops: Animation.Infinite
                                                         NumberAnimation { to: 12; duration: 340; easing.type: Easing.InOutQuad }
                                                         NumberAnimation { to: 4; duration: 340; easing.type: Easing.InOutQuad }
@@ -416,7 +416,7 @@ Item {
                                                     color: root.accentColor
                                                     anchors.bottom: parent.bottom
                                                     SequentialAnimation on height {
-                                                        running: root.attachedTrack !== null
+                                                        running: root.visible && root.attachedTrack !== null
                                                         loops: Animation.Infinite
                                                         NumberAnimation { to: 5; duration: 260; easing.type: Easing.InOutQuad }
                                                         NumberAnimation { to: 12; duration: 260; easing.type: Easing.InOutQuad }
@@ -427,7 +427,7 @@ Item {
                                                     color: root.accentColor
                                                     anchors.bottom: parent.bottom
                                                     SequentialAnimation on height {
-                                                        running: root.attachedTrack !== null
+                                                        running: root.visible && root.attachedTrack !== null
                                                         loops: Animation.Infinite
                                                         NumberAnimation { to: 11; duration: 400; easing.type: Easing.InOutQuad }
                                                         NumberAnimation { to: 3; duration: 400; easing.type: Easing.InOutQuad }
@@ -510,7 +510,7 @@ Item {
                                 visible: root.isThisTrackPlaying
 
                                 RotationAnimation on rotation {
-                                    running: root.isThisTrackPlaying
+                                    running: root.visible && root.isThisTrackPlaying
                                     loops: Animation.Infinite
                                     from: 0; to: 360; duration: 2500
                                 }
@@ -684,7 +684,7 @@ Item {
 
                                 SequentialAnimation {
                                     id: marqueeAnim
-                                    running: marqueeText.needsScroll
+                                    running: root.visible && marqueeText.needsScroll
                                     loops: Animation.Infinite
 
                                     PauseAnimation { duration: 1800 }

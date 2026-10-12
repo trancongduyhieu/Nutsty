@@ -119,6 +119,10 @@ def ensure_mpv():
         ytdl_bin = pc.get_binary_path("yt-dlp")
         ipc_arg = pc.get_mpv_ipc_arg(IPC_TYPE, IPC_TARGET)
 
+        mpv_cache_dir = os.path.join(pc.get_cache_dir(), "mpv_stream_cache")
+        os.makedirs(mpv_cache_dir, exist_ok=True)
+        safe_cache_dir = mpv_cache_dir.replace("\\", "/")
+
         cmd = [
             mpv_bin,
             "--no-config",
@@ -128,9 +132,16 @@ def ensure_mpv():
             "--no-terminal",
             "--force-window=no",
             ipc_arg,
-            "--audio-buffer=0.4",
-            "--demuxer-max-bytes=16M",
-            "--demuxer-max-back-bytes=4M",
+            "--cache=yes",
+            "--cache-on-disk=yes",
+            f"--demuxer-cache-dir={safe_cache_dir}",
+            "--demuxer-max-bytes=128M",
+            "--demuxer-max-back-bytes=64M",
+            "--demuxer-readahead-secs=120",
+            "--cache-secs=300",
+            "--demuxer-cache-unlink-files=whendone",
+            "--audio-buffer=0.8",
+            "--network-timeout=10",
             f"--title={MPV_TITLE}",
             "--loop-playlist=inf",
             "--gapless-audio=yes",
