@@ -56,7 +56,7 @@ Item {
         hideSource: false
         visible: false
         smooth: true
-        mipmap: false
+        mipmap: true
     }
 
     // Hardware-accelerated GLSL Liquid Glass Refraction Shader with 9-Tap Frosted Blur
