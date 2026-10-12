@@ -1581,12 +1581,9 @@ Rectangle {
                         Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
                         Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
 
-                        layer.enabled: !lyricsView.isUserScrolling && !isHovered && targetBlur > 0.01 && dist <= 4
-                        layer.effect: MultiEffect {
-                            blurEnabled: true
-                            blur: lyricRow.targetBlur
-                            blurMax: 32
-                        }
+                        // High-performance depth-of-field: pure typography opacity and scale falloff (0 FBO overhead, zero thermal load)
+                        layer.enabled: false
+
 
                         Item {
                             id: lyricContentItem

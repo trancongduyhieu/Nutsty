@@ -29,12 +29,11 @@ Item {
     readonly property bool isEffectActive: root.visible && root.opacity > 0.01 && root.width > 0 && root.height > 0
 
     property real time: 0.0
-    NumberAnimation on time {
-        from: 0.0
-        to: 100000.0
-        duration: 100000000
-        loops: Animation.Infinite
+    Timer {
+        interval: 100 // Gentle 10 FPS ambient wave flow (prevents continuous 60 FPS shader redrawing)
         running: root.isEffectActive && root.isFlowActive
+        repeat: true
+        onTriggered: root.time += 0.08
     }
 
     // Coordinate mapping to track where this glass sits inside backgroundSourceItem

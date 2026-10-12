@@ -229,7 +229,7 @@ Item {
                         x: 0
 
                         readonly property real overflowDist: Math.max(0, implicitWidth - titleContainer.width)
-                        readonly property bool needsScroll: overflowDist > 6
+                        readonly property bool needsScroll: titleContainer.width > 0 && overflowDist > 6
 
                         SequentialAnimation {
                             id: titleAnim
@@ -288,7 +288,7 @@ Item {
                         x: 0
 
                         readonly property real overflowDist: Math.max(0, implicitWidth - artistContainer.width)
-                        readonly property bool needsScroll: overflowDist > 6
+                        readonly property bool needsScroll: artistContainer.width > 0 && overflowDist > 6
 
                         SequentialAnimation {
                             id: artistAnim

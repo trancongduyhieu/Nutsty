@@ -160,17 +160,15 @@ def resolve_stream_url(video_id, quality=None):
 
         cookie_file = get_exported_cookie_file()
         url = f"https://www.youtube.com/watch?v={video_id}"
-
         attempts = []
 
-        # Attempt 1: Fast JS-less audio solver (visionos yields genuine 251 opus & 140 aac without SABR/PO-Token blocks)
+        # Attempt 1: Standard resilient extraction (clean 251 opus & 140 aac with matching HTTP headers)
         attempts.append({
             "quiet": True,
             "no_warnings": True,
             "skip_download": True,
             "check_formats": False,
-            "noplaylist": True,
-            "extractor_args": {"youtube": {"player_client": ["visionos"]}}
+            "noplaylist": True
         })
 
         # Attempt 2: User cookie file if Google Account session exists
@@ -195,13 +193,14 @@ def resolve_stream_url(video_id, quality=None):
             "extractor_args": {"youtube": {"player_client": ["android"]}}
         })
 
-        # Attempt 4: Resilient broad fallback
+        # Attempt 4: VisionOS fallback
         attempts.append({
             "quiet": True,
             "no_warnings": True,
             "skip_download": True,
             "check_formats": False,
-            "noplaylist": True
+            "noplaylist": True,
+            "extractor_args": {"youtube": {"player_client": ["visionos"]}}
         })
 
         for ydl_opts in attempts:

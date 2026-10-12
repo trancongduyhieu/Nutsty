@@ -394,7 +394,7 @@ class NutstyBridge(QObject):
     def getAppDir(self) -> str:
         if getattr(sys, "frozen", False):
             return os.path.dirname(os.path.abspath(sys.executable))
-        return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        return os.path.abspath(os.path.dirname(__file__))
 
     @Slot()
     def quitApp(self):
@@ -609,6 +609,12 @@ class NutstyBridge(QObject):
                 if hwnd > 0:
                     SW_RESTORE = 9
                     SW_SHOW = 5
+                    HWND_TOPMOST = -1
+                    HWND_NOTOPMOST = -2
+                    SWP_NOSIZE = 0x0001
+                    SWP_NOMOVE = 0x0002
+                    SWP_SHOWWINDOW = 0x0040
+
                     user32.AllowSetForegroundWindow.argtypes = [wintypes.DWORD]
                     user32.AllowSetForegroundWindow.restype = wintypes.BOOL
                     user32.AllowSetForegroundWindow(0xFFFFFFFF)  # ASFW_ANY = -1
@@ -618,6 +624,13 @@ class NutstyBridge(QObject):
                     user32.BringWindowToTop.restype = wintypes.BOOL
                     user32.SetForegroundWindow.argtypes = [wintypes.HWND]
                     user32.SetForegroundWindow.restype = wintypes.BOOL
+                    user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
+                    user32.SetWindowPos.restype = wintypes.BOOL
+
+                    # Bring window to front by temporarily toggling TOPMOST (bypasses Windows foreground lock)
+                    user32.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW)
+                    user32.SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW)
+
                     user32.ShowWindow(hwnd, SW_RESTORE)
                     user32.ShowWindow(hwnd, SW_SHOW)
 

@@ -235,11 +235,11 @@ PanelWindow {
             id: soundwaveButton
             z: 50
             anchors.top: parent.top
-            anchors.topMargin: 12
+            anchors.topMargin: 8
             anchors.left: parent.left
-            anchors.leftMargin: 12
-            width: 44
-            height: 34
+            anchors.leftMargin: 8
+            width: 52
+            height: 40
             HoverHandler { id: waveH }
 
             // 3-Bar Equalizer Visualizer (|||)

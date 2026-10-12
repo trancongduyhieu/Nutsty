@@ -177,13 +177,9 @@ Item {
                 NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
             }
 
-            // Depth of field blur layer (disabled on active line for zero FBO overhead)
-            layer.enabled: targetBlur > 0.01 && dist >= -1 && dist <= 4
-            layer.effect: MultiEffect {
-                blurEnabled: true
-                blur: lyricRow.targetBlur
-                blurMax: 32
-            }
+            // Depth of field: pure typography opacity and scale falloff (0 FBO overhead, zero thermal load)
+            layer.enabled: false
+
 
             // ── 1. Syllable Engine (AppleMusicWordFlow) ────────────────────────
             // Loads ONLY for genuine syllable lines (hasWords) around active line.

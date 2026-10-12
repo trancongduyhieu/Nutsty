@@ -813,18 +813,11 @@ Item {
                     Rectangle {
                         id: coverShadow
                         anchors.fill: parent
+                        anchors.topMargin: 4
+                        anchors.bottomMargin: -4
                         radius: 16
-                        color: "#000000"
-                        visible: false
-                    }
-
-                    MultiEffect {
-                        anchors.fill: coverShadow
-                        source: coverShadow
-                        shadowEnabled: true
-                        shadowColor: "#80000000"
-                        shadowVerticalOffset: 6
-                        shadowBlur: 0.65
+                        color: Qt.rgba(0, 0, 0, 0.40)
+                        z: 0
                     }
 
                     Rectangle {
@@ -892,7 +885,7 @@ Item {
                         MediaPlayer {
                             id: amPlayer
                             videoOutput: amVideoOutput
-                            source: (root.animatedCoverEnabled && root.animatedArtworkUrl !== "") ? root.animatedArtworkUrl : ""
+                            source: (root.visible && root.animatedCoverEnabled && root.animatedArtworkUrl !== "") ? root.animatedArtworkUrl : ""
                             audioOutput: null
                             loops: MediaPlayer.Infinite
                             onErrorOccurred: (error, errorString) => {
@@ -902,10 +895,10 @@ Item {
                                 console.log("[Nutsty] amPlayer playbackState:", playbackState);
                             }
                             Component.onCompleted: {
-                                if (source !== "") play();
+                                if (source !== "" && root.visible && root.isPlaying) play();
                             }
                             onSourceChanged: {
-                                if (source !== "") play();
+                                if (source !== "" && root.visible && root.isPlaying) play();
                                 else stop();
                             }
                         }
@@ -1732,36 +1725,13 @@ Item {
                                         Layout.preferredWidth: 36
                                         Layout.preferredHeight: 36
 
-                                        Rectangle {
-                                            id: qCoverMask
+                                        RoundedImage {
                                             anchors.fill: parent
                                             radius: 6
-                                            color: "#ffffff"
-                                            visible: false
-                                            layer.enabled: true
+                                            source: modelData.image || ""
+                                            fillMode: Image.PreserveAspectCrop
+                                            fallbackIcon: "../assets/icons/media-optical-audio-symbolic.svg"
                                         }
-
-                                        Item {
-                                            anchors.fill: parent
-                                            layer.enabled: true
-                                            layer.effect: MultiEffect {
-                                                maskEnabled: true
-                                                maskSource: qCoverMask
-                                                autoPaddingEnabled: false
-                                            }
-
-                                            Rectangle {
-                                                anchors.fill: parent
-                                                color: "#222224"
-                                            }
-
-                                            Image {
-                                                anchors.fill: parent
-                                                source: modelData.image || ""
-                                                fillMode: Image.PreserveAspectCrop
-                                                scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
-                                                transformOrigin: Item.Center
-                                            }
 
                                             Rectangle {
                                                 anchors.fill: parent
@@ -1935,12 +1905,9 @@ Item {
                                 NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
                             }
 
-                            layer.enabled: !lyricsView.isUserScrolling && !isHovered && targetBlur > 0.01 && dist <= 4
-                            layer.effect: MultiEffect {
-                                blurEnabled: true
-                                blur: lyricRow.targetBlur
-                                blurMax: 32
-                            }
+                            // High-performance depth-of-field: pure typography opacity and scale falloff (0 FBO overhead, zero thermal load)
+                            layer.enabled: false
+
 
                             Item {
                                 id: lyricContentItem
@@ -2452,38 +2419,12 @@ Item {
                                                         Layout.preferredHeight: 76
                                                         Layout.alignment: Qt.AlignHCenter
 
-                                                        Rectangle {
-                                                            id: simArtMask
+                                                        RoundedImage {
                                                             anchors.fill: parent
                                                             radius: 38
-                                                            color: "#ffffff"
-                                                            visible: false
-                                                            layer.enabled: true
-                                                        }
-
-                                                        Item {
-                                                            anchors.fill: parent
-                                                            layer.enabled: true
-                                                            layer.effect: MultiEffect {
-                                                                maskEnabled: true
-                                                                maskSource: simArtMask
-                                                                autoPaddingEnabled: false
-                                                            }
-
-                                                            Image {
-                                                                id: simArtImg
-                                                                anchors.fill: parent
-                                                                source: modelData.image || ""
-                                                                fillMode: Image.PreserveAspectCrop
-                                                                asynchronous: true
-                                                                visible: status === Image.Ready
-                                                            }
-
-                                                            Rectangle {
-                                                                anchors.fill: parent
-                                                                color: "#222226"
-                                                                visible: simArtImg.status !== Image.Ready
-                                                            }
+                                                            source: modelData.image || ""
+                                                            fillMode: Image.PreserveAspectCrop
+                                                            initialsText: modelData.name || modelData.title || ""
                                                         }
 
                                                         Rectangle {
@@ -2535,6 +2476,5 @@ Item {
             }
         }
     }
-}
 
 

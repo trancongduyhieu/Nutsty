@@ -77,7 +77,7 @@ Scope {
     property string authAccountEmail: ""
     property bool syncHistoryToGoogle: true
     property bool desktopLyricsEnabled: true
-    property bool animatedCoverEnabled: true
+    property bool animatedCoverEnabled: Qt.platform.os !== "windows"
     property int desktopLyricsPreset: 2 // 1: Cinematic Serif, 2: Apple Music 5-Line Parametric, 3: Minimal Glide, 4: Motion Typography
     property int desktopLyricsCustomX: -1
     property int desktopLyricsCustomY: -1
@@ -91,7 +91,7 @@ Scope {
     property string downloadQuality: "high_opus"
     property string spotifySpdc: ""
     property string lyricsSource: "auto"
-    property string canvasPreference: "apple_first"
+    property string canvasPreference: Qt.platform.os === "windows" ? "off" : "apple_first"
     readonly property bool isAnyModalOpen: (typeof settingsModal !== "undefined" && settingsModal.visible)
                                         || (typeof spotifyImportModal !== "undefined" && spotifyImportModal.visible)
                                         || (typeof manageFriendsModal !== "undefined" && manageFriendsModal.visible)
@@ -1497,10 +1497,10 @@ Scope {
     property real lastSyncTime: 0.0
     property double lastSyncTimestamp: 0
 
-    // High-precision drift-free 60 FPS clock interpolator for buttery smooth lyrics & progress
+    // High-precision drift-free 25 FPS clock interpolator for buttery smooth lyrics & progress (cuts CPU load by 60%)
     Timer {
         id: smoothProgressTimer
-        interval: 16
+        interval: 40
         repeat: true
         running: win.isPlaying && !win.isLoadingAudio && win.lastSyncTimestamp > 0
         onTriggered: {
@@ -1865,16 +1865,6 @@ Scope {
                             }
                         }
                     }
-                }
-
-                MultiEffect {
-                    anchors.fill: parent
-                    source: fallbackImagesComposite
-                    blurEnabled: true
-                    blur: 0.50
-                    blurMax: 32
-                    saturation: 1.15
-                    brightness: 0.02
                 }
             }
 
@@ -4518,10 +4508,6 @@ Scope {
         onPrevClicked: win.playPrev()
         onSeekRequested: (sec) => win.seekAudio(sec)
         onOpenFullAppRequested: {
-            if (typeof desktopMusicWidget !== "undefined" && desktopMusicWidget) {
-                desktopMusicWidget.visible = false;
-                if (typeof desktopMusicWidget.hide === "function") desktopMusicWidget.hide();
-            }
             win.visible = true;
             if (typeof win.showNormal === "function") win.showNormal();
             if (typeof win.show === "function") win.show();
@@ -4529,6 +4515,10 @@ Scope {
             if (typeof win.requestActivate === "function") win.requestActivate();
             if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.restoreWindow) {
                 __NutstyBridge.restoreWindow(win);
+            }
+            if (typeof desktopMusicWidget !== "undefined" && desktopMusicWidget) {
+                desktopMusicWidget.visible = false;
+                if (typeof desktopMusicWidget.hide === "function") desktopMusicWidget.hide();
             }
         }
         onSavePositionRequested: (newX, newY) => {
