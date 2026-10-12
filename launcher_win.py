@@ -15,6 +15,19 @@ import ctypes
 from ctypes import wintypes
 from pathlib import Path
 
+# If running in VirtualBox, default to OpenGL to prevent host VBoxDxVk crash, or allow QSG_RHI_BACKEND override
+if sys.platform == "win32" and "QSG_RHI_BACKEND" not in os.environ:
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\BIOS") as _k:
+            _vendor = str(winreg.QueryValueEx(_k, "SystemManufacturer")[0]).lower()
+            _prod = str(winreg.QueryValueEx(_k, "SystemProductName")[0]).lower()
+            if any(_vm in _vendor or _vm in _prod for _vm in ("virtualbox", "innotek")):
+                os.environ["QSG_RHI_BACKEND"] = "opengl"
+    except Exception:
+        pass
+    os.environ.setdefault("QSG_RHI_BACKEND", "d3d11")
+
 # Register active launcher instance in sys.modules so background threads (like auth_server) get the active instance
 sys.modules["launcher_win"] = sys.modules[__name__]
 
@@ -962,19 +975,7 @@ def _create_nutsty_app_icon(icon_save_path: str) -> QIcon:
 
 def main():
     os.environ["QT_QUICK_CONTROLS_STYLE"] = "Basic"
-    if sys.platform == "win32":
-        # In VirtualBox, VirtualBox's WDDM Direct3D 11 driver is known to crash with complex shaders.
-        # Fall back to OpenGL or Software if VirtualBox is detected, or let user set QSG_RHI_BACKEND.
-        try:
-            import winreg
-            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\BIOS") as k:
-                vendor = str(winreg.QueryValueEx(k, "SystemManufacturer")[0]).lower()
-                prod = str(winreg.QueryValueEx(k, "SystemProductName")[0]).lower()
-                if any(vm in vendor or vm in prod for vm in ("virtualbox", "innotek")):
-                    os.environ.setdefault("QSG_RHI_BACKEND", "opengl")
-        except Exception:
-            pass
-        os.environ.setdefault("QSG_RHI_BACKEND", "d3d11")
+    sys.stderr.write(f"Nutsty starting. Active QSG_RHI_BACKEND: {os.environ.get('QSG_RHI_BACKEND', 'default')}\n")
 
     try:
         from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu

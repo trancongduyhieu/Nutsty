@@ -86,22 +86,11 @@ Item {
             NumberAnimation { duration: 160; easing.type: Easing.OutBack }
         }
 
-        // Outer Drop Shadow (MultiEffect standard)
+        // Deep Obsidian Frosted Foundation: Blocks text bleed-through
         Rectangle {
-            id: shadowShape
             anchors.fill: parent
             radius: 16
-            color: "#000000"
-            visible: false
-        }
-
-        MultiEffect {
-            anchors.fill: shadowShape
-            source: shadowShape
-            shadowEnabled: true
-            shadowColor: "#66000000"
-            shadowVerticalOffset: 2
-            shadowBlur: 0.50
+            color: Qt.rgba(0.05, 0.06, 0.09, 0.90)
             z: 1
         }
 

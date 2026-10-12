@@ -51,8 +51,8 @@ void main() {
     // Distance from current pixel to rounded box border
     float d = sdRoundedBox(centeredCoord, halfSize, u_radius);
     
-    // Anti-aliased outer silhouette mask
-    float edgeWidth = fwidth(d);
+    // Anti-aliased outer silhouette mask with clamped edgeWidth
+    float edgeWidth = clamp(fwidth(d), 0.75, 2.0);
     float mask = 1.0 - smoothstep(-edgeWidth, edgeWidth, d);
     if (mask <= 0.0) {
         fragColor = vec4(0.0);
@@ -81,33 +81,30 @@ void main() {
     vec2 pixelStep = 1.0 / u_sourceSize;
     
     // =========================================================================
-    // 2. Water-Clear Refraction (Độ trong vắt như keo 502 với tán sắc nhẹ)
+    // 2. Water-Clear Refraction (Standard texture sampling - zero mipmap churn)
     // =========================================================================
     float split = u_aberration * 6.0 * circleMap(t);
     vec3 clearRefraction;
-    clearRefraction.r = textureLod(source, uv + grad * split * pixelStep, 0.5).r;
-    clearRefraction.g = textureLod(source, uv, 0.5).g;
-    clearRefraction.b = textureLod(source, uv - grad * split * pixelStep, 0.5).b;
+    clearRefraction.r = texture(source, uv + grad * split * pixelStep).r;
+    clearRefraction.g = texture(source, uv).g;
+    clearRefraction.b = texture(source, uv - grad * split * pixelStep).b;
     
     // =========================================================================
     // 3. Keo 502 Glossy Meniscus Specular (Sức căng bề mặt & độ bóng trơn dẻo)
     // =========================================================================
     float rimDistance = clamp(distInside / 8.0, 0.0, 1.0);
-    float rimSheen = pow(1.0 - rimDistance, 3.5) * 0.16;
+    float rimSheen = pow(1.0 - rimDistance, 3.5) * 0.22;
     
     // Phản xạ ánh sáng mép trên (Top Light Specular Reflection)
     float topReflect = smoothstep(halfSize.y, -halfSize.y * 0.3, centeredCoord.y) * 
-                       pow(clamp(1.0 - abs(distInside - 2.2) / 2.2, 0.0, 1.0), 2.0) * 0.14;
+                       pow(clamp(1.0 - abs(distInside - 2.2) / 2.2, 0.0, 1.0), 2.0) * 0.18;
     float keo502Gloss = rimSheen + topReflect;
     
     // =========================================================================
-    // 4. Dynamic Dual-Tone Song Extraction (Trích xuất 2 màu của bài hát)
+    // 4. Dynamic Dual-Tone Song Extraction (Analytical - zero texture LOD stalls)
     // =========================================================================
-    vec3 songColorA = textureLod(source, vec2(0.20, 0.25), 6.0).rgb;
-    vec3 songColorB = textureLod(source, vec2(0.80, 0.75), 6.0).rgb;
-    
-    float lumA = dot(songColorA, vec3(0.2126, 0.7152, 0.0722));
-    songColorA = mix(songColorA, vec3(0.95, 0.98, 1.0), max(0.0, 0.25 - lumA));
+    vec3 songColorA = u_tint.rgb * 1.35 + vec3(0.06);
+    vec3 songColorB = u_tint.rgb * 0.70 + vec3(0.02);
     
     // =========================================================================
     // 5. Viscous Flow Wave Diffusion (Sóng lỏng dẻo lan màu từ từ)
@@ -120,26 +117,26 @@ void main() {
     float wave3 = sin((pixelPos.x + pixelPos.y * 0.5) * 0.004 - flowTime * 0.4) * 0.5 + 0.5;
     
     float fluidPattern = smoothstep(0.20, 0.80, wave1 * 0.45 + wave2 * 0.35 + wave3 * 0.20);
-    
-    // Hòa sắc giữa 2 gam màu bài hát (ví dụ xanh biển và trắng)
     vec3 diffusingSongColor = mix(songColorA, songColorB, fluidPattern);
     
-    // Lan màu nhẹ nhàng (subtle ambient tint ~22%), giữ trọn vẹn độ trong veo của keo
+    // Lan màu nhẹ nhàng (~22%), giữ trọn vẹn độ trong veo của keo
     float tintStrength = 0.22 * clamp(u_flowActive, 0.0, 1.0);
     vec3 tintedKeo = mix(clearRefraction, diffusingSongColor, tintStrength);
     
     // =========================================================================
-    // 6. Final Composite & Water-Clear Transparency
+    // 6. Final Composite & Authentic Premultiplied Alpha
     // =========================================================================
     float rimProfile = smoothstep(2.5, 0.3, distInside);
-    vec3 organicRim = mix(u_tint.rgb * 1.1 + vec3(0.04), diffusingSongColor, 0.45);
+    vec3 organicRim = mix(u_tint.rgb * 1.15 + vec3(0.04), diffusingSongColor, 0.45);
     vec3 finalColor = mix(tintedKeo, organicRim, rimProfile * 0.35) + vec3(keo502Gloss);
     finalColor = clamp(finalColor, 0.0, 1.0);
     
-    // Độ trong suốt keo 502 (Water-Clear Transparency ~ 0.40 - 0.52)
-    // Không bao giờ bị đục xám hay đen ngầu, nhìn thấu các card bên dưới
-    float baseAlpha = clamp(max(u_tint.a, 0.40), 0.40, 0.52);
-    float glassAlpha = mask * mix(baseAlpha, 0.56, u_flowActive * 0.25);
-    fragColor = vec4(finalColor * glassAlpha, mask) * qt_Opacity;
+    // Translucency of liquid resin: lets underlying cards and wallpaper breathe
+    float baseAlpha = clamp(max(u_tint.a, 0.28), 0.28, 0.52);
+    float glassAlpha = mix(baseAlpha, 0.55, u_flowActive * 0.25);
+    
+    // Strict Premultiplied Alpha: RGB = finalColor * outAlpha, A = outAlpha
+    // Smoothly falls to 0 at the rounded corners (mask == 0) with zero clipping artifacts
+    float outAlpha = glassAlpha * mask * qt_Opacity;
+    fragColor = vec4(finalColor * outAlpha, outAlpha);
 }
-

@@ -395,24 +395,6 @@ Rectangle {
         }
     }
 
-    // Outer Drop Shadow
-    Rectangle {
-        id: shadowSourceRect
-        anchors.fill: dialogCard
-        radius: dialogCard.radius
-        color: "#000000"
-        visible: false
-    }
-
-    MultiEffect {
-        anchors.fill: shadowSourceRect
-        source: shadowSourceRect
-        shadowEnabled: true
-        shadowColor: "#99000000"
-        shadowVerticalOffset: 8
-        shadowBlur: 0.7
-        z: 1
-    }
 
     // Modal Main Container: Keo 502 Optical Resin (LiquidGlass, 20px Radius matching PostNoteModal)
     LiquidGlass {

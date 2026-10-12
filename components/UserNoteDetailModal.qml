@@ -100,24 +100,6 @@ Item {
         }
     }
 
-    // Elevation: MultiEffect Drop Shadow behind Dialog
-    Rectangle {
-        id: shadowShape
-        anchors.fill: dialogCard
-        radius: dialogCard.radius
-        color: "#000000"
-        visible: false
-    }
-
-    MultiEffect {
-        anchors.fill: shadowShape
-        source: shadowShape
-        shadowEnabled: true
-        shadowColor: "#80000000"
-        shadowVerticalOffset: 6
-        shadowBlur: 0.65
-        z: 1
-    }
 
     // Modal Main Floating Card: Keo 502 Optical Resin (LiquidGlass, 20px Radius)
     LiquidGlass {

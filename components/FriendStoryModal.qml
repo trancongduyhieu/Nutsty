@@ -134,24 +134,6 @@ Item {
             width: 420
             height: 480
 
-            // Elevation: MultiEffect Drop Shadow behind Dialog
-            Rectangle {
-                id: shadowShape
-                anchors.fill: parent
-                radius: 20
-                color: "#000000"
-                visible: false
-            }
-
-            MultiEffect {
-                anchors.fill: shadowShape
-                source: shadowShape
-                shadowEnabled: true
-                shadowColor: "#80000000"
-                shadowVerticalOffset: 6
-                shadowBlur: 0.65
-                z: 1
-            }
 
             // Main Dialog Card: Keo 502 Optical Resin (LiquidGlass, 20px Radius)
             LiquidGlass {

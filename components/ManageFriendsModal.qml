@@ -163,24 +163,6 @@ Item {
             NumberAnimation { duration: 180; easing.type: Easing.OutBack }
         }
 
-        // Outer Shadow
-        Rectangle {
-            id: shadowShape
-            anchors.fill: parent
-            radius: 24
-            color: "#000000"
-            visible: false
-        }
-
-        MultiEffect {
-            anchors.fill: shadowShape
-            source: shadowShape
-            shadowEnabled: true
-            shadowColor: "#80000000"
-            shadowVerticalOffset: 4
-            shadowBlur: 0.65
-            z: 1
-        }
 
         // Dark Acrylic Base for crisp contrast (Không bị xuyên thấu chữ/ảnh nền)
         Rectangle {

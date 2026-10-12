@@ -60,24 +60,8 @@ Item {
         return m + ":" + (s < 10 ? "0" : "") + s;
     }
 
-    // Outer Multi-tier Cinematic Depth Drop Shadow
-    Rectangle {
-        id: shadowShape
-        anchors.fill: parent
-        radius: root.radius
-        color: "#000000"
-        visible: false
-    }
+    // Outer Multi-tier Depth Glow & Hairline Foundation
 
-    MultiEffect {
-        anchors.fill: shadowShape
-        source: shadowShape
-        shadowEnabled: true
-        shadowColor: "#66000000"
-        shadowVerticalOffset: 2
-        shadowBlur: 0.50
-        z: 1
-    }
 
     // Liquid Glass Capsule Container (SimpMusic Rounded Corner 16dp)
     LiquidGlass {

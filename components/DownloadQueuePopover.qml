@@ -64,22 +64,11 @@ Item {
             onClicked: mouse => mouse.accepted = true
         }
 
-        // Outer Multi-tier Cinematic Depth Drop Shadow
+        // Deep Obsidian Frosted Foundation: Blocks text bleed-through
         Rectangle {
-            id: shadowShape
             anchors.fill: parent
             radius: 16
-            color: "#000000"
-            visible: false
-        }
-
-        MultiEffect {
-            anchors.fill: shadowShape
-            source: shadowShape
-            shadowEnabled: true
-            shadowColor: "#66000000"
-            shadowVerticalOffset: 4
-            shadowBlur: 0.55
+            color: Qt.rgba(0.05, 0.06, 0.09, 0.90)
             z: 1
         }
 

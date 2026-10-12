@@ -1808,68 +1808,12 @@ Scope {
         }
 
         // =====================================================================
-        // Dynamic Composite Backdrop Source for Liquid Glass (Triple-Tier)
-        // Tier 1: Live UI Content & Track Cards (mainContentBackdrop)
-        // Tier 2: Active Now Playing Artwork (when music is playing)
-        // Tier 3: Desktop Wallpaper (when idle / no music playing)
+        // Dynamic Composite Backdrop Source for Liquid Glass (Unified with masterBackdropStack)
+        // Direct reference to the rich frosted velvet atmosphere (blurMax: 64) for maximum
+        // vibrance and authentic Keo 502 liquid refraction without duplicate FBO overhead.
         // =====================================================================
-        Item {
-            id: glassCompositeBackdrop
-            anchors.fill: parent
-            z: -999
-            opacity: 0.001
+        readonly property alias glassCompositeBackdrop: masterBackdropStack
 
-            // 1. Fallback Background Layer (Smooth Cross-dissolving Wallpaper vs Artwork)
-            Item {
-                id: fallbackBackdropContainer
-                anchors.fill: parent
-
-                Item {
-                    id: fallbackImagesComposite
-                    anchors.fill: parent
-
-                    // Dark foundation underneath to block wallpaper completely when playing
-                    Rectangle {
-                        anchors.fill: parent
-                        color: "#0a0b0e"
-                    }
-
-                    // Bottom Layer: Desktop Wallpaper (fades out completely when playing song!)
-                    Image {
-                        id: fallbackWallpaperImg
-                        anchors.fill: parent
-                        source: win.formatFileUrl(win.currentWallpaperPath)
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        opacity: (win.currentTrack && win.isPlaying) ? 0.0 : 1.0
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 400
-                                easing.type: Easing.InOutQuad
-                            }
-                        }
-                    }
-
-                    // Top Layer: Active Song Artwork (Crossfades gently over 400ms)
-                    Image {
-                        id: fallbackPlayingImg
-                        anchors.fill: parent
-                        source: win.getTrackCoverUrl(win.currentTrack)
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        opacity: (win.currentTrack && win.isPlaying) ? 1.0 : 0.0
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 400
-                                easing.type: Easing.InOutQuad
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 2. Fallback static content placeholder (liveContentTexture removed to prevent dual full-window FBO overhead)
-        }
 
         // =====================================================================
         // Pure Nutsty App Surface (Isolated from Desktop Wallpaper)

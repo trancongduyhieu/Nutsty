@@ -126,24 +126,6 @@ Rectangle {
         onClicked: root.closeModal()
     }
 
-    // Outer Drop Shadow (MultiEffect standard, 100% matched with PostNoteModal)
-    Rectangle {
-        id: shadowSourceRect
-        anchors.fill: dialogCard
-        radius: dialogCard.radius
-        color: "#000000"
-        visible: false
-    }
-
-    MultiEffect {
-        anchors.fill: shadowSourceRect
-        source: shadowSourceRect
-        shadowEnabled: true
-        shadowColor: "#80000000"
-        shadowVerticalOffset: 6
-        shadowBlur: 0.65
-        z: 1
-    }
 
     // Modal Main Container: Keo 502 Optical Resin (LiquidGlass, 20px Radius)
     LiquidGlass {
