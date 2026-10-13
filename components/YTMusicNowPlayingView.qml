@@ -821,22 +821,10 @@ Item {
                     }
 
                     Rectangle {
-                        id: coverMask
                         anchors.fill: parent
                         radius: 16
-                        color: "#ffffff"
-                        visible: false
-                        layer.enabled: true
-                    }
-
-                    Item {
-                        anchors.fill: parent
-                        layer.enabled: true
-                        layer.effect: MultiEffect {
-                            maskEnabled: true
-                            maskSource: coverMask
-                            autoPaddingEnabled: false
-                        }
+                        color: "#202024"
+                        clip: true
 
                         Image {
                             id: bigCoverImg
@@ -867,10 +855,9 @@ Item {
                             Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
                             transformOrigin: Item.Center
                             asynchronous: true
-                            mipmap: true
                             smooth: true
-                            sourceSize.width: 1200
-                            sourceSize.height: 1200
+                            cache: false
+                            sourceSize: Qt.size(400, 400)
                             onStatusChanged: {
                                 if (status === Image.Error) {
                                     if (root.resolvedSquareImage !== "" && !root.squareImageFailed) {
@@ -885,7 +872,7 @@ Item {
                         MediaPlayer {
                             id: amPlayer
                             videoOutput: amVideoOutput
-                            source: (root.visible && root.animatedCoverEnabled && root.animatedArtworkUrl !== "") ? root.animatedArtworkUrl : ""
+                            source: (root.visible && root.animatedCoverEnabled && root.canvasPreference !== "off" && root.animatedArtworkUrl !== "") ? root.animatedArtworkUrl : ""
                             audioOutput: null
                             loops: MediaPlayer.Infinite
                             onErrorOccurred: (error, errorString) => {
@@ -1437,13 +1424,13 @@ Item {
                                 readonly property real accentLuminance: (0.299 * root.accentColor.r + 0.587 * root.accentColor.g + 0.114 * root.accentColor.b)
 
                                 // Ambient drop shadow for the sliding active Keo 502 gel capsule
-                                MultiEffect {
-                                    anchors.fill: activeChipIndicator
-                                    source: activeChipIndicator
-                                    shadowEnabled: true
-                                    shadowColor: "#50000000"
-                                    shadowVerticalOffset: 2
-                                    shadowBlur: 0.45
+                                Rectangle {
+                                    x: activeChipIndicator.x
+                                    y: activeChipIndicator.y + 2
+                                    width: activeChipIndicator.width
+                                    height: activeChipIndicator.height
+                                    radius: activeChipIndicator.radius
+                                    color: "#50000000"
                                     visible: activeChipIndicator.width > 0
                                     z: 1
                                 }

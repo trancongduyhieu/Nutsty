@@ -106,27 +106,10 @@ Item {
                 Layout.preferredHeight: 38
 
                 Rectangle {
-                    id: miniCoverMask
                     anchors.fill: parent
                     radius: 8
-                    color: "#ffffff"
-                    visible: false
-                    layer.enabled: true
-                }
-
-                Item {
-                    anchors.fill: parent
-                    layer.enabled: true
-                    layer.effect: MultiEffect {
-                        maskEnabled: true
-                        maskSource: miniCoverMask
-                        autoPaddingEnabled: false
-                    }
-
-                    Rectangle {
-                        anchors.fill: parent
-                        color: "#222222"
-                    }
+                    color: "#222222"
+                    clip: true
 
                     Image {
                         id: miniCover
@@ -145,6 +128,8 @@ Item {
                             return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
                         }
                         asynchronous: true
+                        cache: false
+                        sourceSize: Qt.size(80, 80)
                         fillMode: Image.PreserveAspectCrop
                         scale: ((root.resolvedSquareImage !== "" && !root.squareFailed) || (implicitWidth > 0 && Math.abs(implicitWidth - implicitHeight) < 20))
                                ? 1.0

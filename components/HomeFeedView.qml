@@ -227,13 +227,13 @@ Rectangle {
                         readonly property real accentLuminance: (0.299 * root.accentColor.r + 0.587 * root.accentColor.g + 0.114 * root.accentColor.b)
 
                         // Ambient drop shadow for the sliding active Keo 502 gel capsule
-                        MultiEffect {
-                            anchors.fill: activeMoodIndicator
-                            source: activeMoodIndicator
-                            shadowEnabled: true
-                            shadowColor: "#50000000"
-                            shadowVerticalOffset: 2
-                            shadowBlur: 0.45
+                        Rectangle {
+                            x: activeMoodIndicator.x
+                            y: activeMoodIndicator.y + 2
+                            width: activeMoodIndicator.width
+                            height: activeMoodIndicator.height
+                            radius: activeMoodIndicator.radius
+                            color: "#50000000"
                             visible: activeMoodIndicator.width > 0
                             z: 1
                         }
@@ -538,22 +538,10 @@ Rectangle {
                                         Layout.preferredHeight: Math.round(width * 9 / 16) // ~142px
 
                                         Rectangle {
-                                            id: vCoverMask
                                             anchors.fill: parent
                                             radius: 10
-                                            color: "#ffffff"
-                                            visible: false
-                                            layer.enabled: true
-                                        }
-
-                                        Item {
-                                            anchors.fill: parent
-                                            layer.enabled: true
-                                            layer.effect: MultiEffect {
-                                                maskEnabled: true
-                                                maskSource: vCoverMask
-                                                autoPaddingEnabled: false
-                                            }
+                                            color: "#242428"
+                                            clip: true
 
                                             Image {
                                                 id: vCoverImg
@@ -562,15 +550,14 @@ Rectangle {
                                                     var u = modelData.image || "";
                                                     if (u.indexOf("i.ytimg.com") !== -1) return u.split("?")[0];
                                                     if (u.indexOf("googleusercontent.com") !== -1 || u.indexOf("ggpht.com") !== -1) {
-                                                        return u.replace(/=w\d+-h\d+[^=]*$/, "=w1280-h720-l90-rj");
+                                                        return u.replace(/=w\d+-h\d+[^=]*$/, "=w540-h304-l90-rj");
                                                     }
                                                     return u;
                                                 }
                                                 fillMode: Image.PreserveAspectCrop
-                                                sourceSize: Qt.size(720, 404)
+                                                sourceSize: Qt.size(360, 202)
                                                 asynchronous: true
                                                 visible: status === Image.Ready
-                                                mipmap: true
                                                 smooth: true
                                             }
 
@@ -742,22 +729,10 @@ Rectangle {
                                         height: 44
 
                                         Rectangle {
-                                            id: rowImgMask
                                             anchors.fill: parent
                                             radius: 6
-                                            color: "#ffffff"
-                                            visible: false
-                                            layer.enabled: true
-                                        }
-
-                                        Item {
-                                            anchors.fill: parent
-                                            layer.enabled: true
-                                            layer.effect: MultiEffect {
-                                                maskEnabled: true
-                                                maskSource: rowImgMask
-                                                autoPaddingEnabled: false
-                                            }
+                                            color: "#2c2c34"
+                                            clip: true
 
                                             Image {
                                                 id: rowImg
@@ -766,15 +741,14 @@ Rectangle {
                                                     var u = modelData.image || "";
                                                     if (u.indexOf("i.ytimg.com") !== -1) return u.split("?")[0];
                                                     if (u.indexOf("googleusercontent.com") !== -1 || u.indexOf("ggpht.com") !== -1) {
-                                                        return u.replace(/=w\d+-h\d+[^=]*$/, "=w1200-h1200-l90-rj");
+                                                        return u.replace(/=w\d+-h\d+[^=]*$/, "=w120-h120-l90-rj");
                                                     }
                                                     return u;
                                                 }
                                                 fillMode: Image.PreserveAspectCrop
-                                                sourceSize: Qt.size(256, 256)
+                                                sourceSize: Qt.size(88, 88)
                                                 asynchronous: true
                                                 visible: status === Image.Ready
-                                                mipmap: true
                                                 smooth: true
                                             }
 
@@ -920,22 +894,10 @@ Rectangle {
                                         Layout.preferredHeight: width // 1:1 square! (~167px)
 
                                         Rectangle {
-                                            id: aCoverMask
                                             anchors.fill: parent
                                             radius: 10
-                                            color: "#ffffff"
-                                            visible: false
-                                            layer.enabled: true
-                                        }
-
-                                        Item {
-                                            anchors.fill: parent
-                                            layer.enabled: true
-                                            layer.effect: MultiEffect {
-                                                maskEnabled: true
-                                                maskSource: aCoverMask
-                                                autoPaddingEnabled: false
-                                            }
+                                            color: "#242428"
+                                            clip: true
 
                                             Image {
                                                 id: aCoverImg
@@ -944,15 +906,14 @@ Rectangle {
                                                     var u = modelData.image || "";
                                                     if (u.indexOf("i.ytimg.com") !== -1) return u.split("?")[0];
                                                     if (u.indexOf("googleusercontent.com") !== -1 || u.indexOf("ggpht.com") !== -1) {
-                                                        return u.replace(/=w\d+-h\d+[^=]*$/, "=w1200-h1200-l90-rj");
+                                                        return u.replace(/=w\d+-h\d+[^=]*$/, "=w360-h360-l90-rj");
                                                     }
                                                     return u;
                                                 }
                                                 fillMode: Image.PreserveAspectCrop
-                                                sourceSize: Qt.size(600, 600)
+                                                sourceSize: Qt.size(240, 240)
                                                 asynchronous: true
                                                 visible: status === Image.Ready
-                                                mipmap: true
                                                 smooth: true
                                             }
 

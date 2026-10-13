@@ -46,5 +46,9 @@
 | Phase 17: Task 2 - Restore Native Rounded Window Corners & DirectComposition (`launcher_win.py`, `start.bat`) | Completed | Removed forced OpenGL backend override on Windows, restoring Direct3D 11 swapchain with DirectComposition per-pixel transparency and smooth 24px rounded corners |
 | Phase 17: Task 3 - Restore Keo 502 Frosted Dispersion & Optimize VRAM Atmosphere Blur (`liquid_glass.frag`, `shell.qml`) | Completed | Added 9-tap frosted Poisson dispersion in shader, restored glassCompositeBackdrop live content sampling, and downsampled atmosphere blur textures (sourceSize 256x256, blurMax 32) to prevent VirtualBox VBoxDxVk VRAM exhaustion |
 | Phase 17: Task 4 - Rebuild & Synchronize Portable v1.0.4 Release | Completed | Rebuilt Nutsty.exe with PyInstaller, verified live QQuickWindow render captures across all 3 tabs, and synced to Nutsty_Windows_Portable_v1.0.4 |
+| Phase 18: Task 1 - Eliminate 400 MB RAM Leak & VirtualBox DXVK Crash | Completed | Replaced >200 concurrent MultiEffect FBO masks with native clipping Rectangles across HomeFeedView, TrackCard, RoundedImage, PlayerBarBottom; downscaled thumbnail requests from 1200x1200 to 120x120/360x360; gated sleepTimer and modal backdrops on active visibility |
+| Phase 18: Task 2 - Optimize Image Caching & Pixmap Store | Completed | Added cache: false and tuned sourceSize (400x400 for bigCoverImg, 160x160 for songAtmosphereImg, 80x80 for miniCover), dropping Step 4 memory by >110 MB (424 MB -> 313 MB) |
+| Phase 18: Task 3 - Visual Verification & Portable Sync | Completed | Verified 24px concentric rounded corners, Keo 502 frosted dispersion, and clean tab separation (Up Next, Lyrics, Related) via automated screenshots; synced to Nutsty_Windows_Portable_v1.0.4 |
+
 
 

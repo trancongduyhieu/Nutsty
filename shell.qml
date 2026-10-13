@@ -1699,9 +1699,10 @@ Scope {
                     id: songAtmosphereImg
                     anchors.fill: parent
                     source: win.getTrackCoverUrl(win.currentTrack)
-                    sourceSize: Qt.size(256, 256)
+                    sourceSize: Qt.size(160, 160)
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
+                    cache: false
                 }
             }
 
@@ -1809,83 +1810,7 @@ Scope {
         // Dynamic Composite Backdrop Source for Liquid Glass (PlayerBarBottom)
         // Blends live content (album cards, etc.) with a silky frosted atmosphere.
         // =====================================================================
-        Item {
-            id: glassCompositeBackdrop
-            anchors.fill: parent
-            z: -999
-            opacity: 0.001
-
-            // 1. Fallback Background Layer (Smooth Cross-dissolving Wallpaper vs Artwork)
-            Item {
-                id: fallbackBackdropContainer
-                anchors.fill: parent
-
-                Item {
-                    id: fallbackImagesComposite
-                    anchors.fill: parent
-
-                    // Dark foundation underneath to block wallpaper completely when playing
-                    Rectangle {
-                        anchors.fill: parent
-                        color: "#0a0b0e"
-                    }
-
-                    // Bottom Layer: Desktop Wallpaper (fades out completely when playing song!)
-                    Image {
-                        id: fallbackWallpaperImg
-                        anchors.fill: parent
-                        source: win.formatFileUrl(win.currentWallpaperPath)
-                        sourceSize: Qt.size(480, 270)
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        opacity: (win.currentTrack && win.isPlaying) ? 0.0 : 1.0
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 400
-                                easing.type: Easing.InOutQuad
-                            }
-                        }
-                    }
-
-                    // Top Layer: Active Song Artwork (Crossfades gently over 400ms)
-                    Image {
-                        id: fallbackPlayingImg
-                        anchors.fill: parent
-                        source: win.getTrackCoverUrl(win.currentTrack)
-                        sourceSize: Qt.size(256, 256)
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        opacity: (win.currentTrack && win.isPlaying) ? 1.0 : 0.0
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 400
-                                easing.type: Easing.InOutQuad
-                            }
-                        }
-                    }
-                }
-
-                MultiEffect {
-                    anchors.fill: parent
-                    source: fallbackImagesComposite
-                    blurEnabled: true
-                    blur: 0.50
-                    blurMax: 32
-                    saturation: 1.25
-                    brightness: 0.02
-                }
-            }
-
-            // 2. Live Content Layer (Card bài hát, header, etc.)
-            ShaderEffectSource {
-                id: liveContentTexture
-                anchors.fill: parent
-                sourceItem: mainContentBackdrop
-                live: true
-                hideSource: false
-                smooth: true
-            }
-        }
+        readonly property alias glassCompositeBackdrop: masterBackdropStack
 
 
         // =====================================================================
@@ -1899,6 +1824,7 @@ Scope {
             anchors.fill: parent
             z: -998
             opacity: 0.001
+            visible: win.isAnyModalOpen
 
             // 1. Dark Acrylic Window Foundation
             Rectangle {
@@ -1917,7 +1843,7 @@ Scope {
                 Image {
                     id: nutstySurfaceArtwork
                     anchors.fill: parent
-                    source: win.getTrackCoverUrl(win.currentTrack)
+                    source: win.isAnyModalOpen ? win.getTrackCoverUrl(win.currentTrack) : ""
                     sourceSize: Qt.size(48, 48)
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
@@ -1930,17 +1856,17 @@ Scope {
                     visible: win.isAnyModalOpen && nutstySurfaceArtwork.status === Image.Ready
                     blurEnabled: true
                     blur: 1.0
-                    blurMax: 64
+                    blurMax: 32
                     saturation: 1.40
                     brightness: -0.20
                 }
             }
 
-            // 3. Live UI Content Layer with Rich Frosted Bokeh Blur (MultiEffect blurMax: 64)
+            // 3. Live UI Content Layer with Rich Frosted Bokeh Blur
             ShaderEffectSource {
                 id: liveContentRaw
                 anchors.fill: parent
-                sourceItem: mainContentBackdrop
+                sourceItem: win.isAnyModalOpen ? mainContentBackdrop : null
                 live: win.isAnyModalOpen
                 hideSource: false
                 smooth: true
@@ -1953,7 +1879,7 @@ Scope {
                 visible: win.isAnyModalOpen
                 blurEnabled: true
                 blur: 1.0
-                blurMax: 64
+                blurMax: 32
                 saturation: 1.20
                 brightness: -0.10
             }
@@ -1969,6 +1895,7 @@ Scope {
             anchors.fill: parent
             z: -997
             opacity: 0.001
+            visible: typeof sleepTimerPopover !== "undefined" && sleepTimerPopover && sleepTimerPopover.opacity > 0.01
 
             // 1. Semi-translucent dark foundation for enhanced contrast
             Rectangle {
@@ -1976,14 +1903,14 @@ Scope {
                 color: Qt.rgba(0.04, 0.05, 0.08, 0.65)
             }
 
-            // 2. Active Song Atmosphere / Wallpaper with deep blur (blurMax: 64)
+            // 2. Active Song Atmosphere / Wallpaper with blur
             Item {
                 id: sleepTimerBgArtworkComposite
                 anchors.fill: parent
 
                 Image {
                     anchors.fill: parent
-                    source: win.formatFileUrl(win.currentWallpaperPath)
+                    source: frostedSleepTimerBackdrop.visible ? win.formatFileUrl(win.currentWallpaperPath) : ""
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                     opacity: (win.currentTrack && win.isPlaying) ? 0.0 : 1.0
@@ -1994,7 +1921,7 @@ Scope {
 
                 Image {
                     anchors.fill: parent
-                    source: win.getTrackCoverUrl(win.currentTrack)
+                    source: frostedSleepTimerBackdrop.visible ? win.getTrackCoverUrl(win.currentTrack) : ""
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                     opacity: (win.currentTrack && win.isPlaying) ? 0.85 : 0.0
@@ -2007,19 +1934,20 @@ Scope {
             MultiEffect {
                 anchors.fill: parent
                 source: sleepTimerBgArtworkComposite
+                visible: frostedSleepTimerBackdrop.visible
                 blurEnabled: true
                 blur: 1.0
-                blurMax: 64
+                blurMax: 32
                 saturation: 1.30
                 brightness: -0.05
             }
 
-            // 3. Live UI Content (Lyrics, Cards) heavily blurred (blurMax: 64)
+            // 3. Live UI Content (Lyrics, Cards) heavily blurred
             ShaderEffectSource {
                 id: sleepTimerLiveContentRaw
                 anchors.fill: parent
-                sourceItem: mainContentBackdrop
-                live: (typeof sleepTimerPopover !== "undefined" && sleepTimerPopover.opacity > 0.01)
+                sourceItem: frostedSleepTimerBackdrop.visible ? mainContentBackdrop : null
+                live: frostedSleepTimerBackdrop.visible
                 hideSource: false
                 smooth: true
                 visible: false
@@ -2028,9 +1956,10 @@ Scope {
             MultiEffect {
                 anchors.fill: parent
                 source: sleepTimerLiveContentRaw
+                visible: frostedSleepTimerBackdrop.visible
                 blurEnabled: true
                 blur: 1.0
-                blurMax: 64
+                blurMax: 32
                 saturation: 1.20
                 brightness: -0.10
             }
@@ -2517,6 +2446,7 @@ Scope {
                 // 2. YouTube Music Split-Screen Now Playing View (Full-Width Experience)
                 YTMusicNowPlayingView {
                     id: ytNowPlayingView
+                    objectName: "ytMusicNowPlayingView"
                     anchors.fill: parent
                     visible: opacity > 0.01
                     opacity: win.isNowPlayingOpen ? 1.0 : 0.0
@@ -3214,10 +3144,10 @@ Scope {
             if (obj.widgetY !== undefined) win.widgetY = Number(obj.widgetY);
             if (obj.desktopLyricsEnabled !== undefined) win.desktopLyricsEnabled = !!obj.desktopLyricsEnabled;
             if (obj.canvasPreference !== undefined && typeof obj.canvasPreference === "string") {
-                win.canvasPreference = obj.canvasPreference;
+                win.canvasPreference = (Qt.platform.os === "windows" && (obj.canvasPreference === "apple_first" || obj.canvasPreference === "apple_only")) ? "off" : obj.canvasPreference;
                 win.animatedCoverEnabled = (win.canvasPreference !== "off");
             } else if (obj.animatedCoverEnabled !== undefined) {
-                win.animatedCoverEnabled = !!obj.animatedCoverEnabled;
+                win.animatedCoverEnabled = (Qt.platform.os === "windows") ? false : !!obj.animatedCoverEnabled;
                 win.canvasPreference = win.animatedCoverEnabled ? "apple_first" : "off";
             }
             if (obj.desktopLyricsPreset !== undefined) win.desktopLyricsPreset = Number(obj.desktopLyricsPreset);

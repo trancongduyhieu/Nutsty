@@ -56,22 +56,10 @@ Rectangle {
             Layout.preferredHeight: width
 
             Rectangle {
-                id: trackCoverMask
                 anchors.fill: parent
                 radius: 7
-                color: "#ffffff"
-                visible: false
-                layer.enabled: true
-            }
-
-            Item {
-                anchors.fill: parent
-                layer.enabled: true
-                layer.effect: MultiEffect {
-                    maskEnabled: true
-                    maskSource: trackCoverMask
-                    autoPaddingEnabled: false
-                }
+                color: "#202024"
+                clip: true
 
                 Rectangle {
                     anchors.fill: parent
@@ -79,38 +67,37 @@ Rectangle {
                     visible: !coverImg.visible || coverImg.status !== Image.Ready
                 }
 
-                Image {
-                    id: coverImg
-                    anchors.fill: parent
-                    source: {
-                        if (!root.track || !root.track.image) return "";
-                        var s = root.track.image;
-                        if (s.startsWith("/") && !s.startsWith("file://")) return "file://" + s;
-                        if (s.indexOf("googleusercontent.com") !== -1 || s.indexOf("ggpht.com") !== -1) {
-                            return s.replace(/=w\d+-h\d+[^=]*$/, "=w1200-h1200-l90-rj");
-                        }
-                        if (s.indexOf("mzstatic.com") !== -1) {
-                            return s.replace(/\d+x\d+bb/, "1200x1200bb");
-                        }
-                        if (s.indexOf("i.ytimg.com") !== -1) {
-                            return s.split("?")[0];
-                        }
-                        return s;
+            Image {
+                id: coverImg
+                anchors.fill: parent
+                source: {
+                    if (!root.track || !root.track.image) return "";
+                    var s = root.track.image;
+                    if (s.startsWith("/") && !s.startsWith("file://")) return "file://" + s;
+                    if (s.indexOf("googleusercontent.com") !== -1 || s.indexOf("ggpht.com") !== -1) {
+                        return s.replace(/=w\d+-h\d+[^=]*$/, "=w360-h360-l90-rj");
                     }
-                    fillMode: Image.PreserveAspectCrop
-                    scale: {
-                        if (implicitWidth > 0 && implicitHeight > 0) {
-                            var r = implicitWidth / implicitHeight;
-                            if (r > 1.25 && r < 1.45) return 1.34;
-                        }
-                        return 1.0;
+                    if (s.indexOf("mzstatic.com") !== -1) {
+                        return s.replace(/\d+x\d+bb/, "360x360bb");
                     }
-                    transformOrigin: Item.Center
-                    asynchronous: true
-                    visible: status === Image.Ready
-                    sourceSize: Qt.size(360, 360)
-                    mipmap: true
-                    smooth: true
+                    if (s.indexOf("i.ytimg.com") !== -1) {
+                        return s.split("?")[0];
+                    }
+                    return s;
+                }
+                fillMode: Image.PreserveAspectCrop
+                scale: {
+                    if (implicitWidth > 0 && implicitHeight > 0) {
+                        var r = implicitWidth / implicitHeight;
+                        if (r > 1.25 && r < 1.45) return 1.34;
+                    }
+                    return 1.0;
+                }
+                transformOrigin: Item.Center
+                asynchronous: true
+                visible: status === Image.Ready
+                sourceSize: Qt.size(240, 240)
+                smooth: true
                     onStatusChanged: {
                         if (status === Image.Error) {
                             var srcStr = String(source);

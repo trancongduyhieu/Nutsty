@@ -96,32 +96,15 @@ Item {
         visible: img.status !== Image.Ready && !root.hasInitials && root.fallbackIcon !== ""
     }
 
-    // 3. Shared Mask Source for GPU MultiEffect Shader (Must be declared before container with static layer)
+    // 4. Main Image Container with clean clipping (0 FBO overhead, zero GPU leak)
     Rectangle {
-        id: maskRect
-        anchors.fill: imgContainer
-        radius: Math.max(0, root.radius - (root.borderWidth > 0 ? 0.5 : 0))
-        color: "#ffffff"
-        visible: false
-        layer.enabled: true
-        layer.smooth: true
-        smooth: true
-        antialiasing: true
-    }
-
-    // 4. Main Image Container with GPU MultiEffect Mask (0 pixel leakage outside radius)
-    Item {
         id: imgContainer
         anchors.fill: parent
         anchors.margins: root.borderWidth > 0 ? 0.5 : 0
         visible: img.status === Image.Ready
-        layer.enabled: root.radius > 0
-        layer.smooth: true
-        layer.effect: MultiEffect {
-            maskEnabled: root.radius > 0
-            maskSource: maskRect
-            autoPaddingEnabled: false
-        }
+        radius: Math.max(0, root.radius - (root.borderWidth > 0 ? 0.5 : 0))
+        color: "transparent"
+        clip: root.radius > 0
 
         Image {
             id: img
