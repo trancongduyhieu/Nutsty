@@ -1808,10 +1808,33 @@ Scope {
         }
 
         // =====================================================================
-        // Dynamic Composite Backdrop Source for Liquid Glass (PlayerBarBottom)
-        // Blends live content (album cards, etc.) with a silky frosted atmosphere.
+        // Dynamic Composite Backdrop Source for Liquid Glass (PlayerBarBottom & Popovers)
+        // Blends live content (album cards, track rows, etc.) with master wallpaper atmosphere.
         // =====================================================================
-        readonly property alias glassCompositeBackdrop: masterBackdropStack
+        Item {
+            id: glassCompositeBackdrop
+            anchors.fill: parent
+            z: -999
+            opacity: 0.001
+
+            // 1. Master Atmosphere Layer (Wallpaper + Active Track Velvet Aurora)
+            ShaderEffectSource {
+                anchors.fill: parent
+                sourceItem: masterBackdropStack
+                live: true
+                smooth: true
+            }
+
+            // 2. Live UI Content Layer (Track cards, album art, lyrics, scrolling rows)
+            ShaderEffectSource {
+                id: liveContentTexture
+                anchors.fill: parent
+                sourceItem: mainContentBackdrop
+                live: true
+                hideSource: false
+                smooth: true
+            }
+        }
 
 
         // =====================================================================
@@ -1988,7 +2011,7 @@ Scope {
                 isSidebarVisible: win.showSidebar
                 isMaximized: Boolean(win.visibility === 4 || win.maximized)
                 accentColor: win.accentColor
-                backgroundSourceItem: glassCompositeBackdrop
+                backgroundSourceItem: masterBackdropStack
 
                 onHomeClicked: {
                     win.isNowPlayingOpen = false;
@@ -2170,7 +2193,7 @@ Scope {
                             id: homeView
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            backgroundSourceItem: glassCompositeBackdrop
+                            backgroundSourceItem: masterBackdropStack
                             moods: win.homeMoods
                             selectedMood: win.selectedMood
                             sections: win.homeSections
@@ -2341,7 +2364,7 @@ Scope {
                             isPlaying: win.isPlaying
                             isLoadingAudio: win.isLoadingAudio
                             viewMode: win.searchViewMode
-                            backgroundSourceItem: glassCompositeBackdrop
+                            backgroundSourceItem: masterBackdropStack
 
                             onTrackPlayRequested: trk => {
                                 if (win.isContextMenuActive) return;
@@ -2468,7 +2491,7 @@ Scope {
                     queueTracks: win.currentTracks
                     playingPlaylistTitle: win.playingSourceTitle || I18n.tr("Hàng đợi", "Queue")
                     accentColor: win.accentColor
-                    backgroundSourceItem: glassCompositeBackdrop
+                    backgroundSourceItem: masterBackdropStack
                     listeningAlongFriend: win.listeningAlongFriend
 
                     onExitListeningAlongRequested: win.exitListeningAlong()

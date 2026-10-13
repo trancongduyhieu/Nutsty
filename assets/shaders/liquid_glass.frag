@@ -81,28 +81,40 @@ void main() {
     vec2 pixelStep = 1.0 / u_sourceSize;
     
     // =========================================================================
-    // 2. Water-Clear Refraction & 9-Tap Frosted Blur
+    // 2. Water-Clear Refraction & Two-Ring Frosted Blur Dispersion (Keo 502)
+    // 13-tap Poisson-Gaussian Disc Kernel with wide 16px frosted dispersion
     // =========================================================================
-    float split = u_aberration * 6.0 * circleMap(t);
-    float blurRadius = 2.5;
+    float rWide = 16.0;
+    float rMed  = 6.5;
     
-    // Sample with 9-tap frosted glass dispersion (Gaussian kernel)
-    vec3 c0 = texture(source, uv + vec2(-1.0, -1.0) * pixelStep * blurRadius).rgb * 0.0625;
-    vec3 c1 = texture(source, uv + vec2( 0.0, -1.0) * pixelStep * blurRadius).rgb * 0.1250;
-    vec3 c2 = texture(source, uv + vec2( 1.0, -1.0) * pixelStep * blurRadius).rgb * 0.0625;
-    vec3 c3 = texture(source, uv + vec2(-1.0,  0.0) * pixelStep * blurRadius).rgb * 0.1250;
-    vec3 c4 = texture(source, uv                                            ).rgb * 0.2500;
-    vec3 c5 = texture(source, uv + vec2( 1.0,  0.0) * pixelStep * blurRadius).rgb * 0.1250;
-    vec3 c6 = texture(source, uv + vec2(-1.0,  1.0) * pixelStep * blurRadius).rgb * 0.0625;
-    vec3 c7 = texture(source, uv + vec2( 0.0,  1.0) * pixelStep * blurRadius).rgb * 0.1250;
-    vec3 c8 = texture(source, uv + vec2( 1.0,  1.0) * pixelStep * blurRadius).rgb * 0.0625;
-    vec3 baseFrosted = c0 + c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8;
+    vec3 bWide = (
+        texture(source, uv + vec2( rWide,  0.0) * pixelStep).rgb +
+        texture(source, uv + vec2(-rWide,  0.0) * pixelStep).rgb +
+        texture(source, uv + vec2( 0.0,  rWide) * pixelStep).rgb +
+        texture(source, uv + vec2( 0.0, -rWide) * pixelStep).rgb +
+        texture(source, uv + vec2( rWide * 0.707,  rWide * 0.707) * pixelStep).rgb +
+        texture(source, uv + vec2(-rWide * 0.707, -rWide * 0.707) * pixelStep).rgb +
+        texture(source, uv + vec2( rWide * 0.707, -rWide * 0.707) * pixelStep).rgb +
+        texture(source, uv + vec2(-rWide * 0.707,  rWide * 0.707) * pixelStep).rgb
+    ) * 0.125;
     
-    // Chromatic dispersion applied to frosted refraction
+    vec3 bMed = (
+        texture(source, uv + vec2( rMed,  0.0) * pixelStep).rgb +
+        texture(source, uv + vec2(-rMed,  0.0) * pixelStep).rgb +
+        texture(source, uv + vec2( 0.0,  rMed) * pixelStep).rgb +
+        texture(source, uv + vec2( 0.0, -rMed) * pixelStep).rgb
+    ) * 0.25;
+    
+    vec3 bCenter = texture(source, uv).rgb;
+    vec3 baseFrosted = bWide * 0.45 + bMed * 0.35 + bCenter * 0.20;
+    
+    // Prismatic chromatic dispersion along the curved meniscus edge
+    // Strongest at the curved bevel (circleMap(t) ~ 1.0), zero in the flat center
+    float split = (u_aberration > 0.0 ? u_aberration : 0.03) * 160.0 * circleMap(t);
     vec3 clearRefraction;
-    clearRefraction.r = texture(source, uv + grad * split * pixelStep).r * 0.40 + baseFrosted.r * 0.60;
+    clearRefraction.r = texture(source, uv + grad * split * pixelStep).r * 0.45 + baseFrosted.r * 0.55;
     clearRefraction.g = baseFrosted.g;
-    clearRefraction.b = texture(source, uv - grad * split * pixelStep).b * 0.40 + baseFrosted.b * 0.60;
+    clearRefraction.b = texture(source, uv - grad * split * pixelStep).b * 0.45 + baseFrosted.b * 0.55;
     
     // =========================================================================
     // 3. Keo 502 Glossy Meniscus Specular (Sức căng bề mặt & độ bóng trơn dẻo)
@@ -116,10 +128,14 @@ void main() {
     float keo502Gloss = rimSheen + topReflect;
     
     // =========================================================================
-    // 4. Dynamic Dual-Tone Song Extraction (Analytical - zero texture LOD stalls)
+    // 4. Dynamic Dual-Tone Color Extraction & Live Diffusion
     // =========================================================================
-    vec3 songColorA = u_tint.rgb * 1.35 + vec3(0.06);
-    vec3 songColorB = u_tint.rgb * 0.70 + vec3(0.02);
+    // SimpMusic Vibrancy: boost saturation by 1.6x on frosted background color
+    float lum = dot(baseFrosted, vec3(0.2126, 0.7152, 0.0722));
+    vec3 vibrantDiffuse = clamp(mix(vec3(lum), baseFrosted, 1.60) + vec3(0.03 * lum), 0.0, 1.0);
+    
+    vec3 songColorA = mix(u_tint.rgb * 1.35 + vec3(0.04), vibrantDiffuse, 0.45);
+    vec3 songColorB = mix(u_tint.rgb * 0.75 + vec3(0.02), vibrantDiffuse * 0.65, 0.45);
     
     // =========================================================================
     // 5. Viscous Flow Wave Diffusion (Sóng lỏng dẻo lan màu từ từ)
@@ -134,8 +150,8 @@ void main() {
     float fluidPattern = smoothstep(0.20, 0.80, wave1 * 0.45 + wave2 * 0.35 + wave3 * 0.20);
     vec3 diffusingSongColor = mix(songColorA, songColorB, fluidPattern);
     
-    // Lan màu nhẹ nhàng (~22%), giữ trọn vẹn độ trong veo của keo
-    float tintStrength = 0.22 * clamp(u_flowActive, 0.0, 1.0);
+    // Lan màu nhẹ nhàng (~24%), giữ trọn vẹn độ trong veo của keo
+    float tintStrength = 0.24 * clamp(u_flowActive, 0.0, 1.0);
     vec3 tintedKeo = mix(clearRefraction, diffusingSongColor, tintStrength);
     
     // =========================================================================
