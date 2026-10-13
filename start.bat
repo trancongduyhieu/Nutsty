@@ -54,18 +54,11 @@ if not exist "venv\.installed" (
 )
 
 :run_app
-:: If running in VirtualBox, default to OpenGL to prevent host VBoxDxVk crash
-for /f "tokens=2*" %%a in ('reg query "HKLM\HARDWARE\DESCRIPTION\System\BIOS" /v SystemProductName 2^>nul') do (
-    echo %%b | findstr /i "VirtualBox" >nul && if not defined QSG_RHI_BACKEND set "QSG_RHI_BACKEND=opengl"
-)
 echo [3/3] Starting Nutsty...
 python launcher_win.py
 goto end
 
 :run_system
-for /f "tokens=2*" %%a in ('reg query "HKLM\HARDWARE\DESCRIPTION\System\BIOS" /v SystemProductName 2^>nul') do (
-    echo %%b | findstr /i "VirtualBox" >nul && if not defined QSG_RHI_BACKEND set "QSG_RHI_BACKEND=opengl"
-)
 pip install -r requirements_win.txt
 python launcher_win.py
 

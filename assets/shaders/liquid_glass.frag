@@ -81,13 +81,28 @@ void main() {
     vec2 pixelStep = 1.0 / u_sourceSize;
     
     // =========================================================================
-    // 2. Water-Clear Refraction (Standard texture sampling - zero mipmap churn)
+    // 2. Water-Clear Refraction & 9-Tap Frosted Blur
     // =========================================================================
     float split = u_aberration * 6.0 * circleMap(t);
+    float blurRadius = 2.5;
+    
+    // Sample with 9-tap frosted glass dispersion (Gaussian kernel)
+    vec3 c0 = texture(source, uv + vec2(-1.0, -1.0) * pixelStep * blurRadius).rgb * 0.0625;
+    vec3 c1 = texture(source, uv + vec2( 0.0, -1.0) * pixelStep * blurRadius).rgb * 0.1250;
+    vec3 c2 = texture(source, uv + vec2( 1.0, -1.0) * pixelStep * blurRadius).rgb * 0.0625;
+    vec3 c3 = texture(source, uv + vec2(-1.0,  0.0) * pixelStep * blurRadius).rgb * 0.1250;
+    vec3 c4 = texture(source, uv                                            ).rgb * 0.2500;
+    vec3 c5 = texture(source, uv + vec2( 1.0,  0.0) * pixelStep * blurRadius).rgb * 0.1250;
+    vec3 c6 = texture(source, uv + vec2(-1.0,  1.0) * pixelStep * blurRadius).rgb * 0.0625;
+    vec3 c7 = texture(source, uv + vec2( 0.0,  1.0) * pixelStep * blurRadius).rgb * 0.1250;
+    vec3 c8 = texture(source, uv + vec2( 1.0,  1.0) * pixelStep * blurRadius).rgb * 0.0625;
+    vec3 baseFrosted = c0 + c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8;
+    
+    // Chromatic dispersion applied to frosted refraction
     vec3 clearRefraction;
-    clearRefraction.r = texture(source, uv + grad * split * pixelStep).r;
-    clearRefraction.g = texture(source, uv).g;
-    clearRefraction.b = texture(source, uv - grad * split * pixelStep).b;
+    clearRefraction.r = texture(source, uv + grad * split * pixelStep).r * 0.40 + baseFrosted.r * 0.60;
+    clearRefraction.g = baseFrosted.g;
+    clearRefraction.b = texture(source, uv - grad * split * pixelStep).b * 0.40 + baseFrosted.b * 0.60;
     
     // =========================================================================
     // 3. Keo 502 Glossy Meniscus Specular (Sức căng bề mặt & độ bóng trơn dẻo)

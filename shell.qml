@@ -1663,7 +1663,7 @@ Scope {
                     width: parent.width * 1.15
                     height: parent.height * 1.15
                     source: win.formatFileUrl(win.currentWallpaperPath)
-                    sourceSize: Qt.size(1920, 1080)
+                    sourceSize: Qt.size(480, 270)
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                 }
@@ -1676,7 +1676,7 @@ Scope {
                 visible: wallpaperAtmosphereImg.status === Image.Ready && opacity > 0.01
                 blurEnabled: true
                 blur: 1.0
-                blurMax: 64
+                blurMax: 32
                 saturation: 1.35
                 brightness: -0.15
                 opacity: (win.currentTrack && win.isPlaying) ? 0.0 : 0.65
@@ -1697,11 +1697,9 @@ Scope {
 
                 Image {
                     id: songAtmosphereImg
-                    anchors.centerIn: parent
-                    width: parent.width * 1.75
-                    height: parent.height * 1.75
+                    anchors.fill: parent
                     source: win.getTrackCoverUrl(win.currentTrack)
-                    sourceSize: Qt.size(512, 512)
+                    sourceSize: Qt.size(256, 256)
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                 }
@@ -1714,7 +1712,7 @@ Scope {
                 visible: songAtmosphereImg.status === Image.Ready && opacity > 0.01
                 blurEnabled: true
                 blur: 1.0
-                blurMax: 64
+                blurMax: 32
                 saturation: 1.45
                 brightness: -0.15
                 opacity: (win.currentTrack && win.isPlaying) ? 0.65 : 0.0
@@ -1808,11 +1806,86 @@ Scope {
         }
 
         // =====================================================================
-        // Dynamic Composite Backdrop Source for Liquid Glass (Unified with masterBackdropStack)
-        // Direct reference to the rich frosted velvet atmosphere (blurMax: 64) for maximum
-        // vibrance and authentic Keo 502 liquid refraction without duplicate FBO overhead.
+        // Dynamic Composite Backdrop Source for Liquid Glass (PlayerBarBottom)
+        // Blends live content (album cards, etc.) with a silky frosted atmosphere.
         // =====================================================================
-        readonly property alias glassCompositeBackdrop: masterBackdropStack
+        Item {
+            id: glassCompositeBackdrop
+            anchors.fill: parent
+            z: -999
+            opacity: 0.001
+
+            // 1. Fallback Background Layer (Smooth Cross-dissolving Wallpaper vs Artwork)
+            Item {
+                id: fallbackBackdropContainer
+                anchors.fill: parent
+
+                Item {
+                    id: fallbackImagesComposite
+                    anchors.fill: parent
+
+                    // Dark foundation underneath to block wallpaper completely when playing
+                    Rectangle {
+                        anchors.fill: parent
+                        color: "#0a0b0e"
+                    }
+
+                    // Bottom Layer: Desktop Wallpaper (fades out completely when playing song!)
+                    Image {
+                        id: fallbackWallpaperImg
+                        anchors.fill: parent
+                        source: win.formatFileUrl(win.currentWallpaperPath)
+                        sourceSize: Qt.size(480, 270)
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        opacity: (win.currentTrack && win.isPlaying) ? 0.0 : 1.0
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: 400
+                                easing.type: Easing.InOutQuad
+                            }
+                        }
+                    }
+
+                    // Top Layer: Active Song Artwork (Crossfades gently over 400ms)
+                    Image {
+                        id: fallbackPlayingImg
+                        anchors.fill: parent
+                        source: win.getTrackCoverUrl(win.currentTrack)
+                        sourceSize: Qt.size(256, 256)
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        opacity: (win.currentTrack && win.isPlaying) ? 1.0 : 0.0
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: 400
+                                easing.type: Easing.InOutQuad
+                            }
+                        }
+                    }
+                }
+
+                MultiEffect {
+                    anchors.fill: parent
+                    source: fallbackImagesComposite
+                    blurEnabled: true
+                    blur: 0.50
+                    blurMax: 32
+                    saturation: 1.25
+                    brightness: 0.02
+                }
+            }
+
+            // 2. Live Content Layer (Card bài hát, header, etc.)
+            ShaderEffectSource {
+                id: liveContentTexture
+                anchors.fill: parent
+                sourceItem: mainContentBackdrop
+                live: true
+                hideSource: false
+                smooth: true
+            }
+        }
 
 
         // =====================================================================

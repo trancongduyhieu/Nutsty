@@ -1758,20 +1758,19 @@ Item {
                                                     }
                                                 }
                                             }
+
+                                            // 1px Hairline Border Overlay on top of cover image
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                radius: 6
+                                                color: "transparent"
+                                                border.color: Qt.rgba(1.0, 1.0, 1.0, 0.12)
+                                                border.width: 1
+                                                z: 2
+                                            }
                                         }
 
-                                        // 1px Hairline Border Overlay on top of cover image
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            radius: 6
-                                            color: "transparent"
-                                            border.color: Qt.rgba(1.0, 1.0, 1.0, 0.12)
-                                            border.width: 1
-                                            z: 2
-                                        }
-                                    }
-
-                                    ColumnLayout {
+                                        ColumnLayout {
                                         Layout.fillWidth: true
                                         spacing: 2
 
@@ -2476,5 +2475,6 @@ Item {
             }
         }
     }
+}
 
 

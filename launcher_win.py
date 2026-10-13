@@ -15,18 +15,9 @@ import ctypes
 from ctypes import wintypes
 from pathlib import Path
 
-# If running in VirtualBox, default to OpenGL to prevent host VBoxDxVk crash, or allow QSG_RHI_BACKEND override
+# Direct3D 11 backend enables Windows DirectComposition for 100% per-pixel alpha window border transparency
 if sys.platform == "win32" and "QSG_RHI_BACKEND" not in os.environ:
-    try:
-        import winreg
-        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\BIOS") as _k:
-            _vendor = str(winreg.QueryValueEx(_k, "SystemManufacturer")[0]).lower()
-            _prod = str(winreg.QueryValueEx(_k, "SystemProductName")[0]).lower()
-            if any(_vm in _vendor or _vm in _prod for _vm in ("virtualbox", "innotek")):
-                os.environ["QSG_RHI_BACKEND"] = "opengl"
-    except Exception:
-        pass
-    os.environ.setdefault("QSG_RHI_BACKEND", "d3d11")
+    os.environ["QSG_RHI_BACKEND"] = "d3d11"
 
 # Register active launcher instance in sys.modules so background threads (like auth_server) get the active instance
 sys.modules["launcher_win"] = sys.modules[__name__]
