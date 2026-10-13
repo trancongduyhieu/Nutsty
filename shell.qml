@@ -1807,191 +1807,11 @@ Scope {
             }
         }
 
-        // =====================================================================
-        // Dynamic Composite Backdrop Source for Liquid Glass (PlayerBarBottom & Popovers)
-        // Blends live content (album cards, track rows, etc.) with master wallpaper atmosphere.
-        // =====================================================================
-        Item {
-            id: glassCompositeBackdrop
-            anchors.fill: parent
-            z: -999
-            opacity: 0.001
+        // Note: masterBackdropStack serves as the Single Source of Truth (SSOT) backdrop
+        // for all Liquid Glass components (PlayerBarBottom, Modals, Popovers, and ShinyCardContainer).
+        // This eliminates nested ShaderEffectSources, prevents infinite FBO dirty-render loops,
+        // keeps RAM stable (~180-220 MB), and ensures full vibrant colors are sampled by liquid_glass.frag.
 
-            // 1. Master Atmosphere Layer (Wallpaper + Active Track Velvet Aurora)
-            ShaderEffectSource {
-                anchors.fill: parent
-                sourceItem: masterBackdropStack
-                live: true
-                smooth: true
-            }
-
-            // 2. Live UI Content Layer (Track cards, album art, lyrics, scrolling rows)
-            ShaderEffectSource {
-                id: liveContentTexture
-                anchors.fill: parent
-                sourceItem: mainContentBackdrop
-                live: true
-                hideSource: false
-                smooth: true
-            }
-        }
-
-
-        // =====================================================================
-        // Pure Nutsty App Surface (Isolated from Desktop Wallpaper)
-        // Used specifically for Modals & Dialogs (SettingsModal, etc.)
-        // Ensures the modal's Liquid Glass only blurs Nutsty UI & song cards,
-        // without desktop wallpaper bleeding in.
-        // =====================================================================
-        Item {
-            id: nutstyAppSurface
-            anchors.fill: parent
-            z: -998
-            opacity: 0.001
-            visible: win.isAnyModalOpen
-
-            // 1. Dark Acrylic Window Foundation
-            Rectangle {
-                anchors.fill: parent
-                color: Qt.rgba(0.06, 0.07, 0.10, 0.96)
-            }
-
-            // 2. Active Song Atmosphere Aurora Glow (when playing)
-            Item {
-                anchors.fill: parent
-                opacity: (win.isAnyModalOpen && win.currentTrack && win.isPlaying) ? 0.70 : 0.0
-                Behavior on opacity {
-                    NumberAnimation { duration: 400; easing.type: Easing.InOutQuad }
-                }
-
-                Image {
-                    id: nutstySurfaceArtwork
-                    anchors.fill: parent
-                    source: win.isAnyModalOpen ? win.getTrackCoverUrl(win.currentTrack) : ""
-                    sourceSize: Qt.size(48, 48)
-                    fillMode: Image.PreserveAspectCrop
-                    asynchronous: true
-                    visible: false
-                }
-
-                MultiEffect {
-                    anchors.fill: parent
-                    source: nutstySurfaceArtwork
-                    visible: win.isAnyModalOpen && nutstySurfaceArtwork.status === Image.Ready
-                    blurEnabled: true
-                    blur: 1.0
-                    blurMax: 32
-                    saturation: 1.40
-                    brightness: -0.20
-                }
-            }
-
-            // 3. Live UI Content Layer with Rich Frosted Bokeh Blur
-            ShaderEffectSource {
-                id: liveContentRaw
-                anchors.fill: parent
-                sourceItem: win.isAnyModalOpen ? mainContentBackdrop : null
-                live: win.isAnyModalOpen
-                hideSource: false
-                smooth: true
-                visible: false
-            }
-
-            MultiEffect {
-                anchors.fill: parent
-                source: liveContentRaw
-                visible: win.isAnyModalOpen
-                blurEnabled: true
-                blur: 1.0
-                blurMax: 32
-                saturation: 1.20
-                brightness: -0.10
-            }
-        }
-
-        // =====================================================================
-        // Dedicated Frosted Backdrop for SleepTimerPopover (Deep Bokeh Blur)
-        // Blurs underlying lyrics and track cards much more than playerbar
-        // for pristine legibility and fluid Keo 502 resin optics.
-        // =====================================================================
-        Item {
-            id: frostedSleepTimerBackdrop
-            anchors.fill: parent
-            z: -997
-            opacity: 0.001
-            visible: typeof sleepTimerPopover !== "undefined" && sleepTimerPopover && sleepTimerPopover.opacity > 0.01
-
-            // 1. Semi-translucent dark foundation for enhanced contrast
-            Rectangle {
-                anchors.fill: parent
-                color: Qt.rgba(0.04, 0.05, 0.08, 0.65)
-            }
-
-            // 2. Active Song Atmosphere / Wallpaper with blur
-            Item {
-                id: sleepTimerBgArtworkComposite
-                anchors.fill: parent
-
-                Image {
-                    anchors.fill: parent
-                    source: frostedSleepTimerBackdrop.visible ? win.formatFileUrl(win.currentWallpaperPath) : ""
-                    sourceSize: Qt.size(240, 135)
-                    fillMode: Image.PreserveAspectCrop
-                    asynchronous: true
-                    cache: false
-                    opacity: (win.currentTrack && win.isPlaying) ? 0.0 : 1.0
-                    Behavior on opacity {
-                        NumberAnimation { duration: 400; easing.type: Easing.InOutQuad }
-                    }
-                }
-
-                Image {
-                    anchors.fill: parent
-                    source: frostedSleepTimerBackdrop.visible ? win.getTrackCoverUrl(win.currentTrack) : ""
-                    sourceSize: Qt.size(160, 160)
-                    fillMode: Image.PreserveAspectCrop
-                    asynchronous: true
-                    cache: false
-                    opacity: (win.currentTrack && win.isPlaying) ? 0.85 : 0.0
-                    Behavior on opacity {
-                        NumberAnimation { duration: 400; easing.type: Easing.InOutQuad }
-                    }
-                }
-            }
-
-            MultiEffect {
-                anchors.fill: parent
-                source: sleepTimerBgArtworkComposite
-                visible: frostedSleepTimerBackdrop.visible
-                blurEnabled: true
-                blur: 1.0
-                blurMax: 32
-                saturation: 1.30
-                brightness: -0.05
-            }
-
-            // 3. Live UI Content (Lyrics, Cards) heavily blurred
-            ShaderEffectSource {
-                id: sleepTimerLiveContentRaw
-                anchors.fill: parent
-                sourceItem: frostedSleepTimerBackdrop.visible ? mainContentBackdrop : null
-                live: frostedSleepTimerBackdrop.visible
-                hideSource: false
-                smooth: true
-                visible: false
-            }
-
-            MultiEffect {
-                anchors.fill: parent
-                source: sleepTimerLiveContentRaw
-                visible: frostedSleepTimerBackdrop.visible
-                blurEnabled: true
-                blur: 1.0
-                blurMax: 32
-                saturation: 1.20
-                brightness: -0.10
-            }
-        }
 
         // 1. Main Application Backdrop & Scrolling Content
         Item {
@@ -2540,7 +2360,7 @@ Scope {
             Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
             height: 66
             z: 50
-            backgroundSourceItem: glassCompositeBackdrop
+            backgroundSourceItem: masterBackdropStack
 
             currentTrack: win.currentTrack
             resolvedSquareImage: win.currentResolvedCover
@@ -2598,7 +2418,7 @@ Scope {
         SettingsModal {
             id: settingsModal
             objectName: "settingsModal"
-            backgroundSourceItem: nutstyAppSurface
+            backgroundSourceItem: masterBackdropStack
             isLoggedIn: win.isAuthLoggedIn
             accountName: win.authAccountName
             accountThumb: win.currentUserAvatar
@@ -2743,7 +2563,7 @@ Scope {
 
         PostNoteModal {
             id: postNoteModal
-            backgroundSourceItem: nutstyAppSurface
+            backgroundSourceItem: masterBackdropStack
             currentTrack: win.currentTrack
             resolvedCover: win.currentResolvedCover
             availableTracks: (win.currentTracks && win.currentTracks.length > 0) ? win.currentTracks : (win.browsingTracks && win.browsingTracks.length > 0 ? win.browsingTracks : win.allTracks)
@@ -2802,7 +2622,7 @@ Scope {
 
         UserNoteDetailModal {
             id: userNoteDetailModal
-            backgroundSourceItem: nutstyAppSurface
+            backgroundSourceItem: masterBackdropStack
             userAvatar: win.currentUserAvatar
             userName: win.authAccountName
 
@@ -2821,7 +2641,7 @@ Scope {
 
         SpotifyImportModal {
             id: spotifyImportModal
-            backgroundSourceItem: nutstyAppSurface
+            backgroundSourceItem: masterBackdropStack
             accentColor: win.accentColor
             spotifySpdc: win.spotifySpdc
             onCloseRequested: spotifyImportModal.closeModal()
@@ -2871,13 +2691,13 @@ Scope {
             id: downloadPopover
             dlMgr: downloadManager
             accentColor: win.accentColor
-            backgroundSourceItem: glassCompositeBackdrop
+            backgroundSourceItem: masterBackdropStack
         }
 
         SleepTimerPopover {
             id: sleepTimerPopover
             accentColor: win.accentColor
-            backgroundSourceItem: frostedSleepTimerBackdrop
+            backgroundSourceItem: masterBackdropStack
             targetAnchorItem: bottomPlayer
             isTimerActive: win.isSleepTimerActive
             remainingSeconds: win.sleepTimerRemainingSeconds
@@ -2896,7 +2716,7 @@ Scope {
 
         FriendStoryModal {
             id: friendStoryModal
-            backgroundSourceItem: nutstyAppSurface
+            backgroundSourceItem: masterBackdropStack
             friendsNotes: win.friendsNotes
             accentColor: win.accentColor
             onListenAlongRequested: friendData => {
@@ -2917,7 +2737,7 @@ Scope {
         PlaylistTrackSearchModal {
             id: playlistTrackSearchModal
             accentColor: win.accentColor
-            backgroundSourceItem: glassCompositeBackdrop
+            backgroundSourceItem: masterBackdropStack
             currentTrack: win.currentTrack
             isPlaying: win.isPlaying
             availableTracks: (win.currentTracks && win.currentTracks.length > 0) ? win.currentTracks : win.browsingTracks
@@ -2933,7 +2753,7 @@ Scope {
         CoListenersPopover {
             id: coListenersPopover
             accentColor: win.accentColor
-            backgroundSourceItem: glassCompositeBackdrop
+            backgroundSourceItem: masterBackdropStack
             allowControl: win.allowCoListenerControl
             onStopAllRequested: win.stopAllCoListening()
             onKickRequested: (kEmail, kName) => win.kickCoListener(kEmail, kName)
@@ -2943,7 +2763,7 @@ Scope {
         FriendRequestsPopover {
             id: friendRequestsPopover
             accentColor: win.accentColor
-            backgroundSourceItem: glassCompositeBackdrop
+            backgroundSourceItem: masterBackdropStack
             onAcceptRequested: (reqId, fromEmail, fromName) => {
                 win.respondFriendRequest(reqId, fromEmail, "accept");
             }
@@ -2955,7 +2775,7 @@ Scope {
         ManageFriendsModal {
             id: manageFriendsModal
             accentColor: win.accentColor
-            backgroundSourceItem: glassCompositeBackdrop
+            backgroundSourceItem: masterBackdropStack
             currentUserEmail: win.getCurrentUserEmail()
             currentUserName: win.getCurrentUserName()
             currentUserAvatar: win.getCurrentUserAvatar()
