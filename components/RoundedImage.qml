@@ -10,7 +10,7 @@ Item {
     property real radius: 8
     property int fillMode: Image.PreserveAspectCrop
     property bool asynchronous: true
-    property bool cache: true
+    property bool cache: false
 
     // Fallback & Placeholder Properties
     property string initialsText: ""

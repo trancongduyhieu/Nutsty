@@ -1666,6 +1666,7 @@ Scope {
                     sourceSize: Qt.size(480, 270)
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
+                    cache: false
                 }
             }
 
@@ -1911,8 +1912,10 @@ Scope {
                 Image {
                     anchors.fill: parent
                     source: frostedSleepTimerBackdrop.visible ? win.formatFileUrl(win.currentWallpaperPath) : ""
+                    sourceSize: Qt.size(240, 135)
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
+                    cache: false
                     opacity: (win.currentTrack && win.isPlaying) ? 0.0 : 1.0
                     Behavior on opacity {
                         NumberAnimation { duration: 400; easing.type: Easing.InOutQuad }
@@ -1922,8 +1925,10 @@ Scope {
                 Image {
                     anchors.fill: parent
                     source: frostedSleepTimerBackdrop.visible ? win.getTrackCoverUrl(win.currentTrack) : ""
+                    sourceSize: Qt.size(160, 160)
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
+                    cache: false
                     opacity: (win.currentTrack && win.isPlaying) ? 0.85 : 0.0
                     Behavior on opacity {
                         NumberAnimation { duration: 400; easing.type: Easing.InOutQuad }

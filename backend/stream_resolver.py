@@ -44,10 +44,10 @@ QUALITY_ITAG_PRIORITIES = {
     "low": [250, 249, 139, 251, 140, 141, 774, 18]
 }
 
-# In-memory stream cache with TTL eviction (5 hours) to prevent expired Google CDN links
+# In-memory stream cache with TTL eviction (20 minutes) to prevent expired Google CDN links
 _MEMORY_STREAM_CACHE = {}
 _STREAM_CACHE_LOCK = threading.Lock()
-STREAM_CACHE_TTL_SECONDS = 5 * 3600
+STREAM_CACHE_TTL_SECONDS = 1200
 
 def get_cached_stream_url(video_id, quality="high_opus"):
     """Thread-safe TTL cache lookup in memory with disk fallback"""
@@ -108,7 +108,7 @@ def invalidate_cached_stream_url(video_id, quality=None):
     except Exception:
         pass
 
-def resolve_stream_url(video_id, quality=None):
+def resolve_stream_url(video_id, quality=None, force_fresh=False):
     if not video_id:
         return None
 
@@ -120,6 +120,9 @@ def resolve_stream_url(video_id, quality=None):
             video_id = vid_match.group(1)
         else:
             video_id = video_id.split("watch?v=")[1].split("&")[0]
+
+    if force_fresh:
+        invalidate_cached_stream_url(video_id)
 
     if not quality:
         settings_path = os.path.join(pc.get_config_dir(), "nutsty_settings.json")
@@ -137,23 +140,26 @@ def resolve_stream_url(video_id, quality=None):
     cache_key = f"{video_id}_{quality}"
 
     now = time.time()
-    with _STREAM_CACHE_LOCK:
-        if cache_key in _MEMORY_STREAM_CACHE:
-            entry = _MEMORY_STREAM_CACHE[cache_key]
-            if (now - entry.get("timestamp", 0)) < 10800:
-                return entry
-
-    cache = load_json(STREAM_CACHE_FILE, {})
-    cached = cache.get(cache_key)
-    if not cached:
-        legacy = cache.get(video_id)
-        if legacy and legacy.get("quality") == quality:
-            cached = legacy
-
-    if cached and (now - cached.get("timestamp", 0)) < 10800:
+    if not force_fresh:
         with _STREAM_CACHE_LOCK:
-            _MEMORY_STREAM_CACHE[cache_key] = cached
-        return cached
+            if cache_key in _MEMORY_STREAM_CACHE:
+                entry = _MEMORY_STREAM_CACHE[cache_key]
+                if (now - entry.get("timestamp", 0)) < STREAM_CACHE_TTL_SECONDS:
+                    return entry
+
+        cache = load_json(STREAM_CACHE_FILE, {})
+        cached = cache.get(cache_key)
+        if not cached:
+            legacy = cache.get(video_id)
+            if legacy and legacy.get("quality") == quality:
+                cached = legacy
+
+        if cached and (now - cached.get("timestamp", 0)) < STREAM_CACHE_TTL_SECONDS:
+            with _STREAM_CACHE_LOCK:
+                _MEMORY_STREAM_CACHE[cache_key] = cached
+            return cached
+    else:
+        cache = load_json(STREAM_CACHE_FILE, {})
 
     try:
         import yt_dlp
@@ -162,13 +168,15 @@ def resolve_stream_url(video_id, quality=None):
         url = f"https://www.youtube.com/watch?v={video_id}"
         attempts = []
 
-        # Attempt 1: Standard resilient extraction (clean 251 opus & 140 aac with matching HTTP headers)
+        # Attempt 1: Android Music client (highest reliability for YTMusic 251 Opus / 140 AAC)
         attempts.append({
             "quiet": True,
             "no_warnings": True,
             "skip_download": True,
             "check_formats": False,
-            "noplaylist": True
+            "noplaylist": True,
+            "socket_timeout": 8,
+            "extractor_args": {"youtube": {"player_client": ["android_music", "android"]}}
         })
 
         # Attempt 2: User cookie file if Google Account session exists
@@ -179,28 +187,30 @@ def resolve_stream_url(video_id, quality=None):
                 "skip_download": True,
                 "check_formats": False,
                 "noplaylist": True,
+                "socket_timeout": 8,
                 "cookiefile": cookie_file,
                 "extractor_args": {"youtube": {"player_client": ["android", "mweb"]}}
             })
 
-        # Attempt 3: Resilient mobile android client fallback
+        # Attempt 3: Standard resilient web client extraction
         attempts.append({
             "quiet": True,
             "no_warnings": True,
             "skip_download": True,
             "check_formats": False,
             "noplaylist": True,
-            "extractor_args": {"youtube": {"player_client": ["android"]}}
+            "socket_timeout": 8,
         })
 
-        # Attempt 4: VisionOS fallback
+        # Attempt 4: Resilient iOS / mobile web client fallback
         attempts.append({
             "quiet": True,
             "no_warnings": True,
             "skip_download": True,
             "check_formats": False,
             "noplaylist": True,
-            "extractor_args": {"youtube": {"player_client": ["visionos"]}}
+            "socket_timeout": 8,
+            "extractor_args": {"youtube": {"player_client": ["ios", "mweb"]}}
         })
 
         for ydl_opts in attempts:

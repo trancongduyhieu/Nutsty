@@ -372,12 +372,21 @@ def clean_search_title(title):
 # LRC / Rich-sync parsers
 # ──────────────────────────────────────────────────────────────────────────────
 
+def clean_vocal_markers(text):
+    if not text:
+        return ""
+    # Strip voice/vocal prefixes like "v1: ", "v2: ", "bgv: ", "[v1] ", "(v1) ", "vocal 1: "
+    t = re.sub(r'^(?:v\d+|bgv|bg|vocal\s*\d*)\s*:\s*', '', text, flags=re.IGNORECASE)
+    t = re.sub(r'^[\[\(](?:v\d+|bgv|bg)[\]\)]\s*:?\s*', '', t, flags=re.IGNORECASE)
+    return t.strip()
+
 def strip_rich_sync_tags(text):
     if not text:
         return ""
     t = re.sub(r'<[0-9:.]+>', ' ', text)
     t = html.unescape(t)
-    return re.sub(r'\s+', ' ', t).strip()
+    t = re.sub(r'\s+', ' ', t).strip()
+    return clean_vocal_markers(t)
 
 def parse_rich_sync_words(line_str, default_start=0.0):
     """Parse <mm:ss.xx> word timestamps embedded in a LRC line."""
@@ -391,7 +400,7 @@ def parse_rich_sync_words(line_str, default_start=0.0):
     for i, m in enumerate(matches):
         mins, secs = int(m.group(1)), float(m.group(2))
         start_t = round(mins * 60.0 + secs, 3)
-        txt = html.unescape(m.group(3).strip())
+        txt = clean_vocal_markers(html.unescape(m.group(3).strip()))
         if not txt:
             continue
         if i + 1 < len(matches):
@@ -511,7 +520,7 @@ def parse_ttml(ttml_str):
                     "isHeld": dur >= 0.85,
                 })
             if words:
-                plain = " ".join(w["text"] for w in words)
+                plain = clean_vocal_markers(" ".join(w["text"] for w in words))
                 results.append({
                     "time": line_start,
                     "endTime": line_end,
@@ -521,7 +530,7 @@ def parse_ttml(ttml_str):
                     "words": words,
                 })
         else:
-            plain = html.unescape(re.sub(r'<[^>]+>', '', inner).strip())
+            plain = clean_vocal_markers(html.unescape(re.sub(r'<[^>]+>', '', inner).strip()))
             if plain:
                 results.append({
                     "time": line_start,
@@ -564,7 +573,7 @@ def parse_spotify_lyrics(data):
 
         # Spotify LINE_SYNCED → no word timing
         if is_line_synced or not raw_words or "<" not in raw_words:
-            clean = html.unescape(raw_words.strip()) if raw_words else ""
+            clean = clean_vocal_markers(html.unescape(raw_words.strip())) if raw_words else ""
             if not clean:
                 continue
             results.append({

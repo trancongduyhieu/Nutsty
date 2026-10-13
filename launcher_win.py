@@ -1158,16 +1158,20 @@ def main():
         tray_icon.activated.connect(_on_tray_activated)
         tray_icon.show()
 
-    # Periodic Python GC cleanup (Runs gc.collect() every 60s without touching Win32 WorkingSet)
+    # Periodic Python GC & Qt Quick image cache cleanup (Runs every 45s without touching Win32 WorkingSet)
     def _trim_ram():
         try:
             import gc
             gc.collect()
+            if engine_ref[0] is not None:
+                engine_ref[0].trimComponentCache()
+            from PySide6.QtGui import QPixmapCache
+            QPixmapCache.clear()
         except Exception:
             pass
 
     mem_timer = QTimer(app)
-    mem_timer.setInterval(60000)
+    mem_timer.setInterval(45000)
     mem_timer.timeout.connect(_trim_ram)
     mem_timer.start()
 

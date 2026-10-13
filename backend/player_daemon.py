@@ -285,7 +285,7 @@ def find_local_downloaded_file(vid="", title="", artist=""):
             pass
     return None
 
-def resolve_media_path(file_path, title="", artist=""):
+def resolve_media_path(file_path, title="", artist="", force_fresh=False):
     if not file_path:
         return file_path
     if file_path.startswith("ytdl://") or "youtube.com/watch" in file_path or "youtu.be/" in file_path:
@@ -303,25 +303,31 @@ def resolve_media_path(file_path, title="", artist=""):
 
             streaming_quality = get_current_streaming_quality()
 
-            # Instant cache lookup with quality fallback
-            cache = ytmusic_helper.load_json(ytmusic_helper.STREAM_CACHE_FILE, {})
-            cached = cache.get(f"{vid}_{streaming_quality}") or cache.get(vid)
-            if not cached:
-                for k, v in cache.items():
-                    if k.startswith(f"{vid}_") and isinstance(v, dict) and v.get("stream_url"):
-                        cached = v
-                        break
-            if cached and (time.time() - cached.get("timestamp", 0)) < 10800:
-                ua = cached.get("user_agent")
-                if ua:
-                    try:
-                        send_mpv_cmd(["set_property", "user-agent", ua])
-                    except Exception:
-                        pass
-                return cached.get("stream_url")
+            if force_fresh:
+                try:
+                    ytmusic_helper.invalidate_cached_stream_url(vid)
+                except Exception:
+                    pass
+            else:
+                # Instant cache lookup with quality fallback (20 minutes TTL)
+                cache = ytmusic_helper.load_json(ytmusic_helper.STREAM_CACHE_FILE, {})
+                cached = cache.get(f"{vid}_{streaming_quality}") or cache.get(vid)
+                if not cached:
+                    for k, v in cache.items():
+                        if k.startswith(f"{vid}_") and isinstance(v, dict) and v.get("stream_url"):
+                            cached = v
+                            break
+                if cached and (time.time() - cached.get("timestamp", 0)) < 1200:
+                    ua = cached.get("user_agent")
+                    if ua:
+                        try:
+                            send_mpv_cmd(["set_property", "user-agent", ua])
+                        except Exception:
+                            pass
+                    return cached.get("stream_url")
 
             # Resolve direct stream URL using authenticated format picker
-            res = ytmusic_helper.resolve_stream_url(vid, streaming_quality)
+            res = ytmusic_helper.resolve_stream_url(vid, streaming_quality, force_fresh=force_fresh)
             if res and res.get("stream_url"):
                 ua = res.get("user_agent")
                 if ua:
@@ -448,11 +454,13 @@ def get_status_dict():
     is_loading = False
     target_vid = ""
     target_path = ""
+    loading_ts = 0.0
     if os.path.exists(PLAYBACK_STATE_FILE):
         try:
             with open(PLAYBACK_STATE_FILE, "r", encoding="utf-8") as f:
                 st = json.load(f)
-                if st.get("state") == "loading" and (time.time() - st.get("timestamp", 0)) < 15.0:
+                loading_ts = st.get("timestamp", 0)
+                if st.get("state") == "loading" and (time.time() - loading_ts) < 8.0:
                     is_loading = True
                     target_vid = st.get("target_vid", "")
                     target_path = st.get("path", "")
@@ -469,6 +477,21 @@ def get_status_dict():
     path = batch.get("path") or ""
     vol = batch.get("volume") if batch.get("volume") is not None else 100
     idle = batch.get("idle-active")
+
+    # Detect failed playback / 403 / demux error: MPV is idle and loading was requested > 2.5s ago
+    if is_loading and idle and (time.time() - loading_ts) > 2.5:
+        is_loading = False
+        if target_vid:
+            try:
+                import ytmusic_helper
+                ytmusic_helper.invalidate_cached_stream_url(target_vid)
+            except Exception:
+                pass
+        try:
+            with open(PLAYBACK_STATE_FILE, "w", encoding="utf-8") as f:
+                json.dump({"state": "idle", "path": target_path, "target_vid": target_vid, "timestamp": time.time()}, f)
+        except Exception:
+            pass
 
     global _CURRENT_PLAYING_VID, _CURRENT_PLAYING_PATH
     is_target_active = True
@@ -650,7 +673,7 @@ def execute_command(args):
             try:
                 with open(PLAYBACK_STATE_FILE, "r", encoding="utf-8") as f:
                     st = json.load(f)
-                    if st.get("state") == "loading" and (time.time() - st.get("timestamp", 0)) < 15.0:
+                    if st.get("state") == "loading" and (time.time() - st.get("timestamp", 0)) < 4.0:
                         is_already_loading = True
             except Exception:
                 pass
@@ -670,7 +693,7 @@ def execute_command(args):
                         json.dump(state_payload, f)
                 except Exception:
                     pass
-                stream_target = resolve_media_path(target_file)
+                stream_target = resolve_media_path(target_file, force_fresh=True)
                 send_mpv_cmd(["loadfile", stream_target, "replace"])
                 send_mpv_cmd(["set_property", "pause", False])
                 update_current_track_metadata(target_file)

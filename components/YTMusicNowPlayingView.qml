@@ -2020,6 +2020,9 @@ Item {
                                                 Image {
                                                     anchors.fill: parent
                                                     source: modelData.image || ""
+                                                    sourceSize: Qt.size(96, 72)
+                                                    asynchronous: true
+                                                    cache: false
                                                     fillMode: Image.PreserveAspectCrop
                                                     scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
                                                     transformOrigin: Item.Center
@@ -2224,6 +2227,9 @@ Item {
                                                         Image {
                                                             anchors.fill: parent
                                                             source: modelData.image || ""
+                                                            sourceSize: Qt.size(160, 160)
+                                                            asynchronous: true
+                                                            cache: false
                                                             fillMode: Image.PreserveAspectCrop
                                                         }
                                                     }
