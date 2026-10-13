@@ -970,10 +970,18 @@ def main():
 
     try:
         from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
-        from PySide6.QtGui import QCursor, QAction
+        from PySide6.QtGui import QCursor, QAction, QSurfaceFormat
+        # Request explicit 8-bit alpha channel for Direct3D 11/OpenGL RHI swapchains
+        fmt = QSurfaceFormat.defaultFormat()
+        fmt.setAlphaBufferSize(8)
+        QSurfaceFormat.setDefaultFormat(fmt)
         app = QApplication(sys.argv)
         has_widgets = True
     except Exception:
+        from PySide6.QtGui import QSurfaceFormat
+        fmt = QSurfaceFormat.defaultFormat()
+        fmt.setAlphaBufferSize(8)
+        QSurfaceFormat.setDefaultFormat(fmt)
         app = QGuiApplication(sys.argv)
         has_widgets = False
 
@@ -1150,19 +1158,11 @@ def main():
         tray_icon.activated.connect(_on_tray_activated)
         tray_icon.show()
 
-    # Periodic RAM optimization timer (Runs gc & trims Working Set on Windows every 60s)
+    # Periodic Python GC cleanup (Runs gc.collect() every 60s without touching Win32 WorkingSet)
     def _trim_ram():
         try:
             import gc
             gc.collect()
-            if sys.platform == "win32":
-                import ctypes
-                kernel32 = ctypes.windll.kernel32
-                psapi = ctypes.windll.psapi
-                kernel32.GetCurrentProcess.restype = ctypes.c_void_p
-                psapi.EmptyWorkingSet.argtypes = [ctypes.c_void_p]
-                psapi.EmptyWorkingSet.restype = ctypes.c_bool
-                psapi.EmptyWorkingSet(kernel32.GetCurrentProcess())
         except Exception:
             pass
 
@@ -1170,7 +1170,6 @@ def main():
     mem_timer.setInterval(60000)
     mem_timer.timeout.connect(_trim_ram)
     mem_timer.start()
-    QTimer.singleShot(8000, _trim_ram)
 
     sys.exit(app.exec())
 
