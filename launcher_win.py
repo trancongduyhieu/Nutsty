@@ -15,9 +15,97 @@ import ctypes
 from ctypes import wintypes
 from pathlib import Path
 
-# Direct3D 11 backend enables Windows DirectComposition for 100% per-pixel alpha window border transparency
-if sys.platform == "win32" and "QSG_RHI_BACKEND" not in os.environ:
-    os.environ["QSG_RHI_BACKEND"] = "d3d11"
+def _detect_hypervisor_vm():
+    """
+    Multi-tiered detection for VirtualBox and other hypervisors.
+    In VirtualBox, Direct3D 11 backend causes VBoxWddm.sys memory exhaustion
+    and BugCheck 0x10E (VIDEO_MEMORY_MANAGEMENT_INTERNAL). Falling back to
+    OpenGL (Mesa Gallium3D VBoxGL.dll) prevents VM crashes.
+    """
+    if sys.platform != "win32":
+        return False
+    try:
+        import winreg
+
+        reg_access = winreg.KEY_READ | getattr(winreg, "KEY_WOW64_64KEY", 0)
+
+        # Tier 1: Check Kernel Miniport Driver Services
+        # (VBoxWddm, VBoxGuest, VBoxMouse, VBoxVideo, VBoxSF in SYSTEM\CurrentControlSet\Services)
+        vbox_services = ("VBoxWddm", "VBoxGuest", "VBoxMouse", "VBoxVideo", "VBoxSF")
+        for svc in vbox_services:
+            try:
+                k = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, f"SYSTEM\\CurrentControlSet\\Services\\{svc}", 0, reg_access)
+                winreg.CloseKey(k)
+                return True
+            except OSError:
+                pass
+
+        # Tier 2: Enumerate display adapter subkeys under
+        # SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}
+        # (strictly filter for numeric subkeys sub.isdigit() to prevent Access Denied on Properties)
+        display_class_path = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"
+        try:
+            class_key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, display_class_path, 0, reg_access)
+            idx = 0
+            while True:
+                try:
+                    sub_name = winreg.EnumKey(class_key, idx)
+                    idx += 1
+                except OSError:
+                    break
+                if not sub_name.isdigit():
+                    continue
+                try:
+                    sub_key = winreg.OpenKey(class_key, sub_name, 0, reg_access)
+                    for val_name in ("DriverDesc", "ProviderName"):
+                        try:
+                            val, _ = winreg.QueryValueEx(sub_key, val_name)
+                            val_lower = str(val).lower()
+                            if any(target in val_lower for target in ("virtualbox", "innotek", "oracle", "vbox")):
+                                winreg.CloseKey(sub_key)
+                                winreg.CloseKey(class_key)
+                                return True
+                        except OSError:
+                            pass
+                    winreg.CloseKey(sub_key)
+                except OSError:
+                    pass
+            winreg.CloseKey(class_key)
+        except OSError:
+            pass
+
+        # Tier 3: Check BIOS strings
+        # (SystemManufacturer, SystemProductName, BaseBoardManufacturer, etc. in HARDWARE\DESCRIPTION\System\BIOS)
+        try:
+            bios_key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\BIOS", 0, reg_access)
+            bios_targets = ("virtualbox", "innotek", "oracle", "vbox", "qemu", "kvm", "vmware")
+            bios_fields = ("SystemManufacturer", "SystemProductName", "BaseBoardManufacturer", "BaseBoardProduct", "BIOSVendor", "BIOSVersion", "SystemFamily")
+            for val_name in bios_fields:
+                try:
+                    val, _ = winreg.QueryValueEx(bios_key, val_name)
+                    val_lower = str(val).lower()
+                    if any(target in val_lower for target in bios_targets):
+                        winreg.CloseKey(bios_key)
+                        return True
+                except OSError:
+                    pass
+            winreg.CloseKey(bios_key)
+        except OSError:
+            pass
+
+    except Exception:
+        pass
+    return False
+
+
+# Select RHI graphics backend:
+# Direct3D 11 backend enables Windows DirectComposition for 100% per-pixel alpha window border transparency on bare metal.
+# Hypervisors (VirtualBox) crash under D3D11 MultiEffect blur and require OpenGL (Mesa Gallium3D VBoxGL.dll).
+if sys.platform == "win32" and not os.environ.get("QSG_RHI_BACKEND", "").strip():
+    if _detect_hypervisor_vm():
+        os.environ["QSG_RHI_BACKEND"] = "opengl"
+    else:
+        os.environ["QSG_RHI_BACKEND"] = "d3d11"
 
 # Register active launcher instance in sys.modules so background threads (like auth_server) get the active instance
 sys.modules["launcher_win"] = sys.modules[__name__]
@@ -75,6 +163,18 @@ class ThreadLocalStream:
                 return stream.flush()
             except Exception:
                 pass
+
+if sys.platform == "win32":
+    if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+    if sys.stderr and hasattr(sys.stderr, "reconfigure"):
+        try:
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
 
 log_dir = os.path.join(os.environ.get("TEMP", os.path.expanduser("~")), "nutsty")
 log_file_path = os.path.join(log_dir, "launcher.log")
@@ -322,8 +422,8 @@ def request_open_settings(tab: int = 0, mock_update: bool = False):
                                     child.setProperty("visible", True)
                                     if mock_update:
                                         child.setProperty("hasAppUpdate", True)
-                                        child.setProperty("latestVersion", "v1.0.4")
-                                        child.setProperty("appVersion", "1.0.4")
+                                        child.setProperty("latestVersion", "v1.0.4.1")
+                                        child.setProperty("appVersion", "1.0.4.1")
                                         child.setProperty("updateUrl", "https://github.com/trancongduyhieu/FrostifyLocal/releases")
                     sys.stderr.write(f"request_open_settings: found_modal={found_modal}\n")
                 except Exception as e:

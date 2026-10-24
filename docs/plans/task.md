@@ -49,6 +49,11 @@
 | Phase 18: Task 1 - Eliminate 400 MB RAM Leak & VirtualBox DXVK Crash | Completed | Replaced >200 concurrent MultiEffect FBO masks with native clipping Rectangles across HomeFeedView, TrackCard, RoundedImage, PlayerBarBottom; downscaled thumbnail requests from 1200x1200 to 120x120/360x360; gated sleepTimer and modal backdrops on active visibility |
 | Phase 18: Task 2 - Optimize Image Caching & Pixmap Store | Completed | Added cache: false and tuned sourceSize (400x400 for bigCoverImg, 160x160 for songAtmosphereImg, 80x80 for miniCover), dropping Step 4 memory by >110 MB (424 MB -> 313 MB) |
 | Phase 18: Task 3 - Visual Verification & Portable Sync | Completed | Verified 24px concentric rounded corners, Keo 502 frosted dispersion, and clean tab separation (Up Next, Lyrics, Related) via automated screenshots; synced to Nutsty_Windows_Portable_v1.0.4 |
+| Phase 19: Task 1 - Restore Keo 502 Translucent Resin Optics & Edge Chromatic Dispersion (`liquid_glass.frag`) | Completed | Restored outAlpha = glassAlpha * mask * qt_Opacity premultiplied alpha, removed u_tint muddy body mix, recompiled multi-target binary with qsb.exe |
+| Phase 19: Task 2 - Implement Zero-Leak Unified `masterAppSurface` for Live Backdrop Sampling (`shell.qml`) | Completed | Wrapped masterBackdropStack and mainContentBackdrop inside masterAppSurface; pointed PlayerBarBottom, modals, and popovers to masterAppSurface without FBO recursion |
+| Phase 19: Task 3 - Fix Search Shuffle Crash & State Lifecycle (`playback_engine.js`, `CategorizedSearchView.qml`, `shell.qml`) | Completed | Fixed isNowPlayingOpen view disturbance, guarded isTrackDisliked function check, handled empty candidate fallback in XHR, and guarded authServerProc on Windows |
+| Phase 19: Task 4 - Automated Verification & Windows Portable Sync | Completed | Passed verify_codebase.py in 1.3s, verified stable live playback, and synced updated files to Nutsty_Windows_Portable_v1.0.4 |
+
 
 
 

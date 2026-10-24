@@ -115,8 +115,8 @@ Scope {
     property bool toastVisible: false
     property string localApiUrl: "http://127.0.0.1:17890"
     property string notesApiUrl: Quickshell.env("NUTSTY_WORKER_URL") || "http://127.0.0.1:17890"
-    property string appVersion: "1.0.4"
-    property string latestVersion: "1.0.4"
+    property string appVersion: "1.0.4.1"
+    property string latestVersion: "1.0.4.1"
     property bool hasAppUpdate: false
     property bool isCheckingUpdate: false
     property string updateUrl: ""
@@ -546,9 +546,9 @@ Scope {
     Process {
         id: authServerProc
         command: ["python3", "-u", win.appDir + "/backend/auth_server.py"]
-        running: true
+        running: (typeof __NutstyBridge === "undefined")
         onExited: (exitCode, exitStatus) => {
-            if (exitCode !== 0) {
+            if (exitCode !== 0 && typeof __NutstyBridge === "undefined") {
                 restartAuthServerTimer.restart();
             }
         }
@@ -1037,8 +1037,8 @@ Scope {
                                 win.visible = true;
                                 if (res.mock_update) {
                                     win.hasAppUpdate = true;
-                                    win.latestVersion = res.latest_version || "v1.0.4";
-                                    win.appVersion = res.current_version || "1.0.4";
+                                    win.latestVersion = res.latest_version || "v1.0.4.1";
+                                    win.appVersion = res.current_version || "1.0.4.1";
                                     win.updateUrl = res.release_url || "https://github.com/trancongduyhieu/Nutsty/releases";
                                 }
                                 settingsModal.currentTab = (typeof res.tab === "number") ? res.tab : 0;
@@ -1639,10 +1639,18 @@ Scope {
         // 4. Adaptive Dark Scrim:
         //    Preserves high-contrast readability for all text, cards, and buttons.
         // =====================================================================
+        // Master Live Application Surface (Wallpaper + Ambient + Scrolling UI)
+        // Provides the non-recursive live backdrop source for floating overlays:
+        // PlayerBarBottom, Popovers, and Modals.
+        // =====================================================================
         Item {
-            id: masterBackdropStack
+            id: masterAppSurface
             anchors.fill: parent
-            z: 0
+
+            Item {
+                id: masterBackdropStack
+                anchors.fill: parent
+                z: -1000
 
             // 1. Solid dark foundation to completely block background windows/terminals
             Rectangle {
@@ -2349,6 +2357,7 @@ Scope {
             }
         }
     }
+    }
 
         // 2. Floating Liquid Glass Player Bar (Centered Glass Capsule Dock)
         PlayerBarBottom {
@@ -2360,7 +2369,7 @@ Scope {
             Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
             height: 66
             z: 50
-            backgroundSourceItem: masterBackdropStack
+            backgroundSourceItem: masterAppSurface
 
             currentTrack: win.currentTrack
             resolvedSquareImage: win.currentResolvedCover
@@ -2418,7 +2427,7 @@ Scope {
         SettingsModal {
             id: settingsModal
             objectName: "settingsModal"
-            backgroundSourceItem: masterBackdropStack
+            backgroundSourceItem: masterAppSurface
             isLoggedIn: win.isAuthLoggedIn
             accountName: win.authAccountName
             accountThumb: win.currentUserAvatar
@@ -2563,7 +2572,7 @@ Scope {
 
         PostNoteModal {
             id: postNoteModal
-            backgroundSourceItem: masterBackdropStack
+            backgroundSourceItem: masterAppSurface
             currentTrack: win.currentTrack
             resolvedCover: win.currentResolvedCover
             availableTracks: (win.currentTracks && win.currentTracks.length > 0) ? win.currentTracks : (win.browsingTracks && win.browsingTracks.length > 0 ? win.browsingTracks : win.allTracks)
@@ -2622,7 +2631,7 @@ Scope {
 
         UserNoteDetailModal {
             id: userNoteDetailModal
-            backgroundSourceItem: masterBackdropStack
+            backgroundSourceItem: masterAppSurface
             userAvatar: win.currentUserAvatar
             userName: win.authAccountName
 
@@ -2641,7 +2650,7 @@ Scope {
 
         SpotifyImportModal {
             id: spotifyImportModal
-            backgroundSourceItem: masterBackdropStack
+            backgroundSourceItem: masterAppSurface
             accentColor: win.accentColor
             spotifySpdc: win.spotifySpdc
             onCloseRequested: spotifyImportModal.closeModal()
@@ -2691,13 +2700,13 @@ Scope {
             id: downloadPopover
             dlMgr: downloadManager
             accentColor: win.accentColor
-            backgroundSourceItem: masterBackdropStack
+            backgroundSourceItem: masterAppSurface
         }
 
         SleepTimerPopover {
             id: sleepTimerPopover
             accentColor: win.accentColor
-            backgroundSourceItem: masterBackdropStack
+            backgroundSourceItem: masterAppSurface
             targetAnchorItem: bottomPlayer
             isTimerActive: win.isSleepTimerActive
             remainingSeconds: win.sleepTimerRemainingSeconds
@@ -2716,7 +2725,7 @@ Scope {
 
         FriendStoryModal {
             id: friendStoryModal
-            backgroundSourceItem: masterBackdropStack
+            backgroundSourceItem: masterAppSurface
             friendsNotes: win.friendsNotes
             accentColor: win.accentColor
             onListenAlongRequested: friendData => {
@@ -2737,7 +2746,7 @@ Scope {
         PlaylistTrackSearchModal {
             id: playlistTrackSearchModal
             accentColor: win.accentColor
-            backgroundSourceItem: masterBackdropStack
+            backgroundSourceItem: masterAppSurface
             currentTrack: win.currentTrack
             isPlaying: win.isPlaying
             availableTracks: (win.currentTracks && win.currentTracks.length > 0) ? win.currentTracks : win.browsingTracks
@@ -2753,7 +2762,7 @@ Scope {
         CoListenersPopover {
             id: coListenersPopover
             accentColor: win.accentColor
-            backgroundSourceItem: masterBackdropStack
+            backgroundSourceItem: masterAppSurface
             allowControl: win.allowCoListenerControl
             onStopAllRequested: win.stopAllCoListening()
             onKickRequested: (kEmail, kName) => win.kickCoListener(kEmail, kName)
@@ -2763,7 +2772,7 @@ Scope {
         FriendRequestsPopover {
             id: friendRequestsPopover
             accentColor: win.accentColor
-            backgroundSourceItem: masterBackdropStack
+            backgroundSourceItem: masterAppSurface
             onAcceptRequested: (reqId, fromEmail, fromName) => {
                 win.respondFriendRequest(reqId, fromEmail, "accept");
             }
@@ -2775,7 +2784,7 @@ Scope {
         ManageFriendsModal {
             id: manageFriendsModal
             accentColor: win.accentColor
-            backgroundSourceItem: masterBackdropStack
+            backgroundSourceItem: masterAppSurface
             currentUserEmail: win.getCurrentUserEmail()
             currentUserName: win.getCurrentUserName()
             currentUserAvatar: win.getCurrentUserAvatar()
@@ -3951,8 +3960,8 @@ Scope {
         function testUpdatePreview() {
             win.visible = true;
             win.hasAppUpdate = true;
-            win.latestVersion = "v1.0.4";
-            win.appVersion = "1.0.4";
+            win.latestVersion = "v1.0.4.1";
+            win.appVersion = "1.0.4.1";
             win.updateUrl = "https://github.com/trancongduyhieu/Nutsty/releases";
             settingsModal.currentTab = 0;
             settingsModal.visible = true;
@@ -4034,12 +4043,12 @@ Scope {
             win.currentTracks = testTracks;
             win.currentTrack = testTracks[0];
             win.isPlaying = true;
-            nowPlayingView.activeTab = "up_next";
+            if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) ytNowPlayingView.activeTab = "up_next";
         }
         function setNowPlayingTab(tab: string) {
             win.visible = true;
             win.isNowPlayingOpen = true;
-            nowPlayingView.activeTab = tab || "up_next";
+            if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) ytNowPlayingView.activeTab = tab || "up_next";
         }
         function expandSpotifySettings() {
             settingsModal.currentTab = 0;

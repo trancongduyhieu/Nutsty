@@ -65,6 +65,7 @@ jobs:
         shell: pwsh
         run: |
           if (Test-Path "start.bat") { Copy-Item "start.bat" -Destination "dist\Nutsty\" }
+          if (Test-Path "Nutsty_SafeMode_OpenGL.bat") { Copy-Item "Nutsty_SafeMode_OpenGL.bat" -Destination "dist\Nutsty\" }
           if (Test-Path "run_debug.bat") { Copy-Item "run_debug.bat" -Destination "dist\Nutsty\" }
           if (Test-Path "bin") {
             New-Item -ItemType Directory -Force -Path "dist\Nutsty\bin"

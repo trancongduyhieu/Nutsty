@@ -1559,17 +1559,21 @@ Rectangle {
                                                             anchors.fill: parent
                                                             cursorShape: Qt.PointingHandCursor
                                                             onClicked: {
-                                                                if (topResultUnifiedCard.isArtist) {
-                                                                    var allSongs = (searchRoot.songsFilterItems && searchRoot.songsFilterItems.length > 0)
-                                                                                  ? searchRoot.songsFilterItems
-                                                                                  : ((searchRoot.searchData && searchRoot.searchData.songs && searchRoot.searchData.songs.length > 0)
-                                                                                     ? searchRoot.searchData.songs
-                                                                                     : ((topResultUnifiedCard.topItem && topResultUnifiedCard.topItem.top_tracks) ? topResultUnifiedCard.topItem.top_tracks : []));
-                                                                    searchRoot.artistShuffleRequested(topResultUnifiedCard.topItem, allSongs);
-                                                                } else if (topResultUnifiedCard.isAlbum) {
-                                                                    searchRoot.albumSelected(topResultUnifiedCard.topItem);
-                                                                } else {
-                                                                    searchRoot.trackPlayRequested(topResultUnifiedCard.topItem);
+                                                                try {
+                                                                    if (topResultUnifiedCard.isArtist && topResultUnifiedCard.topItem) {
+                                                                        var allSongs = (searchRoot.songsFilterItems && Array.isArray(searchRoot.songsFilterItems) && searchRoot.songsFilterItems.length > 0)
+                                                                                      ? searchRoot.songsFilterItems
+                                                                                      : ((searchRoot.searchData && searchRoot.searchData.songs && Array.isArray(searchRoot.searchData.songs) && searchRoot.searchData.songs.length > 0)
+                                                                                         ? searchRoot.searchData.songs
+                                                                                         : ((topResultUnifiedCard.topItem && topResultUnifiedCard.topItem.top_tracks && Array.isArray(topResultUnifiedCard.topItem.top_tracks)) ? topResultUnifiedCard.topItem.top_tracks : []));
+                                                                        searchRoot.artistShuffleRequested(topResultUnifiedCard.topItem, allSongs);
+                                                                    } else if (topResultUnifiedCard.isAlbum && topResultUnifiedCard.topItem) {
+                                                                        searchRoot.albumSelected(topResultUnifiedCard.topItem);
+                                                                    } else if (topResultUnifiedCard.topItem) {
+                                                                        searchRoot.trackPlayRequested(topResultUnifiedCard.topItem);
+                                                                    }
+                                                                } catch (e) {
+                                                                    console.warn("Nutsty: search shuffle error", e);
                                                                 }
                                                             }
                                                         }

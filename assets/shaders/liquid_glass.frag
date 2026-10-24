@@ -159,13 +159,15 @@ void main() {
     // =========================================================================
     float rimProfile = smoothstep(2.5, 0.3, distInside);
     vec3 organicRim = mix(u_tint.rgb * 1.15 + vec3(0.04), diffusingSongColor, 0.45);
-    
-    // Tone curve: preserve deep contrast for white text while keeping highlights and chromatic dispersion glowing
-    vec3 glassBody = mix(tintedKeo, u_tint.rgb, clamp(u_tint.a, 0.15, 0.38));
-    vec3 finalColor = mix(glassBody, organicRim, rimProfile * 0.38) + vec3(keo502Gloss);
+    vec3 finalColor = mix(tintedKeo, organicRim, rimProfile * 0.35) + vec3(keo502Gloss);
     finalColor = clamp(finalColor, 0.0, 1.0);
     
-    // Smooth anti-aliased edge mask with 100% optical presence inside the rounded capsule
-    float outAlpha = mask * qt_Opacity;
+    // Translucency of liquid resin: lets underlying cards and wallpaper breathe
+    float baseAlpha = clamp(max(u_tint.a, 0.28), 0.28, 0.52);
+    float glassAlpha = mix(baseAlpha, 0.55, u_flowActive * 0.25);
+    
+    // Strict Premultiplied Alpha: RGB = finalColor * outAlpha, A = outAlpha
+    // Smoothly falls to 0 at the rounded corners (mask == 0) with zero clipping artifacts
+    float outAlpha = glassAlpha * mask * qt_Opacity;
     fragColor = vec4(finalColor * outAlpha, outAlpha);
 }

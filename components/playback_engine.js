@@ -811,84 +811,113 @@ function playFriendTrack(win, trk) {
 
 function playArtistShuffle(win, artistItem, candidateTracks) {
     if (!artistItem) return;
-    if (win.listeningAlongFriend && !win.isSyncingFromFriend && !win.guestCanControlHost) {
-        win.showToast(I18n.tr("Host đã khóa quyền chuyển bài hát", "Host disabled track skipping"));
-        return;
-    }
-    var aName = artistItem.name || artistItem.title || artistItem.artist || "";
-    var bId = artistItem.browseId || artistItem.channelId || "";
-    win.mainSectionTitle = aName;
-
-    var pool = [];
-    if (candidateTracks && Array.isArray(candidateTracks) && candidateTracks.length > 0) {
-        pool = candidateTracks.slice();
-    } else if (artistItem.top_tracks && Array.isArray(artistItem.top_tracks) && artistItem.top_tracks.length > 0) {
-        pool = artistItem.top_tracks.slice();
-    } else if (artistItem.popular && Array.isArray(artistItem.popular) && artistItem.popular.length > 0) {
-        pool = artistItem.popular.slice();
-    }
-
-    pool = pool.filter(function(t) {
-        if (!t) return false;
-        var vid = t.videoId || (t.path && t.path.startsWith("ytdl://") ? t.path.replace("ytdl://", "") : "");
-        return (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) ? !ytNowPlayingView.isTrackDisliked(vid) : true;
-    });
-
-    if (pool.length > 0) {
-        var randIdx = Math.floor(Math.random() * pool.length);
-        var chosen = pool[randIdx];
-        var rest = pool.filter(function(_, idx) { return idx !== randIdx; });
-        for (var i = rest.length - 1; i > 0; i--) {
-            var j = Math.floor(Math.random() * (i + 1));
-            var tmp = rest[i];
-            rest[i] = rest[j];
-            rest[j] = tmp;
+    try {
+        if (win.listeningAlongFriend && !win.isSyncingFromFriend && !win.guestCanControlHost) {
+            win.showToast(I18n.tr("Host đã khóa quyền chuyển bài hát", "Host disabled track skipping"));
+            return;
         }
-        win.currentTracks = [chosen].concat(rest);
-        win.playingPlaylistId = "";
-        win.playingSourceTitle = aName;
-        win.playOnlineTrack(chosen, false);
-    }
+        var aName = artistItem.name || artistItem.title || artistItem.artist || "";
+        var bId = artistItem.browseId || artistItem.channelId || "";
+        win.mainSectionTitle = aName;
 
-    win.isNowPlayingOpen = true;
-    if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) {
-        ytNowPlayingView.activeTab = "up_next";
-    }
-
-    var xhr = new XMLHttpRequest();
-    var url = "http://127.0.0.1:17890/api/artist_shuffle?name=" + encodeURIComponent(aName) + "&browseId=" + encodeURIComponent(bId);
-    xhr.open("GET", url, true);
-    xhr.onreadystatechange = function() {
-        if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
+        function _isDisliked(vid) {
+            if (!vid) return false;
             try {
-                var res = JSON.parse(xhr.responseText);
-                var fullTracks = (res && res.tracks) ? res.tracks : (Array.isArray(res) ? res : []);
-                if (fullTracks && fullTracks.length > 0) {
-                    var cur = win.currentTrack;
-                    if (cur) {
-                        var curVid = cur.videoId || (cur.path && cur.path.startsWith("ytdl://") ? cur.path.replace("ytdl://", "") : "");
-                        var filtered = fullTracks.filter(function(t) {
-                            if (!t) return false;
-                            var tVid = t.videoId || (t.path && t.path.startsWith("ytdl://") ? t.path.replace("ytdl://", "") : "");
-                            if (curVid && tVid && curVid === tVid) return false;
-                            return (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) ? !ytNowPlayingView.isTrackDisliked(tVid) : true;
-                        });
-                        win.currentTracks = [cur].concat(filtered);
-                    } else {
-                        var rIdx = Math.floor(Math.random() * fullTracks.length);
-                        var ch = fullTracks[rIdx];
-                        var rRest = fullTracks.filter(function(_, idx) { return idx !== rIdx; });
-                        win.currentTracks = [ch].concat(rRest);
-                        win.playingPlaylistId = "";
-                        win.playOnlineTrack(ch, false);
-                    }
+                if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView && typeof ytNowPlayingView.isTrackDisliked === "function") {
+                    return ytNowPlayingView.isTrackDisliked(vid);
                 }
-            } catch (e) {
-                console.warn("Nutsty: parse error in artist_shuffle", e);
-            }
+            } catch (e) {}
+            return false;
         }
-    };
-    xhr.send();
+
+        var pool = [];
+        if (candidateTracks && Array.isArray(candidateTracks) && candidateTracks.length > 0) {
+            pool = candidateTracks.slice();
+        } else if (artistItem.top_tracks && Array.isArray(artistItem.top_tracks) && artistItem.top_tracks.length > 0) {
+            pool = artistItem.top_tracks.slice();
+        } else if (artistItem.popular && Array.isArray(artistItem.popular) && artistItem.popular.length > 0) {
+            pool = artistItem.popular.slice();
+        }
+
+        pool = pool.filter(function(t) {
+            if (!t) return false;
+            var vid = t.videoId || (t.path && t.path.startsWith("ytdl://") ? t.path.replace("ytdl://", "") : "");
+            return !_isDisliked(vid);
+        });
+
+        var hasStartedPlayback = false;
+        if (pool.length > 0) {
+            var randIdx = Math.floor(Math.random() * pool.length);
+            var chosen = pool[randIdx];
+            var rest = pool.filter(function(_, idx) { return idx !== randIdx; });
+            for (var i = rest.length - 1; i > 0; i--) {
+                var j = Math.floor(Math.random() * (i + 1));
+                var tmp = rest[i];
+                rest[i] = rest[j];
+                rest[j] = tmp;
+            }
+            win.currentTracks = [chosen].concat(rest);
+            win.playingPlaylistId = "";
+            win.playingSourceTitle = aName;
+            win.playOnlineTrack(chosen, false);
+            hasStartedPlayback = true;
+        }
+
+        // Keep view context steady: if user is in search, don't force NowPlayingView open
+        if (win.currentView !== "search") {
+            win.isNowPlayingOpen = true;
+            if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) {
+                ytNowPlayingView.activeTab = "up_next";
+            }
+        } else {
+            win.isNowPlayingOpen = false;
+        }
+
+        var xhr = new XMLHttpRequest();
+        var url = "http://127.0.0.1:17890/api/artist_shuffle?name=" + encodeURIComponent(aName) + "&browseId=" + encodeURIComponent(bId);
+        xhr.open("GET", url, true);
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
+                try {
+                    var res = JSON.parse(xhr.responseText);
+                    var fullTracks = (res && res.tracks) ? res.tracks : (Array.isArray(res) ? res : []);
+                    if (fullTracks && fullTracks.length > 0) {
+                        if (hasStartedPlayback && win.currentTrack) {
+                            var cur = win.currentTrack;
+                            var curVid = cur.videoId || (cur.path && cur.path.startsWith("ytdl://") ? cur.path.replace("ytdl://", "") : "");
+                            var filtered = fullTracks.filter(function(t) {
+                                if (!t) return false;
+                                var tVid = t.videoId || (t.path && t.path.startsWith("ytdl://") ? t.path.replace("ytdl://", "") : "");
+                                if (curVid && tVid && curVid === tVid) return false;
+                                return !_isDisliked(tVid);
+                            });
+                            win.currentTracks = [cur].concat(filtered);
+                        } else {
+                            // If candidate pool was initially empty, start playback from fullTracks now
+                            var rIdx = Math.floor(Math.random() * fullTracks.length);
+                            var ch = fullTracks[rIdx];
+                            var rRest = fullTracks.filter(function(_, idx) { return idx !== rIdx; });
+                            for (var ri = rRest.length - 1; ri > 0; ri--) {
+                                var rj = Math.floor(Math.random() * (ri + 1));
+                                var rtmp = rRest[ri];
+                                rRest[ri] = rRest[rj];
+                                rRest[rj] = rtmp;
+                            }
+                            win.currentTracks = [ch].concat(rRest);
+                            win.playingPlaylistId = "";
+                            win.playingSourceTitle = aName;
+                            win.playOnlineTrack(ch, false);
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Nutsty: parse error in artist_shuffle", e);
+                }
+            }
+        };
+        xhr.send();
+    } catch (err) {
+        console.warn("Nutsty: playArtistShuffle error", err);
+    }
 }
 
 function addTracksToQueue(win, tracks) {

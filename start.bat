@@ -53,13 +53,81 @@ if not exist "venv\.installed" (
     )
 )
 
+:: Detect VirtualBox hypervisor to prevent WDDM driver crash BugCheck 0x10E
+if "%QSG_RHI_BACKEND%"=="" set "QSG_RHI_BACKEND="
+if not defined QSG_RHI_BACKEND (
+    reg query "HKLM\SYSTEM\CurrentControlSet\Services\VBoxWddm" >nul 2>nul
+    if %errorlevel% equ 0 set "QSG_RHI_BACKEND=opengl"
+)
+if not defined QSG_RHI_BACKEND (
+    reg query "HKLM\SYSTEM\CurrentControlSet\Services\VBoxGuest" >nul 2>nul
+    if %errorlevel% equ 0 set "QSG_RHI_BACKEND=opengl"
+)
+if not defined QSG_RHI_BACKEND (
+    reg query "HKLM\SYSTEM\CurrentControlSet\Services\VBoxVideo" >nul 2>nul
+    if %errorlevel% equ 0 set "QSG_RHI_BACKEND=opengl"
+)
+if not defined QSG_RHI_BACKEND (
+    reg query "HKLM\SYSTEM\CurrentControlSet\Services\VBoxMouse" >nul 2>nul
+    if %errorlevel% equ 0 set "QSG_RHI_BACKEND=opengl"
+)
+if not defined QSG_RHI_BACKEND (
+    reg query "HKLM\HARDWARE\DESCRIPTION\System\BIOS" 2>nul | findstr /i /c:"innotek" /c:"VirtualBox" /c:"Oracle" >nul 2>nul
+    if %errorlevel% equ 0 set "QSG_RHI_BACKEND=opengl"
+)
+if "%QSG_RHI_BACKEND%"=="opengl" (
+    echo [INFO] VirtualBox hypervisor detected: Active QSG_RHI_BACKEND=opengl
+)
+
 :run_app
+if "%QSG_RHI_BACKEND%"=="" set "QSG_RHI_BACKEND="
+if not defined QSG_RHI_BACKEND (
+    reg query "HKLM\SYSTEM\CurrentControlSet\Services\VBoxWddm" >nul 2>nul
+    if %errorlevel% equ 0 set "QSG_RHI_BACKEND=opengl"
+)
+if not defined QSG_RHI_BACKEND (
+    reg query "HKLM\SYSTEM\CurrentControlSet\Services\VBoxGuest" >nul 2>nul
+    if %errorlevel% equ 0 set "QSG_RHI_BACKEND=opengl"
+)
+if not defined QSG_RHI_BACKEND (
+    reg query "HKLM\SYSTEM\CurrentControlSet\Services\VBoxVideo" >nul 2>nul
+    if %errorlevel% equ 0 set "QSG_RHI_BACKEND=opengl"
+)
+if not defined QSG_RHI_BACKEND (
+    reg query "HKLM\SYSTEM\CurrentControlSet\Services\VBoxMouse" >nul 2>nul
+    if %errorlevel% equ 0 set "QSG_RHI_BACKEND=opengl"
+)
+if not defined QSG_RHI_BACKEND (
+    reg query "HKLM\HARDWARE\DESCRIPTION\System\BIOS" 2>nul | findstr /i /c:"innotek" /c:"VirtualBox" /c:"Oracle" >nul 2>nul
+    if %errorlevel% equ 0 set "QSG_RHI_BACKEND=opengl"
+)
 echo [3/3] Starting Nutsty...
-python launcher_win.py
+python launcher_win.py %*
 goto end
 
 :run_system
+if "%QSG_RHI_BACKEND%"=="" set "QSG_RHI_BACKEND="
+if not defined QSG_RHI_BACKEND (
+    reg query "HKLM\SYSTEM\CurrentControlSet\Services\VBoxWddm" >nul 2>nul
+    if %errorlevel% equ 0 set "QSG_RHI_BACKEND=opengl"
+)
+if not defined QSG_RHI_BACKEND (
+    reg query "HKLM\SYSTEM\CurrentControlSet\Services\VBoxGuest" >nul 2>nul
+    if %errorlevel% equ 0 set "QSG_RHI_BACKEND=opengl"
+)
+if not defined QSG_RHI_BACKEND (
+    reg query "HKLM\SYSTEM\CurrentControlSet\Services\VBoxVideo" >nul 2>nul
+    if %errorlevel% equ 0 set "QSG_RHI_BACKEND=opengl"
+)
+if not defined QSG_RHI_BACKEND (
+    reg query "HKLM\SYSTEM\CurrentControlSet\Services\VBoxMouse" >nul 2>nul
+    if %errorlevel% equ 0 set "QSG_RHI_BACKEND=opengl"
+)
+if not defined QSG_RHI_BACKEND (
+    reg query "HKLM\HARDWARE\DESCRIPTION\System\BIOS" 2>nul | findstr /i /c:"innotek" /c:"VirtualBox" /c:"Oracle" >nul 2>nul
+    if %errorlevel% equ 0 set "QSG_RHI_BACKEND=opengl"
+)
 pip install -r requirements_win.txt
-python launcher_win.py
+python launcher_win.py %*
 
 :end
