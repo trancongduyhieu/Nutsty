@@ -81,8 +81,8 @@ void main() {
     vec2 pixelStep = 1.0 / u_sourceSize;
     
     // =========================================================================
-    // 2. Water-Clear Refraction & Two-Ring Frosted Blur Dispersion (Keo 502)
-    // 13-tap Poisson-Gaussian Disc Kernel with wide 16px frosted dispersion
+    // 2. Authentic Kyant 7-Band Spectral Dispersion & Frosted Lens Refraction
+    // Replicates Kyant RoundedRectRefractionWithDispersionShader from SimpMusic
     // =========================================================================
     float rWide = 16.0;
     float rMed  = 6.5;
@@ -108,13 +108,28 @@ void main() {
     vec3 bCenter = texture(source, uv).rgb;
     vec3 baseFrosted = bWide * 0.45 + bMed * 0.35 + bCenter * 0.20;
     
-    // Prismatic chromatic dispersion along the curved meniscus edge
-    // Strongest at the curved bevel (circleMap(t) ~ 1.0), zero in the flat center
-    float split = (u_aberration > 0.0 ? u_aberration : 0.03) * 160.0 * circleMap(t);
-    vec3 clearRefraction;
-    clearRefraction.r = texture(source, uv + grad * split * pixelStep).r * 0.45 + baseFrosted.r * 0.55;
-    clearRefraction.g = baseFrosted.g;
-    clearRefraction.b = texture(source, uv - grad * split * pixelStep).b * 0.45 + baseFrosted.b * 0.55;
+    // Kyant Chromatic Aberration & Corner Dispersion Intensity
+    float chromaFactor = u_aberration > 0.0 ? u_aberration : 0.04;
+    float cornerDispersion = chromaFactor * abs(centeredCoord.x * centeredCoord.y) / max(1.0, halfSize.x * halfSize.y);
+    float dispersionAmt = (chromaFactor * 140.0 * circleMap(t) + cornerDispersion * 90.0);
+    vec2 dispOffset = grad * dispersionAmt * pixelStep;
+
+    // 7-Band Spectral Rainbow Refraction (Red -> Orange -> Yellow -> Green -> Cyan -> Blue -> Purple)
+    vec3 cRed    = texture(source, uv + dispOffset).rgb;
+    vec3 cOrange = texture(source, uv + dispOffset * (2.0 / 3.0)).rgb;
+    vec3 cYellow = texture(source, uv + dispOffset * (1.0 / 3.0)).rgb;
+    vec3 cGreen  = texture(source, uv).rgb;
+    vec3 cCyan   = texture(source, uv - dispOffset * (1.0 / 3.0)).rgb;
+    vec3 cBlue   = texture(source, uv - dispOffset * (2.0 / 3.0)).rgb;
+    vec3 cPurple = texture(source, uv - dispOffset).rgb;
+
+    vec3 clearRefraction = vec3(0.0);
+    clearRefraction.r = (cRed.r / 3.5) + (cOrange.r / 3.5) + (cYellow.r / 3.5) + (cPurple.r / 7.0);
+    clearRefraction.g = (cOrange.g / 7.0) + (cYellow.g / 3.5) + (cGreen.g / 3.5) + (cCyan.g / 3.5);
+    clearRefraction.b = (cCyan.b / 3.0) + (cBlue.b / 3.0) + (cPurple.b / 3.0);
+    
+    // Smoothly blend crystal-clear prismatic edge with inner frosted body
+    vec3 refractiveResin = mix(clearRefraction, baseFrosted, smoothstep(2.0, refrHeight, distInside) * 0.60);
     
     // =========================================================================
     // 3. Keo 502 Glossy Meniscus Specular (Sức căng bề mặt & độ bóng trơn dẻo)
@@ -151,8 +166,8 @@ void main() {
     vec3 diffusingSongColor = mix(songColorA, songColorB, fluidPattern);
     
     // Lan màu nhẹ nhàng (~24%), giữ trọn vẹn độ trong veo của keo
-    float tintStrength = 0.24 * clamp(u_flowActive, 0.0, 1.0);
-    vec3 tintedKeo = mix(clearRefraction, diffusingSongColor, tintStrength);
+    float tintStrength = 0.22 * clamp(u_flowActive, 0.0, 1.0);
+    vec3 tintedKeo = mix(refractiveResin, diffusingSongColor, tintStrength);
     
     // =========================================================================
     // 6. Final Composite & Authentic Premultiplied Alpha (Seamless Uniform Liquid Glass)
@@ -162,13 +177,13 @@ void main() {
     vec3 refractionBody = mix(tintedKeo, organicRim, rimProfile * 0.35) + vec3(keo502Gloss);
 
     // SimpMusic Authentic Liquid Glass: Seamless, uniform refractive volume across the whole capsule
-    // A uniform deep smoky undertone (0.22) ensures crisp WCAG AAA contrast without any localized sticker artifacts
-    vec3 finalColor = clamp(mix(refractionBody, vec3(0.04, 0.04, 0.05), 0.22), 0.0, 1.0);
+    // A balanced smoky undertone (0.18) ensures crisp WCAG AAA contrast while preserving liquid resin transparency
+    vec3 finalColor = clamp(mix(refractionBody, vec3(0.04, 0.04, 0.05), 0.18), 0.0, 1.0);
     
-    // Uniform deep occlusion (0.86 - 0.92) across the entire rounded silhouette
-    // Dissolves 90% of underlying scrolling clutter while letting pure aurora bokeh & jewel tone waves refract
-    float baseAlpha = clamp(u_tint.a > 0.0 ? u_tint.a : 0.88, 0.75, 0.95);
-    float glassAlpha = mix(baseAlpha, min(0.96, baseAlpha + 0.05), u_flowActive);
+    // Uniform liquid resin opacity (0.72 - 0.82)
+    // Perfectly reveals underlying scrolling motion with optical refraction while eliminating sharp textual clash
+    float baseAlpha = clamp(u_tint.a > 0.0 ? u_tint.a : 0.76, 0.60, 0.88);
+    float glassAlpha = mix(baseAlpha, min(0.90, baseAlpha + 0.06), u_flowActive);
     
     // Strict Premultiplied Alpha: RGB = finalColor * outAlpha, A = outAlpha
     // Smoothly falls to 0 at the rounded corners (mask == 0) with zero clipping artifacts

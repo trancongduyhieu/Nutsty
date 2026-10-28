@@ -2392,7 +2392,7 @@ Scope {
             Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
             height: 66
             z: 50
-            backgroundSourceItem: masterBackdropStack
+            backgroundSourceItem: mainContentContainer
 
             currentTrack: win.currentTrack
             resolvedSquareImage: win.currentResolvedCover
