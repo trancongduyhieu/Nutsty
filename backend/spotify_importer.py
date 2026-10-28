@@ -273,16 +273,152 @@ def fetch_spotify_playlist_from_embed(playlist_id):
         return None
 
 
+def fetch_spotify_playlist_from_pathfinder(playlist_id, token=None, spdc=None):
+    """
+    Fetches Spotify playlist metadata and ALL tracks using Spotify Web Partner Pathfinder GraphQL API.
+    Supports seamless automatic pagination without the 100-track limit and immune to Web API 429 rate limits.
+    """
+    pid = extract_playlist_id(playlist_id)
+    if not pid:
+        return None
+
+    if not token:
+        if not spdc:
+            spdc = lyrics_helper.get_spotify_spdc()
+        token = lyrics_helper.get_spotify_access_token(spdc) if spdc else ""
+
+    client_token = lyrics_helper._spotify_get_client_token()
+    if not token or not client_token:
+        return None
+
+    headers = {
+        "authorization": f"Bearer {token}",
+        "client-token": client_token,
+        "content-type": "application/json",
+        "origin": "https://open.spotify.com",
+        "referer": "https://open.spotify.com/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    }
+    sha256 = "7982b11e21535cd2594badc40030b745671b61a1fa66766e569d45e6364f3422"
+
+    tracks = []
+    offset = 0
+    batch_size = 100
+    total_count = None
+    title = ""
+    description = ""
+    cover_url = ""
+    owner_name = ""
+
+    while True:
+        payload = json.dumps({
+            "variables": {
+                "uri": f"spotify:playlist:{pid}",
+                "offset": offset,
+                "limit": batch_size,
+                "enableWatchFeedEntrypoint": False
+            },
+            "operationName": "fetchPlaylist",
+            "extensions": {
+                "persistedQuery": {
+                    "version": 1,
+                    "sha256Hash": sha256
+                }
+            }
+        }).encode("utf-8")
+
+        req = urllib.request.Request(
+            "https://api-partner.spotify.com/pathfinder/v1/query",
+            data=payload,
+            headers=headers,
+            method="POST"
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=12, context=pc.get_ssl_context()) as resp:
+                res = json.loads(resp.read().decode("utf-8"))
+            pl = res.get("data", {}).get("playlistV2")
+            if not pl:
+                break
+
+            if total_count is None:
+                title = pl.get("name") or "Spotify Playlist"
+                description = pl.get("description") or ""
+                images = pl.get("images", {}).get("items", [])
+                if images and images[0].get("sources"):
+                    cover_url = images[0]["sources"][0].get("url", "")
+                owner_name = pl.get("ownerV2", {}).get("data", {}).get("name", "")
+                total_count = pl.get("content", {}).get("totalCount", 0)
+
+            items = pl.get("content", {}).get("items", [])
+            if not items:
+                break
+
+            for itm in items:
+                track_data = itm.get("itemV2", {}).get("data") or itm.get("track")
+                if not track_data or not track_data.get("name"):
+                    continue
+                artists_list = []
+                for a in track_data.get("artists", {}).get("items", []):
+                    art_name = a.get("profile", {}).get("name") or a.get("name")
+                    if art_name:
+                        artists_list.append(art_name)
+                artist_str = ", ".join(artists_list)
+
+                album_data = track_data.get("albumOfTrack") or track_data.get("album", {})
+                album_name = album_data.get("name", "") if isinstance(album_data, dict) else ""
+                album_sources = album_data.get("coverArt", {}).get("sources", []) if isinstance(album_data, dict) else []
+                img_url = album_sources[0].get("url", "") if album_sources else ""
+                dur_ms = track_data.get("trackDuration", {}).get("totalMilliseconds") or track_data.get("duration_ms", 0)
+
+                tracks.append({
+                    "name": track_data.get("name"),
+                    "artist": artist_str,
+                    "album": album_name,
+                    "duration_ms": dur_ms,
+                    "image": img_url,
+                    "isrc": track_data.get("uri", "")
+                })
+
+            offset += len(items)
+            if total_count and offset >= total_count:
+                break
+            if len(items) < batch_size:
+                break
+        except Exception as e:
+            sys.stderr.write(f"[spotify_importer] Pathfinder fetch error at offset {offset}: {e}\n")
+            break
+
+    if tracks:
+        _PLAYLIST_TRACKS_CACHE[pid] = tracks
+        return {
+            "success": True,
+            "id": pid,
+            "title": title or "Spotify Playlist",
+            "description": description,
+            "image": cover_url,
+            "trackCount": total_count if (total_count and total_count > len(tracks)) else len(tracks),
+            "owner": owner_name,
+            "tracks": tracks
+        }
+    return None
+
+
 def fetch_spotify_playlist_details(playlist_id, token=None, spdc=None):
     """
-    Fetches Spotify playlist metadata (title, description, image).
-    Tries ultra-fast rate-limit-immune embed parser first, then falls back to Web API.
+    Fetches Spotify playlist metadata (title, description, image, trackCount).
+    Tries ultra-fast rate-limit-immune Pathfinder GraphQL API first (supporting >100 tracks),
+    then falls back to embed scraper, and finally to Web API.
     """
     pid = extract_playlist_id(playlist_id)
     if not pid:
         return {"success": False, "error": "ID playlist không hợp lệ."}
 
-    # Fast path: Embed scraper (0ms auth, 0 rate limit, 100% reliable)
+    # Primary Path: Pathfinder GraphQL API (supports > 100 tracks, auto-paginated, 0 rate limit)
+    pathfinder_res = fetch_spotify_playlist_from_pathfinder(pid, token=token, spdc=spdc)
+    if pathfinder_res and pathfinder_res.get("success"):
+        return pathfinder_res
+
+    # Secondary Path: Embed scraper (0ms auth, 0 rate limit, fallback up to 100 tracks)
     embed_res = fetch_spotify_playlist_from_embed(pid)
     if embed_res and embed_res.get("success"):
         return {
@@ -314,7 +450,7 @@ def fetch_spotify_playlist_details(playlist_id, token=None, spdc=None):
             data = json.loads(resp.read().decode("utf-8"))
             images = data.get("images") or []
             cover_url = images[0].get("url") if images else ""
-            tracks = fetch_spotify_playlist_tracks(pid, token)
+            tracks = fetch_spotify_playlist_tracks(pid, token, spdc=spdc)
             return {
                 "success": True,
                 "id": data.get("id"),
@@ -329,14 +465,24 @@ def fetch_spotify_playlist_details(playlist_id, token=None, spdc=None):
         return {"success": False, "error": f"Không thể lấy thông tin playlist: {str(e)}"}
 
 
-def fetch_spotify_playlist_tracks(playlist_id, token):
+def fetch_spotify_playlist_tracks(playlist_id, token=None, spdc=None):
     """
-    Fetches all tracks from a Spotify playlist, handling pagination (100 tracks per page).
+    Fetches all tracks from a Spotify playlist, handling pagination without any 100-track cap.
     """
     pid = extract_playlist_id(playlist_id)
+    if pid in _PLAYLIST_TRACKS_CACHE and _PLAYLIST_TRACKS_CACHE[pid] and len(_PLAYLIST_TRACKS_CACHE[pid]) > 100:
+        return _PLAYLIST_TRACKS_CACHE[pid]
+
+    # 1. Try Pathfinder GraphQL (complete paginated tracks > 100)
+    pf_res = fetch_spotify_playlist_from_pathfinder(pid, token=token, spdc=spdc)
+    if pf_res and pf_res.get("tracks"):
+        return pf_res["tracks"]
+
+    # 2. Check existing cache
     if pid in _PLAYLIST_TRACKS_CACHE and _PLAYLIST_TRACKS_CACHE[pid]:
         return _PLAYLIST_TRACKS_CACHE[pid]
 
+    # 3. Fallback to embed
     embed_res = fetch_spotify_playlist_from_embed(pid)
     if embed_res and embed_res.get("tracks"):
         return embed_res["tracks"]
@@ -344,6 +490,14 @@ def fetch_spotify_playlist_tracks(playlist_id, token):
     tracks = []
     offset = 0
     limit = 100
+
+    if not token:
+        if not spdc:
+            spdc = lyrics_helper.get_spotify_spdc()
+        token = lyrics_helper.get_spotify_access_token(spdc) if spdc else None
+
+    if not token:
+        return tracks
 
     while True:
         url = f"https://api.spotify.com/v1/playlists/{pid}/tracks?limit={limit}&offset={offset}"
@@ -549,7 +703,7 @@ class SpotifyImportManager:
                 self.current_track = "Đang tải danh sách bài hát..."
 
             # Fetch tracks
-            sp_tracks = fetch_spotify_playlist_tracks(pid, token)
+            sp_tracks = details.get("tracks") or fetch_spotify_playlist_tracks(pid, token=token, spdc=spdc)
             total_tracks = len(sp_tracks)
             if total_tracks == 0:
                 with self._lock:

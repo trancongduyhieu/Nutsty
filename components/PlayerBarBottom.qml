@@ -60,8 +60,15 @@ Item {
         return m + ":" + (s < 10 ? "0" : "") + s;
     }
 
-    // Outer Multi-tier Depth Glow & Hairline Foundation
-
+    // Outer Ambient Glow & Soft Drop Shadow for Floating Capsule Elevation
+    Rectangle {
+        anchors.fill: parent
+        anchors.topMargin: 3
+        anchors.bottomMargin: -3
+        radius: root.radius + 1
+        color: Qt.rgba(0.0, 0.0, 0.0, 0.40)
+        z: 0
+    }
 
     // Liquid Glass Capsule Container (SimpMusic Rounded Corner 16dp)
     LiquidGlass {
@@ -71,7 +78,7 @@ Item {
         displacement: 18.0
         aberration: 0.03
         bevelWidth: 24.0
-        tintColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18)
+        tintColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
         backgroundSourceItem: root.backgroundSourceItem
         isFlowActive: root.isPlaying && root.currentTrack !== null
         z: 2
@@ -81,7 +88,7 @@ Item {
             anchors.fill: parent
             radius: root.radius
             color: "transparent"
-            border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
+            border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.30)
             border.width: 1
             z: 20
             Behavior on border.color { ColorAnimation { duration: 250 } }

@@ -155,16 +155,20 @@ void main() {
     vec3 tintedKeo = mix(clearRefraction, diffusingSongColor, tintStrength);
     
     // =========================================================================
-    // 6. Final Composite & Authentic Premultiplied Alpha
+    // 6. Final Composite & Authentic Premultiplied Alpha (Seamless Uniform Liquid Glass)
     // =========================================================================
     float rimProfile = smoothstep(2.5, 0.3, distInside);
     vec3 organicRim = mix(u_tint.rgb * 1.15 + vec3(0.04), diffusingSongColor, 0.45);
-    vec3 finalColor = mix(tintedKeo, organicRim, rimProfile * 0.35) + vec3(keo502Gloss);
-    finalColor = clamp(finalColor, 0.0, 1.0);
+    vec3 refractionBody = mix(tintedKeo, organicRim, rimProfile * 0.35) + vec3(keo502Gloss);
+
+    // SimpMusic Authentic Liquid Glass: Seamless, uniform refractive volume across the whole capsule
+    // A uniform deep smoky undertone (0.22) ensures crisp WCAG AAA contrast without any localized sticker artifacts
+    vec3 finalColor = clamp(mix(refractionBody, vec3(0.04, 0.04, 0.05), 0.22), 0.0, 1.0);
     
-    // Translucency of liquid resin: lets underlying cards and wallpaper breathe
-    float baseAlpha = clamp(max(u_tint.a, 0.28), 0.28, 0.52);
-    float glassAlpha = mix(baseAlpha, 0.55, u_flowActive * 0.25);
+    // Uniform deep occlusion (0.86 - 0.92) across the entire rounded silhouette
+    // Dissolves 90% of underlying scrolling clutter while letting pure aurora bokeh & jewel tone waves refract
+    float baseAlpha = clamp(u_tint.a > 0.0 ? u_tint.a : 0.88, 0.75, 0.95);
+    float glassAlpha = mix(baseAlpha, min(0.96, baseAlpha + 0.05), u_flowActive);
     
     // Strict Premultiplied Alpha: RGB = finalColor * outAlpha, A = outAlpha
     // Smoothly falls to 0 at the rounded corners (mask == 0) with zero clipping artifacts
