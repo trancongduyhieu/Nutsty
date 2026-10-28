@@ -599,32 +599,16 @@ Rectangle {
                         color: Qt.rgba(1, 1, 1, 0.04)
                         border.color: Qt.rgba(1, 1, 1, 0.10)
                         border.width: 1
-                        clip: true
 
-                        Image {
+                        RoundedImage {
                             id: mainCover
                             anchors.fill: parent
+                            radius: 16
                             source: root.track && root.track.image ? root.track.image : ""
                             fillMode: Image.PreserveAspectCrop
-                            visible: status === Image.Ready
+                            autoCropBlackBars: true
                             asynchronous: true
-                        }
-
-                        Rectangle {
-                            anchors.fill: parent
-                            visible: !mainCover.visible
-                            gradient: Gradient {
-                                GradientStop { position: 0.0; color: "#2d2d3a" }
-                                GradientStop { position: 1.0; color: "#141418" }
-                            }
-                            Text {
-                                anchors.centerIn: parent
-                                text: root.track && root.track.artist ? root.track.artist.charAt(0).toUpperCase() : "A"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 72
-                                font.bold: true
-                                color: "#444455"
-                            }
+                            initialsText: root.track && root.track.artist ? root.track.artist : "A"
                         }
                     }
 

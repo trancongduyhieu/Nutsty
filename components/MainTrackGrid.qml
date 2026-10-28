@@ -176,57 +176,21 @@ Rectangle {
                         Layout.preferredWidth: 160
                         Layout.preferredHeight: 160
 
-                        Rectangle {
-                            id: albumHeroMask
+                        RoundedImage {
+                            id: albumHeroCover
                             anchors.fill: parent
                             radius: 8
-                            color: "#ffffff"
-                            visible: false
-                            layer.enabled: true
-                        }
-
-                        Item {
-                            anchors.fill: parent
-                            layer.enabled: true
-                            layer.effect: MultiEffect {
-                                maskEnabled: true
-                                maskSource: albumHeroMask
-                                autoPaddingEnabled: false
+                            source: {
+                                if (!root.albumMetadata || !root.albumMetadata.image) return "";
+                                var s = root.albumMetadata.image;
+                                return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
                             }
-
-                            Rectangle {
-                                anchors.fill: parent
-                                color: "#242424"
-                            }
-
-                            Image {
-                                id: albumHeroCover
-                                anchors.fill: parent
-                                source: {
-                                    if (!root.albumMetadata || !root.albumMetadata.image) return "";
-                                    var s = root.albumMetadata.image;
-                                    return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
-                                }
-                                fillMode: Image.PreserveAspectCrop
-                                scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.25)) ? 1.48 : 1.0
-                                transformOrigin: Item.Center
-                                asynchronous: true
-                            }
-
-                            Rectangle {
-                                anchors.fill: parent
-                                visible: !albumHeroCover.visible || albumHeroCover.status !== Image.Ready
-                                gradient: Gradient {
-                                    GradientStop { position: 0.0; color: "#3a2255" }
-                                    GradientStop { position: 1.0; color: "#1a1a1a" }
-                                }
-                                AppIcon {
-                                    anchors.centerIn: parent
-                                    source: "../assets/icons/media-optical-audio-symbolic.svg"
-                                    iconSize: 54
-                                    color: Qt.rgba(1, 1, 1, 0.25)
-                                }
-                            }
+                            fillMode: Image.PreserveAspectCrop
+                            autoCropBlackBars: true
+                            asynchronous: true
+                            fallbackIcon: "../assets/icons/media-optical-audio-symbolic.svg"
+                            fallbackIconSize: 54
+                            fallbackIconColor: Qt.rgba(1, 1, 1, 0.25)
                         }
 
                         // 1px Hairline Border Overlay
@@ -1425,60 +1389,22 @@ Rectangle {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: width
 
-                                    Rectangle {
-                                        id: favImgMask
+                                    RoundedImage {
+                                        id: favImg
                                         anchors.fill: parent
                                         radius: 10
-                                        color: "#ffffff"
-                                        visible: false
-                                        layer.enabled: true
-                                    }
-
-                                    Item {
-                                        anchors.fill: parent
-                                        layer.enabled: true
-                                        layer.effect: MultiEffect {
-                                            maskEnabled: true
-                                            maskSource: favImgMask
-                                            autoPaddingEnabled: false
+                                        source: {
+                                            if (!modelData) return "";
+                                            var s = modelData.image || modelData.thumbnail || "";
+                                            return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
                                         }
-
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            color: "#202024"
-                                            visible: !favImg.visible || favImg.status !== Image.Ready
-                                        }
-
-                                        Image {
-                                            id: favImg
-                                            anchors.fill: parent
-                                            source: {
-                                                if (!modelData) return "";
-                                                var s = modelData.image || modelData.thumbnail || "";
-                                                return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
-                                            }
-                                            fillMode: Image.PreserveAspectCrop
-                                            scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.25)) ? 1.48 : 1.0
-                                            transformOrigin: Item.Center
-                                            asynchronous: true
-                                            visible: status === Image.Ready
-                                            sourceSize: Qt.size(360, 360)
-                                        }
-
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            visible: !favImg.visible || favImg.status !== Image.Ready
-                                            gradient: Gradient {
-                                                GradientStop { position: 0.0; color: "#2e1065" }
-                                                GradientStop { position: 1.0; color: "#18181b" }
-                                            }
-                                            AppIcon {
-                                                anchors.centerIn: parent
-                                                source: "../assets/icons/emblem-favorite-symbolic.svg"
-                                                iconSize: 42
-                                                color: root.accentColor
-                                            }
-                                        }
+                                        fillMode: Image.PreserveAspectCrop
+                                        autoCropBlackBars: true
+                                        sourceSize: Qt.size(360, 360)
+                                        asynchronous: true
+                                        fallbackIcon: "../assets/icons/emblem-favorite-symbolic.svg"
+                                        fallbackIconSize: 42
+                                        fallbackIconColor: root.accentColor
                                     }
 
                                     // 1px Hairline Border Overlay
@@ -1759,53 +1685,21 @@ Rectangle {
                                     height: 42
                                     Layout.alignment: Qt.AlignVCenter
 
-                                    Rectangle {
-                                        id: dlArtMask
+                                    RoundedImage {
+                                        id: dlArtImg
                                         anchors.fill: parent
                                         radius: 6
-                                        color: "#ffffff"
-                                        visible: false
-                                        layer.enabled: true
-                                    }
-
-                                    Item {
-                                        anchors.fill: parent
-                                        layer.enabled: true
-                                        layer.effect: MultiEffect {
-                                            maskEnabled: true
-                                            maskSource: dlArtMask
-                                            autoPaddingEnabled: false
+                                        source: {
+                                            if (!modelData || !modelData.image) return "";
+                                            var s = modelData.image;
+                                            return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
                                         }
-
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            color: "#202024"
-                                            visible: !dlArtImg.visible || dlArtImg.status !== Image.Ready
-                                        }
-
-                                        Image {
-                                            id: dlArtImg
-                                            anchors.fill: parent
-                                            source: {
-                                                if (!modelData || !modelData.image) return "";
-                                                var s = modelData.image;
-                                                return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
-                                            }
-                                            fillMode: Image.PreserveAspectCrop
-                                            scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.25)) ? 1.48 : 1.0
-                                            transformOrigin: Item.Center
-                                            sourceSize: Qt.size(88, 88)
-                                            asynchronous: true
-                                            visible: status === Image.Ready
-                                        }
-
-                                        AppIcon {
-                                            anchors.centerIn: parent
-                                            visible: !dlArtImg.visible || dlArtImg.status !== Image.Ready
-                                            source: "../assets/icons/media-optical-audio-symbolic.svg"
-                                            iconSize: 20
-                                            color: Qt.rgba(1, 1, 1, 0.25)
-                                        }
+                                        fillMode: Image.PreserveAspectCrop
+                                        autoCropBlackBars: true
+                                        sourceSize: Qt.size(88, 88)
+                                        asynchronous: true
+                                        fallbackIcon: "../assets/icons/media-optical-audio-symbolic.svg"
+                                        fallbackIconSize: 20
                                     }
 
                                     // 1px Hairline Border Overlay on top of image (matching Home)

@@ -105,53 +105,31 @@ Item {
                 Layout.preferredWidth: 38
                 Layout.preferredHeight: 38
 
-                Rectangle {
+                RoundedImage {
+                    id: miniCover
                     anchors.fill: parent
                     radius: 8
-                    color: "#222222"
-                    clip: true
-
-                    Image {
-                        id: miniCover
-                        anchors.fill: parent
-                        source: {
-                            if (root.resolvedSquareImage !== "" && !root.squareFailed) {
-                                var r = root.resolvedSquareImage;
-                                return (r.startsWith("/") && !r.startsWith("file://")) ? ("file://" + r) : r;
-                            }
-                            if (!root.currentTrack) return "";
-                            var s = root.currentTrack.image || root.currentTrack.artUrl || root.currentTrack.cover || root.currentTrack.thumbnail || "";
-                            if (!s && root.currentTrack.videoId) {
-                                s = "https://i.ytimg.com/vi/" + root.currentTrack.videoId + "/hqdefault.jpg";
-                            }
-                            if (s.indexOf("i.ytimg.com") !== -1) s = s.split("?")[0];
-                            return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
+                    source: {
+                        if (root.resolvedSquareImage !== "" && !root.squareFailed) {
+                            var r = root.resolvedSquareImage;
+                            return (r.startsWith("/") && !r.startsWith("file://")) ? ("file://" + r) : r;
                         }
-                        asynchronous: true
-                        cache: false
-                        sourceSize: Qt.size(80, 80)
-                        fillMode: Image.PreserveAspectCrop
-                        scale: ((root.resolvedSquareImage !== "" && !root.squareFailed) || (implicitWidth > 0 && Math.abs(implicitWidth - implicitHeight) < 20))
-                               ? 1.0
-                               : ((implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0)
-                        transformOrigin: Item.Center
-                        visible: status === Image.Ready
-                        onStatusChanged: {
-                            if (status === Image.Error && root.resolvedSquareImage !== "" && !root.squareFailed) {
-                                root.squareFailed = true;
-                            }
+                        if (!root.currentTrack) return "";
+                        var s = root.currentTrack.image || root.currentTrack.artUrl || root.currentTrack.cover || root.currentTrack.thumbnail || "";
+                        if (!s && root.currentTrack.videoId) {
+                            s = "https://i.ytimg.com/vi/" + root.currentTrack.videoId + "/hqdefault.jpg";
                         }
+                        if (s.indexOf("i.ytimg.com") !== -1) s = s.split("?")[0];
+                        return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
                     }
-
-                    Rectangle {
-                        anchors.fill: parent
-                        visible: !miniCover.visible
-                        color: "#282828"
-                        AppIcon {
-                            anchors.centerIn: parent
-                            source: "../assets/icons/folder-music-symbolic.svg"
-                            iconSize: 18
-                            color: Theme.textSecondary
+                    fillMode: Image.PreserveAspectCrop
+                    autoCropBlackBars: true
+                    sourceSize: Qt.size(80, 80)
+                    fallbackIcon: "../assets/icons/folder-music-symbolic.svg"
+                    fallbackIconSize: 18
+                    onStatusChanged: {
+                        if (status === Image.Error && root.resolvedSquareImage !== "" && !root.squareFailed) {
+                            root.squareFailed = true;
                         }
                     }
                 }

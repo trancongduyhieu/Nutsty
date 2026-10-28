@@ -106,30 +106,15 @@ Item {
                             }
                         }
 
-                        Image {
+                        RoundedImage {
                             id: heroAvatar
                             anchors.fill: parent
+                            radius: 70
                             source: (root.artistData && root.artistData.metadata && root.artistData.metadata.image) ? root.artistData.metadata.image : ""
                             fillMode: Image.PreserveAspectCrop
+                            sourceSize: Qt.size(280, 280)
                             asynchronous: true
-                            visible: false
-                        }
-
-                        Rectangle {
-                            id: heroAvatarMask
-                            anchors.fill: parent
-                            radius: 70
-                            color: "#000000"
-                            visible: false
-                            layer.enabled: true
-                        }
-
-                        MultiEffect {
-                            anchors.fill: parent
-                            source: heroAvatar
-                            maskEnabled: true
-                            maskSource: heroAvatarMask
-                            visible: heroAvatar.status === Image.Ready
+                            initialsText: (root.artistData && root.artistData.metadata && root.artistData.metadata.name) ? root.artistData.metadata.name : "A"
                         }
 
                         // Border ring
@@ -421,40 +406,15 @@ Item {
                                     Layout.preferredWidth: 42
                                     Layout.preferredHeight: 42
 
-                                    Rectangle {
-                                        id: artRowMask
+                                    RoundedImage {
+                                        id: artRowImg
                                         anchors.fill: parent
                                         radius: 6
-                                        color: "#ffffff"
-                                        visible: false
-                                        layer.enabled: true
-                                    }
-
-                                    Item {
-                                        anchors.fill: parent
-                                        layer.enabled: true
-                                        layer.effect: MultiEffect {
-                                            maskEnabled: true
-                                            maskSource: artRowMask
-                                            autoPaddingEnabled: false
-                                        }
-
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            color: "#202024"
-                                            visible: !artRowImg.visible || artRowImg.status !== Image.Ready
-                                        }
-
-                                        Image {
-                                            id: artRowImg
-                                            anchors.fill: parent
-                                            source: modelData.image || ""
-                                            fillMode: Image.PreserveAspectCrop
-                                            scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
-                                            transformOrigin: Item.Center
-                                            asynchronous: true
-                                            visible: status === Image.Ready
-                                        }
+                                        source: modelData.image || ""
+                                        fillMode: Image.PreserveAspectCrop
+                                        autoCropBlackBars: true
+                                        sourceSize: Qt.size(84, 84)
+                                        asynchronous: true
                                     }
                                 }
 
@@ -560,40 +520,15 @@ Item {
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: width
 
-                                        Rectangle {
-                                            id: albCoverMask
+                                        RoundedImage {
+                                            id: albCoverImg
                                             anchors.fill: parent
                                             radius: 7
-                                            color: "#ffffff"
-                                            visible: false
-                                            layer.enabled: true
-                                        }
-
-                                        Item {
-                                            anchors.fill: parent
-                                            layer.enabled: true
-                                            layer.effect: MultiEffect {
-                                                maskEnabled: true
-                                                maskSource: albCoverMask
-                                                autoPaddingEnabled: false
-                                            }
-
-                                            Rectangle {
-                                                anchors.fill: parent
-                                                color: "#202024"
-                                                visible: !albCoverImg.visible || albCoverImg.status !== Image.Ready
-                                            }
-
-                                            Image {
-                                                id: albCoverImg
-                                                anchors.fill: parent
-                                                source: modelData.image || ""
-                                                fillMode: Image.PreserveAspectCrop
-                                                scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
-                                                transformOrigin: Item.Center
-                                                asynchronous: true
-                                                visible: status === Image.Ready
-                                            }
+                                            source: modelData.image || ""
+                                            fillMode: Image.PreserveAspectCrop
+                                            autoCropBlackBars: true
+                                            sourceSize: Qt.size(240, 240)
+                                            asynchronous: true
                                         }
 
                                         // Play hover pill
@@ -700,40 +635,15 @@ Item {
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: width
 
-                                        Rectangle {
-                                            id: singleCoverMask
+                                        RoundedImage {
+                                            id: singleCoverImg
                                             anchors.fill: parent
                                             radius: 7
-                                            color: "#ffffff"
-                                            visible: false
-                                            layer.enabled: true
-                                        }
-
-                                        Item {
-                                            anchors.fill: parent
-                                            layer.enabled: true
-                                            layer.effect: MultiEffect {
-                                                maskEnabled: true
-                                                maskSource: singleCoverMask
-                                                autoPaddingEnabled: false
-                                            }
-
-                                            Rectangle {
-                                                anchors.fill: parent
-                                                color: "#202024"
-                                                visible: !singleCoverImg.visible || singleCoverImg.status !== Image.Ready
-                                            }
-
-                                            Image {
-                                                id: singleCoverImg
-                                                anchors.fill: parent
-                                                source: modelData.image || ""
-                                                fillMode: Image.PreserveAspectCrop
-                                                scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
-                                                transformOrigin: Item.Center
-                                                asynchronous: true
-                                                visible: status === Image.Ready
-                                            }
+                                            source: modelData.image || ""
+                                            fillMode: Image.PreserveAspectCrop
+                                            autoCropBlackBars: true
+                                            sourceSize: Qt.size(240, 240)
+                                            asynchronous: true
                                         }
 
                                         // Play hover pill
@@ -840,38 +750,15 @@ Item {
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: 114
 
-                                        Rectangle {
-                                            id: vidThumbMask
+                                        RoundedImage {
+                                            id: vidCoverImg
                                             anchors.fill: parent
                                             radius: 5.5
-                                            color: "#ffffff"
-                                            visible: false
-                                            layer.enabled: true
-                                        }
-
-                                        Item {
-                                            anchors.fill: parent
-                                            layer.enabled: true
-                                            layer.effect: MultiEffect {
-                                                maskEnabled: true
-                                                maskSource: vidThumbMask
-                                                autoPaddingEnabled: false
-                                            }
-
-                                            Rectangle {
-                                                anchors.fill: parent
-                                                color: "#202024"
-                                                visible: !vidCoverImg.visible || vidCoverImg.status !== Image.Ready
-                                            }
-
-                                            Image {
-                                                id: vidCoverImg
-                                                anchors.fill: parent
-                                                source: modelData.image || ""
-                                                fillMode: Image.PreserveAspectCrop
-                                                asynchronous: true
-                                                visible: status === Image.Ready
-                                            }
+                                            source: modelData.image || ""
+                                            fillMode: Image.PreserveAspectCrop
+                                            autoCropBlackBars: false
+                                            sourceSize: Qt.size(240, 135)
+                                            asynchronous: true
                                         }
 
                                         // Play hover icon
@@ -986,37 +873,15 @@ Item {
                                         Layout.preferredHeight: 108
                                         Layout.alignment: Qt.AlignHCenter
 
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            radius: 54
-                                            color: "#26262a"
-                                            visible: relAvatarImg.status !== Image.Ready
-                                        }
-
-                                        Image {
+                                        RoundedImage {
                                             id: relAvatarImg
                                             anchors.fill: parent
+                                            radius: 54
                                             source: modelData.image || ""
                                             fillMode: Image.PreserveAspectCrop
+                                            sourceSize: Qt.size(216, 216)
                                             asynchronous: true
-                                            visible: false
-                                        }
-
-                                        Rectangle {
-                                            id: relAvatarMask
-                                            anchors.fill: parent
-                                            radius: 54
-                                            color: "#ffffff"
-                                            visible: false
-                                            layer.enabled: true
-                                        }
-
-                                        MultiEffect {
-                                            anchors.fill: parent
-                                            source: relAvatarImg
-                                            maskEnabled: true
-                                            maskSource: relAvatarMask
-                                            visible: relAvatarImg.status === Image.Ready
+                                            initialsText: modelData.name || modelData.title || "A"
                                         }
 
                                         Rectangle {

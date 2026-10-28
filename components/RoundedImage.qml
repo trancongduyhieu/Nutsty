@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Effects
 import "."
 
 Item {
@@ -11,6 +10,9 @@ Item {
     property int fillMode: Image.PreserveAspectCrop
     property bool asynchronous: true
     property bool cache: false
+    property size sourceSize: Qt.size(0, 0)
+    property real zoomFactor: 1.0
+    property bool autoCropBlackBars: true
 
     // Fallback & Placeholder Properties
     property string initialsText: ""
@@ -28,6 +30,16 @@ Item {
     readonly property int status: img.status
     readonly property real paintedWidth: img.paintedWidth
     readonly property real paintedHeight: img.paintedHeight
+
+    // Effective zoom scale (automatically zooms 1.34x for 4:3 YouTube thumbnails to crop black bars)
+    readonly property real effectiveZoom: {
+        if (zoomFactor !== 1.0) return Math.max(0.1, zoomFactor);
+        if (autoCropBlackBars && img.implicitWidth > 0 && img.implicitHeight > 0) {
+            var r = img.implicitWidth / img.implicitHeight;
+            if (r > 1.25 && r < 1.45) return 1.34;
+        }
+        return 1.0;
+    }
 
     implicitWidth: 44
     implicitHeight: 44
@@ -96,42 +108,54 @@ Item {
         visible: img.status !== Image.Ready && !root.hasInitials && root.fallbackIcon !== ""
     }
 
-    // 4. Main Image Container with clean clipping (0 FBO overhead, zero GPU leak)
-    Rectangle {
-        id: imgContainer
+    // 4. Background Image Loader (Decodes texture once in background without extra paint passes)
+    Image {
+        id: img
         anchors.fill: parent
-        anchors.margins: root.borderWidth > 0 ? 0.5 : 0
-        visible: img.status === Image.Ready
-        radius: Math.max(0, root.radius - (root.borderWidth > 0 ? 0.5 : 0))
-        color: "transparent"
-        clip: root.radius > 0
-
-        Image {
-            id: img
-            anchors.fill: parent
-            source: root.source
-            fillMode: root.fillMode
-            sourceSize: {
-                var w = root.width > 0 ? root.width : root.implicitWidth;
-                var h = root.height > 0 ? root.height : root.implicitHeight;
-                return Qt.size(Math.max(16, Math.round(w * 2)), Math.max(16, Math.round(h * 2)));
+        source: root.source
+        fillMode: root.fillMode
+        sourceSize: {
+            if (root.sourceSize.width > 0 && root.sourceSize.height > 0) {
+                return root.sourceSize;
             }
-            asynchronous: root.asynchronous
-            cache: root.cache
-            smooth: true
+            var w = root.width > 0 ? root.width : root.implicitWidth;
+            var h = root.height > 0 ? root.height : root.implicitHeight;
+            return Qt.size(Math.max(16, Math.round(w * 2)), Math.max(16, Math.round(h * 2)));
+        }
+        asynchronous: root.asynchronous
+        cache: root.cache
+        smooth: true
+        // Only render raw image directly if radius is 0; otherwise ShaderEffect handles single-pass rounded rendering
+        visible: root.radius <= 0 && status === Image.Ready
 
-            onStatusChanged: {
-                if (status === Image.Error) {
-                    var srcStr = String(source);
-                    if (srcStr.indexOf("maxresdefault.jpg") !== -1) {
-                        source = srcStr.replace("maxresdefault.jpg", "hqdefault.jpg");
-                    }
+        onStatusChanged: {
+            if (status === Image.Error) {
+                var srcStr = String(source);
+                if (srcStr.indexOf("maxresdefault.jpg") !== -1) {
+                    source = srcStr.replace("maxresdefault.jpg", "hqdefault.jpg");
                 }
             }
         }
     }
 
-    // 5. Hairline Border Overlay
+    // 5. Hardware-accelerated Single-Pass SDF Rounded Shader (0 FBOs, 0 GPU leak, universal RHI)
+    ShaderEffect {
+        id: roundedShader
+        anchors.fill: parent
+        anchors.margins: root.borderWidth > 0 ? (root.borderWidth * 0.5) : 0
+        visible: root.radius > 0 && img.status === Image.Ready
+
+        property variant source: img
+        property vector2d u_resolution: Qt.vector2d(Math.max(1, width), Math.max(1, height))
+        property vector2d u_sourceSize: Qt.vector2d(Math.max(1, img.implicitWidth), Math.max(1, img.implicitHeight))
+        property real u_radius: Math.max(0, root.radius - (root.borderWidth > 0 ? (root.borderWidth * 0.5) : 0))
+        property real u_scale: root.effectiveZoom
+        property int u_fillMode: root.fillMode === Image.PreserveAspectCrop ? 2 : 0
+
+        fragmentShader: Qt.resolvedUrl("../assets/shaders/rounded_image.frag.qsb")
+    }
+
+    // 6. Hairline Border Overlay
     Rectangle {
         id: borderRect
         anchors.fill: parent

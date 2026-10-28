@@ -381,53 +381,17 @@ Item {
                         border.width: 1.5
                     }
 
-                    // Circle Mask for User Avatar (Hardware GPU layer effect mask)
-                    Rectangle {
-                        id: userAvatarMask
+                    // User Avatar with Hardware SDF Circle Masking (Zero FBOs, 100% round)
+                    RoundedImage {
+                        id: userAvatarImg
                         anchors.fill: parent
                         anchors.margins: 2
                         radius: 22
-                        color: "#ffffff"
-                        visible: false
-                        layer.enabled: true
-                    }
-
-                    // Masked Container: Zero Pixel Leakage Outside Circle
-                    Item {
-                        anchors.fill: parent
-                        anchors.margins: 2
-                        layer.enabled: true
-                        layer.effect: MultiEffect {
-                            maskEnabled: true
-                            maskSource: userAvatarMask
-                            autoPaddingEnabled: false
-                        }
-
-                        // Background fallback
-                        Rectangle {
-                            anchors.fill: parent
-                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: (root.userName && root.userName.length > 0) ? root.userName.substring(0, 1).toUpperCase() : "U"
-                                color: "#ffffff"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 16
-                                font.bold: true
-                            }
-                        }
-
-                        // Profile Image
-                        Image {
-                            id: userAvatarImg
-                            anchors.fill: parent
-                            source: root.userAvatar || ""
-                            fillMode: Image.PreserveAspectCrop
-                            visible: root.userAvatar !== ""
-                            asynchronous: true
-                            cache: true
-                        }
+                        source: root.userAvatar || ""
+                        fillMode: Image.PreserveAspectCrop
+                        initialsText: root.userName || "U"
+                        placeholderColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
+                        asynchronous: true
                     }
 
                     // Plus / Edit Action Badge at bottom-right of avatar
@@ -676,51 +640,17 @@ Item {
                             border.width: 1.5
                         }
 
-                        // Friend Circle Mask (Hardware GPU layer effect mask)
-                        Rectangle {
-                            id: friendAvatarMask
+                        // Friend Avatar with Hardware SDF Circle Masking (Zero FBOs, 100% round)
+                        RoundedImage {
+                            id: friendAvatarImg
                             anchors.fill: parent
                             anchors.margins: 2
                             radius: 22
-                            color: "#ffffff"
-                            visible: false
-                            layer.enabled: true
-                        }
-
-                        // Masked Container
-                        Item {
-                            anchors.fill: parent
-                            anchors.margins: 2
-                            layer.enabled: true
-                            layer.effect: MultiEffect {
-                                maskEnabled: true
-                                maskSource: friendAvatarMask
-                                autoPaddingEnabled: false
-                            }
-
-                            Rectangle {
-                                anchors.fill: parent
-                                color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: (modelData.user_name && modelData.user_name.length > 0) ? modelData.user_name.substring(0, 1).toUpperCase() : "F"
-                                    color: "#ffffff"
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 16
-                                    font.bold: true
-                                }
-                            }
-
-                            Image {
-                                id: friendAvatarImg
-                                anchors.fill: parent
-                                source: modelData.avatar_url || ""
-                                fillMode: Image.PreserveAspectCrop
-                                visible: (modelData.avatar_url || "") !== ""
-                                asynchronous: true
-                                cache: true
-                            }
+                            source: modelData.avatar_url || ""
+                            fillMode: Image.PreserveAspectCrop
+                            initialsText: modelData.user_name || "F"
+                            placeholderColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
+                            asynchronous: true
                         }
 
                         // Green Online Indicator Dot (Only visible when friend is online)

@@ -689,38 +689,14 @@ Rectangle {
                             Layout.preferredHeight: 40
                             Layout.alignment: Qt.AlignVCenter
 
-                            Rectangle {
-                                id: recMask
-                                anchors.fill: parent
-                                radius: recEntityRow.isArtist ? 20 : 6
-                                visible: false
-                                layer.enabled: true
-                            }
-
-                            Image {
+                            RoundedImage {
                                 id: recImg
                                 anchors.fill: parent
+                                radius: recEntityRow.isArtist ? 20 : 6
                                 source: modelData.image || ""
                                 fillMode: Image.PreserveAspectCrop
-                                sourceSize.width: 80
-                                sourceSize.height: 80
+                                sourceSize: Qt.size(80, 80)
                                 asynchronous: true
-                                visible: false
-                            }
-
-                            MultiEffect {
-                                anchors.fill: parent
-                                source: recImg
-                                maskEnabled: true
-                                maskSource: recMask
-                                visible: recImg.status === Image.Ready
-                            }
-
-                            Rectangle {
-                                anchors.fill: parent
-                                radius: recEntityRow.isArtist ? 20 : 6
-                                color: Qt.rgba(1, 1, 1, 0.08)
-                                visible: recImg.status !== Image.Ready
                             }
 
                             Rectangle {
@@ -1409,39 +1385,14 @@ Rectangle {
                                                 Layout.preferredHeight: 92
                                                 Layout.alignment: Qt.AlignVCenter
 
-                                                Rectangle {
-                                                    id: artMask
+                                                RoundedImage {
+                                                    id: topThumb
                                                     anchors.fill: parent
                                                     radius: topResultUnifiedCard.isArtist ? 46 : 12
-                                                    color: "#ffffff"
-                                                    visible: false
-                                                    layer.enabled: true
-                                                }
-
-                                                Item {
-                                                    anchors.fill: parent
-                                                    layer.enabled: true
-                                                    layer.effect: MultiEffect {
-                                                        maskEnabled: true
-                                                        maskSource: artMask
-                                                        autoPaddingEnabled: false
-                                                    }
-
-                                                    Rectangle {
-                                                        anchors.fill: parent
-                                                        color: "#202024"
-                                                        visible: topThumb.status !== Image.Ready
-                                                    }
-
-                                                    Image {
-                                                        id: topThumb
-                                                        anchors.fill: parent
-                                                        source: topResultUnifiedCard.topItem ? (topResultUnifiedCard.topItem.image || "") : ""
-                                                        fillMode: Image.PreserveAspectCrop
-                                                        sourceSize: Qt.size(192, 192)
-                                                        asynchronous: true
-                                                        visible: status === Image.Ready
-                                                    }
+                                                    source: topResultUnifiedCard.topItem ? (topResultUnifiedCard.topItem.image || "") : ""
+                                                    fillMode: Image.PreserveAspectCrop
+                                                    sourceSize: Qt.size(192, 192)
+                                                    asynchronous: true
                                                 }
 
                                                 Rectangle {
@@ -1677,23 +1628,14 @@ Rectangle {
                                                             Layout.preferredHeight: 42
                                                             Layout.alignment: Qt.AlignVCenter
 
-                                                            Rectangle {
-                                                                id: rThumbMask; anchors.fill: parent; radius: 8; color: "#ffffff"; visible: false; layer.enabled: true
-                                                            }
-                                                            Item {
+                                                            RoundedImage {
+                                                                id: rThumb
                                                                 anchors.fill: parent
-                                                                layer.enabled: true
-                                                                layer.effect: MultiEffect { maskEnabled: true; maskSource: rThumbMask; autoPaddingEnabled: false }
-                                                                Rectangle { anchors.fill: parent; color: "#202024"; visible: rThumb.status !== Image.Ready }
-                                                                Image {
-                                                                    id: rThumb
-                                                                    anchors.fill: parent
-                                                                    source: modelData.image || ""
-                                                                    fillMode: Image.PreserveAspectCrop
-                                                                    sourceSize: Qt.size(96, 96)
-                                                                    asynchronous: true
-                                                                    visible: status === Image.Ready
-                                                                }
+                                                                radius: 8
+                                                                source: modelData.image || ""
+                                                                fillMode: Image.PreserveAspectCrop
+                                                                sourceSize: Qt.size(96, 96)
+                                                                asynchronous: true
                                                             }
                                                             Rectangle {
                                                                 anchors.fill: parent
@@ -1837,39 +1779,14 @@ Rectangle {
                                                         Layout.preferredWidth: 124
                                                         Layout.preferredHeight: 124
 
-                                                        Rectangle {
-                                                            id: albMask
+                                                        RoundedImage {
+                                                            id: albThumb
                                                             anchors.fill: parent
                                                             radius: 8
-                                                            color: "#ffffff"
-                                                            visible: false
-                                                            layer.enabled: true
-                                                        }
-
-                                                        Item {
-                                                            anchors.fill: parent
-                                                            layer.enabled: true
-                                                            layer.effect: MultiEffect {
-                                                                maskEnabled: true
-                                                                maskSource: albMask
-                                                                autoPaddingEnabled: false
-                                                            }
-
-                                                            Rectangle {
-                                                                anchors.fill: parent
-                                                                color: "#202024"
-                                                                visible: albThumb.status !== Image.Ready
-                                                            }
-
-                                                            Image {
-                                                                id: albThumb
-                                                                anchors.fill: parent
-                                                                source: modelData.image || ""
-                                                                fillMode: Image.PreserveAspectCrop
-                                                                sourceSize: Qt.size(248, 248)
-                                                                asynchronous: true
-                                                                visible: status === Image.Ready
-                                                            }
+                                                            source: modelData.image || ""
+                                                            fillMode: Image.PreserveAspectCrop
+                                                            sourceSize: Qt.size(248, 248)
+                                                            asynchronous: true
                                                         }
 
                                                         Rectangle {
@@ -1967,39 +1884,14 @@ Rectangle {
                                                         Layout.preferredWidth: 118
                                                         Layout.preferredHeight: 118
 
-                                                        Rectangle {
-                                                            id: cplMask
+                                                        RoundedImage {
+                                                            id: cplThumb
                                                             anchors.fill: parent
                                                             radius: 8
-                                                            color: "#ffffff"
-                                                            visible: false
-                                                            layer.enabled: true
-                                                        }
-
-                                                        Item {
-                                                            anchors.fill: parent
-                                                            layer.enabled: true
-                                                            layer.effect: MultiEffect {
-                                                                maskEnabled: true
-                                                                maskSource: cplMask
-                                                                autoPaddingEnabled: false
-                                                            }
-
-                                                            Rectangle {
-                                                                anchors.fill: parent
-                                                                color: "#202024"
-                                                                visible: cplThumb.status !== Image.Ready
-                                                            }
-
-                                                            Image {
-                                                                id: cplThumb
-                                                                anchors.fill: parent
-                                                                source: modelData.image || ""
-                                                                fillMode: Image.PreserveAspectCrop
-                                                                sourceSize: Qt.size(236, 236)
-                                                                asynchronous: true
-                                                                visible: status === Image.Ready
-                                                            }
+                                                            source: modelData.image || ""
+                                                            fillMode: Image.PreserveAspectCrop
+                                                            sourceSize: Qt.size(236, 236)
+                                                            asynchronous: true
                                                         }
                                                     }
 
@@ -2087,39 +1979,14 @@ Rectangle {
                                                         Layout.preferredWidth: 118
                                                         Layout.preferredHeight: 118
 
-                                                        Rectangle {
-                                                            id: fplmMask
+                                                        RoundedImage {
+                                                            id: fplmThumb
                                                             anchors.fill: parent
                                                             radius: 8
-                                                            color: "#ffffff"
-                                                            visible: false
-                                                            layer.enabled: true
-                                                        }
-
-                                                        Item {
-                                                            anchors.fill: parent
-                                                            layer.enabled: true
-                                                            layer.effect: MultiEffect {
-                                                                maskEnabled: true
-                                                                maskSource: fplmMask
-                                                                autoPaddingEnabled: false
-                                                            }
-
-                                                            Rectangle {
-                                                                anchors.fill: parent
-                                                                color: "#202024"
-                                                                visible: fplmThumb.status !== Image.Ready
-                                                            }
-
-                                                            Image {
-                                                                id: fplmThumb
-                                                                anchors.fill: parent
-                                                                source: modelData.image || ""
-                                                                fillMode: Image.PreserveAspectCrop
-                                                                sourceSize: Qt.size(236, 236)
-                                                                asynchronous: true
-                                                                visible: status === Image.Ready
-                                                            }
+                                                            source: modelData.image || ""
+                                                            fillMode: Image.PreserveAspectCrop
+                                                            sourceSize: Qt.size(236, 236)
+                                                            asynchronous: true
                                                         }
                                                     }
 
@@ -2210,39 +2077,14 @@ Rectangle {
                                                         Layout.preferredWidth: 96
                                                         Layout.preferredHeight: 96
 
-                                                        Rectangle {
-                                                            id: artCircleMask
+                                                        RoundedImage {
+                                                            id: artImg
                                                             anchors.fill: parent
                                                             radius: 48
-                                                            color: "#ffffff"
-                                                            visible: false
-                                                            layer.enabled: true
-                                                        }
-
-                                                        Item {
-                                                            anchors.fill: parent
-                                                            layer.enabled: true
-                                                            layer.effect: MultiEffect {
-                                                                maskEnabled: true
-                                                                maskSource: artCircleMask
-                                                                autoPaddingEnabled: false
-                                                            }
-
-                                                            Rectangle {
-                                                                anchors.fill: parent
-                                                                color: "#202024"
-                                                                visible: artImg.status !== Image.Ready
-                                                            }
-
-                                                            Image {
-                                                                id: artImg
-                                                                anchors.fill: parent
-                                                                source: modelData.image || ""
-                                                                fillMode: Image.PreserveAspectCrop
-                                                                sourceSize: Qt.size(192, 192)
-                                                                asynchronous: true
-                                                                visible: status === Image.Ready
-                                                            }
+                                                            source: modelData.image || ""
+                                                            fillMode: Image.PreserveAspectCrop
+                                                            sourceSize: Qt.size(192, 192)
+                                                            asynchronous: true
                                                         }
 
                                                         Rectangle {
@@ -2381,17 +2223,14 @@ Rectangle {
                                         Layout.preferredWidth: 40
                                         Layout.preferredHeight: 40
 
-                                        Rectangle {
-                                            id: fMask; anchors.fill: parent; radius: 6; color: "#ffffff"; visible: false; layer.enabled: true
-                                        }
-                                        Item {
+                                        RoundedImage {
+                                            id: fImg
                                             anchors.fill: parent
-                                            layer.enabled: true
-                                            layer.effect: MultiEffect { maskEnabled: true; maskSource: fMask; autoPaddingEnabled: false }
-                                            Rectangle { anchors.fill: parent; color: "#202024"; visible: fImg.status !== Image.Ready }
-                                            Image {
-                                                id: fImg; anchors.fill: parent; source: modelData.image || ""; fillMode: Image.PreserveAspectCrop; sourceSize: Qt.size(80, 80); asynchronous: true; visible: status === Image.Ready
-                                            }
+                                            radius: 6
+                                            source: modelData.image || ""
+                                            fillMode: Image.PreserveAspectCrop
+                                            sourceSize: Qt.size(80, 80)
+                                            asynchronous: true
                                         }
                                         Rectangle {
                                             anchors.fill: parent
@@ -2541,13 +2380,14 @@ Rectangle {
                                         Layout.preferredWidth: 54
                                         Layout.preferredHeight: 54
 
-                                        Rectangle { id: falbMask; anchors.fill: parent; radius: 8; color: "#ffffff"; visible: false; layer.enabled: true }
-                                        Item {
+                                        RoundedImage {
+                                            id: falbImg
                                             anchors.fill: parent
-                                            layer.enabled: true
-                                            layer.effect: MultiEffect { maskEnabled: true; maskSource: falbMask; autoPaddingEnabled: false }
-                                            Rectangle { anchors.fill: parent; color: "#202024"; visible: falbImg.status !== Image.Ready }
-                                            Image { id: falbImg; anchors.fill: parent; source: modelData.image || ""; fillMode: Image.PreserveAspectCrop; sourceSize: Qt.size(108, 108); asynchronous: true; visible: status === Image.Ready }
+                                            radius: 8
+                                            source: modelData.image || ""
+                                            fillMode: Image.PreserveAspectCrop
+                                            sourceSize: Qt.size(108, 108)
+                                            asynchronous: true
                                         }
                                         Rectangle { anchors.fill: parent; radius: 8; color: "transparent"; border.color: Qt.rgba(1, 1, 1, 0.12); border.width: 1 }
                                     }
@@ -2659,13 +2499,14 @@ Rectangle {
                                         Layout.preferredWidth: 54
                                         Layout.preferredHeight: 54
 
-                                        Rectangle { id: cplmMask; anchors.fill: parent; radius: 8; color: "#ffffff"; visible: false; layer.enabled: true }
-                                        Item {
+                                        RoundedImage {
+                                            id: cplmImg
                                             anchors.fill: parent
-                                            layer.enabled: true
-                                            layer.effect: MultiEffect { maskEnabled: true; maskSource: cplmMask; autoPaddingEnabled: false }
-                                            Rectangle { anchors.fill: parent; color: "#202024"; visible: cplmImg.status !== Image.Ready }
-                                            Image { id: cplmImg; anchors.fill: parent; source: modelData.image || ""; fillMode: Image.PreserveAspectCrop; sourceSize: Qt.size(108, 108); asynchronous: true; visible: status === Image.Ready }
+                                            radius: 8
+                                            source: modelData.image || ""
+                                            fillMode: Image.PreserveAspectCrop
+                                            sourceSize: Qt.size(108, 108)
+                                            asynchronous: true
                                         }
                                         Rectangle { anchors.fill: parent; radius: 8; color: "transparent"; border.color: Qt.rgba(1, 1, 1, 0.12); border.width: 1 }
                                     }
@@ -2776,13 +2617,14 @@ Rectangle {
                                         Layout.preferredWidth: 54
                                         Layout.preferredHeight: 54
 
-                                        Rectangle { id: fpl2Mask; anchors.fill: parent; radius: 8; color: "#ffffff"; visible: false; layer.enabled: true }
-                                        Item {
+                                        RoundedImage {
+                                            id: fpl2Img
                                             anchors.fill: parent
-                                            layer.enabled: true
-                                            layer.effect: MultiEffect { maskEnabled: true; maskSource: fpl2Mask; autoPaddingEnabled: false }
-                                            Rectangle { anchors.fill: parent; color: "#202024"; visible: fpl2Img.status !== Image.Ready }
-                                            Image { id: fpl2Img; anchors.fill: parent; source: modelData.image || ""; fillMode: Image.PreserveAspectCrop; sourceSize: Qt.size(108, 108); asynchronous: true; visible: status === Image.Ready }
+                                            radius: 8
+                                            source: modelData.image || ""
+                                            fillMode: Image.PreserveAspectCrop
+                                            sourceSize: Qt.size(108, 108)
+                                            asynchronous: true
                                         }
                                         Rectangle { anchors.fill: parent; radius: 8; color: "transparent"; border.color: Qt.rgba(1, 1, 1, 0.12); border.width: 1 }
                                     }
@@ -2894,13 +2736,14 @@ Rectangle {
                                         Layout.preferredWidth: 54
                                         Layout.preferredHeight: 54
 
-                                        Rectangle { id: faMask; anchors.fill: parent; radius: 27; color: "#ffffff"; visible: false; layer.enabled: true }
-                                        Item {
+                                        RoundedImage {
+                                            id: faImg
                                             anchors.fill: parent
-                                            layer.enabled: true
-                                            layer.effect: MultiEffect { maskEnabled: true; maskSource: faMask; autoPaddingEnabled: false }
-                                            Rectangle { anchors.fill: parent; color: "#202024"; visible: faImg.status !== Image.Ready }
-                                            Image { id: faImg; anchors.fill: parent; source: modelData.image || ""; fillMode: Image.PreserveAspectCrop; sourceSize: Qt.size(108, 108); asynchronous: true; visible: status === Image.Ready }
+                                            radius: 27
+                                            source: modelData.image || ""
+                                            fillMode: Image.PreserveAspectCrop
+                                            sourceSize: Qt.size(108, 108)
+                                            asynchronous: true
                                         }
                                         Rectangle { anchors.fill: parent; radius: 27; color: "transparent"; border.color: Qt.rgba(1, 1, 1, 0.18); border.width: 1 }
                                     }

@@ -824,11 +824,11 @@ Item {
                         anchors.fill: parent
                         radius: 16
                         color: "#202024"
-                        clip: true
 
-                        Image {
+                        RoundedImage {
                             id: bigCoverImg
                             anchors.fill: parent
+                            radius: 16
                             source: {
                                 if (root.resolvedSquareImage !== "" && !root.squareImageFailed) {
                                     var rImg = root.resolvedSquareImage;
@@ -840,23 +840,8 @@ Item {
                                 return (targetImg.startsWith("/") && !targetImg.startsWith("file://")) ? ("file://" + targetImg) : targetImg;
                             }
                             fillMode: Image.PreserveAspectCrop
-                            scale: {
-                                if (root.resolvedIsSquare || (implicitWidth > 0 && Math.abs(implicitWidth - implicitHeight) < 20)) {
-                                    return 1.0;
-                                }
-                                // If 4:3 letterboxed thumbnail (e.g. hqdefault.jpg 480x360), zoom 1.34x to crop black bars
-                                if (implicitWidth > 0 && implicitHeight > 0) {
-                                    var r = implicitWidth / implicitHeight;
-                                    if (r > 1.25 && r < 1.45) return 1.34;
-                                }
-                                // True 16:9 HD thumbnail (maxresdefault.jpg 1280x720, ratio ~1.78): PreserveAspectCrop fills square cleanly
-                                return 1.0;
-                            }
-                            Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
-                            transformOrigin: Item.Center
+                            autoCropBlackBars: true
                             asynchronous: true
-                            smooth: true
-                            cache: false
                             sourceSize: Qt.size(400, 400)
                             onStatusChanged: {
                                 if (status === Image.Error) {

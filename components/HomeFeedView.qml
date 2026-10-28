@@ -537,41 +537,22 @@ Rectangle {
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: Math.round(width * 9 / 16) // ~142px
 
-                                        Rectangle {
+                                        RoundedImage {
+                                            id: vCoverImg
                                             anchors.fill: parent
                                             radius: 10
-                                            color: "#242428"
-                                            clip: true
-
-                                            Image {
-                                                id: vCoverImg
-                                                anchors.fill: parent
-                                                source: {
-                                                    var u = modelData.image || "";
-                                                    if (u.indexOf("i.ytimg.com") !== -1) return u.split("?")[0];
-                                                    if (u.indexOf("googleusercontent.com") !== -1 || u.indexOf("ggpht.com") !== -1) {
-                                                        return u.replace(/=w\d+-h\d+[^=]*$/, "=w540-h304-l90-rj");
-                                                    }
-                                                    return u;
+                                            source: {
+                                                var u = modelData.image || "";
+                                                if (u.indexOf("i.ytimg.com") !== -1) return u.split("?")[0];
+                                                if (u.indexOf("googleusercontent.com") !== -1 || u.indexOf("ggpht.com") !== -1) {
+                                                    return u.replace(/=w\d+-h\d+[^=]*$/, "=w540-h304-l90-rj");
                                                 }
-                                                fillMode: Image.PreserveAspectCrop
-                                                sourceSize: Qt.size(360, 202)
-                                                asynchronous: true
-                                                visible: status === Image.Ready
-                                                smooth: true
+                                                return u;
                                             }
-
-                                            Rectangle {
-                                                anchors.fill: parent
-                                                color: "#242428"
-                                                visible: vCoverImg.status !== Image.Ready
-                                                SequentialAnimation on opacity {
-                                                    running: parent.visible
-                                                    loops: Animation.Infinite
-                                                    NumberAnimation { from: 0.30; to: 0.70; duration: 750; easing.type: Easing.InOutQuad }
-                                                    NumberAnimation { from: 0.70; to: 0.30; duration: 750; easing.type: Easing.InOutQuad }
-                                                }
-                                            }
+                                            fillMode: Image.PreserveAspectCrop
+                                            autoCropBlackBars: false
+                                            sourceSize: Qt.size(360, 202)
+                                            asynchronous: true
                                         }
 
                                         // 1px Subtle Border Overlay
@@ -728,41 +709,21 @@ Rectangle {
                                         width: 44
                                         height: 44
 
-                                        Rectangle {
+                                        RoundedImage {
+                                            id: rowImg
                                             anchors.fill: parent
                                             radius: 6
-                                            color: "#2c2c34"
-                                            clip: true
-
-                                            Image {
-                                                id: rowImg
-                                                anchors.fill: parent
-                                                source: {
-                                                    var u = modelData.image || "";
-                                                    if (u.indexOf("i.ytimg.com") !== -1) return u.split("?")[0];
-                                                    if (u.indexOf("googleusercontent.com") !== -1 || u.indexOf("ggpht.com") !== -1) {
-                                                        return u.replace(/=w\d+-h\d+[^=]*$/, "=w120-h120-l90-rj");
-                                                    }
-                                                    return u;
+                                            source: {
+                                                var u = modelData.image || "";
+                                                if (u.indexOf("i.ytimg.com") !== -1) return u.split("?")[0];
+                                                if (u.indexOf("googleusercontent.com") !== -1 || u.indexOf("ggpht.com") !== -1) {
+                                                    return u.replace(/=w\d+-h\d+[^=]*$/, "=w120-h120-l90-rj");
                                                 }
-                                                fillMode: Image.PreserveAspectCrop
-                                                sourceSize: Qt.size(88, 88)
-                                                asynchronous: true
-                                                visible: status === Image.Ready
-                                                smooth: true
+                                                return u;
                                             }
-
-                                            Rectangle {
-                                                anchors.fill: parent
-                                                color: "#2c2c34"
-                                                visible: rowImg.status !== Image.Ready
-                                                SequentialAnimation on opacity {
-                                                    running: parent.visible
-                                                    loops: Animation.Infinite
-                                                    NumberAnimation { from: 0.30; to: 0.70; duration: 750; easing.type: Easing.InOutQuad }
-                                                    NumberAnimation { from: 0.70; to: 0.30; duration: 750; easing.type: Easing.InOutQuad }
-                                                }
-                                            }
+                                            fillMode: Image.PreserveAspectCrop
+                                            sourceSize: Qt.size(88, 88)
+                                            asynchronous: true
                                         }
 
                                         Rectangle {
@@ -893,41 +854,22 @@ Rectangle {
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: width // 1:1 square! (~167px)
 
-                                        Rectangle {
+                                        RoundedImage {
+                                            id: aCoverImg
                                             anchors.fill: parent
                                             radius: 10
-                                            color: "#242428"
-                                            clip: true
-
-                                            Image {
-                                                id: aCoverImg
-                                                anchors.fill: parent
-                                                source: {
-                                                    var u = modelData.image || "";
-                                                    if (u.indexOf("i.ytimg.com") !== -1) return u.split("?")[0];
-                                                    if (u.indexOf("googleusercontent.com") !== -1 || u.indexOf("ggpht.com") !== -1) {
-                                                        return u.replace(/=w\d+-h\d+[^=]*$/, "=w360-h360-l90-rj");
-                                                    }
-                                                    return u;
+                                            source: {
+                                                var u = modelData.image || "";
+                                                if (u.indexOf("i.ytimg.com") !== -1) return u.split("?")[0];
+                                                if (u.indexOf("googleusercontent.com") !== -1 || u.indexOf("ggpht.com") !== -1) {
+                                                    return u.replace(/=w\d+-h\d+[^=]*$/, "=w360-h360-l90-rj");
                                                 }
-                                                fillMode: Image.PreserveAspectCrop
-                                                sourceSize: Qt.size(240, 240)
-                                                asynchronous: true
-                                                visible: status === Image.Ready
-                                                smooth: true
+                                                return u;
                                             }
-
-                                            Rectangle {
-                                                anchors.fill: parent
-                                                color: "#242428"
-                                                visible: aCoverImg.status !== Image.Ready
-                                                SequentialAnimation on opacity {
-                                                    running: parent.visible
-                                                    loops: Animation.Infinite
-                                                    NumberAnimation { from: 0.30; to: 0.70; duration: 750; easing.type: Easing.InOutQuad }
-                                                    NumberAnimation { from: 0.70; to: 0.30; duration: 750; easing.type: Easing.InOutQuad }
-                                                }
-                                            }
+                                            fillMode: Image.PreserveAspectCrop
+                                            autoCropBlackBars: true
+                                            sourceSize: Qt.size(240, 240)
+                                            asynchronous: true
                                         }
 
                                         // 1px Subtle Border Overlay
@@ -1126,38 +1068,19 @@ Rectangle {
                                 anchors.margins: 6
                                 spacing: 12
 
-                                Rectangle {
+                                RoundedImage {
+                                    id: qpImg
                                     width: 44
                                     height: 44
                                     radius: 4
-                                    color: "#282828"
-                                    clip: true
-
-                                    Image {
-                                        id: qpImg
-                                        anchors.fill: parent
-                                        source: modelData.image || ""
-                                        fillMode: Image.PreserveAspectCrop
-                                        sourceSize: Qt.size(64, 64)
-                                        asynchronous: true
-                                        visible: status === Image.Ready
-                                    }
-
-                                    // Skeleton Pulsing Shimmer Placeholder
-                                    Rectangle {
-                                        anchors.fill: parent
-                                        color: "#2c2c34"
-                                        visible: qpImg.status !== Image.Ready
-                                        SequentialAnimation on opacity {
-                                            running: parent.visible
-                                            loops: Animation.Infinite
-                                            NumberAnimation { from: 0.30; to: 0.70; duration: 750; easing.type: Easing.InOutQuad }
-                                            NumberAnimation { from: 0.70; to: 0.30; duration: 750; easing.type: Easing.InOutQuad }
-                                        }
-                                    }
+                                    source: modelData.image || ""
+                                    fillMode: Image.PreserveAspectCrop
+                                    sourceSize: Qt.size(64, 64)
+                                    asynchronous: true
 
                                     Rectangle {
                                         anchors.fill: parent
+                                        radius: 4
                                         color: Qt.rgba(0, 0, 0, 0.4)
                                         visible: qpMouse.containsMouse || (root.currentTrack && modelData && (root.currentTrack.path === modelData.path || (modelData.videoId && root.currentTrack.videoId === modelData.videoId)))
 
@@ -1258,35 +1181,15 @@ Rectangle {
                                 anchors.margins: 12
                                 spacing: 10
 
-                                Rectangle {
+                                RoundedImage {
+                                    id: plImg
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: width
                                     radius: 6
-                                    color: "#282828"
-                                    clip: true
-
-                                    Image {
-                                        id: plImg
-                                        anchors.fill: parent
-                                        source: modelData.image || ""
-                                        fillMode: Image.PreserveAspectCrop
-                                        sourceSize: Qt.size(200, 200)
-                                        asynchronous: true
-                                        visible: status === Image.Ready
-                                    }
-
-                                    // Skeleton Pulsing Shimmer Placeholder
-                                    Rectangle {
-                                        anchors.fill: parent
-                                        color: "#2c2c34"
-                                        visible: plImg.status !== Image.Ready
-                                        SequentialAnimation on opacity {
-                                            running: parent.visible
-                                            loops: Animation.Infinite
-                                            NumberAnimation { from: 0.30; to: 0.70; duration: 750; easing.type: Easing.InOutQuad }
-                                            NumberAnimation { from: 0.70; to: 0.30; duration: 750; easing.type: Easing.InOutQuad }
-                                        }
-                                    }
+                                    source: modelData.image || ""
+                                    fillMode: Image.PreserveAspectCrop
+                                    sourceSize: Qt.size(200, 200)
+                                    asynchronous: true
 
                                     Rectangle {
                                         width: 40

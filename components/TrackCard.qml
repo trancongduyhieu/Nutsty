@@ -55,21 +55,10 @@ Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: width
 
-            Rectangle {
-                anchors.fill: parent
-                radius: 7
-                color: "#202024"
-                clip: true
-
-                Rectangle {
-                    anchors.fill: parent
-                    color: "#202024"
-                    visible: !coverImg.visible || coverImg.status !== Image.Ready
-                }
-
-            Image {
+            RoundedImage {
                 id: coverImg
                 anchors.fill: parent
+                radius: 7
                 source: {
                     if (!root.track || !root.track.image) return "";
                     var s = root.track.image;
@@ -86,46 +75,9 @@ Rectangle {
                     return s;
                 }
                 fillMode: Image.PreserveAspectCrop
-                scale: {
-                    if (implicitWidth > 0 && implicitHeight > 0) {
-                        var r = implicitWidth / implicitHeight;
-                        if (r > 1.25 && r < 1.45) return 1.34;
-                    }
-                    return 1.0;
-                }
-                transformOrigin: Item.Center
-                asynchronous: true
-                visible: status === Image.Ready
+                autoCropBlackBars: true
                 sourceSize: Qt.size(240, 240)
-                smooth: true
-                    onStatusChanged: {
-                        if (status === Image.Error) {
-                            var srcStr = String(source);
-                            if (srcStr.indexOf("maxresdefault.jpg") !== -1) {
-                                source = srcStr.replace("maxresdefault.jpg", "hqdefault.jpg");
-                            }
-                        }
-                    }
-                }
-
-                // Fallback gradient cover if image fails or missing
-                Rectangle {
-                    anchors.fill: parent
-                    visible: !coverImg.visible
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: "#333333" }
-                        GradientStop { position: 1.0; color: "#181818" }
-                    }
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: root.track && root.track.artist ? root.track.artist.charAt(0).toUpperCase() : "A"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 42
-                        font.bold: true
-                        color: "#555555"
-                    }
-                }
+                initialsText: root.track && root.track.artist ? root.track.artist : "A"
             }
 
             // 1px Hairline Border Overlay on top of image

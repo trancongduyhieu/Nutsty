@@ -686,77 +686,53 @@ Rectangle {
                                     Layout.preferredWidth: 32
                                     Layout.preferredHeight: 32
 
-                                    Rectangle {
-                                        id: qThumbMask
+                                    RoundedImage {
+                                        id: qCoverImg
                                         anchors.fill: parent
                                         radius: 5
-                                        color: "#ffffff"
-                                        visible: false
-                                        layer.enabled: true
+                                        source: modelData.image || ""
+                                        fillMode: Image.PreserveAspectCrop
+                                        autoCropBlackBars: true
+                                        asynchronous: true
+                                        visible: !!modelData.image
                                     }
 
-                                    Item {
+                                    // Fallback index number
+                                    Text {
+                                        anchors.centerIn: parent
+                                        visible: !modelData.image
+                                        text: (index + 1) + ""
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        color: qItem.isCurrent ? root.accentColor : Theme.textMuted
+                                    }
+
+                                    // Overlay equalizer if current and playing
+                                    Rectangle {
                                         anchors.fill: parent
-                                        layer.enabled: true
-                                        layer.effect: MultiEffect {
-                                            maskEnabled: true
-                                            maskSource: qThumbMask
-                                            autoPaddingEnabled: false
-                                        }
+                                        radius: 5
+                                        color: Qt.rgba(0, 0, 0, 0.6)
+                                        visible: qItem.isCurrent && root.isPlaying
 
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            color: "#202024"
-                                            visible: !qCoverImg.visible || qCoverImg.status !== Image.Ready
-                                        }
-
-                                        Image {
-                                            id: qCoverImg
-                                            anchors.fill: parent
-                                            source: modelData.image || ""
-                                            fillMode: Image.PreserveAspectCrop
-                                            scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
-                                            transformOrigin: Item.Center
-                                            asynchronous: true
-                                            visible: !!source
-                                        }
-
-                                        // Fallback index number
-                                        Text {
+                                        Row {
                                             anchors.centerIn: parent
-                                            visible: !modelData.image
-                                            text: (index + 1) + ""
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: 12
-                                            font.bold: true
-                                            color: qItem.isCurrent ? root.accentColor : Theme.textMuted
-                                        }
+                                            spacing: 2
 
-                                        // Overlay equalizer if current and playing
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            color: Qt.rgba(0, 0, 0, 0.6)
-                                            visible: qItem.isCurrent && root.isPlaying
+                                            Repeater {
+                                                model: 3
+                                                Rectangle {
+                                                    width: 2.5
+                                                    height: index === 0 ? 8 : (index === 1 ? 12 : 6)
+                                                    radius: 1
+                                                    color: root.accentColor
+                                                    anchors.bottom: parent.bottom
 
-                                            Row {
-                                                anchors.centerIn: parent
-                                                spacing: 2
-
-                                                Repeater {
-                                                    model: 3
-                                                    Rectangle {
-                                                        width: 2.5
-                                                        height: index === 0 ? 8 : (index === 1 ? 12 : 6)
-                                                        radius: 1
-                                                        color: root.accentColor
-                                                        anchors.bottom: parent.bottom
-
-                                                        SequentialAnimation on height {
-                                                            running: root.visible && root.activeTab === "queue" && qItem.isCurrent && root.isPlaying
-                                                            loops: Animation.Infinite
-                                                            NumberAnimation { to: index === 0 ? 12 : (index === 1 ? 6 : 11); duration: 220 + index * 80; easing.type: Easing.InOutQuad }
-                                                            NumberAnimation { to: index === 0 ? 5 : (index === 1 ? 12 : 4); duration: 220 + index * 80; easing.type: Easing.InOutQuad }
-                                                        }
+                                                    SequentialAnimation on height {
+                                                        running: root.visible && root.activeTab === "queue" && qItem.isCurrent && root.isPlaying
+                                                        loops: Animation.Infinite
+                                                        NumberAnimation { to: index === 0 ? 12 : (index === 1 ? 6 : 11); duration: 220 + index * 80; easing.type: Easing.InOutQuad }
+                                                        NumberAnimation { to: index === 0 ? 5 : (index === 1 ? 12 : 4); duration: 220 + index * 80; easing.type: Easing.InOutQuad }
                                                     }
                                                 }
                                             }
