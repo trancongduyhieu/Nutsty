@@ -375,7 +375,14 @@ def extract_song_palette(img_src: str) -> dict:
                 content = resp.read()
             img = Image.open(io.BytesIO(content))
         else:
-            path_str = clean_src.replace("file:///", "").replace("file://", "")
+            path_str = clean_src
+            if path_str.startswith("file:///"):
+                if len(path_str) > 9 and path_str[9] == ":":
+                    path_str = path_str[8:]
+                else:
+                    path_str = path_str[7:]
+            elif path_str.startswith("file://"):
+                path_str = path_str[7:]
             p = Path(os.path.expanduser(path_str))
             if not p.exists():
                 return default_res

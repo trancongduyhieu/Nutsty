@@ -171,6 +171,17 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             music_routes.handle_get_artist_shuffle(self, query)
         elif path == "/api/resolve_cover":
             music_routes.handle_get_resolve_cover(self, query)
+        elif path == "/api/palette":
+            url_param = query.get("url", [""])[0]
+            try:
+                try:
+                    from backend.palette_extractor import extract_song_palette
+                except ImportError:
+                    from palette_extractor import extract_song_palette
+                res = extract_song_palette(url_param)
+                self._send_json(res)
+            except Exception as e:
+                self._send_json({"highlightColor": "", "error": str(e)}, status_code=500)
         elif path == "/api/notes":
             social_routes.handle_get_notes(self, query)
         elif path == "/api/friends":

@@ -210,10 +210,8 @@ Scope {
                 if (!data || data.trim() === "") return;
                 try {
                     var parsed = JSON.parse(data);
-                    if (parsed && parsed.highlightColor && parsed.highlightColor !== "#f4afb3" && parsed.highlightColor.trim() !== "") {
+                    if (parsed && parsed.highlightColor && parsed.highlightColor.trim() !== "") {
                         win.songAccentColor = parsed.highlightColor;
-                    } else {
-                        win.songAccentColor = win.wallpaperAccentColor;
                     }
                 } catch(e) {}
             }
@@ -235,14 +233,32 @@ Scope {
             win.songAccentColor = win.wallpaperAccentColor;
             return;
         }
-        songPaletteProc.running = false;
-        songPaletteProc.command = [
-            "python3", "-u",
-            win.appDir + "/backend/palette_extractor.py",
-            "song_palette",
-            imgUrl
-        ];
-        songPaletteProc.running = true;
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", "http://127.0.0.1:17890/api/palette?url=" + encodeURIComponent(imgUrl));
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200) {
+                    try {
+                        var parsed = JSON.parse(xhr.responseText);
+                        if (parsed && parsed.highlightColor && parsed.highlightColor.trim() !== "") {
+                            win.songAccentColor = parsed.highlightColor;
+                            return;
+                        }
+                    } catch(e) {}
+                }
+                // Fallback to CLI process if auth_server is not reachable
+                if (!songPaletteProc.running) {
+                    songPaletteProc.command = [
+                        "python3", "-u",
+                        win.appDir + "/backend/palette_extractor.py",
+                        "song_palette",
+                        imgUrl
+                    ];
+                    songPaletteProc.running = true;
+                }
+            }
+        };
+        xhr.send();
     }
 
     Timer {
@@ -1471,6 +1487,11 @@ Scope {
 
     property var currentTrack: null
     property string currentResolvedCover: ""
+    onCurrentResolvedCoverChanged: {
+        if (win.currentResolvedCover && win.isPlaying) {
+            win.fetchSongPalette(win.currentResolvedCover);
+        }
+    }
     onCurrentTrackChanged: {
         win.currentResolvedCover = "";
         win.triggerUserActiveBoost();
@@ -1652,91 +1673,94 @@ Scope {
                 anchors.fill: parent
                 z: -1000
 
-            // 1. Solid dark foundation to completely block background windows/terminals
-            Rectangle {
-                anchors.fill: parent
-                color: "#0a0b0e"
-            }
-
-            // 2. Desktop Wallpaper Atmosphere Wrapper (when paused / idle)
-            Item {
-                id: wallpaperAtmosphereWrapper
-                anchors.fill: parent
-                clip: true
-                visible: false
-
-                Image {
-                    id: wallpaperAtmosphereImg
-                    anchors.centerIn: parent
-                    width: parent.width * 1.15
-                    height: parent.height * 1.15
-                    source: win.formatFileUrl(win.currentWallpaperPath)
-                    sourceSize: Qt.size(480, 270)
-                    fillMode: Image.PreserveAspectCrop
-                    asynchronous: true
-                    cache: false
-                }
-            }
-
-            MultiEffect {
-                id: wallpaperAtmosphereEffect
-                anchors.fill: parent
-                source: wallpaperAtmosphereWrapper
-                visible: wallpaperAtmosphereImg.status === Image.Ready && opacity > 0.01
-                blurEnabled: true
-                blur: 1.0
-                blurMax: 32
-                saturation: 1.35
-                brightness: -0.15
-                opacity: (win.currentTrack && win.isPlaying) ? 0.0 : 0.65
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 400
-                        easing.type: Easing.InOutQuad
-                    }
-                }
-            }
-
-            // 3. Song Artwork Atmosphere Wrapper (when playing music)
-            Item {
-                id: songAtmosphereWrapper
-                anchors.fill: parent
-                clip: true
-                visible: false
-
-                Image {
-                    id: songAtmosphereImg
+                // 1. Solid dark foundation to completely block background windows/terminals
+                Rectangle {
                     anchors.fill: parent
-                    source: win.getTrackCoverUrl(win.currentTrack)
-                    sourceSize: Qt.size(160, 160)
-                    fillMode: Image.PreserveAspectCrop
-                    asynchronous: true
-                    cache: false
+                    color: "#0a0b0e"
                 }
-            }
 
-            MultiEffect {
-                id: songAtmosphereEffect
-                anchors.fill: parent
-                source: songAtmosphereWrapper
-                visible: songAtmosphereImg.status === Image.Ready && opacity > 0.01
-                blurEnabled: true
-                blur: 1.0
-                blurMax: 32
-                saturation: 1.45
-                brightness: -0.15
-                opacity: (win.currentTrack && win.isPlaying) ? 0.65 : 0.0
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 400
-                        easing.type: Easing.InOutQuad
+                // 2. Desktop Wallpaper Atmosphere Wrapper (when paused / idle)
+                Item {
+                    id: wallpaperAtmosphereWrapper
+                    anchors.fill: parent
+                    clip: true
+                    visible: false
+
+                    Image {
+                        id: wallpaperAtmosphereImg
+                        anchors.centerIn: parent
+                        width: parent.width * 1.15
+                        height: parent.height * 1.15
+                        source: win.formatFileUrl(win.currentWallpaperPath)
+                        sourceSize: Qt.size(480, 270)
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        cache: false
+                    }
+                }
+
+                MultiEffect {
+                    id: wallpaperAtmosphereEffect
+                    anchors.fill: parent
+                    source: wallpaperAtmosphereWrapper
+                    visible: wallpaperAtmosphereImg.status === Image.Ready && opacity > 0.01
+                    blurEnabled: true
+                    blur: 1.0
+                    blurMax: 40
+                    saturation: 1.55
+                    brightness: -0.05
+                    opacity: (win.currentTrack && win.isPlaying) ? 0.0 : 0.85
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: 400
+                            easing.type: Easing.InOutQuad
+                        }
+                    }
+                }
+
+                // 3. Song Artwork Atmosphere Wrapper (when playing music)
+                Item {
+                    id: songAtmosphereWrapper
+                    anchors.fill: parent
+                    clip: true
+                    visible: false
+
+                    Image {
+                        id: songAtmosphereImg
+                        anchors.fill: parent
+                        source: win.getTrackCoverUrl(win.currentTrack)
+                        sourceSize: Qt.size(160, 160)
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        cache: false
+                    }
+                }
+
+                MultiEffect {
+                    id: songAtmosphereEffect
+                    anchors.fill: parent
+                    source: songAtmosphereWrapper
+                    visible: songAtmosphereImg.status === Image.Ready && opacity > 0.01
+                    blurEnabled: true
+                    blur: 1.0
+                    blurMax: 40
+                    saturation: 1.65
+                    brightness: -0.05
+                    opacity: (win.currentTrack && win.isPlaying) ? 0.85 : 0.0
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: 400
+                            easing.type: Easing.InOutQuad
+                        }
                     }
                 }
             }
 
-            // 4. Adaptive Dark Scrim
+            // 4. Adaptive Dark Scrim (Applied over masterBackdropStack to guarantee text readability)
             Rectangle {
+                id: masterScrimOverlay
                 anchors.fill: parent
+                z: -999
                 gradient: Gradient {
                     GradientStop {
                         position: 0.0
@@ -1755,7 +1779,6 @@ Scope {
                     }
                 }
             }
-        }
 
         // Ambient Edge Vignette (Option 2 - Cinematic Spatial Depth)
         Item {
@@ -2369,7 +2392,7 @@ Scope {
             Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
             height: 66
             z: 50
-            backgroundSourceItem: masterAppSurface
+            backgroundSourceItem: masterBackdropStack
 
             currentTrack: win.currentTrack
             resolvedSquareImage: win.currentResolvedCover
@@ -2427,7 +2450,7 @@ Scope {
         SettingsModal {
             id: settingsModal
             objectName: "settingsModal"
-            backgroundSourceItem: masterAppSurface
+            backgroundSourceItem: masterBackdropStack
             isLoggedIn: win.isAuthLoggedIn
             accountName: win.authAccountName
             accountThumb: win.currentUserAvatar
@@ -2572,7 +2595,7 @@ Scope {
 
         PostNoteModal {
             id: postNoteModal
-            backgroundSourceItem: masterAppSurface
+            backgroundSourceItem: masterBackdropStack
             currentTrack: win.currentTrack
             resolvedCover: win.currentResolvedCover
             availableTracks: (win.currentTracks && win.currentTracks.length > 0) ? win.currentTracks : (win.browsingTracks && win.browsingTracks.length > 0 ? win.browsingTracks : win.allTracks)
@@ -2631,7 +2654,7 @@ Scope {
 
         UserNoteDetailModal {
             id: userNoteDetailModal
-            backgroundSourceItem: masterAppSurface
+            backgroundSourceItem: masterBackdropStack
             userAvatar: win.currentUserAvatar
             userName: win.authAccountName
 
@@ -2650,7 +2673,7 @@ Scope {
 
         SpotifyImportModal {
             id: spotifyImportModal
-            backgroundSourceItem: masterAppSurface
+            backgroundSourceItem: masterBackdropStack
             accentColor: win.accentColor
             spotifySpdc: win.spotifySpdc
             onCloseRequested: spotifyImportModal.closeModal()
@@ -2700,13 +2723,13 @@ Scope {
             id: downloadPopover
             dlMgr: downloadManager
             accentColor: win.accentColor
-            backgroundSourceItem: masterAppSurface
+            backgroundSourceItem: masterBackdropStack
         }
 
         SleepTimerPopover {
             id: sleepTimerPopover
             accentColor: win.accentColor
-            backgroundSourceItem: masterAppSurface
+            backgroundSourceItem: masterBackdropStack
             targetAnchorItem: bottomPlayer
             isTimerActive: win.isSleepTimerActive
             remainingSeconds: win.sleepTimerRemainingSeconds
@@ -2725,7 +2748,7 @@ Scope {
 
         FriendStoryModal {
             id: friendStoryModal
-            backgroundSourceItem: masterAppSurface
+            backgroundSourceItem: masterBackdropStack
             friendsNotes: win.friendsNotes
             accentColor: win.accentColor
             onListenAlongRequested: friendData => {
@@ -2746,7 +2769,7 @@ Scope {
         PlaylistTrackSearchModal {
             id: playlistTrackSearchModal
             accentColor: win.accentColor
-            backgroundSourceItem: masterAppSurface
+            backgroundSourceItem: masterBackdropStack
             currentTrack: win.currentTrack
             isPlaying: win.isPlaying
             availableTracks: (win.currentTracks && win.currentTracks.length > 0) ? win.currentTracks : win.browsingTracks
@@ -2762,7 +2785,7 @@ Scope {
         CoListenersPopover {
             id: coListenersPopover
             accentColor: win.accentColor
-            backgroundSourceItem: masterAppSurface
+            backgroundSourceItem: masterBackdropStack
             allowControl: win.allowCoListenerControl
             onStopAllRequested: win.stopAllCoListening()
             onKickRequested: (kEmail, kName) => win.kickCoListener(kEmail, kName)
@@ -2772,7 +2795,7 @@ Scope {
         FriendRequestsPopover {
             id: friendRequestsPopover
             accentColor: win.accentColor
-            backgroundSourceItem: masterAppSurface
+            backgroundSourceItem: masterBackdropStack
             onAcceptRequested: (reqId, fromEmail, fromName) => {
                 win.respondFriendRequest(reqId, fromEmail, "accept");
             }
@@ -2784,7 +2807,7 @@ Scope {
         ManageFriendsModal {
             id: manageFriendsModal
             accentColor: win.accentColor
-            backgroundSourceItem: masterAppSurface
+            backgroundSourceItem: masterBackdropStack
             currentUserEmail: win.getCurrentUserEmail()
             currentUserName: win.getCurrentUserName()
             currentUserAvatar: win.getCurrentUserAvatar()
@@ -3764,6 +3787,9 @@ Scope {
     IpcHandler {
         id: frostifyIpc
         target: "frostify"
+        function getAccentColorInfo() {
+            console.log("[NutstyAccent]", "accentColor:", win.accentColor, "songAccentColor:", win.songAccentColor, "wallpaperAccentColor:", win.wallpaperAccentColor, "isPlaying:", win.isPlaying, "track:", win.currentTrack ? win.currentTrack.title : "null", "cover:", win.currentTrack ? win.currentTrack.image : "null");
+        }
         function testSendChatMessage(text: string) {
             win.sendChatMessage(text);
         }
