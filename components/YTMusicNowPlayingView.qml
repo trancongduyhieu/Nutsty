@@ -1670,6 +1670,7 @@ Item {
                                     id: qRow
                                     width: delegateCol.width
                                     height: 48
+                                    radius: 8
                                     readonly property bool isCurrent: Boolean(root.track && modelData && (
                                         (typeof win !== "undefined" && typeof win.isSameTrack === "function") 
                                             ? win.isSameTrack(modelData, root.track)
@@ -1707,6 +1708,7 @@ Item {
 
                                             Rectangle {
                                                 anchors.fill: parent
+                                                radius: 6
                                                 color: Qt.rgba(0, 0, 0, 0.55)
                                                 visible: qRow.isCurrent && root.isPlaying
 
@@ -1995,23 +1997,17 @@ Item {
                                             anchors.rightMargin: 12
                                             spacing: 10
 
-                                            Rectangle {
+                                            RoundedImage {
                                                 Layout.preferredWidth: 36
                                                 Layout.preferredHeight: 36
                                                 radius: 6
-                                                color: "#222"
-                                                clip: true
-
-                                                Image {
-                                                    anchors.fill: parent
-                                                    source: modelData.image || ""
-                                                    sourceSize: Qt.size(96, 72)
-                                                    asynchronous: true
-                                                    cache: false
-                                                    fillMode: Image.PreserveAspectCrop
-                                                    scale: (implicitWidth > 0 && implicitHeight > 0 && (implicitWidth / implicitHeight > 1.3)) ? 1.48 : 1.0
-                                                    transformOrigin: Item.Center
-                                                }
+                                                source: modelData.image || ""
+                                                sourceSize: Qt.size(72, 72)
+                                                asynchronous: true
+                                                fillMode: Image.PreserveAspectCrop
+                                                autoCropBlackBars: true
+                                                fallbackIcon: "../assets/icons/media-optical-audio-symbolic.svg"
+                                                fallbackIconSize: 16
                                             }
 
                                             ColumnLayout {
@@ -2202,21 +2198,17 @@ Item {
                                                     anchors.margins: 8
                                                     spacing: 6
 
-                                                    Rectangle {
+                                                    RoundedImage {
                                                         Layout.preferredWidth: 114
                                                         Layout.preferredHeight: 114
                                                         radius: 8
-                                                        color: "#222"
-                                                        clip: true
-
-                                                        Image {
-                                                            anchors.fill: parent
-                                                            source: modelData.image || ""
-                                                            sourceSize: Qt.size(160, 160)
-                                                            asynchronous: true
-                                                            cache: false
-                                                            fillMode: Image.PreserveAspectCrop
-                                                        }
+                                                        source: modelData.image || ""
+                                                        sourceSize: Qt.size(240, 240)
+                                                        asynchronous: true
+                                                        fillMode: Image.PreserveAspectCrop
+                                                        autoCropBlackBars: true
+                                                        fallbackIcon: "../assets/icons/folder-music-symbolic.svg"
+                                                        fallbackIconSize: 32
                                                     }
 
                                                     Text {
