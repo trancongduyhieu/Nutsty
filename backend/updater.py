@@ -27,17 +27,15 @@ CACHE_FILE = os.path.join(CONFIG_DIR, "nutsty_update_cache.json")
 CACHE_TTL = 6 * 3600  # 6 hours TTL
 
 def parse_semver(v_str):
-    """Parse version string like 'v1.0.11' or '1.0.0-beta.1' into comparable tuple."""
+    """Parse version string like 'v1.0.11', '1.0.4.2' or '1.0.0-beta.1' into comparable 4-element tuple."""
     if not v_str:
-        return (0, 0, 0)
+        return (0, 0, 0, 0)
     cleaned = re.sub(r"^[vV]", "", str(v_str).strip())
-    match = re.match(r"^(\d+)\.(\d+)(?:\.(\d+))?", cleaned)
-    if match:
-        major = int(match.group(1))
-        minor = int(match.group(2))
-        patch = int(match.group(3)) if match.group(3) else 0
-        return (major, minor, patch)
-    return (0, 0, 0)
+    base_ver = cleaned.split("-")[0]
+    nums = [int(x) for x in re.findall(r"\d+", base_ver)]
+    while len(nums) < 4:
+        nums.append(0)
+    return tuple(nums[:4])
 
 def is_newer_version(latest_tag, current_ver):
     """Return True if latest_tag > current_ver."""
