@@ -28,6 +28,7 @@ LibraryLoader 1.0 LibraryLoader.qml
 LiquidGlass 1.0 LiquidGlass.qml
 LiquidScrollBar 1.0 LiquidScrollBar.qml
 MainTrackGrid 1.0 MainTrackGrid.qml
+MediaCoverSurface 1.0 MediaCoverSurface.qml
 ManageFriendsModal 1.0 ManageFriendsModal.qml
 MarqueeText 1.0 MarqueeText.qml
 MinimalistLyricsView 1.0 MinimalistLyricsView.qml

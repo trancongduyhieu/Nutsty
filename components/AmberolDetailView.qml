@@ -590,27 +590,19 @@ Rectangle {
                     Layout.alignment: Qt.AlignHCenter
 
                     // 1. Large Cover Art (260x260 in compact, 280x280 wide)
-                    Rectangle {
+                    MediaCoverSurface {
+                        id: mainCover
                         width: root.isCompact ? 260 : 280
                         height: width
                         Layout.preferredWidth: width
                         Layout.preferredHeight: height
                         Layout.alignment: Qt.AlignHCenter
+                        track: root.track
                         radius: 16
-                        color: Qt.rgba(1, 1, 1, 0.04)
-                        border.color: Qt.rgba(1, 1, 1, 0.10)
-                        border.width: 1
-
-                        RoundedImage {
-                            id: mainCover
-                            anchors.fill: parent
-                            radius: 16
-                            source: root.track && root.track.image ? root.track.image : ""
-                            fillMode: Image.PreserveAspectCrop
-                            autoCropBlackBars: true
-                            asynchronous: true
-                            initialsText: root.track && root.track.artist ? root.track.artist : "A"
-                        }
+                        animatedCoverEnabled: (typeof win !== "undefined" && win) ? win.animatedCoverEnabled : true
+                        canvasPreference: (typeof win !== "undefined" && win) ? win.canvasPreference : "apple_first"
+                        isPlaying: (typeof win !== "undefined" && win) ? win.isPlaying : false
+                        appDir: root.appDir
                     }
 
                     // 2. Track Title & Artist Info

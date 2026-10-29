@@ -811,140 +811,16 @@ Item {
                     width: Math.min(parent.width - 24, Math.min(parent.height - 24, 460))
                     height: width
 
-                    Rectangle {
-                        id: coverShadow
+                    MediaCoverSurface {
+                        id: coverSurface
                         anchors.fill: parent
-                        anchors.topMargin: 4
-                        anchors.bottomMargin: -4
+                        track: root.track
                         radius: 16
-                        color: Qt.rgba(0, 0, 0, 0.40)
-                        z: 0
-                    }
-
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: 16
-                        color: "#202024"
-
-                        // Mask for Animated Video Output (zero leak into 4 corners, 0 FBO overhead when idle)
-                        Rectangle {
-                            id: coverVideoMask
-                            anchors.fill: parent
-                            radius: 16
-                            color: "#ffffff"
-                            visible: false
-                            layer.enabled: true
-                        }
-
-                        RoundedImage {
-                            id: bigCoverImg
-                            anchors.fill: parent
-                            radius: 16
-                            source: {
-                                if (root.resolvedSquareImage !== "" && !root.squareImageFailed) {
-                                    var rImg = root.resolvedSquareImage;
-                                    return (rImg.startsWith("/") && !rImg.startsWith("file://")) ? ("file://" + rImg) : rImg;
-                                }
-                                var raw = root.getRawTrackImage(root.track);
-                                if (!raw) return "";
-                                var targetImg = root.highResFailed ? raw : root.getHighResImage(raw);
-                                return (targetImg.startsWith("/") && !targetImg.startsWith("file://")) ? ("file://" + targetImg) : targetImg;
-                            }
-                            fillMode: Image.PreserveAspectCrop
-                            autoCropBlackBars: true
-                            asynchronous: true
-                            sourceSize: Qt.size(400, 400)
-                            onStatusChanged: {
-                                if (status === Image.Error) {
-                                    if (root.resolvedSquareImage !== "" && !root.squareImageFailed) {
-                                        root.squareImageFailed = true;
-                                    } else if (!root.highResFailed) {
-                                        root.highResFailed = true;
-                                    }
-                                }
-                            }
-                        }
-
-                        MediaPlayer {
-                            id: amPlayer
-                            videoOutput: amVideoOutput
-                            source: (root.visible && root.animatedCoverEnabled && root.canvasPreference !== "off" && root.animatedArtworkUrl !== "") ? root.animatedArtworkUrl : ""
-                            audioOutput: null
-                            loops: MediaPlayer.Infinite
-                            onErrorOccurred: (error, errorString) => {
-                                console.log("[Nutsty] amPlayer error:", error, errorString);
-                            }
-                            onPlaybackStateChanged: {
-                                console.log("[Nutsty] amPlayer playbackState:", playbackState);
-                            }
-                            Component.onCompleted: {
-                                if (source !== "" && root.visible && root.isPlaying) play();
-                            }
-                            onSourceChanged: {
-                                if (source !== "" && root.visible && root.isPlaying) play();
-                                else stop();
-                            }
-                        }
-
-                        Connections {
-                            target: root
-                            function onIsPlayingChanged() {
-                                if (amPlayer.source !== "") {
-                                    if (root.isPlaying && root.visible) {
-                                        if (amPlayer.playbackState !== MediaPlayer.PlayingState) amPlayer.play();
-                                    } else {
-                                        if (amPlayer.playbackState === MediaPlayer.PlayingState) amPlayer.pause();
-                                    }
-                                }
-                            }
-                            function onVisibleChanged() {
-                                if (amPlayer.source !== "") {
-                                    if (root.visible && root.isPlaying) {
-                                        if (amPlayer.playbackState !== MediaPlayer.PlayingState) amPlayer.play();
-                                    } else {
-                                        if (amPlayer.playbackState === MediaPlayer.PlayingState) amPlayer.pause();
-                                    }
-                                }
-                            }
-                        }
-
-                        VideoOutput {
-                            id: amVideoOutput
-                            anchors.fill: parent
-                            fillMode: VideoOutput.PreserveAspectCrop
-                            visible: opacity > 0.01
-                            opacity: (root.animatedCoverEnabled && root.animatedArtworkUrl !== "" && (amPlayer.playbackState === MediaPlayer.PlayingState || amPlayer.playbackState === MediaPlayer.PausedState)) ? 1.0 : 0.0
-                            Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.OutQuad } }
-                            z: 1
-
-                            layer.enabled: opacity > 0.01
-                            layer.effect: MultiEffect {
-                                maskEnabled: true
-                                maskSource: coverVideoMask
-                                autoPaddingEnabled: false
-                            }
-                        }
-
-                        Rectangle {
-                            anchors.fill: parent
-                            visible: bigCoverImg.status !== Image.Ready && (!root.animatedCoverEnabled || root.animatedArtworkUrl === "")
-                            color: Qt.rgba(0.08, 0.08, 0.10, 0.85)
-                            AppIcon {
-                                anchors.centerIn: parent
-                                source: "../assets/icons/media-optical-audio-symbolic.svg"
-                                iconSize: 48
-                                color: Theme.textMuted
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: 16
-                        color: "transparent"
-                        border.color: Qt.rgba(1, 1, 1, 0.16)
-                        border.width: 1
-                        z: 2
+                        animatedCoverEnabled: root.animatedCoverEnabled
+                        canvasPreference: root.canvasPreference
+                        isPlaying: root.isPlaying
+                        overrideImage: root.resolvedSquareImage
+                        appDir: root.appDir
                     }
                 }
             }
