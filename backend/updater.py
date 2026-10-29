@@ -217,6 +217,18 @@ def check_for_updates(force=False, mock=False):
     return res
 
 
+def find_app_root_in_staged(stage_path):
+    """Ensure we find the folder containing Nutsty.exe, shell.qml, or start.bat, never a subfolder like _internal."""
+    if not stage_path or not os.path.exists(stage_path):
+        return stage_path
+    if os.path.exists(os.path.join(stage_path, "Nutsty.exe")) or os.path.exists(os.path.join(stage_path, "start.bat")) or os.path.exists(os.path.join(stage_path, "shell.qml")):
+        return stage_path
+    for root, dirs, files in os.walk(stage_path):
+        if "Nutsty.exe" in files or "start.bat" in files or "shell.qml" in files:
+            if os.path.basename(root) != "_internal":
+                return root
+    return stage_path
+
 class DirectUpdateManager:
     def __init__(self):
         self._lock = threading.Lock()
@@ -318,10 +330,7 @@ class DirectUpdateManager:
             with zipfile.ZipFile(zip_dest, "r") as zf:
                 zf.extractall(staged_dest)
 
-            entries = os.listdir(staged_dest)
-            final_stage = staged_dest
-            if len(entries) == 1 and os.path.isdir(os.path.join(staged_dest, entries[0])):
-                final_stage = os.path.join(staged_dest, entries[0])
+            final_stage = find_app_root_in_staged(staged_dest)
 
             with self._lock:
                 self.active = False
@@ -343,11 +352,7 @@ class DirectUpdateManager:
         if not staged or not os.path.exists(staged):
             default_staged = os.path.join(CONFIG_DIR, "updates", "staged")
             if os.path.exists(default_staged):
-                entries = os.listdir(default_staged)
-                if len(entries) == 1 and os.path.isdir(os.path.join(default_staged, entries[0])):
-                    staged = os.path.join(default_staged, entries[0])
-                else:
-                    staged = default_staged
+                staged = find_app_root_in_staged(default_staged)
             else:
                 return {"success": False, "error": "Chưa có bản cập nhật được giải nén sẵn sàng."}
 
