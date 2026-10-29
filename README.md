@@ -9,7 +9,7 @@
 [![Engine](https://img.shields.io/badge/Audio-mpv%20IPC%20Daemon-9b59b6?style=flat-square)](#)
 [![Cloud](https://img.shields.io/badge/Cloud%20Relay-Cloudflare%20Workers%20%2B%20D1-F38020?style=flat-square&logo=cloudflare)](#)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](#)
-[![Version](https://img.shields.io/badge/Release-v1.0.4.2-gold?style=flat-square)](#)
+[![Version](https://img.shields.io/badge/Release-v1.0.5-gold?style=flat-square)](#)
 
 *Nutsty là trình phát nhạc máy tính để bàn hiện đại, kết hợp hoàn hảo giữa thẩm mỹ kính lỏng Liquid Glass thích ứng màu sắc và bộ máy âm thanh bit-perfect độ trễ thấp.*
 

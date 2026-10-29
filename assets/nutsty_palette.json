@@ -1,11 +1,11 @@
 {
-  "wallpaper": "C:/WINDOWS/web/wallpaper/Windows/img0.jpg",
-  "meanLuminance": 0.328,
-  "brightRatio": 0.126,
+  "wallpaper": "C:/Users/apple/AppData/Local/Packages/MicrosoftWindows.Client.CBS_cw5n1h2txyewy/LocalCache/Microsoft/IrisService/16589437814299591839/134373335584207623.jpg",
+  "meanLuminance": 0.405,
+  "brightRatio": 0.031,
   "isLightArea": false,
-  "theme": "amethyst",
+  "theme": "sapphire",
   "baseTextColor": "#f8fafc",
-  "highlightColor": "#9bc3ff",
+  "highlightColor": "#89c9ff",
   "deadTextColor": "#f1f5f9",
   "shadowDirectional": "#a6020305",
   "shadowAmbient": "#66000000"

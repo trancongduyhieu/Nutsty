@@ -20,7 +20,7 @@ Item {
     property bool closingGuard: false
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
     property Item backgroundSourceItem: null
-    property string versionString: (typeof win !== "undefined" && win.appVersion) ? win.appVersion : "1.0.4.2"
+    property string versionString: (typeof win !== "undefined" && win.appVersion) ? win.appVersion : "1.0.5"
     property string customReleaseNotes: ""
 
     signal closeRequested()
@@ -143,7 +143,7 @@ Item {
                         Text {
                             id: verTagTxt
                             anchors.centerIn: parent
-                            text: "v" + (root.versionString || "1.0.4.2")
+                            text: "v" + (root.versionString || "1.0.5")
                             font.family: Theme.fontFamily
                             font.pixelSize: 10
                             font.bold: true

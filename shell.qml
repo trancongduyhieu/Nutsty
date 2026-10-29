@@ -129,9 +129,9 @@ Scope {
     property bool toastVisible: false
     property string localApiUrl: "http://127.0.0.1:17890"
     property string notesApiUrl: Quickshell.env("NUTSTY_WORKER_URL") || "http://127.0.0.1:17890"
-    property string appVersion: "1.0.4.2"
-    property string latestVersion: "1.0.4.2"
-    property string lastSeenVersion: "1.0.4.2"
+    property string appVersion: "1.0.5"
+    property string latestVersion: "1.0.5"
+    property string lastSeenVersion: "1.0.5"
     property bool hasAppUpdate: false
     property bool isCheckingUpdate: false
     property string updateUrl: ""
