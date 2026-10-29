@@ -26,6 +26,7 @@ Rectangle {
     property string canvasPreference: "apple_first"
     property int currentTab: 0 // 0: Google Account, 1: Desktop Lyrics
     property bool desktopLyricsEnabled: true
+    property bool lyricsRomanizationEnabled: true
     property int lyricsPreset: 2 // 1: Gacha, 2: Apple Music 5-Line, 3: Minimalist Blur, 4: Anime MV Kinetic
     property int customX: -1
     property int customY: -1
@@ -301,6 +302,7 @@ Rectangle {
     signal toggleAnimatedCoverRequested(bool enabled)
     signal saveCanvasPreferenceRequested(string pref)
     signal toggleDesktopLyricsRequested(bool enabled)
+    signal toggleLyricsRomanizationRequested(bool enabled)
     signal selectLyricsPresetRequested(int preset)
     signal resetLyricsPositionRequested()
     signal saveSpotifySpdcRequested(string spdc)
@@ -2317,6 +2319,64 @@ Rectangle {
                             preventStealing: false
                             cursorShape: Qt.PointingHandCursor
                             onClicked: root.toggleDesktopLyricsRequested(!root.desktopLyricsEnabled)
+                        }
+                    }
+                }
+
+                // Secondary Switch: Romanization (Romaji / Romaja / Pinyin)
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 46
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: toggleRomanization.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            text: I18n.tr("Phiên âm lời bài hát Latinh (Romanization)", "Lyrics Romanization")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 14
+                            font.bold: true
+                            color: Theme.textPrimary
+                        }
+
+                        Text {
+                            text: I18n.tr("Hiển thị phát âm Romaji, Romaja, Pinyin bên dưới câu hát gốc", "Show Romaji, Romaja, and Pinyin readings under original lyrics")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                        }
+                    }
+
+                    // Toggle Switch Pill (Pinned to Right)
+                    Rectangle {
+                        id: toggleRomanization
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 44
+                        height: 24
+                        radius: 12
+                        color: root.lyricsRomanizationEnabled ? root.accentColor : Qt.rgba(255, 255, 255, 0.14)
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        Rectangle {
+                            width: 18
+                            height: 18
+                            radius: 9
+                            color: "#ffffff"
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: root.lyricsRomanizationEnabled ? parent.width - width - 3 : 3
+                            Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            preventStealing: false
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.toggleLyricsRomanizationRequested(!root.lyricsRomanizationEnabled)
                         }
                     }
                 }

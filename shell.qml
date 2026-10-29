@@ -77,6 +77,7 @@ Scope {
     property string authAccountEmail: ""
     property bool syncHistoryToGoogle: true
     property bool desktopLyricsEnabled: true
+    property bool lyricsRomanizationEnabled: true
     property bool animatedCoverEnabled: Qt.platform.os !== "windows"
     property int desktopLyricsPreset: 2 // 1: Cinematic Serif, 2: Apple Music 5-Line Parametric, 3: Minimal Glide, 4: Motion Typography
     property int desktopLyricsCustomX: -1
@@ -2346,6 +2347,7 @@ Scope {
                     accentColor: win.accentColor
                     backgroundSourceItem: masterBackdropStack
                     listeningAlongFriend: win.listeningAlongFriend
+                    lyricsRomanizationEnabled: win.lyricsRomanizationEnabled
 
                     onExitListeningAlongRequested: win.exitListeningAlong()
                     onSeekRequested: sec => win.seekAudio(sec)
@@ -2459,6 +2461,7 @@ Scope {
             accountEmail: win.authAccountEmail
             syncHistoryToGoogle: win.syncHistoryToGoogle
             desktopLyricsEnabled: win.desktopLyricsEnabled
+            lyricsRomanizationEnabled: win.lyricsRomanizationEnabled
             animatedCoverEnabled: win.animatedCoverEnabled
             canvasPreference: win.canvasPreference
             lyricsPreset: win.desktopLyricsPreset
@@ -2522,6 +2525,10 @@ Scope {
             }
             onToggleDesktopLyricsRequested: enabled => {
                 win.desktopLyricsEnabled = enabled;
+                win.saveSettings();
+            }
+            onToggleLyricsRomanizationRequested: enabled => {
+                win.lyricsRomanizationEnabled = enabled;
                 win.saveSettings();
             }
             onSelectLyricsPresetRequested: preset => {
@@ -3025,6 +3032,7 @@ Scope {
             if (obj.widgetX !== undefined) win.widgetX = Number(obj.widgetX);
             if (obj.widgetY !== undefined) win.widgetY = Number(obj.widgetY);
             if (obj.desktopLyricsEnabled !== undefined) win.desktopLyricsEnabled = !!obj.desktopLyricsEnabled;
+            if (obj.lyricsRomanizationEnabled !== undefined) win.lyricsRomanizationEnabled = !!obj.lyricsRomanizationEnabled;
             if (obj.canvasPreference !== undefined && typeof obj.canvasPreference === "string") {
                 win.canvasPreference = (Qt.platform.os === "windows" && (obj.canvasPreference === "apple_first" || obj.canvasPreference === "apple_only")) ? "off" : obj.canvasPreference;
                 win.animatedCoverEnabled = (win.canvasPreference !== "off");
@@ -3085,6 +3093,7 @@ Scope {
             widgetX: win.widgetX,
             widgetY: win.widgetY,
             desktopLyricsEnabled: win.desktopLyricsEnabled,
+            lyricsRomanizationEnabled: win.lyricsRomanizationEnabled,
             animatedCoverEnabled: win.animatedCoverEnabled,
             canvasPreference: win.canvasPreference,
             desktopLyricsPreset: win.desktopLyricsPreset,
@@ -4313,6 +4322,7 @@ Scope {
         isPlaying: win.isPlaying
         currentTrack: win.currentTrack
         enabled: win.desktopLyricsEnabled
+        lyricsRomanizationEnabled: win.lyricsRomanizationEnabled
         lyricsPreset: win.desktopLyricsPreset
         customX: win.desktopLyricsCustomX
         customY: win.desktopLyricsCustomY
