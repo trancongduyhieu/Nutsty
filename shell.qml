@@ -83,10 +83,18 @@ Scope {
     property int desktopLyricsCustomX: -1
     property int desktopLyricsCustomY: -1
     property var desktopLyricsWallpaperPositions: ({})
-    property bool isSleepTimerActive: false
-    property int sleepTimerRemainingSeconds: 0
-    property string sleepTimerMode: "" // "duration" or "end_of_track"
-    property bool sleepTimerFadeTriggered: false
+    SleepTimerController {
+        id: sleepTimerController
+        currentTime: win.currentTime
+        totalDuration: win.totalDuration
+        appDir: win.appDir
+        onTimerFinished: win.isPlaying = false
+    }
+
+    property alias isSleepTimerActive: sleepTimerController.isActive
+    property alias sleepTimerRemainingSeconds: sleepTimerController.remainingSeconds
+    property alias sleepTimerMode: sleepTimerController.mode
+    property alias sleepTimerFadeTriggered: sleepTimerController.fadeTriggered
     property string currentLanguage: I18n.locale
     property string streamingQuality: "high_opus"
     property string downloadQuality: "high_opus"
@@ -3295,48 +3303,15 @@ Scope {
     }
 
     function startSleepTimer(seconds, mode) {
-        return PlaybackEngine.startSleepTimer(win, seconds, mode);
+        if (mode === "end_of_track") {
+            sleepTimerController.startEndOfTrack();
+        } else {
+            sleepTimerController.startDuration(Math.round(seconds / 60));
+        }
     }
 
     function cancelSleepTimer() {
-        return PlaybackEngine.cancelSleepTimer(win);
-    }
-
-    Timer {
-        id: sleepCountdownTimer
-        interval: 1000
-        repeat: true
-        running: win.isSleepTimerActive
-        onTriggered: {
-            if (!win.isSleepTimerActive) return;
-
-            if (win.sleepTimerMode === "duration") {
-                if (win.sleepTimerRemainingSeconds > 0) {
-                    win.sleepTimerRemainingSeconds--;
-                }
-
-                // Trigger 5-second Cosine Fade at 5s remaining
-                if (win.sleepTimerRemainingSeconds === 5 && !win.sleepTimerFadeTriggered) {
-                    win.sleepTimerFadeTriggered = true;
-                    Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "fade_out_and_pause", "5.0"]);
-                } else if (win.sleepTimerRemainingSeconds <= 0) {
-                    win.isSleepTimerActive = false;
-                    win.sleepTimerFadeTriggered = false;
-                    win.sleepTimerMode = "";
-                    win.isPlaying = false;
-                    Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
-                }
-            } else if (win.sleepTimerMode === "end_of_track") {
-                win.sleepTimerRemainingSeconds = Math.max(0, Math.round(win.totalDuration - win.currentTime));
-                if (win.totalDuration > 5) {
-                    var remaining = win.totalDuration - win.currentTime;
-                    if (remaining <= 5.0 && remaining > 0.4 && !win.sleepTimerFadeTriggered) {
-                        win.sleepTimerFadeTriggered = true;
-                        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "fade_out_and_pause", String(Math.max(1.0, remaining))]);
-                    }
-                }
-            }
-        }
+        sleepTimerController.cancel();
     }
 
     function rateSong(vid, rating) {
