@@ -70,29 +70,20 @@ Item {
         z: 0
     }
 
-    // Liquid Glass Capsule Container (Apple Squircle & Snell Refraction)
+    // Liquid Glass Capsule Container (Apple Squircle & Snell Refraction with Dynamic Chromatic Rim)
     LiquidGlass {
         id: glassDock
         anchors.fill: parent
         radius: root.radius
-        displacement: 22.0
-        aberration: 0.040
-        bevelWidth: 20.0
+        displacement: (typeof win !== "undefined" && win.liquidGlassDisplacement !== undefined) ? win.liquidGlassDisplacement : 22.0
+        aberration: (typeof win !== "undefined" && win.liquidGlassAberration !== undefined) ? win.liquidGlassAberration : 0.040
+        bevelWidth: (typeof win !== "undefined" && win.liquidGlassBevelWidth !== undefined) ? win.liquidGlassBevelWidth : 20.0
+        blurRadius: (typeof win !== "undefined" && win.liquidGlassBlur !== undefined) ? win.liquidGlassBlur : 2.0
+        colorBleed: (typeof win !== "undefined" && win.liquidGlassColorBleed !== undefined) ? win.liquidGlassColorBleed : 0.45
         tintColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
         backgroundSourceItem: root.backgroundSourceItem
         isFlowActive: root.isPlaying && root.currentTrack !== null
         z: 2
-
-        // 1px Ultra-Sleek Glass Rim Border (Subtle Translucent Edge)
-        Rectangle {
-            anchors.fill: parent
-            radius: root.radius
-            color: "transparent"
-            border.color: Qt.rgba(1.0, 1.0, 1.0, 0.15)
-            border.width: 1
-            z: 20
-            Behavior on border.color { ColorAnimation { duration: 250 } }
-        }
 
         // =====================================================================
         // 1. LEFT SECTION (Mini cover + Track title & artist)
