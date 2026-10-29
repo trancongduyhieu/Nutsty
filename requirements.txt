@@ -5,3 +5,5 @@ yt-dlp>=2024.0.0
 syncedlyrics>=0.10.0
 ytmusicapi>=1.7.0
 pillow>=10.0.0
+pypinyin>=0.50.0
+pykakasi>=2.3.0

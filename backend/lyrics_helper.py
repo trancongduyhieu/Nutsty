@@ -1043,7 +1043,7 @@ def _has_synced(lyric_list):
     """Returns True if any line has a real timestamp (not all synthetic/unsynced)."""
     return lyric_list and any(item.get("time", 0) > 0 for item in lyric_list)
 
-def get_lyrics(title, artist=None, video_id=None, file_path=None, duration_sec=None):
+def _get_lyrics_raw(title, artist=None, video_id=None, file_path=None, duration_sec=None):
     if not title:
         return []
 
@@ -1260,6 +1260,27 @@ def get_lyrics(title, artist=None, video_id=None, file_path=None, duration_sec=N
 
     # Final fallback: plain DB lyrics
     return db_lyrics or get_lyrics_from_local_db(title, artist, video_id)
+
+
+def _enrich_with_romanization(lines):
+    """Enrich lyric lines with Romanized Latin reading for CJK characters."""
+    if not lines or not isinstance(lines, list):
+        return lines
+    try:
+        import romanizer
+        for item in lines:
+            if isinstance(item, dict) and "text" in item and "romanized" not in item:
+                raw_txt = item.get("text") or ""
+                clean_txt = strip_rich_sync_tags(raw_txt)
+                item["romanized"] = romanizer.romanize_line(clean_txt)
+    except Exception as e:
+        sys.stderr.write(f"[Romanization warning]: {e}\n")
+    return lines
+
+
+def get_lyrics(title, artist=None, video_id=None, file_path=None, duration_sec=None):
+    res = _get_lyrics_raw(title, artist, video_id, file_path, duration_sec)
+    return _enrich_with_romanization(res)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Cache write helpers

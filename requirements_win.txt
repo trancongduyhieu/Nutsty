@@ -9,3 +9,5 @@ ytmusicapi>=1.7.0
 websockets>=11.0.0
 certifi>=2024.2.2
 pillow>=10.0.0
+pypinyin>=0.50.0
+pykakasi>=2.3.0
