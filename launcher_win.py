@@ -316,14 +316,41 @@ class NativeHitTestFilter(QAbstractNativeEventFilter):
     def set_mask(self, hwnd: int, x: int, y: int, w: int, h: int):
         with self._lock:
             self._panel_hwnds.add(hwnd)
-            if w <= 0 or h <= 0:
-                self._masks[hwnd] = None
-            else:
-                self._masks[hwnd] = (int(x), int(y), int(w), int(h))
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                gdi32 = ctypes.windll.gdi32
+                if w <= 0 or h <= 0:
+                    self._masks[hwnd] = None
+                    empty_rgn = gdi32.CreateRectRgn(0, 0, 0, 0)
+                    user32.SetWindowRgn(hwnd, empty_rgn, True)
+                else:
+                    self._masks[hwnd] = (int(x), int(y), int(w), int(h))
+                    dpi = user32.GetDpiForWindow(hwnd) if hasattr(user32, "GetDpiForWindow") else 96
+                    scale = dpi / 96.0
+                    px = int(x * scale)
+                    py = int(y * scale)
+                    pw = int(w * scale)
+                    ph = int(h * scale)
+                    r = int(24 * scale * 2)
+                    # Physically restrict window rendering to only the interactive widget rectangle
+                    # This guarantees the rest of the 2560x1600 screen cannot be drawn black by Direct3D!
+                    rgn = gdi32.CreateRoundRectRgn(px, py, px + pw + 1, py + ph + 1, r, r)
+                    user32.SetWindowRgn(hwnd, rgn, True)
+            except Exception as e:
+                sys.stderr.write(f"NativeHitTestFilter set_mask rgn error: {e}\n")
 
     def clear_mask(self, hwnd: int):
         with self._lock:
             self._masks[hwnd] = None
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                gdi32 = ctypes.windll.gdi32
+                empty_rgn = gdi32.CreateRectRgn(0, 0, 0, 0)
+                user32.SetWindowRgn(hwnd, empty_rgn, True)
+            except Exception:
+                pass
 
     def nativeEventFilter(self, eventType, message):
         if eventType == b"windows_generic_MSG" or eventType == "windows_generic_MSG":
@@ -1087,16 +1114,20 @@ def main():
         from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
         from PySide6.QtGui import QCursor, QAction, QSurfaceFormat
         # Request explicit 8-bit alpha channel for Direct3D 11/OpenGL RHI swapchains
+        from PySide6.QtQuick import QQuickWindow
         fmt = QSurfaceFormat.defaultFormat()
         fmt.setAlphaBufferSize(8)
         QSurfaceFormat.setDefaultFormat(fmt)
+        QQuickWindow.setDefaultAlphaBuffer(True)
         app = QApplication(sys.argv)
         has_widgets = True
     except Exception:
         from PySide6.QtGui import QSurfaceFormat
+        from PySide6.QtQuick import QQuickWindow
         fmt = QSurfaceFormat.defaultFormat()
         fmt.setAlphaBufferSize(8)
         QSurfaceFormat.setDefaultFormat(fmt)
+        QQuickWindow.setDefaultAlphaBuffer(True)
         app = QGuiApplication(sys.argv)
         has_widgets = False
 
@@ -1206,11 +1237,15 @@ def main():
                     if vis in (3, 4):  # Maximized = 3, FullScreen = 4
                         user32.SetWindowRgn(hwnd, None, True)
                         return
-                    w_val = int(win_obj.width())
-                    h_val = int(win_obj.height())
-                    if w_val > 0 and h_val > 0:
-                        r = int(radius * 2)
-                        hrgn = gdi32.CreateRoundRectRgn(0, 0, w_val + 1, h_val + 1, r, r)
+                    rect = wintypes.RECT()
+                    user32.GetClientRect(hwnd, ctypes.byref(rect))
+                    phys_w = rect.right - rect.left
+                    phys_h = rect.bottom - rect.top
+                    if phys_w > 0 and phys_h > 0:
+                        dpi = user32.GetDpiForWindow(hwnd) if hasattr(user32, "GetDpiForWindow") else 96
+                        scale = dpi / 96.0
+                        r = int(radius * scale * 2)
+                        hrgn = gdi32.CreateRoundRectRgn(0, 0, phys_w + 1, phys_h + 1, r, r)
                         if hrgn:
                             user32.SetWindowRgn(hwnd, hrgn, True)
                 except Exception:
@@ -1228,27 +1263,25 @@ def main():
 
     def _init_win(w):
         if _is_bottom_panel(w):
-            w.show()
             if w.property("visible"):
                 bridge.pinWindowToDesktopBottom(w)
         else:
             if main_win_ref[0] is None and w.width() >= 500:
                 main_win_ref[0] = w
+            _setup_frameless_window(w, radius=24)
             w.show()
             w.raise_()
             w.requestActivate()
-            _setup_frameless_window(w, radius=24)
 
     main_win_ref[0] = None
-    for obj in engine.rootObjects():
-        if isinstance(obj, (QWindow, QQuickWindow)):
-            _init_win(obj)
-        if hasattr(obj, "findChildren"):
-            for child_win in obj.findChildren(QWindow):
-                _init_win(child_win)
+    def _init_all_windows():
+        for top_win in app.topLevelWindows():
+            _init_win(top_win)
 
-    for top_win in app.topLevelWindows():
-        _init_win(top_win)
+    _init_all_windows()
+    QTimer.singleShot(50, _init_all_windows)
+    QTimer.singleShot(250, _init_all_windows)
+    QTimer.singleShot(750, _init_all_windows)
 
     # Setup Windows System Tray Icon with "Mở toàn màn hình / Mở cửa sổ chính" & "Tắt ứng dụng"
     tray_icon = None
