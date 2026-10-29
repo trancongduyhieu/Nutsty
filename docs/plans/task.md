@@ -59,6 +59,10 @@
 | Phase 20: Task 4 - Git Commit & Push Changes | Completed | Committed in 90a31c4 and pushed to main |
 | Phase 20: Task 5 - Clean Re-tag v1.0.5 on GitHub | Completed | Re-tagged v1.0.5 at 90a31c4 and pushed to origin (triggers GitHub Actions release build) |
 | Phase 20: Task 6 - Rebuild Local Executable | Completed | PyInstaller build completed successfully, synced to portable dist |
+| Phase 21: Task 1 - Eliminate Desktop Lyrics Black Box & Screen Blackout (`launcher_win.py`, `DesktopLyricsWidget.qml`, `DesktopMusicWidget.qml`) | Completed | Removed GDI SetWindowRgn clipping from set_mask/clear_mask which destroyed DWM per-pixel alpha composition; simplified widget masks to retain interactive input bounds during dragging |
+| Phase 21: Task 2 - Fix Album Artwork & Thumbnail Texture Distortion (`RoundedImage.qml`) | Completed | Replaced broken single-pass ShaderEffect (which sampled atlas textures with corrupted UVs when img was hidden) with concentric MultiEffect mask, restoring pristine crisp album covers across home feed and now playing |
+| Phase 21: Task 3 - Implement 0ms Instant Audio Cutoff on Song Switch (`launcher_win.py`, `player_daemon.py`, `playback_engine.js`) | Completed | Added bridge.stopImmediate() to immediately silence and stop previous MPV track over named pipe in 0ms before loading and auto-playing the next track |
+| Phase 21: Task 4 - Rebuild Standalone Nutsty.exe & Update v1.0.5 Release | Completed | Rebuilt executable with PyInstaller, synced to Nutsty_Windows_Portable_v1.0.4.1 in Downloads, verified codebase via scripts/verify_codebase.py (< 1s), and updated git tag v1.0.5 on GitHub |
 
 
 
