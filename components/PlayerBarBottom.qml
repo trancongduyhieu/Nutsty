@@ -70,25 +70,25 @@ Item {
         z: 0
     }
 
-    // Liquid Glass Capsule Container (SimpMusic Sleek Rounded Corner 16dp)
+    // Liquid Glass Capsule Container (Apple Squircle & Snell Refraction)
     LiquidGlass {
         id: glassDock
         anchors.fill: parent
         radius: root.radius
-        displacement: 24.0
+        displacement: 22.0
         aberration: 0.040
-        bevelWidth: 16.5
-        tintColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40)
+        bevelWidth: 20.0
+        tintColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
         backgroundSourceItem: root.backgroundSourceItem
         isFlowActive: root.isPlaying && root.currentTrack !== null
         z: 2
 
-        // 1px Ultra-Sleek Hairline Accent Border (Slim & Non-bulky)
+        // 1px Ultra-Sleek Glass Rim Border (Subtle Translucent Edge)
         Rectangle {
             anchors.fill: parent
             radius: root.radius
             color: "transparent"
-            border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
+            border.color: Qt.rgba(1.0, 1.0, 1.0, 0.15)
             border.width: 1
             z: 20
             Behavior on border.color { ColorAnimation { duration: 250 } }
