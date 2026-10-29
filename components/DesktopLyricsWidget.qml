@@ -182,7 +182,8 @@ PanelWindow {
                 : ((root.lyricsPreset === 4)
                     ? (animeMVView.implicitHeight > 0 ? animeMVView.implicitHeight : 260)
                     : (appleMusicView.implicitHeight > 0 ? appleMusicView.implicitHeight : 300)))
-        visible: root.enabled && root.activeLyrics && root.activeLyrics.length > 0
+        readonly property bool hasSyncedLyrics: root.activeLyrics && root.activeLyrics.length > 0
+        visible: root.enabled && (hasSyncedLyrics || (root.currentTrack !== null && root.isPlaying))
 
         // Universal Full-Screen Drag & Gesture Area (Shared across ALL presets)
         MouseArea {
@@ -238,10 +239,39 @@ PanelWindow {
         // =====================================================================
         // Preset 1: Cinematic Serif View Plugin
         // =====================================================================
+        // Graceful Ambient Track Title Banner (Shown when music is playing but lyrics are loading/instrumental)
+        Item {
+            id: fallbackBanner
+            anchors.fill: parent
+            visible: !containerBox.hasSyncedLyrics && root.currentTrack !== null
+
+            Row {
+                anchors.centerIn: parent
+                spacing: 10
+
+                AppIcon {
+                    source: "../assets/icons/audio-x-generic-symbolic.svg"
+                    iconSize: 18
+                    color: Theme.accentColor
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Text {
+                    text: root.currentTrack ? (root.currentTrack.title + (root.currentTrack.artist ? ("  •  " + root.currentTrack.artist) : "")) : ""
+                    font.family: root.magicFontFamily
+                    font.pixelSize: 22
+                    color: "#ffffff"
+                    style: Text.Outline
+                    styleColor: "#66000000"
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+            }
+        }
+
         GachaAnimeLyricsView {
             id: gachaView
             anchors.fill: parent
-            visible: root.lyricsPreset === 1
+            visible: containerBox.hasSyncedLyrics && root.lyricsPreset === 1
             activeLyrics: root.activeLyrics
             currentTime: root.currentTime
             isPlaying: root.isPlaying
@@ -261,7 +291,7 @@ PanelWindow {
         AppleMusicDesktopLyrics {
             id: appleMusicView
             anchors.fill: parent
-            visible: root.lyricsPreset === 2
+            visible: containerBox.hasSyncedLyrics && root.lyricsPreset === 2
             activeLyrics: root.activeLyrics
             currentTime: root.currentTime
             isPlaying: root.isPlaying

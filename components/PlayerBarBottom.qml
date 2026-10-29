@@ -60,12 +60,19 @@ Item {
         return m + ":" + (s < 10 ? "0" : "") + s;
     }
 
-    // Deep Obsidian Frosted Foundation: Blocks text bleed-through (matches FriendRequestsPopover & Popover design parity)
+    // Adaptive Liquid Glass Foundation: 30%+ more translucent, prevents scrolling text bleed,
+    // and dynamically transitions between Song Accent (playing) and Wallpaper Accent (paused).
     Rectangle {
         anchors.fill: parent
         radius: root.radius
-        color: Qt.rgba(0.05, 0.06, 0.09, 0.88)
+        color: Qt.rgba(
+            0.04 + root.accentColor.r * 0.04,
+            0.04 + root.accentColor.g * 0.04,
+            0.06 + root.accentColor.b * 0.06,
+            root.isPlaying ? 0.52 : 0.36
+        )
         z: 1
+        Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.InOutQuad } }
     }
 
     // Liquid Glass Capsule Container (Apple Squircle & Snell Refraction with Dynamic Chromatic Rim)
@@ -78,7 +85,8 @@ Item {
         bevelWidth: (typeof win !== "undefined" && win.liquidGlassBevelWidth !== undefined) ? win.liquidGlassBevelWidth : 21.0
         blurRadius: (typeof win !== "undefined" && win.liquidGlassBlur !== undefined) ? win.liquidGlassBlur : 0.5
         colorBleed: (typeof win !== "undefined" && win.liquidGlassColorBleed !== undefined) ? win.liquidGlassColorBleed : 0.94
-        tintColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
+        tintColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, root.isPlaying ? 0.18 : 0.08)
+        Behavior on tintColor { ColorAnimation { duration: 400; easing.type: Easing.InOutQuad } }
         backgroundSourceItem: root.backgroundSourceItem
         isFlowActive: root.isPlaying && root.currentTrack !== null
         z: 2

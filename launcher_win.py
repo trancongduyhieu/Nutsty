@@ -660,13 +660,28 @@ class NutstyBridge(QObject):
                             user32.SetWindowLongW.restype = wintypes.LONG
                             user32.SetWindowLongW(hwnd, GWL_EXSTYLE, target_ex)
 
-                    HWND_BOTTOM = 1
+                    # Extend DWM frame for true transparent alpha composition on Windows
+                    try:
+                        class MARGINS(ctypes.Structure):
+                            _fields_ = [
+                                ("cxLeftWidth", ctypes.c_int),
+                                ("cxRightWidth", ctypes.c_int),
+                                ("cyTopHeight", ctypes.c_int),
+                                ("cyBottomHeight", ctypes.c_int),
+                            ]
+                        margins = MARGINS(-1, -1, -1, -1)
+                        ctypes.windll.dwmapi.DwmExtendFrameIntoClientArea(hwnd, ctypes.byref(margins))
+                    except Exception:
+                        pass
+
+                    # Place above desktop wallpaper/icons while remaining below normal active app windows
+                    HWND_NOTOPMOST = -2
                     SWP_NOSIZE = 0x0001
                     SWP_NOMOVE = 0x0002
                     SWP_NOACTIVATE = 0x0010
                     user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
                     user32.SetWindowPos.restype = wintypes.BOOL
-                    user32.SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE)
+                    user32.SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE)
         except Exception as e:
             sys.stderr.write(f"pinWindowToDesktopBottom error: {e}\n")
 
@@ -1150,8 +1165,70 @@ def main():
         except Exception:
             return False
 
+    def _setup_frameless_window(win_obj, radius=24):
+        if not pc.IS_WINDOWS or not hasattr(win_obj, "winId"):
+            return
+        try:
+            import ctypes
+            from ctypes import wintypes
+            hwnd = int(win_obj.winId())
+            if hwnd <= 0:
+                return
+
+            dwmapi = ctypes.windll.dwmapi
+            user32 = ctypes.windll.user32
+            gdi32 = ctypes.windll.gdi32
+
+            class MARGINS(ctypes.Structure):
+                _fields_ = [
+                    ("cxLeftWidth", ctypes.c_int),
+                    ("cxRightWidth", ctypes.c_int),
+                    ("cyTopHeight", ctypes.c_int),
+                    ("cyBottomHeight", ctypes.c_int),
+                ]
+            margins = MARGINS(-1, -1, -1, -1)
+            try:
+                dwmapi.DwmExtendFrameIntoClientArea(hwnd, ctypes.byref(margins))
+            except Exception:
+                pass
+
+            try:
+                DWMWA_WINDOW_CORNER_PREFERENCE = 33
+                DWMWCP_ROUND = 2
+                val = ctypes.c_int(DWMWCP_ROUND)
+                dwmapi.DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ctypes.byref(val), ctypes.sizeof(val))
+            except Exception:
+                pass
+
+            def _apply_rgn():
+                try:
+                    vis = win_obj.property("visibility")
+                    if vis in (3, 4):  # Maximized = 3, FullScreen = 4
+                        user32.SetWindowRgn(hwnd, None, True)
+                        return
+                    w_val = int(win_obj.width())
+                    h_val = int(win_obj.height())
+                    if w_val > 0 and h_val > 0:
+                        r = int(radius * 2)
+                        hrgn = gdi32.CreateRoundRectRgn(0, 0, w_val + 1, h_val + 1, r, r)
+                        if hrgn:
+                            user32.SetWindowRgn(hwnd, hrgn, True)
+                except Exception:
+                    pass
+
+            _apply_rgn()
+            if hasattr(win_obj, "widthChanged"):
+                win_obj.widthChanged.connect(_apply_rgn)
+            if hasattr(win_obj, "heightChanged"):
+                win_obj.heightChanged.connect(_apply_rgn)
+            if hasattr(win_obj, "visibilityChanged"):
+                win_obj.visibilityChanged.connect(_apply_rgn)
+        except Exception as e:
+            sys.stderr.write(f"_setup_frameless_window error: {e}\n")
+
     def _init_win(w):
         if _is_bottom_panel(w):
+            w.show()
             if w.property("visible"):
                 bridge.pinWindowToDesktopBottom(w)
         else:
@@ -1160,6 +1237,7 @@ def main():
             w.show()
             w.raise_()
             w.requestActivate()
+            _setup_frameless_window(w, radius=24)
 
     main_win_ref[0] = None
     for obj in engine.rootObjects():

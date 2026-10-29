@@ -53,6 +53,13 @@
 | Phase 19: Task 2 - Implement Zero-Leak Unified `masterAppSurface` for Live Backdrop Sampling (`shell.qml`) | Completed | Wrapped masterBackdropStack and mainContentBackdrop inside masterAppSurface; pointed PlayerBarBottom, modals, and popovers to masterAppSurface without FBO recursion |
 | Phase 19: Task 3 - Fix Search Shuffle Crash & State Lifecycle (`playback_engine.js`, `CategorizedSearchView.qml`, `shell.qml`) | Completed | Fixed isNowPlayingOpen view disturbance, guarded isTrackDisliked function check, handled empty candidate fallback in XHR, and guarded authServerProc on Windows |
 | Phase 19: Task 4 - Automated Verification & Windows Portable Sync | Completed | Passed verify_codebase.py in 1.3s, verified stable live playback, and synced updated files to Nutsty_Windows_Portable_v1.0.4 |
+| Phase 20: Task 1 - Static Codebase Verification (`verify_codebase.py`) | Completed | Verified in 1010.7ms, all contracts and AST scopes clean |
+| Phase 20: Task 2 - Visual Verification (PlayerBar translucency, dynamic tint, rounded corners, Desktop Lyrics) | Completed | Verified via Qt screen capture (screen_playing.png & screen_paused.png) |
+| Phase 20: Task 3 - Performance & Resource Benchmark | Completed | Memory RSS ~312MB, CPU stable under load |
+| Phase 20: Task 4 - Git Commit & Push Changes | In_Progress | Stage and commit PlayerBar, window transparency, and desktop lyrics fixes |
+| Phase 20: Task 5 - Clean Re-tag v1.0.5 on GitHub | Pending | Re-tag v1.0.5 at latest commit and trigger GitHub Actions release |
+| Phase 20: Task 6 - Rebuild Local Executable | Pending | Run PyInstaller nutsty.spec to refresh local build |
+
 
 
 

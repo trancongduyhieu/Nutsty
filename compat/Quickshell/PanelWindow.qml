@@ -66,6 +66,7 @@ Window {
     }
 
     Component.onCompleted: {
+        root.show();
         if (visible) {
             root.lower();
             if (typeof __NutstyBridge !== "undefined") {
