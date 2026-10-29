@@ -75,9 +75,9 @@ Item {
         id: glassDock
         anchors.fill: parent
         radius: root.radius
-        displacement: 10.0
-        aberration: 0.030
-        bevelWidth: 10.0
+        displacement: 24.0
+        aberration: 0.040
+        bevelWidth: 16.5
         tintColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40)
         backgroundSourceItem: root.backgroundSourceItem
         isFlowActive: root.isPlaying && root.currentTrack !== null
