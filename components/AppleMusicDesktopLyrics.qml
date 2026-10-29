@@ -13,6 +13,7 @@ Item {
     property real currentTime: 0.0
     property bool isPlaying: false
     property var currentTrack: null
+    property bool lyricsRomanizationEnabled: true
 
     // Adaptive Palette / Styling
     property color colHighlight: "#deb06c"
@@ -207,9 +208,12 @@ Item {
             // ── 2. Static Typography ─────────────────────────────────────────
             // Exclusively visible when flowLoader is NOT active (upcoming, previous, or plain LRC).
             // When isCurrent: illuminates in crisp solid white (#ffffff) with subtle ambient shadow!
+            readonly property bool hasRomanized: root.lyricsRomanizationEnabled && !!(modelData && modelData.romanized && modelData.romanized.trim() !== "")
+
             Text {
                 id: staticTxt
                 anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: lyricRow.hasRomanized ? -9 : 0
                 visible: !flowLoader.visible
                 text: (modelData && modelData.text) ? modelData.text : ""
                 font.family: Theme.fontFamily
@@ -218,6 +222,29 @@ Item {
                 color: lyricRow.isCurrent ? "#ffffff" : root.colPendingText
                 elide: Text.ElideRight
                 width: parent.width
+                style: Text.Outline
+                styleColor: root.colShadowAmb
+
+                Behavior on color {
+                    ColorAnimation { duration: 180 }
+                }
+            }
+
+            // Secondary Romanization Row
+            Text {
+                id: romanizedDesktopTxt
+                anchors.top: staticTxt.bottom
+                anchors.topMargin: 0
+                anchors.left: parent.left
+                anchors.right: parent.right
+                visible: lyricRow.hasRomanized
+                text: (modelData && modelData.romanized) ? modelData.romanized : ""
+                font.family: Theme.fontFamily
+                font.pixelSize: 14
+                font.weight: Font.DemiBold
+                font.italic: true
+                color: lyricRow.isCurrent ? Qt.rgba(255, 255, 255, 0.85) : root.colPendingText
+                elide: Text.ElideRight
                 style: Text.Outline
                 styleColor: root.colShadowAmb
 

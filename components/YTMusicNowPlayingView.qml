@@ -24,6 +24,7 @@ Item {
 
     property var activeLyrics: []
     property int currentLyricIndex: -1
+    property bool lyricsRomanizationEnabled: (typeof win !== "undefined" && win && win.lyricsRomanizationEnabled !== undefined) ? win.lyricsRomanizationEnabled : true
     property bool hasLyrics: false
     property bool isLoadingLyrics: false
 
@@ -1882,47 +1883,75 @@ Item {
                             layer.enabled: false
 
 
-                            Item {
+                            Column {
                                 id: lyricContentItem
                                 anchors.left: parent.left
                                 anchors.right: parent.right
                                 anchors.verticalCenter: parent.verticalCenter
-                                implicitHeight: Math.max(36, (appleMusicFlowLoader.visible && appleMusicFlowLoader.item)
-                                    ? appleMusicFlowLoader.item.implicitHeight
-                                    : staticLineTxt.implicitHeight)
+                                spacing: 3
 
-                                // Apple Music Word Flow: Traveling wave ripple + phosphor bloom
-                                // ONLY for lines with genuine syllable timestamps (hasWords=true AND NOT isSynthetic).
-                                Loader {
-                                    id: appleMusicFlowLoader
-                                    active: lyricRow.dist <= 1 && modelData.hasWords && !modelData.isSynthetic && modelData.words && modelData.words.length > 0
-                                    visible: active && (lyricRow.isCurrent ||
-                                             (lyricRow.signedDist === -1 && appleMusicFlowLoader.item !== null && appleMusicFlowLoader.item.hasActiveHeldWord))
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    sourceComponent: Component {
-                                        AppleMusicWordFlow {
-                                            words: (modelData.hasWords && !modelData.isSynthetic && modelData.words) ? modelData.words : []
-                                            currentTime: root.currentTime
-                                            fontSize: 28
+                                Item {
+                                    width: parent.width
+                                    implicitHeight: Math.max(36, (appleMusicFlowLoader.visible && appleMusicFlowLoader.item)
+                                        ? appleMusicFlowLoader.item.implicitHeight
+                                        : staticLineTxt.implicitHeight)
+
+                                    // Apple Music Word Flow: Traveling wave ripple + phosphor bloom
+                                    // ONLY for lines with genuine syllable timestamps (hasWords=true AND NOT isSynthetic).
+                                    Loader {
+                                        id: appleMusicFlowLoader
+                                        active: lyricRow.dist <= 1 && modelData.hasWords && !modelData.isSynthetic && modelData.words && modelData.words.length > 0
+                                        visible: active && (lyricRow.isCurrent ||
+                                                 (lyricRow.signedDist === -1 && appleMusicFlowLoader.item !== null && appleMusicFlowLoader.item.hasActiveHeldWord))
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        sourceComponent: Component {
+                                            AppleMusicWordFlow {
+                                                words: (modelData.hasWords && !modelData.isSynthetic && modelData.words) ? modelData.words : []
+                                                currentTime: root.currentTime
+                                                fontSize: 28
+                                            }
+                                        }
+                                    }
+
+                                    // Unified Static Typography: Used for plain LRC lines and inactive lines
+                                    Text {
+                                        id: staticLineTxt
+                                        visible: !appleMusicFlowLoader.visible
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        textFormat: Text.PlainText
+                                        text: modelData.text || ""
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: lyricRow.targetFontSize
+                                        font.weight: Font.Bold
+                                        color: lyricRow.isCurrent ? "#ffffff" : "#c4c8d4"
+                                        wrapMode: Text.Wrap
+                                        lineHeight: 1.28
+
+                                        Behavior on color {
+                                            ColorAnimation { duration: 180 }
+                                        }
+                                        Behavior on font.pixelSize {
+                                            NumberAnimation { duration: 180; easing.type: Easing.OutQuad }
                                         }
                                     }
                                 }
 
-                                // Unified Static Typography: Used for plain LRC lines and inactive lines
+                                // Secondary Romanization Row (Romaji / Romaja / Pinyin)
                                 Text {
-                                    id: staticLineTxt
-                                    visible: !appleMusicFlowLoader.visible
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
+                                    id: romanizedLineTxt
+                                    visible: root.lyricsRomanizationEnabled && !!(modelData && modelData.romanized && modelData.romanized.trim() !== "")
+                                    width: parent.width
                                     textFormat: Text.PlainText
-                                    text: modelData.text || ""
+                                    text: (modelData && modelData.romanized) ? modelData.romanized : ""
                                     font.family: Theme.fontFamily
-                                    font.pixelSize: lyricRow.targetFontSize
-                                    font.weight: Font.Bold
-                                    color: lyricRow.isCurrent ? "#ffffff" : "#c4c8d4"
+                                    font.pixelSize: Math.max(13, Math.round(lyricRow.targetFontSize * 0.54))
+                                    font.weight: Font.DemiBold
+                                    font.italic: true
+                                    color: lyricRow.isCurrent ? Qt.rgba(255, 255, 255, 0.82) : Qt.rgba(196, 200, 212, 0.50)
                                     wrapMode: Text.Wrap
-                                    lineHeight: 1.28
+                                    lineHeight: 1.18
 
                                     Behavior on color {
                                         ColorAnimation { duration: 180 }

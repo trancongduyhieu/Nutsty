@@ -15,6 +15,7 @@ PanelWindow {
     property bool isPlaying: false
     property var currentTrack: null
     property bool enabled: true
+    property bool lyricsRomanizationEnabled: true
     property int lyricsPreset: 2 // 1: Cinematic Serif, 2: Apple Music 5-Line Fluid Sync, 3: Minimalist Slide-Up Motion Blur, 4: Motion Typography
     property int customX: -1
     property int customY: -1
@@ -244,6 +245,7 @@ PanelWindow {
             activeLyrics: root.activeLyrics
             currentTime: root.currentTime
             isPlaying: root.isPlaying
+            lyricsRomanizationEnabled: root.lyricsRomanizationEnabled
             magicFontFamily: root.magicFontFamily
             colHighlight: root.colHighlight
             colActiveText: root.colActiveText
@@ -256,8 +258,6 @@ PanelWindow {
         // =====================================================================
         // Preset 2: Apple Music Parametric Multi-Line Fluid Sync View Plugin
         // =====================================================================
-        // Preset 2: Apple Music Parametric Multi-Line Fluid Sync View Plugin
-        // =====================================================================
         AppleMusicDesktopLyrics {
             id: appleMusicView
             anchors.fill: parent
@@ -266,6 +266,7 @@ PanelWindow {
             currentTime: root.currentTime
             isPlaying: root.isPlaying
             currentTrack: root.currentTrack
+            lyricsRomanizationEnabled: root.lyricsRomanizationEnabled
             colHighlight: root.colHighlight
             colActiveText: root.colActiveText
             colPendingText: "#a0a5b5"

@@ -12,6 +12,7 @@ Item {
     property real currentTime: 0.0
     property bool isPlaying: false
     property string magicFontFamily: "Instrument Serif"
+    property bool lyricsRomanizationEnabled: true
 
     // Adaptive Palette Colors
     property color colHighlight: "#deb06c"
@@ -33,6 +34,7 @@ Item {
     property real lineProgress: 0.0
 
     property string activeLineText: ""
+    property string activeRomanizedText: ""
     property string fadingLineText: ""
 
     onCurrentTimeChanged: updateProgress()
@@ -69,8 +71,10 @@ Item {
             currentLyricIndex = idx;
             if (idx >= 0 && activeLyrics && idx < activeLyrics.length) {
                 activeLineText = activeLyrics[idx].text;
+                activeRomanizedText = (activeLyrics[idx].romanized || "");
             } else {
                 activeLineText = "";
+                activeRomanizedText = "";
             }
         }
     }
@@ -186,6 +190,24 @@ Item {
             colShadowDirectional: root.colShadowDir
             colShadowAmbient: root.colShadowAmb
             isLightArea: root.isLightArea
+        }
+
+        Text {
+            id: activeRomanizedTextItem
+            anchors.top: activeSentence.bottom
+            anchors.topMargin: -4
+            anchors.left: parent.left
+            anchors.right: parent.right
+            visible: root.lyricsRomanizationEnabled && !!root.activeRomanizedText
+            text: root.activeRomanizedText
+            font.family: Theme.fontFamily
+            font.pixelSize: 16
+            font.weight: Font.DemiBold
+            font.italic: true
+            color: Qt.rgba(248, 250, 252, 0.85)
+            elide: Text.ElideRight
+            style: Text.Outline
+            styleColor: root.colShadowAmb
         }
     }
 }
