@@ -20,6 +20,7 @@ Item {
     property bool autoCropBlackBars: true
     property bool showShadow: true
     property string overrideImage: ""
+    property string overrideAnimatedArtworkUrl: ""
     property color borderColor: Qt.rgba(1, 1, 1, 0.16)
     property real borderWidth: 1.0
     property string appDir: (typeof win !== "undefined" && win && win.appDir) ? win.appDir : (Quickshell.env("NUTSTY_APP_DIR") || (Quickshell.env("HOME") + "/Applications/FrostifyLocal"))
@@ -30,6 +31,12 @@ Item {
     property bool highResFailed: false
     property string animatedArtworkUrl: ""
     property bool isLoadingAnimatedArtwork: false
+
+    readonly property string effectiveAnimatedUrl: {
+        if (!root.visible || !root.animatedCoverEnabled || root.canvasPreference === "off") return "";
+        if (root.overrideAnimatedArtworkUrl !== "") return root.overrideAnimatedArtworkUrl;
+        return root.animatedArtworkUrl;
+    }
 
     onTrackChanged: {
         squareImageFailed = false;
@@ -82,7 +89,7 @@ Item {
             root.resolvedSquareImage = "";
             return;
         }
-        var vid = root.track.videoId || "";
+        var vid = root.track.videoId || (root.track.path && root.track.path.startsWith("ytdl://") ? root.track.path.replace("ytdl://", "") : "");
         var title = root.track.title || root.track.name || "";
         var artist = root.track.artist || "";
         if (!vid && !title) {
@@ -93,7 +100,7 @@ Item {
         squareCoverProc.command = [
             "python3", "-u",
             root.appDir + "/backend/ytmusic_helper.py",
-            "square_cover",
+            "resolve_cover",
             title, artist, vid
         ];
         squareCoverProc.running = true;
@@ -107,8 +114,8 @@ Item {
                 if (!data || data.trim() === "") return;
                 try {
                     var parsed = JSON.parse(data);
-                    if (parsed && parsed.square_image) {
-                        root.resolvedSquareImage = parsed.square_image;
+                    if (parsed && (parsed.url || parsed.square_image)) {
+                        root.resolvedSquareImage = parsed.url || parsed.square_image;
                     }
                 } catch(e) {}
             }
@@ -163,8 +170,9 @@ Item {
                 if (!data || data.trim() === "") return;
                 try {
                     var parsed = JSON.parse(data);
-                    if (parsed && parsed.animated_artwork_url) {
-                        root.animatedArtworkUrl = parsed.animated_artwork_url;
+                    var vidUrl = parsed ? (parsed.video_url || parsed.animated_artwork_url || "") : "";
+                    if (parsed && (parsed.found || vidUrl !== "") && vidUrl !== "") {
+                        root.animatedArtworkUrl = vidUrl;
                     } else {
                         root.animatedArtworkUrl = "";
                     }
@@ -226,7 +234,10 @@ Item {
             autoCropBlackBars: root.autoCropBlackBars
             asynchronous: true
             sourceSize: Qt.size(400, 400)
-            initialsText: root.track ? (root.track.artist || "A") : "A"
+            useInitialsFallback: false
+            fallbackIcon: "../assets/icons/media-optical-audio-symbolic.svg"
+            fallbackIconSize: 48
+            fallbackIconColor: Theme.textMuted
             onStatusChanged: {
                 if (status === Image.Error) {
                     if (root.resolvedSquareImage !== "" && !root.squareImageFailed) {
@@ -252,7 +263,7 @@ Item {
         MediaPlayer {
             id: amPlayer
             videoOutput: amVideoOutput
-            source: (root.visible && root.animatedCoverEnabled && root.canvasPreference !== "off" && root.animatedArtworkUrl !== "") ? root.animatedArtworkUrl : ""
+            source: root.effectiveAnimatedUrl
             audioOutput: null
             loops: MediaPlayer.Infinite
             Component.onCompleted: {
@@ -292,7 +303,7 @@ Item {
             anchors.fill: parent
             fillMode: VideoOutput.PreserveAspectCrop
             visible: opacity > 0.01
-            opacity: (root.animatedCoverEnabled && root.animatedArtworkUrl !== "" && (amPlayer.playbackState === MediaPlayer.PlayingState || amPlayer.playbackState === MediaPlayer.PausedState)) ? 1.0 : 0.0
+            opacity: (root.animatedCoverEnabled && root.effectiveAnimatedUrl !== "" && (amPlayer.playbackState === MediaPlayer.PlayingState || amPlayer.playbackState === MediaPlayer.PausedState)) ? 1.0 : 0.0
             Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.OutQuad } }
             z: 1
 
@@ -307,7 +318,7 @@ Item {
         // Fallback Audio Icon when image not ready
         Rectangle {
             anchors.fill: parent
-            visible: bigCoverImg.status !== Image.Ready && (!root.animatedCoverEnabled || root.animatedArtworkUrl === "")
+            visible: bigCoverImg.status !== Image.Ready && (!root.animatedCoverEnabled || root.effectiveAnimatedUrl === "")
             color: Qt.rgba(0.08, 0.08, 0.10, 0.85)
             AppIcon {
                 anchors.centerIn: parent

@@ -820,6 +820,7 @@ Item {
                         canvasPreference: root.canvasPreference
                         isPlaying: root.isPlaying
                         overrideImage: root.resolvedSquareImage
+                        overrideAnimatedArtworkUrl: root.animatedArtworkUrl
                         appDir: root.appDir
                     }
                 }

@@ -31,6 +31,18 @@ Item {
     readonly property real paintedWidth: img.paintedWidth
     readonly property real paintedHeight: img.paintedHeight
 
+    // Reactive fallback for maxresdefault -> hqdefault (preserves property binding without mutation)
+    property bool highResFallbackActive: false
+    onSourceChanged: highResFallbackActive = false
+
+    readonly property url effectiveSource: {
+        var s = String(root.source);
+        if (root.highResFallbackActive && s.indexOf("maxresdefault.jpg") !== -1) {
+            return s.replace("maxresdefault.jpg", "hqdefault.jpg");
+        }
+        return root.source;
+    }
+
     // Effective zoom scale (automatically zooms 1.34x for 4:3 YouTube thumbnails to crop black bars)
     readonly property real effectiveZoom: {
         if (zoomFactor !== 1.0) return Math.max(0.1, zoomFactor);
@@ -112,7 +124,7 @@ Item {
     Image {
         id: img
         anchors.fill: parent
-        source: root.source
+        source: root.effectiveSource
         fillMode: root.fillMode
         sourceSize: {
             if (root.sourceSize.width > 0 && root.sourceSize.height > 0) {
@@ -130,9 +142,9 @@ Item {
 
         onStatusChanged: {
             if (status === Image.Error) {
-                var srcStr = String(source);
-                if (srcStr.indexOf("maxresdefault.jpg") !== -1) {
-                    source = srcStr.replace("maxresdefault.jpg", "hqdefault.jpg");
+                var srcStr = String(root.source);
+                if (srcStr.indexOf("maxresdefault.jpg") !== -1 && !root.highResFallbackActive) {
+                    root.highResFallbackActive = true;
                 }
             }
         }

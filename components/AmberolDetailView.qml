@@ -602,6 +602,7 @@ Rectangle {
                         animatedCoverEnabled: (typeof win !== "undefined" && win) ? win.animatedCoverEnabled : true
                         canvasPreference: (typeof win !== "undefined" && win) ? win.canvasPreference : "apple_first"
                         isPlaying: (typeof win !== "undefined" && win) ? win.isPlaying : false
+                        overrideImage: (typeof win !== "undefined" && win) ? win.currentResolvedCover : ""
                         appDir: root.appDir
                     }
 
