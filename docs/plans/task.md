@@ -56,9 +56,9 @@
 | Phase 20: Task 1 - Static Codebase Verification (`verify_codebase.py`) | Completed | Verified in 1010.7ms, all contracts and AST scopes clean |
 | Phase 20: Task 2 - Visual Verification (PlayerBar translucency, dynamic tint, rounded corners, Desktop Lyrics) | Completed | Verified via Qt screen capture (screen_playing.png & screen_paused.png) |
 | Phase 20: Task 3 - Performance & Resource Benchmark | Completed | Memory RSS ~312MB, CPU stable under load |
-| Phase 20: Task 4 - Git Commit & Push Changes | In_Progress | Stage and commit PlayerBar, window transparency, and desktop lyrics fixes |
-| Phase 20: Task 5 - Clean Re-tag v1.0.5 on GitHub | Pending | Re-tag v1.0.5 at latest commit and trigger GitHub Actions release |
-| Phase 20: Task 6 - Rebuild Local Executable | Pending | Run PyInstaller nutsty.spec to refresh local build |
+| Phase 20: Task 4 - Git Commit & Push Changes | Completed | Committed in 90a31c4 and pushed to main |
+| Phase 20: Task 5 - Clean Re-tag v1.0.5 on GitHub | Completed | Re-tagged v1.0.5 at 90a31c4 and pushed to origin (triggers GitHub Actions release build) |
+| Phase 20: Task 6 - Rebuild Local Executable | Completed | PyInstaller build completed successfully, synced to portable dist |
 
 
 
