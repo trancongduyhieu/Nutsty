@@ -346,9 +346,7 @@ class NativeHitTestFilter(QAbstractNativeEventFilter):
             try:
                 import ctypes
                 user32 = ctypes.windll.user32
-                gdi32 = ctypes.windll.gdi32
-                empty_rgn = gdi32.CreateRectRgn(0, 0, 0, 0)
-                user32.SetWindowRgn(hwnd, empty_rgn, True)
+                user32.SetWindowRgn(hwnd, None, True)
             except Exception:
                 pass
 
@@ -1263,7 +1261,11 @@ def main():
 
     def _init_win(w):
         if _is_bottom_panel(w):
-            if w.property("visible"):
+            if "desktoplyrics" in w.metaObject().className().lower() or w.property("activeLyrics") is not None:
+                w.show()
+                bridge.pinWindowToDesktopBottom(w)
+            elif bool(w.property("visible")):
+                w.show()
                 bridge.pinWindowToDesktopBottom(w)
         else:
             if main_win_ref[0] is None and w.width() >= 500:

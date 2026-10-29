@@ -60,14 +60,12 @@ Item {
         return m + ":" + (s < 10 ? "0" : "") + s;
     }
 
-    // Deep Obsidian Glass Foundation: Calm neutral charcoal base blocks bright wallpaper bleed-through (e.g. orange bridges),
-    // while remaining ~30% more translucent than original 0.88 without yellowing the bar.
+    // Deep Obsidian Frosted Foundation: Pure 1.0.4.2 dark obsidian (blocks all wallpaper color pollution)
     Rectangle {
         anchors.fill: parent
         radius: root.radius
-        color: Qt.rgba(0.05, 0.06, 0.09, root.isPlaying ? 0.68 : 0.58)
+        color: Qt.rgba(0.05, 0.06, 0.09, 0.88)
         z: 1
-        Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.InOutQuad } }
     }
 
     // Liquid Glass Capsule Container (Apple Squircle & Snell Refraction with Dynamic Chromatic Rim)
@@ -80,7 +78,7 @@ Item {
         bevelWidth: (typeof win !== "undefined" && win.liquidGlassBevelWidth !== undefined) ? win.liquidGlassBevelWidth : 21.0
         blurRadius: (typeof win !== "undefined" && win.liquidGlassBlur !== undefined) ? win.liquidGlassBlur : 0.5
         colorBleed: (typeof win !== "undefined" && win.liquidGlassColorBleed !== undefined) ? win.liquidGlassColorBleed : 0.94
-        tintColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, root.isPlaying ? 0.12 : 0.05)
+        tintColor: Qt.rgba(0.08, 0.10, 0.14, 0.28)
         Behavior on tintColor { ColorAnimation { duration: 400; easing.type: Easing.InOutQuad } }
         backgroundSourceItem: root.backgroundSourceItem
         isFlowActive: root.isPlaying && root.currentTrack !== null
