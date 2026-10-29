@@ -3737,6 +3737,7 @@ Scope {
         function scrollArtworkDown() { frostifyIpc.scrollArtworkDown(); }
         function dislikeCurrentTrack() { frostifyIpc.dislikeCurrentTrack(); }
         function openSettings() { frostifyIpc.openSettings(); }
+        function openSettingsLyrics() { frostifyIpc.openSettingsLyrics(); }
         function openSpotifyImport() { frostifyIpc.openSpotifyImport(); }
         function cancelSpotifyImport() { frostifyIpc.cancelSpotifyImport(); }
         function closeSpotifyImport() { frostifyIpc.closeSpotifyImport(); }
@@ -4001,6 +4002,14 @@ Scope {
         function openSettings() {
             win.visible = true;
             settingsModal.currentTab = 0;
+            settingsModal.visible = true;
+            if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && typeof __NutstyBridge.restoreWindow === "function") {
+                __NutstyBridge.restoreWindow(win);
+            }
+        }
+        function openSettingsLyrics() {
+            win.visible = true;
+            settingsModal.currentTab = 1;
             settingsModal.visible = true;
             if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && typeof __NutstyBridge.restoreWindow === "function") {
                 __NutstyBridge.restoreWindow(win);
