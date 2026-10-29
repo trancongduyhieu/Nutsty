@@ -39,11 +39,6 @@ Item {
     // Coordinate mapping to track where this glass sits inside backgroundSourceItem
     readonly property point globalOffset: {
         if (!backgroundSourceItem || !root.isEffectActive) return Qt.point(0, 0);
-        var _dep = root.extraDependency;
-        // Explicitly create reactive binding dependencies on geometry of self, parent and source
-        var _rx = root.x, _ry = root.y, _rw = root.width, _rh = root.height;
-        var _px = root.parent ? (root.parent.x + root.parent.y + root.parent.width + root.parent.height) : 0;
-        var _sx = backgroundSourceItem.width + backgroundSourceItem.height;
         return root.mapToItem(backgroundSourceItem, 0, 0);
     }
 

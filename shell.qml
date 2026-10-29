@@ -1769,12 +1769,12 @@ Scope {
                     }
                     GradientStop {
                         position: 0.40
-                        color: win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.83) : Qt.rgba(0.01, 0.01, 0.02, 0.76)
+                        color: win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.65) : Qt.rgba(0.01, 0.01, 0.02, 0.55)
                         Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
                     }
                     GradientStop {
                         position: 1.0
-                        color: win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.86) : Qt.rgba(0.01, 0.01, 0.02, 0.81)
+                        color: win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.38) : Qt.rgba(0.01, 0.01, 0.02, 0.32)
                         Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
                     }
                 }
@@ -1799,16 +1799,13 @@ Scope {
                 }
             }
 
-            // Bottom subtle shade (soft ambient gradient behind floating player bar)
+            // Bottom subtle shade: kept completely transparent so floating player bar refracts rich atmosphere
             Rectangle {
                 anchors.bottom: parent.bottom
                 anchors.left: parent.left
                 anchors.right: parent.right
                 height: 120
-                gradient: Gradient {
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 1.0; color: Qt.rgba(0.0, 0.0, 0.02, 0.12) }
-                }
+                color: "transparent"
             }
 
             // Left edge subtle shade
@@ -2392,7 +2389,7 @@ Scope {
             Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
             height: 66
             z: 50
-            backgroundSourceItem: mainContentContainer
+            backgroundSourceItem: masterAppSurface
 
             currentTrack: win.currentTrack
             resolvedSquareImage: win.currentResolvedCover

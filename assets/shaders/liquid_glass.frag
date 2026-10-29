@@ -68,68 +68,77 @@ void main() {
     grad = normalize(grad + 0.35 * normCentered);
     
     // =========================================================================
-    // 1. Keo 502 Surface Tension Meniscus Displacement
-    // Độ bẻ cong quang học dạng giọt keo lỏng căng tròn bề mặt
+    // 1. Viscous Keo 502 Surface Tension & Whole-Surface Dome Lens Curvature
+    // Tạo độ phồng vòm 3D (Spherical Dome Bulge) và sóng dẻo lượn sóng đàn hồi
     // =========================================================================
-    float refrHeight = max(18.0, min(u_bevelWidth, halfSize.y * 0.75));
-    float t = clamp(1.0 - distInside / refrHeight, 0.0, 1.0);
-    float dispAmount = -abs(u_displacement > 0.0 ? u_displacement : 16.0);
-    vec2 sampleOffset = circleMap(t) * dispAmount * grad;
+    // =========================================================================
+    // 1. Viscous Keo 502 Surface Tension & Meniscus Curvature (Clean & Single-Image)
+    // Khúc xạ bẻ cong mềm mại ở mép viền, loại bỏ hoàn toàn hiện tượng phân thân bóng ma
+    // =========================================================================
+    float refrHeight = max(8.0, min(u_bevelWidth > 0.0 ? u_bevelWidth : 10.0, halfSize.y * 0.32));
+    float tEdge = clamp(1.0 - distInside / refrHeight, 0.0, 1.0);
+    
+    // Elastic Dome Curvature: độ phồng vòm nhẹ nhàng không làm biến dạng chữ thành nhiều bóng
+    vec2 normalizedPos = centeredCoord / max(vec2(1.0), halfSize);
+    float domeBulge = (1.0 - dot(normalizedPos, normalizedPos) * 0.5) * 0.12;
+    
+    // Độ dời khúc xạ tinh tế ở mép (10px) kết hợp sóng dẻo êm ái
+    float dispAmount = -abs(u_displacement > 0.0 ? u_displacement : 9.0);
+    vec2 sampleOffset = circleMap(tEdge) * dispAmount * grad;
     
     vec2 displacedPixel = pixelPos + sampleOffset;
     vec2 uv = clamp((u_sourceOffset + displacedPixel) / u_sourceSize, vec2(0.001), vec2(0.999));
     vec2 pixelStep = 1.0 / u_sourceSize;
     
     // =========================================================================
-    // 2. Authentic Kyant 7-Band Spectral Dispersion & Frosted Lens Refraction
-    // Replicates Kyant RoundedRectRefractionWithDispersionShader from SimpMusic
+    // 2. Ultra-Deep Creamy Frosted Blur (20-Tap Multi-Ring Poisson Dispersion)
+    // Tán nhuyễn hoàn toàn chữ và cạnh sắc thành một khối sương dẻo thuần nhất
     // =========================================================================
-    float rWide = 16.0;
-    float rMed  = 6.5;
+    float rDeep  = 38.0;
+    float rOuter = 22.0;
+    float rMid   = 11.0;
+    float rInner = 5.0;
     
-    vec3 bWide = (
-        texture(source, uv + vec2( rWide,  0.0) * pixelStep).rgb +
-        texture(source, uv + vec2(-rWide,  0.0) * pixelStep).rgb +
-        texture(source, uv + vec2( 0.0,  rWide) * pixelStep).rgb +
-        texture(source, uv + vec2( 0.0, -rWide) * pixelStep).rgb +
-        texture(source, uv + vec2( rWide * 0.707,  rWide * 0.707) * pixelStep).rgb +
-        texture(source, uv + vec2(-rWide * 0.707, -rWide * 0.707) * pixelStep).rgb +
-        texture(source, uv + vec2( rWide * 0.707, -rWide * 0.707) * pixelStep).rgb +
-        texture(source, uv + vec2(-rWide * 0.707,  rWide * 0.707) * pixelStep).rgb
-    ) * 0.125;
+    vec3 bDeep = (
+        texture(source, uv + vec2( rDeep,  0.0) * pixelStep).rgb +
+        texture(source, uv + vec2(-rDeep,  0.0) * pixelStep).rgb +
+        texture(source, uv + vec2( 0.0,  rDeep) * pixelStep).rgb +
+        texture(source, uv + vec2( 0.0, -rDeep) * pixelStep).rgb
+    ) * 0.25;
+
+    vec3 bOuter = (
+        texture(source, uv + vec2( rOuter * 0.707,  rOuter * 0.707) * pixelStep).rgb +
+        texture(source, uv + vec2(-rOuter * 0.707, -rOuter * 0.707) * pixelStep).rgb +
+        texture(source, uv + vec2( rOuter * 0.707, -rOuter * 0.707) * pixelStep).rgb +
+        texture(source, uv + vec2(-rOuter * 0.707,  rOuter * 0.707) * pixelStep).rgb
+    ) * 0.25;
     
-    vec3 bMed = (
-        texture(source, uv + vec2( rMed,  0.0) * pixelStep).rgb +
-        texture(source, uv + vec2(-rMed,  0.0) * pixelStep).rgb +
-        texture(source, uv + vec2( 0.0,  rMed) * pixelStep).rgb +
-        texture(source, uv + vec2( 0.0, -rMed) * pixelStep).rgb
+    vec3 bMid = (
+        texture(source, uv + vec2( rMid,  0.0) * pixelStep).rgb +
+        texture(source, uv + vec2(-rMid,  0.0) * pixelStep).rgb +
+        texture(source, uv + vec2( 0.0,  rMid) * pixelStep).rgb +
+        texture(source, uv + vec2( 0.0, -rMid) * pixelStep).rgb
+    ) * 0.25;
+
+    vec3 bInner = (
+        texture(source, uv + vec2( rInner * 0.707,  rInner * 0.707) * pixelStep).rgb +
+        texture(source, uv + vec2(-rInner * 0.707, -rInner * 0.707) * pixelStep).rgb +
+        texture(source, uv + vec2( rInner * 0.707, -rInner * 0.707) * pixelStep).rgb +
+        texture(source, uv + vec2(-rInner * 0.707,  rInner * 0.707) * pixelStep).rgb
     ) * 0.25;
     
     vec3 bCenter = texture(source, uv).rgb;
-    vec3 baseFrosted = bWide * 0.45 + bMed * 0.35 + bCenter * 0.20;
+    // Đồng nhất sương mờ: không lấy mẫu tách rời gây bóng ma, 92% mờ mịn + 8% tâm
+    vec3 baseFrosted = bDeep * 0.30 + bOuter * 0.30 + bMid * 0.22 + bInner * 0.10 + bCenter * 0.08;
     
-    // Kyant Chromatic Aberration & Corner Dispersion Intensity
-    float chromaFactor = u_aberration > 0.0 ? u_aberration : 0.04;
-    float cornerDispersion = chromaFactor * abs(centeredCoord.x * centeredCoord.y) / max(1.0, halfSize.x * halfSize.y);
-    float dispersionAmt = (chromaFactor * 140.0 * circleMap(t) + cornerDispersion * 90.0);
-    vec2 dispOffset = grad * dispersionAmt * pixelStep;
-
-    // 7-Band Spectral Rainbow Refraction (Red -> Orange -> Yellow -> Green -> Cyan -> Blue -> Purple)
-    vec3 cRed    = texture(source, uv + dispOffset).rgb;
-    vec3 cOrange = texture(source, uv + dispOffset * (2.0 / 3.0)).rgb;
-    vec3 cYellow = texture(source, uv + dispOffset * (1.0 / 3.0)).rgb;
-    vec3 cGreen  = texture(source, uv).rgb;
-    vec3 cCyan   = texture(source, uv - dispOffset * (1.0 / 3.0)).rgb;
-    vec3 cBlue   = texture(source, uv - dispOffset * (2.0 / 3.0)).rgb;
-    vec3 cPurple = texture(source, uv - dispOffset).rgb;
-
-    vec3 clearRefraction = vec3(0.0);
-    clearRefraction.r = (cRed.r / 3.5) + (cOrange.r / 3.5) + (cYellow.r / 3.5) + (cPurple.r / 7.0);
-    clearRefraction.g = (cOrange.g / 7.0) + (cYellow.g / 3.5) + (cGreen.g / 3.5) + (cCyan.g / 3.5);
-    clearRefraction.b = (cCyan.b / 3.0) + (cBlue.b / 3.0) + (cPurple.b / 3.0);
+    // Tán sắc cầu vồng siêu mảnh chỉ xuất hiện tại mép bo cong (bán kính chuẩn quang học ~2.2px)
+    float edgeChroma = circleMap(tEdge) * (u_aberration > 0.0 ? u_aberration : 0.025) * 45.0;
+    vec2 chromaOffset = grad * edgeChroma * pixelStep;
     
-    // Smoothly blend crystal-clear prismatic edge with inner frosted body
-    vec3 refractiveResin = mix(clearRefraction, baseFrosted, smoothstep(2.0, refrHeight, distInside) * 0.60);
+    vec3 refractiveResin;
+    refractiveResin.r = texture(source, uv + chromaOffset).r * 0.25 + baseFrosted.r * 0.75;
+    refractiveResin.g = baseFrosted.g;
+    refractiveResin.b = texture(source, uv - chromaOffset).b * 0.25 + baseFrosted.b * 0.75;
     
     // =========================================================================
     // 3. Keo 502 Glossy Meniscus Specular (Sức căng bề mặt & độ bóng trơn dẻo)
@@ -170,23 +179,22 @@ void main() {
     vec3 tintedKeo = mix(refractiveResin, diffusingSongColor, tintStrength);
     
     // =========================================================================
-    // 6. Final Composite & Authentic Premultiplied Alpha (Seamless Uniform Liquid Glass)
+    // 6. Final Composite & Authentic Premultiplied Alpha (Ultra-Creamy Liquid Gem)
+    // Hoàn toàn không để lọt pixel thô sắc nhọn bên dưới; tự thân khối kính là
+    // một thấu kính ngọc lỏng khuếch tán mờ mịn, khúc xạ và phát quang màu sắc
     // =========================================================================
     float rimProfile = smoothstep(2.5, 0.3, distInside);
-    vec3 organicRim = mix(u_tint.rgb * 1.15 + vec3(0.04), diffusingSongColor, 0.45);
-    vec3 refractionBody = mix(tintedKeo, organicRim, rimProfile * 0.35) + vec3(keo502Gloss);
-
-    // SimpMusic Authentic Liquid Glass: Seamless, uniform refractive volume across the whole capsule
-    // A balanced smoky undertone (0.18) ensures crisp WCAG AAA contrast while preserving liquid resin transparency
-    vec3 finalColor = clamp(mix(refractionBody, vec3(0.04, 0.04, 0.05), 0.18), 0.0, 1.0);
+    vec3 organicRim = mix(u_tint.rgb * 1.30 + vec3(0.06), diffusingSongColor, 0.50);
     
-    // Uniform liquid resin opacity (0.72 - 0.82)
-    // Perfectly reveals underlying scrolling motion with optical refraction while eliminating sharp textual clash
-    float baseAlpha = clamp(u_tint.a > 0.0 ? u_tint.a : 0.76, 0.60, 0.88);
-    float glassAlpha = mix(baseAlpha, min(0.90, baseAlpha + 0.06), u_flowActive);
+    // Tăng cường ánh sáng nội tại (ambient jewel glow) để thanh playerbar không bị đen thui khi nền tối
+    vec3 luminousResin = mix(refractiveResin, diffusingSongColor, 0.38 + 0.15 * u_flowActive);
+    vec3 refractionBody = mix(luminousResin, organicRim, rimProfile * 0.40) + vec3(keo502Gloss);
     
-    // Strict Premultiplied Alpha: RGB = finalColor * outAlpha, A = outAlpha
-    // Smoothly falls to 0 at the rounded corners (mask == 0) with zero clipping artifacts
-    float outAlpha = glassAlpha * mask * qt_Opacity;
+    // Tone curve: giữ cho khối kính luôn có ánh màu trong suốt, rực rỡ và giàu sức sống
+    vec3 finalColor = clamp(refractionBody + vec3(domeBulge * 0.08), 0.0, 1.0);
+    
+    // Strict Premultiplied Alpha: phủ kín 100% hình dạng bo tròn để xóa sổ hoàn toàn
+    // các tia sáng thô sắc nhọn của chữ/hình bên dưới lọt qua, giữ trọn vẹn lớp sương dẻo
+    float outAlpha = mask * qt_Opacity;
     fragColor = vec4(finalColor * outAlpha, outAlpha);
 }

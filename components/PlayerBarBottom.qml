@@ -70,25 +70,25 @@ Item {
         z: 0
     }
 
-    // Liquid Glass Capsule Container (SimpMusic Rounded Corner 16dp)
+    // Liquid Glass Capsule Container (SimpMusic Sleek Rounded Corner 16dp)
     LiquidGlass {
         id: glassDock
         anchors.fill: parent
         radius: root.radius
-        displacement: 22.0
-        aberration: 0.045
-        bevelWidth: 26.0
-        tintColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.76)
+        displacement: 10.0
+        aberration: 0.030
+        bevelWidth: 10.0
+        tintColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40)
         backgroundSourceItem: root.backgroundSourceItem
         isFlowActive: root.isPlaying && root.currentTrack !== null
         z: 2
 
-        // 1px Hairline Accent Border for Liquid Glass Dock
+        // 1px Ultra-Sleek Hairline Accent Border (Slim & Non-bulky)
         Rectangle {
             anchors.fill: parent
             radius: root.radius
             color: "transparent"
-            border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.30)
+            border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
             border.width: 1
             z: 20
             Behavior on border.color { ColorAnimation { duration: 250 } }
