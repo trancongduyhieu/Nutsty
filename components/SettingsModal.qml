@@ -44,8 +44,8 @@ Rectangle {
     property bool spotifyAutoSyncing: false
     property bool manualSpotifyExpanded: false
     property bool spotifyValidating: false
-    property string appVersion: "1.0.4.1"
-    property string latestVersion: "1.0.4.1"
+    property string appVersion: "1.0.4.2"
+    property string latestVersion: "1.0.4.2"
     property bool hasAppUpdate: false
     property bool isCheckingUpdate: false
     property bool isDownloadingUpdate: false
@@ -56,6 +56,7 @@ Rectangle {
     signal openUpdateUrlRequested()
     signal startDirectUpdateRequested()
     signal applyUpdateRequested()
+    signal openWhatsNewRequested()
 
     onVisibleChanged: {
         if (!visible) {
@@ -2177,7 +2178,51 @@ Rectangle {
                             }
                         }
 
-                        // 3. Check for Updates Button
+                        // 3. View What's New Button
+                        Rectangle {
+                            id: whatsNewBtn
+                            height: 28
+                            width: whatsNewRow.implicitWidth + 16
+                            radius: 6
+                            color: whatsNewMouse.containsMouse
+                                   ? Qt.rgba(255, 255, 255, 0.14)
+                                   : Qt.rgba(255, 255, 255, 0.06)
+                            border.width: 1
+                            border.color: Qt.rgba(255, 255, 255, 0.12)
+                            Behavior on color { ColorAnimation { duration: 120 } }
+
+                            Row {
+                                id: whatsNewRow
+                                anchors.centerIn: parent
+                                spacing: 6
+
+                                AppIcon {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    source: "../assets/icons/emblem-favorite-symbolic.svg"
+                                    iconSize: 12
+                                    color: root.accentColor
+                                }
+
+                                Text {
+                                    text: I18n.tr("Điểm mới", "What's New")
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: whatsNewMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.85)
+                                    Behavior on color { ColorAnimation { duration: 120 } }
+                                }
+                            }
+
+                            MouseArea {
+                                id: whatsNewMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.openWhatsNewRequested()
+                            }
+                        }
+
+                        // 4. Check for Updates Button
                         Rectangle {
                             id: checkUpdateBtn
                             height: 28

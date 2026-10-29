@@ -129,8 +129,9 @@ Scope {
     property bool toastVisible: false
     property string localApiUrl: "http://127.0.0.1:17890"
     property string notesApiUrl: Quickshell.env("NUTSTY_WORKER_URL") || "http://127.0.0.1:17890"
-    property string appVersion: "1.0.4.1"
-    property string latestVersion: "1.0.4.1"
+    property string appVersion: "1.0.4.2"
+    property string latestVersion: "1.0.4.2"
+    property string lastSeenVersion: "1.0.4.2"
     property bool hasAppUpdate: false
     property bool isCheckingUpdate: false
     property string updateUrl: ""
@@ -2489,6 +2490,7 @@ Scope {
             updateStatusMessage: win.updateStatusMessage
 
             onCloseRequested: settingsModal.visible = false
+            onOpenWhatsNewRequested: whatsNewModal.openModal(win.updateReleaseNotes)
             onCheckUpdateRequested: win.checkForUpdates(true, true)
             onOpenUpdateUrlRequested: win.openExternalUrl(win.updateUrl)
             onStartDirectUpdateRequested: win.startDirectUpdate()
@@ -2761,6 +2763,13 @@ Scope {
             onCancelTimerRequested: () => {
                 win.cancelSleepTimer();
             }
+        }
+
+        WhatsNewModal {
+            id: whatsNewModal
+            backgroundSourceItem: masterBackdropStack
+            accentColor: win.accentColor
+            versionString: win.appVersion
         }
 
         FriendStoryModal {
@@ -3088,6 +3097,18 @@ Scope {
             if (obj.liquidGlassBevelWidth !== undefined) win.liquidGlassBevelWidth = obj.liquidGlassBevelWidth;
             if (obj.liquidGlassAberration !== undefined) win.liquidGlassAberration = obj.liquidGlassAberration;
             if (obj.liquidGlassColorBleed !== undefined) win.liquidGlassColorBleed = obj.liquidGlassColorBleed;
+            if (obj.lastSeenVersion !== undefined) {
+                win.lastSeenVersion = obj.lastSeenVersion.toString();
+            } else {
+                win.lastSeenVersion = "";
+            }
+            if (win.lastSeenVersion !== win.appVersion) {
+                Qt.callLater(function() {
+                    whatsNewModal.openModal(win.updateReleaseNotes);
+                    win.lastSeenVersion = win.appVersion;
+                    win.saveSettings();
+                });
+            }
             console.log("DEBUG Nutsty settings loaded: isShuffle=" + win.isShuffle + ", isRepeat=" + win.isRepeat + ", lyricsPreset=" + win.desktopLyricsPreset + ", language=" + win.currentLanguage + ", streamingQuality=" + win.streamingQuality + ", downloadQuality=" + win.downloadQuality + ", lyricsSource=" + win.lyricsSource + ", canvasPreference=" + win.canvasPreference);
         } catch(e) {}
     }
@@ -3096,6 +3117,7 @@ Scope {
         var data = JSON.stringify({
             isShuffle: win.isShuffle,
             isRepeat: win.isRepeat,
+            lastSeenVersion: win.lastSeenVersion,
             syncHistoryToGoogle: win.syncHistoryToGoogle,
             followedArtists: win.followedArtists,
             widgetX: win.widgetX,
@@ -3704,6 +3726,7 @@ Scope {
 
     IpcHandler {
         target: "nutsty"
+        function openWhatsNew() { frostifyIpc.openWhatsNew(); }
         function openWindow() { frostifyIpc.openWindow(); }
         function closeWindow() { frostifyIpc.closeWindow(); }
         function toggle() { frostifyIpc.toggle(); }
@@ -3786,6 +3809,9 @@ Scope {
     IpcHandler {
         id: frostifyIpc
         target: "frostify"
+        function openWhatsNew() {
+            whatsNewModal.openModal(win.updateReleaseNotes);
+        }
         function getAccentColorInfo() {
             console.log("[NutstyAccent]", "accentColor:", win.accentColor, "songAccentColor:", win.songAccentColor, "wallpaperAccentColor:", win.wallpaperAccentColor, "isPlaying:", win.isPlaying, "track:", win.currentTrack ? win.currentTrack.title : "null", "cover:", win.currentTrack ? win.currentTrack.image : "null");
         }

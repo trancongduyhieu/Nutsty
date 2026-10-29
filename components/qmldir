@@ -59,4 +59,5 @@ TrackCard 1.0 TrackCard.qml
 TrackContextMenu 1.0 TrackContextMenu.qml
 TrackRow 1.0 TrackRow.qml
 UserNoteDetailModal 1.0 UserNoteDetailModal.qml
+WhatsNewModal 1.0 WhatsNewModal.qml
 YTMusicNowPlayingView 1.0 YTMusicNowPlayingView.qml

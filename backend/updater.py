@@ -79,11 +79,11 @@ def check_for_updates(force=False, mock=False):
         return {
             "has_update": True,
             "current_version": current_ver,
-            "latest_version": "v1.0.4.1",
-            "release_name": "Nutsty v1.0.4.1 (VirtualBox VM Stability & Hardware Fallback)",
-            "changelog": "- Tối ưu hóa GPU/CPU, hạ nhiệt độ phần cứng và đóng băng animation ẩn\n- Kích hoạt đệm ghi đĩa MPV Disk Cache 128MB, tăng tốc giải mã luồng thuần Opus 160kbps\n- Khắc phục lỗi click sóng âm trên Desktop Music Widget khôi phục cửa sổ chính trên Windows (High-DPI scaling)\n- Loại bỏ hoàn toàn rò rỉ cửa sổ native QWindow trên Windows",
+            "latest_version": "v1.0.4.2",
+            "release_name": "Nutsty v1.0.4.2 (Lyrics Romanization, Obsidian LiquidGlass & MediaCoverSurface)",
+            "changelog": "- Tự động phiên âm lời bài hát Latinh (Romanization) cho nhạc Anime (Romaji), K-Pop (Romaja) và C-Pop (Pinyin)\n- Kính lỏng PlayerBar Deep Obsidian: Lớp nền sẫm màu chống lem chữ khi cuộn danh sách bài hát\n- Hợp nhất Bề mặt Bìa MediaCoverSurface: Bo tròn 16px video canvas Apple/Spotify, khắc phục triệt để lỗi không tải ảnh bìa Retina\n- Bộ điều khiển Hẹn giờ ngủ Deep Module SleepTimerController với đường cong Cosine Fade êm dịu\n- Giới thiệu Modal Có gì mới (What's New) tóm tắt tính năng phát hành",
             "release_url": "https://github.com/trancongduyhieu/FrostifyLocal/releases",
-            "download_url": "https://github.com/trancongduyhieu/FrostifyLocal/releases/download/v1.0.4.1/Nutsty_Windows_Portable.zip",
+            "download_url": "https://github.com/trancongduyhieu/FrostifyLocal/releases/download/v1.0.4.2/Nutsty_Windows_Portable.zip",
             "checked_at": int(time.time())
         }
 

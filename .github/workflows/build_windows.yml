@@ -94,7 +94,21 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: Nutsty_Windows_Portable.zip
-          generate_release_notes: true
+          name: "Nutsty ${{ github.ref_name }}"
+          body: |
+            ### 🚀 Dành cho người dùng Windows (Tải về và nghe ngay)
+            - **Bước 1:** Bấm tải file **`Nutsty_Windows_Portable.zip`** ở mục **Assets** bên dưới.
+            - **Bước 2:** Giải nén file zip ra thư mục bất kỳ.
+            - **Bước 3:** Bấm đúp chuột vào file **`start.bat`** (hoặc `Nutsty.exe`) để mở ứng dụng và nghe nhạc ngay lập tức.
+            *(Bản Portable đã tích hợp sẵn toàn bộ runtime, mpv và yt-dlp, không cần cài đặt Python hay thao tác dòng lệnh).*
+
+            ---
+            ### ✨ Có gì mới trong bản ${{ github.ref_name }}?
+            - **Phiên âm lời bài hát Latinh (Romanization)**: Hỗ trợ tự động Romaji (Nhật), Romaja (Hàn), Pinyin (Trung) đồng bộ từng câu cho nhạc Anime, K-Pop, C-Pop.
+            - **Kính lỏng PlayerBar Deep Obsidian**: Bổ sung lớp đế sẫm màu chống lem chữ khi cuộn danh sách bài hát; hiệu ứng khúc xạ quang học tinh tế.
+            - **Hợp nhất Bề mặt Bìa MediaCoverSurface**: Tự động bo tròn 16px video canvas Apple Music / Spotify không lem 4 góc, khắc phục triệt để lỗi không load ảnh bìa Retina.
+            - **Bộ đếm Hẹn giờ ngủ Deep Module**: SleepTimerController với đường cong hạ âm lượng Cosine Fade êm dịu 5s trước khi dừng.
+            - **Giao diện Điểm mới (What's New Modal)**: Tích hợp cửa sổ chào mừng và giới thiệu tính năng mới ngay trong ứng dụng và phần Cài đặt.
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
