@@ -826,6 +826,16 @@ Item {
                         radius: 16
                         color: "#202024"
 
+                        // Mask for Animated Video Output (zero leak into 4 corners, 0 FBO overhead when idle)
+                        Rectangle {
+                            id: coverVideoMask
+                            anchors.fill: parent
+                            radius: 16
+                            color: "#ffffff"
+                            visible: false
+                            layer.enabled: true
+                        }
+
                         RoundedImage {
                             id: bigCoverImg
                             anchors.fill: parent
@@ -906,6 +916,13 @@ Item {
                             opacity: (root.animatedCoverEnabled && root.animatedArtworkUrl !== "" && (amPlayer.playbackState === MediaPlayer.PlayingState || amPlayer.playbackState === MediaPlayer.PausedState)) ? 1.0 : 0.0
                             Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.OutQuad } }
                             z: 1
+
+                            layer.enabled: opacity > 0.01
+                            layer.effect: MultiEffect {
+                                maskEnabled: true
+                                maskSource: coverVideoMask
+                                autoPaddingEnabled: false
+                            }
                         }
 
                         Rectangle {
