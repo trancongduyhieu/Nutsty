@@ -10,11 +10,11 @@ Item {
     // =========================================================================
     property Item backgroundSourceItem: null
     property real radius: 16
-    property real displacement: 22.0
-    property real aberration: 0.04
-    property real bevelWidth: 20.0
-    property real blurRadius: 2.0
-    property real colorBleed: 0.45
+    property real displacement: 30.0
+    property real aberration: 0.065
+    property real bevelWidth: 21.0
+    property real blurRadius: 0.5
+    property real colorBleed: 0.94
     property color tintColor: Qt.rgba(0.12, 0.14, 0.18, 0.45)
     property bool interactive: false
     property real extraDependency: 0.0

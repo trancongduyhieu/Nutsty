@@ -75,11 +75,11 @@ Item {
         id: glassDock
         anchors.fill: parent
         radius: root.radius
-        displacement: (typeof win !== "undefined" && win.liquidGlassDisplacement !== undefined) ? win.liquidGlassDisplacement : 22.0
-        aberration: (typeof win !== "undefined" && win.liquidGlassAberration !== undefined) ? win.liquidGlassAberration : 0.040
-        bevelWidth: (typeof win !== "undefined" && win.liquidGlassBevelWidth !== undefined) ? win.liquidGlassBevelWidth : 20.0
-        blurRadius: (typeof win !== "undefined" && win.liquidGlassBlur !== undefined) ? win.liquidGlassBlur : 2.0
-        colorBleed: (typeof win !== "undefined" && win.liquidGlassColorBleed !== undefined) ? win.liquidGlassColorBleed : 0.45
+        displacement: (typeof win !== "undefined" && win.liquidGlassDisplacement !== undefined) ? win.liquidGlassDisplacement : 30.0
+        aberration: (typeof win !== "undefined" && win.liquidGlassAberration !== undefined) ? win.liquidGlassAberration : 0.065
+        bevelWidth: (typeof win !== "undefined" && win.liquidGlassBevelWidth !== undefined) ? win.liquidGlassBevelWidth : 21.0
+        blurRadius: (typeof win !== "undefined" && win.liquidGlassBlur !== undefined) ? win.liquidGlassBlur : 0.5
+        colorBleed: (typeof win !== "undefined" && win.liquidGlassColorBleed !== undefined) ? win.liquidGlassColorBleed : 0.94
         tintColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
         backgroundSourceItem: root.backgroundSourceItem
         isFlowActive: root.isPlaying && root.currentTrack !== null

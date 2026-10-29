@@ -92,42 +92,11 @@ Scope {
     property string spotifySpdc: ""
     property string lyricsSource: "auto"
     property string canvasPreference: Qt.platform.os === "windows" ? "off" : "apple_first"
-    property int liquidGlassPreset: 1 // 1: Apple Crystal, 2: SimpMusic Kyant, 3: Deep Frosted, 4: Keo 502
-    property real liquidGlassBlur: 2.0
-    property real liquidGlassDisplacement: 22.0
-    property real liquidGlassBevelWidth: 20.0
-    property real liquidGlassAberration: 0.04
-    property real liquidGlassColorBleed: 0.45
-
-    function applyLiquidGlassPreset(presetIndex) {
-        win.liquidGlassPreset = presetIndex;
-        if (presetIndex === 1) { // Apple Crystal
-            win.liquidGlassBlur = 2.0;
-            win.liquidGlassDisplacement = 22.0;
-            win.liquidGlassBevelWidth = 20.0;
-            win.liquidGlassAberration = 0.04;
-            win.liquidGlassColorBleed = 0.45;
-        } else if (presetIndex === 2) { // SimpMusic Kyant
-            win.liquidGlassBlur = 8.0;
-            win.liquidGlassDisplacement = 26.0;
-            win.liquidGlassBevelWidth = 24.0;
-            win.liquidGlassAberration = 0.05;
-            win.liquidGlassColorBleed = 0.65;
-        } else if (presetIndex === 3) { // Deep Frosted Mist
-            win.liquidGlassBlur = 14.0;
-            win.liquidGlassDisplacement = 18.0;
-            win.liquidGlassBevelWidth = 26.0;
-            win.liquidGlassAberration = 0.03;
-            win.liquidGlassColorBleed = 0.80;
-        } else if (presetIndex === 4) { // Keo 502 Viscous Fluid
-            win.liquidGlassBlur = 4.0;
-            win.liquidGlassDisplacement = 34.0;
-            win.liquidGlassBevelWidth = 28.0;
-            win.liquidGlassAberration = 0.06;
-            win.liquidGlassColorBleed = 0.60;
-        }
-        win.saveSettings();
-    }
+    property real liquidGlassBlur: 0.5
+    property real liquidGlassDisplacement: 30.0
+    property real liquidGlassBevelWidth: 21.0
+    property real liquidGlassAberration: 0.065
+    property real liquidGlassColorBleed: 0.94
     readonly property bool isAnyModalOpen: (typeof settingsModal !== "undefined" && settingsModal.visible)
                                         || (typeof spotifyImportModal !== "undefined" && spotifyImportModal.visible)
                                         || (typeof manageFriendsModal !== "undefined" && manageFriendsModal.visible)
@@ -2495,12 +2464,6 @@ Scope {
             lyricsPreset: win.desktopLyricsPreset
             customX: win.desktopLyricsCustomX
             customY: win.desktopLyricsCustomY
-            liquidGlassPreset: win.liquidGlassPreset
-            liquidGlassBlur: win.liquidGlassBlur
-            liquidGlassDisplacement: win.liquidGlassDisplacement
-            liquidGlassBevelWidth: win.liquidGlassBevelWidth
-            liquidGlassAberration: win.liquidGlassAberration
-            liquidGlassColorBleed: win.liquidGlassColorBleed
             currentLanguage: win.currentLanguage
             streamingQuality: win.streamingQuality
             downloadQuality: win.downloadQuality
@@ -2563,17 +2526,6 @@ Scope {
             }
             onSelectLyricsPresetRequested: preset => {
                 win.desktopLyricsPreset = preset;
-                win.saveSettings();
-            }
-            onSelectLiquidGlassPresetRequested: preset => {
-                win.applyLiquidGlassPreset(preset);
-            }
-            onUpdateLiquidGlassParamRequested: (param, val) => {
-                if (param === "blur") win.liquidGlassBlur = val;
-                else if (param === "displacement") win.liquidGlassDisplacement = val;
-                else if (param === "bevelWidth") win.liquidGlassBevelWidth = val;
-                else if (param === "aberration") win.liquidGlassAberration = val;
-                else if (param === "colorBleed") win.liquidGlassColorBleed = val;
                 win.saveSettings();
             }
             onResetLyricsPositionRequested: {
