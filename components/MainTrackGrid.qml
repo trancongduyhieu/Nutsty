@@ -153,9 +153,7 @@ Rectangle {
         clip: true
         boundsBehavior: Flickable.StopAtBounds
 
-        ScrollBar.vertical: ScrollBar {
-            policy: ScrollBar.AsNeeded
-        }
+        ScrollBar.vertical: LiquidScrollBar {}
 
         ColumnLayout {
             id: contentCol

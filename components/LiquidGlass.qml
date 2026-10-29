@@ -41,6 +41,7 @@ Item {
     // Coordinate mapping to track where this glass sits inside backgroundSourceItem
     readonly property point globalOffset: {
         if (!backgroundSourceItem || !root.isEffectActive) return Qt.point(0, 0);
+        var _dep = root.x + root.y + root.width + root.height + (root.parent ? (root.parent.x + root.parent.y) : 0);
         return root.mapToItem(backgroundSourceItem, 0, 0);
     }
 

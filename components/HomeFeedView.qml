@@ -129,8 +129,8 @@ Rectangle {
         reuseItems: true
         model: root.activeFeedSections
 
-        ScrollBar.vertical: ScrollBar {
-            policy: ScrollBar.AsNeeded
+        ScrollBar.vertical: LiquidScrollBar {
+            backgroundSourceItem: root.backgroundSourceItem
         }
 
         // ---------------------------------------------------------------------

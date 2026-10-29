@@ -26,6 +26,7 @@ singleton I18n 1.0 I18n.qml
 singleton LibraryData 1.0 LibraryData.qml
 LibraryLoader 1.0 LibraryLoader.qml
 LiquidGlass 1.0 LiquidGlass.qml
+LiquidScrollBar 1.0 LiquidScrollBar.qml
 MainTrackGrid 1.0 MainTrackGrid.qml
 ManageFriendsModal 1.0 ManageFriendsModal.qml
 MarqueeText 1.0 MarqueeText.qml

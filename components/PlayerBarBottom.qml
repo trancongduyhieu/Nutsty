@@ -60,16 +60,6 @@ Item {
         return m + ":" + (s < 10 ? "0" : "") + s;
     }
 
-    // Outer Ambient Glow & Soft Drop Shadow for Floating Capsule Elevation
-    Rectangle {
-        anchors.fill: parent
-        anchors.topMargin: 3
-        anchors.bottomMargin: -3
-        radius: root.radius + 1
-        color: Qt.rgba(0.0, 0.0, 0.0, 0.40)
-        z: 0
-    }
-
     // Liquid Glass Capsule Container (Apple Squircle & Snell Refraction with Dynamic Chromatic Rim)
     LiquidGlass {
         id: glassDock
