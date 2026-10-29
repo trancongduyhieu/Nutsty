@@ -60,6 +60,14 @@ Item {
         return m + ":" + (s < 10 ? "0" : "") + s;
     }
 
+    // Deep Obsidian Frosted Foundation: Blocks text bleed-through (matches FriendRequestsPopover & Popover design parity)
+    Rectangle {
+        anchors.fill: parent
+        radius: root.radius
+        color: Qt.rgba(0.05, 0.06, 0.09, 0.88)
+        z: 1
+    }
+
     // Liquid Glass Capsule Container (Apple Squircle & Snell Refraction with Dynamic Chromatic Rim)
     LiquidGlass {
         id: glassDock
@@ -70,7 +78,7 @@ Item {
         bevelWidth: (typeof win !== "undefined" && win.liquidGlassBevelWidth !== undefined) ? win.liquidGlassBevelWidth : 21.0
         blurRadius: (typeof win !== "undefined" && win.liquidGlassBlur !== undefined) ? win.liquidGlassBlur : 0.5
         colorBleed: (typeof win !== "undefined" && win.liquidGlassColorBleed !== undefined) ? win.liquidGlassColorBleed : 0.94
-        tintColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+        tintColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
         backgroundSourceItem: root.backgroundSourceItem
         isFlowActive: root.isPlaying && root.currentTrack !== null
         z: 2
