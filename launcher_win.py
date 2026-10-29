@@ -316,39 +316,14 @@ class NativeHitTestFilter(QAbstractNativeEventFilter):
     def set_mask(self, hwnd: int, x: int, y: int, w: int, h: int):
         with self._lock:
             self._panel_hwnds.add(hwnd)
-            try:
-                import ctypes
-                user32 = ctypes.windll.user32
-                gdi32 = ctypes.windll.gdi32
-                if w <= 0 or h <= 0:
-                    self._masks[hwnd] = None
-                    empty_rgn = gdi32.CreateRectRgn(0, 0, 0, 0)
-                    user32.SetWindowRgn(hwnd, empty_rgn, True)
-                else:
-                    self._masks[hwnd] = (int(x), int(y), int(w), int(h))
-                    dpi = user32.GetDpiForWindow(hwnd) if hasattr(user32, "GetDpiForWindow") else 96
-                    scale = dpi / 96.0
-                    px = int(x * scale)
-                    py = int(y * scale)
-                    pw = int(w * scale)
-                    ph = int(h * scale)
-                    r = int(24 * scale * 2)
-                    # Physically restrict window rendering to only the interactive widget rectangle
-                    # This guarantees the rest of the 2560x1600 screen cannot be drawn black by Direct3D!
-                    rgn = gdi32.CreateRoundRectRgn(px, py, px + pw + 1, py + ph + 1, r, r)
-                    user32.SetWindowRgn(hwnd, rgn, True)
-            except Exception as e:
-                sys.stderr.write(f"NativeHitTestFilter set_mask rgn error: {e}\n")
+            if w <= 0 or h <= 0:
+                self._masks[hwnd] = None
+            else:
+                self._masks[hwnd] = (int(x), int(y), int(w), int(h))
 
     def clear_mask(self, hwnd: int):
         with self._lock:
             self._masks[hwnd] = None
-            try:
-                import ctypes
-                user32 = ctypes.windll.user32
-                user32.SetWindowRgn(hwnd, None, True)
-            except Exception:
-                pass
 
     def nativeEventFilter(self, eventType, message):
         if eventType == b"windows_generic_MSG" or eventType == "windows_generic_MSG":
@@ -793,6 +768,16 @@ class NutstyBridge(QObject):
         except Exception as e:
             sys.stderr.write(f"restoreWindow error: {e}\n")
 
+
+    @Slot()
+    def stopImmediate(self):
+        """Immediately stop and pause MPV playback with 0ms latency upon track change."""
+        try:
+            import player_daemon
+            player_daemon.send_mpv_cmd(["set_property", "pause", True])
+            player_daemon.send_mpv_cmd(["stop"])
+        except Exception as e:
+            sys.stderr.write(f"stopImmediate error: {e}\n")
 
     @Slot(list)
     def execDetached(self, args: list):

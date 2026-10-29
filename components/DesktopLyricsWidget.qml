@@ -38,7 +38,7 @@ PanelWindow {
     }
 
     // Dynamic input mask: Passes through desktop clicks when idle; full grab when dragging
-    mask: (universalDragArea.pressed || universalDragArea.drag.active) ? null : lyricsRegion
+    mask: lyricsRegion
 
     Region {
         id: lyricsRegion

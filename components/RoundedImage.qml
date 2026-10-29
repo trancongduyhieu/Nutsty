@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import "."
 
 Item {
@@ -120,7 +121,18 @@ Item {
         visible: img.status !== Image.Ready && !root.hasInitials && root.fallbackIcon !== ""
     }
 
-    // 4. Background Image Loader (Decodes texture once in background without extra paint passes)
+    // 4. Rounded Mask Item (Active only when radius > 0 and image is ready)
+    Rectangle {
+        id: maskRect
+        anchors.fill: parent
+        anchors.margins: root.borderWidth > 0 ? (root.borderWidth * 0.5) : 0
+        radius: Math.max(0, root.radius - (root.borderWidth > 0 ? (root.borderWidth * 0.5) : 0))
+        color: "#ffffff"
+        layer.enabled: true
+        visible: false
+    }
+
+    // 5. Hardware-accelerated Concentric Image Loader (MultiEffect masked)
     Image {
         id: img
         anchors.fill: parent
@@ -137,8 +149,15 @@ Item {
         asynchronous: root.asynchronous
         cache: root.cache
         smooth: true
-        // Only render raw image directly if radius is 0; otherwise ShaderEffect handles single-pass rounded rendering
-        visible: root.radius <= 0 && status === Image.Ready
+        scale: root.effectiveZoom
+        transformOrigin: Item.Center
+        visible: status === Image.Ready
+
+        layer.enabled: root.radius > 0 && status === Image.Ready
+        layer.effect: MultiEffect {
+            maskEnabled: true
+            maskSource: maskRect
+        }
 
         onStatusChanged: {
             if (status === Image.Error) {
@@ -148,23 +167,6 @@ Item {
                 }
             }
         }
-    }
-
-    // 5. Hardware-accelerated Single-Pass SDF Rounded Shader (0 FBOs, 0 GPU leak, universal RHI)
-    ShaderEffect {
-        id: roundedShader
-        anchors.fill: parent
-        anchors.margins: root.borderWidth > 0 ? (root.borderWidth * 0.5) : 0
-        visible: root.radius > 0 && img.status === Image.Ready
-
-        property variant source: img
-        property vector2d u_resolution: Qt.vector2d(Math.max(1, width), Math.max(1, height))
-        property vector2d u_sourceSize: Qt.vector2d(Math.max(1, img.implicitWidth), Math.max(1, img.implicitHeight))
-        property real u_radius: Math.max(0, root.radius - (root.borderWidth > 0 ? (root.borderWidth * 0.5) : 0))
-        property real u_scale: root.effectiveZoom
-        property int u_fillMode: root.fillMode === Image.PreserveAspectCrop ? 2 : 0
-
-        fragmentShader: Qt.resolvedUrl("../assets/shaders/rounded_image.frag.qsb")
     }
 
     // 6. Hairline Border Overlay

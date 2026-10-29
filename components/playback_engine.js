@@ -117,6 +117,11 @@ function playOnlineTrack(win, trk, startRadio, radioProc, prewarmTimer, pollTime
     var localMatch = win.findLocalDownloadedTrack(trk);
     var hasLocalFile = Boolean(localMatch && localMatch.path);
 
+    if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.stopImmediate) {
+        __NutstyBridge.stopImmediate();
+    } else {
+        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
+    }
     win.trackChangeTimestamp = Date.now();
     win.postLoadGraceTimestamp = Date.now();
     win.currentTrack = trk;
@@ -211,6 +216,11 @@ function playTrack(win, trk, pollTimer) {
     }
     if (win.currentTrack && win.isSameTrack(win.currentTrack, trk) && win.isPlaying) {
         return;
+    }
+    if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.stopImmediate) {
+        __NutstyBridge.stopImmediate();
+    } else {
+        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
     }
     win.trackChangeTimestamp = Date.now();
     win.postLoadGraceTimestamp = Date.now();

@@ -38,7 +38,7 @@ PanelWindow {
     }
 
     // Dynamic input mask: Only un-mask during active drag movement so single/double clicks are never cancelled by Win32 SetWindowRgn
-    mask: dragArea.drag.active ? null : cardRegion
+    mask: cardRegion
 
     Region {
         id: cardRegion
