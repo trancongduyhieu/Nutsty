@@ -660,6 +660,20 @@ class NutstyBridge(QObject):
                             user32.SetWindowLongW.restype = wintypes.LONG
                             user32.SetWindowLongW(hwnd, GWL_EXSTYLE, target_ex)
 
+                    # Extend DWM frame for true transparent alpha composition on Windows
+                    try:
+                        class MARGINS(ctypes.Structure):
+                            _fields_ = [
+                                ("cxLeftWidth", ctypes.c_int),
+                                ("cxRightWidth", ctypes.c_int),
+                                ("cyTopHeight", ctypes.c_int),
+                                ("cyBottomHeight", ctypes.c_int),
+                            ]
+                        margins = MARGINS(-1, -1, -1, -1)
+                        ctypes.windll.dwmapi.DwmExtendFrameIntoClientArea(hwnd, ctypes.byref(margins))
+                    except Exception:
+                        pass
+
                     # Place above desktop wallpaper/icons while remaining below normal active app windows
                     HWND_NOTOPMOST = -2
                     SWP_NOSIZE = 0x0001
@@ -1238,7 +1252,7 @@ def main():
                 except Exception:
                     pass
                 return
-            if bool(w.property("visible")):
+            elif bool(w.property("visible")):
                 w.show()
                 bridge.pinWindowToDesktopBottom(w)
         else:

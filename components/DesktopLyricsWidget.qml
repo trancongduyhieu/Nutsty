@@ -15,7 +15,7 @@ PanelWindow {
     property bool isPlaying: false
     property var currentTrack: null
     property bool enabled: true
-    property bool lyricsRomanizationEnabled: false
+    property bool lyricsRomanizationEnabled: true
     property int lyricsPreset: 2 // 1: Cinematic Serif, 2: Apple Music 5-Line Fluid Sync, 3: Minimalist Slide-Up Motion Blur, 4: Motion Typography
     property int customX: -1
     property int customY: -1

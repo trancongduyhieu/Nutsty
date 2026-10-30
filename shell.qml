@@ -4334,7 +4334,7 @@ Scope {
         isPlaying: win.isPlaying
         currentTrack: win.currentTrack
         enabled: Qt.platform.os !== "windows" && win.desktopLyricsEnabled
-        lyricsRomanizationEnabled: false
+        lyricsRomanizationEnabled: win.lyricsRomanizationEnabled
         lyricsPreset: win.desktopLyricsPreset
         customX: win.desktopLyricsCustomX
         customY: win.desktopLyricsCustomY
