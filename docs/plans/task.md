@@ -66,6 +66,10 @@
 | Phase 22: Task 1 - Restore Clean Panel Window & Win32 DWM Frame Baseline (`PanelWindow.qml`, `launcher_win.py`) | Completed | Restored proven 5cacbaa PanelWindow and DWM composition frame; eliminated main window black screen and desktop blackout |
 | Phase 22: Task 2 - Permanently Disable Desktop Lyrics on Windows & Lock Settings (`shell.qml`, `SettingsModal.qml`, `launcher_win.py`) | Completed | Disabled desktop lyrics on Windows, hidden presets/positioning rows, locked toggle to OFF with Linux Wayland indicator, while preserving full Linux Wayland functionality |
 | Phase 22: Task 3 - Rebuild Standalone Nutsty.exe & Synchronize Windows Portable Release | Completed | PyInstaller build passed (76s), synced to dist/Nutsty and Downloads/Nutsty_Windows_Portable_v1.0.4.1, tested via Qt screen grab showing restored liquid glass UI |
+| Phase 23: Task 1 - Restore Animated Cover (Apple Music & Spotify Canvas) on Windows & Respect Saved Settings | Completed | Removed forced canvas disabling in shell.qml and YTMusicNowPlayingView, preserved nutsty_settings.json configuration |
+| Phase 23: Task 2 - Upgrade Static Cover Resolution & Anti-Aliased Mipmapping | Completed | Increased sourceSize from 400x400 to 1000x1000 in MediaCoverSurface, added mipmap: true in RoundedImage, normalized local Windows file paths with formatImageUrl |
+| Phase 23: Task 3 - Prevent Ghost DWM Window & VirtualBox Host DXVK Crash | Completed | Made PanelWindow visible: false on Windows on init and guarded pinWindowToDesktopBottom in launcher_win.py |
+| Phase 23: Task 4 - Verification, PyInstaller Build & Portable Sync | Completed | Verified with verify_codebase.py (764ms), test_animated_cover_and_hd.py (passed 100%), captured HD now playing screenshot, rebuilt Nutsty.exe, and synced to portable dist |
 
 
 

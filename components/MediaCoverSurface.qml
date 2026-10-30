@@ -73,10 +73,35 @@ Item {
         return img;
     }
 
+    function formatImageUrl(urlStr) {
+        if (!urlStr) return "";
+        var s = String(urlStr).trim();
+        if (s.startsWith("http://") || s.startsWith("https://") || s.startsWith("file://") || s.startsWith("qrc:")) {
+            return s;
+        }
+        var clean = s.replace(/\\/g, "/");
+        if (clean.startsWith("/")) {
+            return "file://" + clean;
+        }
+        if (/^[a-zA-Z]:\//.test(clean)) {
+            return "file:///" + clean;
+        }
+        return clean;
+    }
+
     function getHighResImage(raw) {
-        if (!raw) return "";
-        if (raw.indexOf("yt3.googleusercontent.com") !== -1 || raw.indexOf("lh3.googleusercontent.com") !== -1) {
-            return raw.replace(/=w\d+-h\d+.*$/, "=w1200-h1200-l90-rj");
+        if (!raw || typeof raw !== "string") return "";
+        if (raw.indexOf("googleusercontent.com") !== -1 || raw.indexOf("ggpht.com") !== -1) {
+            if (/=w\d+-h\d+/.test(raw)) {
+                return raw.replace(/=w\d+-h\d+[^=]*$/, "=w1200-h1200-l90-rj");
+            } else if (raw.indexOf("=") !== -1) {
+                return raw.split("=")[0] + "=w1200-h1200-l90-rj";
+            } else {
+                return raw + "=w1200-h1200-l90-rj";
+            }
+        }
+        if (raw.indexOf("mzstatic.com") !== -1) {
+            return raw.replace(/\d+x\d+bb/, "1200x1200bb");
         }
         if (raw.indexOf("i.ytimg.com") !== -1) {
             return raw.replace(/(hqdefault|mqdefault|default|sddefault)\.jpg/, "maxresdefault.jpg");
@@ -127,6 +152,10 @@ Item {
     // =========================================================================
     function fetchAnimatedArtwork() {
         root.animatedArtworkUrl = "";
+        if (root.overrideAnimatedArtworkUrl !== "") {
+            root.isLoadingAnimatedArtwork = false;
+            return;
+        }
         if (!root.animatedCoverEnabled || root.canvasPreference === "off" || !root.track) {
             root.isLoadingAnimatedArtwork = false;
             return;
@@ -218,22 +247,20 @@ Item {
             radius: root.radius
             source: {
                 if (root.overrideImage !== "") {
-                    var oImg = root.overrideImage;
-                    return (oImg.startsWith("/") && !oImg.startsWith("file://")) ? ("file://" + oImg) : oImg;
+                    return root.formatImageUrl(root.overrideImage);
                 }
                 if (root.resolvedSquareImage !== "" && !root.squareImageFailed) {
-                    var rImg = root.resolvedSquareImage;
-                    return (rImg.startsWith("/") && !rImg.startsWith("file://")) ? ("file://" + rImg) : rImg;
+                    return root.formatImageUrl(root.resolvedSquareImage);
                 }
                 var raw = root.getRawTrackImage(root.track);
                 if (!raw) return "";
                 var targetImg = root.highResFailed ? raw : root.getHighResImage(raw);
-                return (targetImg.startsWith("/") && !targetImg.startsWith("file://")) ? ("file://" + targetImg) : targetImg;
+                return root.formatImageUrl(targetImg);
             }
             fillMode: Image.PreserveAspectCrop
             autoCropBlackBars: root.autoCropBlackBars
             asynchronous: true
-            sourceSize: Qt.size(400, 400)
+            sourceSize: Qt.size(1000, 1000)
             useInitialsFallback: false
             fallbackIcon: "../assets/icons/media-optical-audio-symbolic.svg"
             fallbackIconSize: 48

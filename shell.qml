@@ -78,7 +78,7 @@ Scope {
     property bool syncHistoryToGoogle: true
     property bool desktopLyricsEnabled: Qt.platform.os !== "windows"
     property bool lyricsRomanizationEnabled: true
-    property bool animatedCoverEnabled: Qt.platform.os !== "windows"
+    property bool animatedCoverEnabled: true
     property int desktopLyricsPreset: 2 // 1: Cinematic Serif, 2: Apple Music 5-Line Parametric, 3: Minimal Glide, 4: Motion Typography
     property int desktopLyricsCustomX: -1
     property int desktopLyricsCustomY: -1
@@ -100,7 +100,7 @@ Scope {
     property string downloadQuality: "high_opus"
     property string spotifySpdc: ""
     property string lyricsSource: "auto"
-    property string canvasPreference: Qt.platform.os === "windows" ? "off" : "apple_first"
+    property string canvasPreference: "apple_first"
     property real liquidGlassBlur: 0.5
     property real liquidGlassDisplacement: 30.0
     property real liquidGlassBevelWidth: 21.0
@@ -3052,10 +3052,10 @@ Scope {
             win.desktopLyricsEnabled = (Qt.platform.os === "windows") ? false : (obj.desktopLyricsEnabled !== undefined ? !!obj.desktopLyricsEnabled : true);
             if (obj.lyricsRomanizationEnabled !== undefined) win.lyricsRomanizationEnabled = !!obj.lyricsRomanizationEnabled;
             if (obj.canvasPreference !== undefined && typeof obj.canvasPreference === "string") {
-                win.canvasPreference = (Qt.platform.os === "windows" && (obj.canvasPreference === "apple_first" || obj.canvasPreference === "apple_only")) ? "off" : obj.canvasPreference;
+                win.canvasPreference = obj.canvasPreference;
                 win.animatedCoverEnabled = (win.canvasPreference !== "off");
             } else if (obj.animatedCoverEnabled !== undefined) {
-                win.animatedCoverEnabled = (Qt.platform.os === "windows") ? false : !!obj.animatedCoverEnabled;
+                win.animatedCoverEnabled = !!obj.animatedCoverEnabled;
                 win.canvasPreference = win.animatedCoverEnabled ? "apple_first" : "off";
             }
             if (obj.desktopLyricsPreset !== undefined) win.desktopLyricsPreset = Number(obj.desktopLyricsPreset);

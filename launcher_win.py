@@ -479,11 +479,14 @@ class NutstyBridge(QObject):
             cb = self._callbacks.pop(cb_id, None)
         if cb:
             try:
-                if IS_PYSIDE:
-                    from PySide6.QtQml import QJSValue
-                    cb.call([QJSValue(str(out or "")), QJSValue(str(err or "")), QJSValue(int(code or 0))])
-                else:
-                    cb.call([str(out or ""), str(err or ""), int(code or 0)])
+                if hasattr(cb, "call"):
+                    if IS_PYSIDE:
+                        from PySide6.QtQml import QJSValue
+                        cb.call([QJSValue(str(out or "")), QJSValue(str(err or "")), QJSValue(int(code or 0))])
+                    else:
+                        cb.call([str(out or ""), str(err or ""), int(code or 0)])
+                elif callable(cb):
+                    cb(str(out or ""), str(err or ""), int(code or 0))
             except Exception as e:
                 sys.stderr.write(f"Process callback execution error: {e}\n")
 
@@ -626,6 +629,16 @@ class NutstyBridge(QObject):
                 return
             if hasattr(win_obj, "lower"):
                 win_obj.lower()
+            if pc.IS_WINDOWS and (win_obj.property("objectName") == "bottomPanel" or getattr(win_obj, "isDesktopBottomPanel", False) or bool(win_obj.property("isDesktopBottomPanel"))):
+                try:
+                    if hasattr(win_obj, "hide"):
+                        win_obj.hide()
+                    if hasattr(win_obj, "setVisible"):
+                        win_obj.setVisible(False)
+                except Exception:
+                    pass
+                return
+
             if pc.IS_WINDOWS and hasattr(win_obj, "winId"):
                 import ctypes
                 from ctypes import wintypes

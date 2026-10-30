@@ -149,6 +149,7 @@ Item {
         asynchronous: root.asynchronous
         cache: root.cache
         smooth: true
+        mipmap: true
         scale: root.effectiveZoom
         transformOrigin: Item.Center
         visible: status === Image.Ready

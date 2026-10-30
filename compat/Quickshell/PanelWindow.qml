@@ -7,7 +7,7 @@ Window {
     readonly property bool isDesktopBottomPanel: true
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus | Qt.Tool | Qt.WindowStaysOnBottomHint
     color: "transparent"
-    visible: true
+    visible: Qt.platform.os !== "windows"
 
     width: (screen && screen.geometry) ? screen.geometry.width : Screen.width
     height: (screen && screen.geometry) ? screen.geometry.height : Screen.height
@@ -37,7 +37,7 @@ Window {
 
     onMaskChanged: updateMask()
     onVisibleChanged: {
-        if (visible) {
+        if (visible && Qt.platform.os !== "windows") {
             root.show();
             root.lower();
             if (typeof __NutstyBridge !== "undefined") {
@@ -69,7 +69,7 @@ Window {
     Component.onCompleted: {
         updateMask();
         Qt.callLater(updateMask);
-        if (visible) {
+        if (visible && Qt.platform.os !== "windows") {
             root.show();
             root.lower();
             if (typeof __NutstyBridge !== "undefined") {

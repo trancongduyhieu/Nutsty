@@ -73,8 +73,8 @@ Item {
         }
     }
 
-    property bool animatedCoverEnabled: (typeof win !== "undefined" && win) ? win.animatedCoverEnabled : (Qt.platform.os !== "windows")
-    property string canvasPreference: (typeof win !== "undefined" && win) ? win.canvasPreference : (Qt.platform.os === "windows" ? "off" : "apple_first")
+    property bool animatedCoverEnabled: (typeof win !== "undefined" && win) ? win.animatedCoverEnabled : true
+    property string canvasPreference: (typeof win !== "undefined" && win) ? win.canvasPreference : "apple_first"
     property string animatedArtworkUrl: ""
     property bool isLoadingAnimatedArtwork: false
     onAnimatedCoverEnabledChanged: {
