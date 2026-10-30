@@ -63,6 +63,9 @@
 | Phase 21: Task 2 - Fix Album Artwork & Thumbnail Texture Distortion (`RoundedImage.qml`) | Completed | Replaced broken single-pass ShaderEffect (which sampled atlas textures with corrupted UVs when img was hidden) with concentric MultiEffect mask, restoring pristine crisp album covers across home feed and now playing |
 | Phase 21: Task 3 - Implement 0ms Instant Audio Cutoff on Song Switch (`launcher_win.py`, `player_daemon.py`, `playback_engine.js`) | Completed | Added bridge.stopImmediate() to immediately silence and stop previous MPV track over named pipe in 0ms before loading and auto-playing the next track |
 | Phase 21: Task 4 - Rebuild Standalone Nutsty.exe & Update v1.0.5 Release | Completed | Rebuilt executable with PyInstaller, synced to Nutsty_Windows_Portable_v1.0.4.1 in Downloads, verified codebase via scripts/verify_codebase.py (< 1s), and updated git tag v1.0.5 on GitHub |
+| Phase 22: Task 1 - Eliminate Desktop Blackout & Restore Desktop Lyrics Visibility (`PanelWindow.qml`, `launcher_win.py`) | Completed | Removed Qt.WindowStaysOnBottomHint and DwmExtendFrameIntoClientArea; placed bottom panels at HWND_NOTOPMOST = -2 above wallpaper with WS_EX_NOACTIVATE and HTTRANSPARENT hit-testing |
+| Phase 22: Task 2 - Disable Romanization / Phonetics in Desktop Lyrics Overlay (`DesktopLyricsWidget.qml`, `shell.qml`) | Completed | Enforced lyricsRomanizationEnabled: false for DesktopLyricsWidget while preserving player settings |
+| Phase 22: Task 3 - Rebuild Standalone Executable & Sync Portable Release | Completed | PyInstaller build passed, synced to dist/Nutsty and Downloads portable release, verified with test_full_lyrics_verification.py |
 
 
 

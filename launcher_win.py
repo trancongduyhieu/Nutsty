@@ -660,14 +660,14 @@ class NutstyBridge(QObject):
                             user32.SetWindowLongW.restype = wintypes.LONG
                             user32.SetWindowLongW(hwnd, GWL_EXSTYLE, target_ex)
 
-                    # Place at HWND_BOTTOM (matching WlrLayer.Bottom) without stealing focus or activating
-                    HWND_BOTTOM = 1
+                    # Place above desktop wallpaper/icons while remaining below normal active app windows
+                    HWND_NOTOPMOST = -2
                     SWP_NOSIZE = 0x0001
                     SWP_NOMOVE = 0x0002
                     SWP_NOACTIVATE = 0x0010
                     user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
                     user32.SetWindowPos.restype = wintypes.BOOL
-                    user32.SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE)
+                    user32.SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE)
         except Exception as e:
             sys.stderr.write(f"pinWindowToDesktopBottom error: {e}\n")
 
