@@ -1232,6 +1232,12 @@ def main():
 
     def _init_win(w):
         if _is_bottom_panel(w):
+            if "desktoplyrics" in w.metaObject().className().lower() or w.property("activeLyrics") is not None:
+                try:
+                    w.hide()
+                except Exception:
+                    pass
+                return
             if bool(w.property("visible")):
                 w.show()
                 bridge.pinWindowToDesktopBottom(w)

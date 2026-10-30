@@ -2331,10 +2331,12 @@ Rectangle {
                         }
 
                         Text {
-                            text: I18n.tr("Hiển thị lời bài hát nổi trực tiếp trên hình nền Wayland", "Display floating lyrics directly on Wayland desktop wallpaper")
+                            text: (Qt.platform.os === "windows")
+                                ? I18n.tr("Chỉ hỗ trợ trên Linux Wayland (Niri / CachyOS)", "Only supported on Linux Wayland (Niri / CachyOS)")
+                                : I18n.tr("Hiển thị lời bài hát nổi trực tiếp trên hình nền Wayland", "Display floating lyrics directly on Wayland desktop wallpaper")
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
-                            color: Theme.textSecondary
+                            color: (Qt.platform.os === "windows") ? Theme.textMuted : Theme.textSecondary
                         }
                     }
 
@@ -2346,7 +2348,8 @@ Rectangle {
                         width: 44
                         height: 24
                         radius: 12
-                        color: root.desktopLyricsEnabled ? root.accentColor : Qt.rgba(255, 255, 255, 0.14)
+                        opacity: (Qt.platform.os === "windows") ? 0.35 : 1.0
+                        color: (Qt.platform.os !== "windows" && root.desktopLyricsEnabled) ? root.accentColor : Qt.rgba(255, 255, 255, 0.14)
                         Behavior on color { ColorAnimation { duration: 150 } }
 
                         Rectangle {
@@ -2355,15 +2358,20 @@ Rectangle {
                             radius: 9
                             color: "#ffffff"
                             anchors.verticalCenter: parent.verticalCenter
-                            x: root.desktopLyricsEnabled ? parent.width - width - 3 : 3
+                            x: (Qt.platform.os !== "windows" && root.desktopLyricsEnabled) ? parent.width - width - 3 : 3
                             Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
                         }
 
                         MouseArea {
                             anchors.fill: parent
                             preventStealing: false
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.toggleDesktopLyricsRequested(!root.desktopLyricsEnabled)
+                            enabled: Qt.platform.os !== "windows"
+                            cursorShape: (Qt.platform.os === "windows") ? Qt.ForbiddenCursor : Qt.PointingHandCursor
+                            onClicked: {
+                                if (Qt.platform.os !== "windows") {
+                                    root.toggleDesktopLyricsRequested(!root.desktopLyricsEnabled);
+                                }
+                            }
                         }
                     }
                 }
@@ -2647,6 +2655,7 @@ Rectangle {
                     font.bold: true
                     color: Theme.textMuted
                     Layout.topMargin: 2
+                    visible: Qt.platform.os !== "windows"
                 }
 
                 // -------------------------------------------------------------
@@ -2655,6 +2664,7 @@ Rectangle {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 52
+                    visible: Qt.platform.os !== "windows"
                     radius: 8
                     color: p1Hover.hovered ? Qt.rgba(255, 255, 255, 0.05) : "transparent"
                     Behavior on color { ColorAnimation { duration: 120 } }
@@ -2742,6 +2752,7 @@ Rectangle {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 52
+                    visible: Qt.platform.os !== "windows"
                     radius: 8
                     color: p2Hover.hovered ? Qt.rgba(255, 255, 255, 0.05) : "transparent"
                     Behavior on color { ColorAnimation { duration: 120 } }
@@ -2852,6 +2863,7 @@ Rectangle {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 52
+                    visible: Qt.platform.os !== "windows"
                     radius: 8
                     color: p3Hover.hovered ? Qt.rgba(255, 255, 255, 0.05) : "transparent"
                     Behavior on color { ColorAnimation { duration: 120 } }
@@ -2953,6 +2965,7 @@ Rectangle {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 52
+                    visible: Qt.platform.os !== "windows"
                     radius: 8
                     color: p4Hover.hovered ? Qt.rgba(255, 255, 255, 0.05) : "transparent"
                     Behavior on color { ColorAnimation { duration: 120 } }
@@ -3039,6 +3052,7 @@ Rectangle {
                 Item {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 38
+                    visible: Qt.platform.os !== "windows"
 
                     Column {
                         anchors.left: parent.left
