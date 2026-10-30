@@ -4332,7 +4332,7 @@ Scope {
         isPlaying: win.isPlaying
         currentTrack: win.currentTrack
         enabled: win.desktopLyricsEnabled
-        lyricsRomanizationEnabled: win.lyricsRomanizationEnabled
+        lyricsRomanizationEnabled: false
         lyricsPreset: win.desktopLyricsPreset
         customX: win.desktopLyricsCustomX
         customY: win.desktopLyricsCustomY

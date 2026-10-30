@@ -660,28 +660,14 @@ class NutstyBridge(QObject):
                             user32.SetWindowLongW.restype = wintypes.LONG
                             user32.SetWindowLongW(hwnd, GWL_EXSTYLE, target_ex)
 
-                    # Extend DWM frame for true transparent alpha composition on Windows
-                    try:
-                        class MARGINS(ctypes.Structure):
-                            _fields_ = [
-                                ("cxLeftWidth", ctypes.c_int),
-                                ("cxRightWidth", ctypes.c_int),
-                                ("cyTopHeight", ctypes.c_int),
-                                ("cyBottomHeight", ctypes.c_int),
-                            ]
-                        margins = MARGINS(-1, -1, -1, -1)
-                        ctypes.windll.dwmapi.DwmExtendFrameIntoClientArea(hwnd, ctypes.byref(margins))
-                    except Exception:
-                        pass
-
-                    # Place above desktop wallpaper/icons while remaining below normal active app windows
-                    HWND_NOTOPMOST = -2
+                    # Place at HWND_BOTTOM (matching WlrLayer.Bottom) without stealing focus or activating
+                    HWND_BOTTOM = 1
                     SWP_NOSIZE = 0x0001
                     SWP_NOMOVE = 0x0002
                     SWP_NOACTIVATE = 0x0010
                     user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
                     user32.SetWindowPos.restype = wintypes.BOOL
-                    user32.SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE)
+                    user32.SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE)
         except Exception as e:
             sys.stderr.write(f"pinWindowToDesktopBottom error: {e}\n")
 
@@ -1246,10 +1232,7 @@ def main():
 
     def _init_win(w):
         if _is_bottom_panel(w):
-            if "desktoplyrics" in w.metaObject().className().lower() or w.property("activeLyrics") is not None:
-                w.show()
-                bridge.pinWindowToDesktopBottom(w)
-            elif bool(w.property("visible")):
+            if bool(w.property("visible")):
                 w.show()
                 bridge.pinWindowToDesktopBottom(w)
         else:

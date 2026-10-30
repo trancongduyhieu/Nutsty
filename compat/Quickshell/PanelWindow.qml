@@ -7,7 +7,7 @@ Window {
     readonly property bool isDesktopBottomPanel: true
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus | Qt.Tool | Qt.WindowStaysOnBottomHint
     color: "transparent"
-    visible: true
+    visible: false
 
     width: (screen && screen.geometry) ? screen.geometry.width : Screen.width
     height: (screen && screen.geometry) ? screen.geometry.height : Screen.height
@@ -24,11 +24,14 @@ Window {
         if (typeof __NutstyBridge === "undefined") return;
         if (!mask || !mask.item) {
             __NutstyBridge.clearWindowMask(root);
+            root.visible = false;
         } else {
             var it = mask.item;
             if (!it.visible || it.width <= 0 || it.height <= 0) {
                 __NutstyBridge.setWindowMaskRect(root, -100, -100, 1, 1);
+                root.visible = false;
             } else {
+                root.visible = true;
                 var pt = (typeof it.mapToItem === "function") ? it.mapToItem(null, 0, 0) : Qt.point(it.x, it.y);
                 __NutstyBridge.setWindowMaskRect(root, Math.round(pt.x), Math.round(pt.y), Math.round(it.width), Math.round(it.height));
             }
@@ -46,6 +49,7 @@ Window {
             updateMask();
             Qt.callLater(updateMask);
         } else {
+            root.hide();
             if (typeof __NutstyBridge !== "undefined") {
                 __NutstyBridge.clearWindowMask(root);
             }
@@ -76,6 +80,7 @@ Window {
                 __NutstyBridge.pinWindowToDesktopBottom(root);
             }
         } else {
+            root.hide();
             if (typeof __NutstyBridge !== "undefined") {
                 __NutstyBridge.clearWindowMask(root);
             }
