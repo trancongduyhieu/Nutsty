@@ -485,8 +485,7 @@ class TaskbarLyricsService:
         self._ws_thread = None
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
-        self._last_lyrics_track_id = None
-        self._lyrics_pushed = False
+        self._last_lyrics_key = None
 
     def start(self):
         if not pc.IS_WINDOWS or not os.path.exists(self.exe_path):
@@ -589,7 +588,6 @@ class TaskbarLyricsService:
                 lyrics = lyrics.toVariant()
             if isinstance(lyrics, list):
                 self._active_lyrics = lyrics
-                self._lyrics_pushed = False
         if self._ws and self._loop and self._loop.is_running():
             asyncio.run_coroutine_threadsafe(self._push_state(), self._loop)
 
@@ -602,9 +600,11 @@ class TaskbarLyricsService:
                 if st:
                     await self._ws.send(json.dumps(st))
                 track_id = st.get("trackId") if st else None
-                if fmt and (track_id != self._last_lyrics_track_id or not self._lyrics_pushed):
-                    self._last_lyrics_track_id = track_id
-                    self._lyrics_pushed = True
+                raw_len = len(self._active_lyrics)
+                first_t = self._active_lyrics[0].get("time") if raw_len > 0 and isinstance(self._active_lyrics[0], dict) else 0
+                lyrics_key = (track_id, raw_len, first_t)
+                if fmt and (lyrics_key != self._last_lyrics_key):
+                    self._last_lyrics_key = lyrics_key
                     await self._ws.send(json.dumps({"type": "push_lyrics", "lyrics": fmt}))
         except Exception:
             pass
@@ -681,6 +681,7 @@ class TaskbarLyricsService:
             try:
                 async with websockets.connect(uri) as ws:
                     self._ws = ws
+                    self._last_lyrics_key = None
                     await self._push_state()
 
                     async for msg in ws:
