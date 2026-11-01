@@ -69,3 +69,6 @@ scripts/
 cloudflare/
 docs/plans/
 bin/*.exe
+bin/*.dll
+bin/*.pdb
+bin/*.json

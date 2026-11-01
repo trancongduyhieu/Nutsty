@@ -77,6 +77,25 @@ Scope {
     property string authAccountEmail: ""
     property bool syncHistoryToGoogle: true
     property bool desktopLyricsEnabled: Qt.platform.os !== "windows"
+    property bool taskbarLyricsEnabled: Qt.platform.os === "windows"
+    property string taskbarLyricsPlacement: "taskbar" // "taskbar" | "above"
+    property string taskbarLyricsAlign: "center"      // "center" | "left" | "right"
+    property string taskbarLyricsVPos: "bottom"       // "bottom" | "top"
+    onTaskbarLyricsEnabledChanged: {
+        if (Qt.platform.os === "windows" && typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.notifyTaskbarLyricsState === "function") {
+            __NutstyBridge.notifyTaskbarLyricsState(win.taskbarLyricsEnabled);
+        }
+    }
+    onTaskbarLyricsPlacementChanged: {
+        if (Qt.platform.os === "windows" && typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.setTaskbarLyricsPlacement === "function") {
+            __NutstyBridge.setTaskbarLyricsPlacement(win.taskbarLyricsPlacement);
+        }
+    }
+    onTaskbarLyricsAlignChanged: {
+        if (Qt.platform.os === "windows" && typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.setTaskbarLyricsAlign === "function") {
+            __NutstyBridge.setTaskbarLyricsAlign(win.taskbarLyricsAlign);
+        }
+    }
     property bool lyricsRomanizationEnabled: true
     property bool animatedCoverEnabled: true
     property int desktopLyricsPreset: 2 // 1: Cinematic Serif, 2: Apple Music 5-Line Parametric, 3: Minimal Glide, 4: Motion Typography
@@ -2470,6 +2489,9 @@ Scope {
             accountEmail: win.authAccountEmail
             syncHistoryToGoogle: win.syncHistoryToGoogle
             desktopLyricsEnabled: win.desktopLyricsEnabled
+            taskbarLyricsEnabled: win.taskbarLyricsEnabled
+            taskbarLyricsPlacement: win.taskbarLyricsPlacement
+            taskbarLyricsAlign: win.taskbarLyricsAlign
             lyricsRomanizationEnabled: win.lyricsRomanizationEnabled
             animatedCoverEnabled: win.animatedCoverEnabled
             canvasPreference: win.canvasPreference
@@ -2536,6 +2558,18 @@ Scope {
             onToggleDesktopLyricsRequested: enabled => {
                 if (Qt.platform.os === "windows") return;
                 win.desktopLyricsEnabled = enabled;
+                win.saveSettings();
+            }
+            onToggleTaskbarLyricsRequested: enabled => {
+                win.taskbarLyricsEnabled = enabled;
+                win.saveSettings();
+            }
+            onChangeTaskbarLyricsPlacementRequested: placement => {
+                win.taskbarLyricsPlacement = placement;
+                win.saveSettings();
+            }
+            onChangeTaskbarLyricsAlignRequested: align => {
+                win.taskbarLyricsAlign = align;
                 win.saveSettings();
             }
             onToggleLyricsRomanizationRequested: enabled => {
@@ -3050,6 +3084,9 @@ Scope {
             if (obj.widgetX !== undefined) win.widgetX = Number(obj.widgetX);
             if (obj.widgetY !== undefined) win.widgetY = Number(obj.widgetY);
             win.desktopLyricsEnabled = (Qt.platform.os === "windows") ? false : (obj.desktopLyricsEnabled !== undefined ? !!obj.desktopLyricsEnabled : true);
+            if (obj.taskbarLyricsEnabled !== undefined) win.taskbarLyricsEnabled = !!obj.taskbarLyricsEnabled;
+            if (obj.taskbarLyricsPlacement !== undefined && typeof obj.taskbarLyricsPlacement === "string") win.taskbarLyricsPlacement = obj.taskbarLyricsPlacement;
+            if (obj.taskbarLyricsAlign !== undefined && typeof obj.taskbarLyricsAlign === "string") win.taskbarLyricsAlign = obj.taskbarLyricsAlign;
             if (obj.lyricsRomanizationEnabled !== undefined) win.lyricsRomanizationEnabled = !!obj.lyricsRomanizationEnabled;
             if (obj.canvasPreference !== undefined && typeof obj.canvasPreference === "string") {
                 win.canvasPreference = obj.canvasPreference;
@@ -3124,6 +3161,9 @@ Scope {
             widgetX: win.widgetX,
             widgetY: win.widgetY,
             desktopLyricsEnabled: win.desktopLyricsEnabled,
+            taskbarLyricsEnabled: win.taskbarLyricsEnabled,
+            taskbarLyricsPlacement: win.taskbarLyricsPlacement,
+            taskbarLyricsAlign: win.taskbarLyricsAlign,
             lyricsRomanizationEnabled: win.lyricsRomanizationEnabled,
             animatedCoverEnabled: win.animatedCoverEnabled,
             canvasPreference: win.canvasPreference,
@@ -4351,6 +4391,40 @@ Scope {
         onVolumeChangeRequested: (delta) => {
             var newVol = Math.max(0.0, Math.min(100.0, win.volume + delta));
             win.setVolume(newVol);
+        }
+    }
+
+    // =========================================================================
+    // Windows Taskbar Lyrics (Powered by native kamol1dn/spicy-taskbar TaskbarLyrics.exe)
+    // Synchronized via high-speed WebSocket bridge to ws://localhost:9012/
+    // =========================================================================
+    Timer {
+        id: taskbarLyricsPushTimer
+        interval: 1000
+        repeat: true
+        running: Qt.platform.os === "windows" && win.taskbarLyricsEnabled && win.currentTrack !== null
+        onTriggered: {
+            if (typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.updateTaskbarPlayback === "function") {
+                __NutstyBridge.updateTaskbarPlayback(win.isPlaying, win.currentTime, win.totalDuration, win.currentTrack, win.activeLyrics);
+            }
+        }
+    }
+    Connections {
+        target: win
+        function onCurrentTrackChanged() {
+            if (Qt.platform.os === "windows" && typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.updateTaskbarPlayback === "function") {
+                __NutstyBridge.updateTaskbarPlayback(win.isPlaying, win.currentTime, win.totalDuration, win.currentTrack, win.activeLyrics);
+            }
+        }
+        function onIsPlayingChanged() {
+            if (Qt.platform.os === "windows" && typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.updateTaskbarPlayback === "function") {
+                __NutstyBridge.updateTaskbarPlayback(win.isPlaying, win.currentTime, win.totalDuration, win.currentTrack, win.activeLyrics);
+            }
+        }
+        function onActiveLyricsChanged() {
+            if (Qt.platform.os === "windows" && typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.updateTaskbarLyrics === "function") {
+                __NutstyBridge.updateTaskbarLyrics(win.activeLyrics);
+            }
         }
     }
 

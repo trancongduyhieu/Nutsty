@@ -62,3 +62,11 @@ Tài liệu đặc tả chuyên sâu về hệ thống lời bài hát hiển th
 - **Unified Baseline & Spring-Damped SmoothedAnimation**: Toàn bộ từ (chưa hát, đang hát, đã hát) nằm chung baseline $0.0\text{px}$ (xóa bỏ triệt để hố sâu $1.8\text{px}$). Đỉnh sóng nâng $y_{\text{lift}} = -1.6\text{px}$ (biên độ $1.6\text{px} \le 2.0\text{px}$), scale $1.01\times$. Bọc `Translate.y` và `scale` trong `SmoothedAnimation { duration: 150; reversingMode: SmoothedAnimation.Immediate }` đảm bảo $C^1$ velocity continuity, triệt tiêu hoàn toàn giật cục.
 - **Phosphor Bloom Glow**: Tỏa hào quang lân tinh qua `MultiEffect` (blur $0.55$, opacity $0.51$, max $24$) trên nền layer mượt.
 - **Footgun #1**: **TUYỆT ĐỐI CẤM** gán trực tiếp `x, y` trên con trực tiếp của QML `Flow` (làm vỡ positioner và văng chữ lên dòng trên). Bắt buộc bọc qua `transform: Translate { y: waveY }` trên item con bên trong.
+
+---
+
+## 6. Windows Taskbar Lyrics Strip (kamol1dn/spicy-taskbar Native Companion)
+- **Kiến trúc Native Companion**: Tích hợp binary bin/TaskbarLyrics.exe biên dịch từ kamol1dn/spicy-taskbar (.NET 8 WPF single-file). Tự động khởi chạy song song và kết nối qua WebSocket bridge hai chiều (ws://localhost:9012/).
+- **Hiệu ứng Syllable Karaoke & Nhịp nghỉ**: Vẽ trực tiếp lên hoặc phía trên taskbar Windows bằng Win32 WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | HWND_TOPMOST. Hiệu ứng quét âm tiết karaoke từng từ (syllable sweep) siêu mượt, đếm nhịp nghỉ 3 chấm ● ● ● khi instrumental gap >= 2.5s.
+- **Cơ chế WebSocket Bridge 2 chiều**: Nutsty push trực tiếp sp_state (vị trí ms, playback state) và push_lyrics (cấu trúc Syllable / Line). TaskbarLyrics xử lý lệnh set_config cập nhật vị trí (taskbar/above), căn lề (center/left/right) tức thì không cần khởi động lại.
+- **Tối ưu VM & Hệ thống**: Mặc định tắt VizEnabled (audio visualizer) để tránh chiếm dụng WASAPI loopback và ngừa crash đồ họa VirtualBox / VM.
