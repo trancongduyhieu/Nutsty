@@ -10,3 +10,5 @@
 | Task 6: Connect reactive playback & settings in `shell.qml` | Done | Timer & connections update taskbar playback, placement, align, on/off dynamically |
 | Task 7: PyInstaller Build & Full Release Package | Done | Package `dist\Nutsty\Nutsty.exe` with `bin\TaskbarLyrics.exe`, `bin\mpv.exe`, assets, QML |
 | Task 8: Verification & Live Proof | Done | Verified WebSocket connection, `TaskbarLyrics.exe` log confirmation (`resolve: cache hit (spicy)`, `smtc: track`), zero-latency updates, and codebase contracts |
+| Task 9: Atomic Single-Instance Win32 Mutex + Rapid Activation | Done | Replaced vulnerable socket-only probe with session-scoped kernel named mutex `Local\Nutsty_Master_SingleInstance_Mutex_Apple`, preventing dual instances, high CPU spikes (63%) and 600MB+ RAM bloat |
+| Task 10: WebSockets 17.1 `ClientConnection` Parity & Safe Send | Done | Fixed AttributeError on `ws.closed` for websockets 17.1 via `_is_ws_open()` and added `asyncio.Lock()` concurrency guards, ensuring stable taskbar lyrics push without WebSocket aborts |

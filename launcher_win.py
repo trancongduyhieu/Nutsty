@@ -1,1900 +1,1963 @@
-#!/usr/bin/env python3
-"""
-Nutsty Cross-Platform Launcher (Windows & Desktop Qt Quick)
-Launches Nutsty with PySide6 / PyQt6, injects compatibility bridges for Quickshell APIs,
-starts background services, and displays the main window.
-"""
-import os
-import sys
-import json
-import time
-import subprocess
-import threading
-import asyncio
-import concurrent.futures
-import ctypes
-from ctypes import wintypes
-from pathlib import Path
-
-def _detect_hypervisor_vm():
-    """
-    Multi-tiered detection for VirtualBox and other hypervisors.
-    In VirtualBox, Direct3D 11 backend causes VBoxWddm.sys memory exhaustion
-    and BugCheck 0x10E (VIDEO_MEMORY_MANAGEMENT_INTERNAL). Falling back to
-    OpenGL (Mesa Gallium3D VBoxGL.dll) prevents VM crashes.
-    """
-    if sys.platform != "win32":
-        return False
-    try:
-        import winreg
-
-        reg_access = winreg.KEY_READ | getattr(winreg, "KEY_WOW64_64KEY", 0)
-
-        # Tier 1: Check Kernel Miniport Driver Services
-        # (VBoxWddm, VBoxGuest, VBoxMouse, VBoxVideo, VBoxSF in SYSTEM\CurrentControlSet\Services)
-        vbox_services = ("VBoxWddm", "VBoxGuest", "VBoxMouse", "VBoxVideo", "VBoxSF")
-        for svc in vbox_services:
-            try:
-                k = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, f"SYSTEM\\CurrentControlSet\\Services\\{svc}", 0, reg_access)
-                winreg.CloseKey(k)
-                return True
-            except OSError:
-                pass
-
-        # Tier 2: Enumerate display adapter subkeys under
-        # SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}
-        # (strictly filter for numeric subkeys sub.isdigit() to prevent Access Denied on Properties)
-        display_class_path = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"
-        try:
-            class_key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, display_class_path, 0, reg_access)
-            idx = 0
-            while True:
-                try:
-                    sub_name = winreg.EnumKey(class_key, idx)
-                    idx += 1
-                except OSError:
-                    break
-                if not sub_name.isdigit():
-                    continue
-                try:
-                    sub_key = winreg.OpenKey(class_key, sub_name, 0, reg_access)
-                    for val_name in ("DriverDesc", "ProviderName"):
-                        try:
-                            val, _ = winreg.QueryValueEx(sub_key, val_name)
-                            val_lower = str(val).lower()
-                            if any(target in val_lower for target in ("virtualbox", "innotek", "oracle", "vbox")):
-                                winreg.CloseKey(sub_key)
-                                winreg.CloseKey(class_key)
-                                return True
-                        except OSError:
-                            pass
-                    winreg.CloseKey(sub_key)
-                except OSError:
-                    pass
-            winreg.CloseKey(class_key)
-        except OSError:
-            pass
-
-        # Tier 3: Check BIOS strings
-        # (SystemManufacturer, SystemProductName, BaseBoardManufacturer, etc. in HARDWARE\DESCRIPTION\System\BIOS)
-        try:
-            bios_key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\BIOS", 0, reg_access)
-            bios_targets = ("virtualbox", "innotek", "oracle", "vbox", "qemu", "kvm", "vmware")
-            bios_fields = ("SystemManufacturer", "SystemProductName", "BaseBoardManufacturer", "BaseBoardProduct", "BIOSVendor", "BIOSVersion", "SystemFamily")
-            for val_name in bios_fields:
-                try:
-                    val, _ = winreg.QueryValueEx(bios_key, val_name)
-                    val_lower = str(val).lower()
-                    if any(target in val_lower for target in bios_targets):
-                        winreg.CloseKey(bios_key)
-                        return True
-                except OSError:
-                    pass
-            winreg.CloseKey(bios_key)
-        except OSError:
-            pass
-
-    except Exception:
-        pass
-    return False
-
-
-# Select RHI graphics backend:
-# Direct3D 11 backend enables Windows DirectComposition for 100% per-pixel alpha window border transparency on bare metal.
-# Hypervisors (VirtualBox) crash under D3D11 MultiEffect blur and require OpenGL (Mesa Gallium3D VBoxGL.dll).
-if sys.platform == "win32" and not os.environ.get("QSG_RHI_BACKEND", "").strip():
-    if _detect_hypervisor_vm():
-        os.environ["QSG_RHI_BACKEND"] = "opengl"
-    else:
-        os.environ["QSG_RHI_BACKEND"] = "d3d11"
-
-# Register active launcher instance in sys.modules so background threads (like auth_server) get the active instance
-sys.modules["launcher_win"] = sys.modules[__name__]
-
-# Safe logging for Windows PyInstaller GUI mode (where sys.stdout/stderr are None)
-class SafeLogWriter:
-    def __init__(self, log_path=None):
-        self.log_file = None
-        if log_path:
-            try:
-                os.makedirs(os.path.dirname(log_path), exist_ok=True)
-                self.log_file = open(log_path, "a", encoding="utf-8", errors="replace")
-            except Exception:
-                pass
-
-    def write(self, s):
-        if self.log_file:
-            try:
-                self.log_file.write(str(s))
-                self.log_file.flush()
-            except Exception:
-                pass
-
-    def flush(self):
-        if self.log_file:
-            try:
-                self.log_file.flush()
-            except Exception:
-                pass
-
-class ThreadLocalStream:
-    def __init__(self, default_stream):
-        self._local = threading.local()
-        self._default = default_stream
-
-    def set_stream(self, stream):
-        self._local.stream = stream
-
-    def clear_stream(self):
-        if hasattr(self._local, "stream"):
-            del self._local.stream
-
-    def write(self, s):
-        stream = getattr(self._local, "stream", self._default)
-        if stream:
-            try:
-                return stream.write(s)
-            except Exception:
-                pass
-
-    def flush(self):
-        stream = getattr(self._local, "stream", self._default)
-        if stream and hasattr(stream, "flush"):
-            try:
-                return stream.flush()
-            except Exception:
-                pass
-
-if sys.platform == "win32":
-    if sys.stdout and hasattr(sys.stdout, "reconfigure"):
-        try:
-            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
-    if sys.stderr and hasattr(sys.stderr, "reconfigure"):
-        try:
-            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
-
-log_dir = os.path.join(os.environ.get("TEMP", os.path.expanduser("~")), "nutsty")
-log_file_path = os.path.join(log_dir, "launcher.log")
-default_out = sys.stdout if sys.stdout is not None else SafeLogWriter(log_file_path)
-default_err = sys.stderr if sys.stderr is not None else SafeLogWriter(log_file_path)
-
-sys.stdout = ThreadLocalStream(default_out)
-sys.stderr = ThreadLocalStream(default_err)
-
-# Resolve App and Resource Root across source runs and PyInstaller onedir bundles
-def resolve_app_root():
-    if getattr(sys, "frozen", False):
-        meipass = getattr(sys, "_MEIPASS", None)
-        if meipass and os.path.exists(os.path.join(meipass, "shell.qml")):
-            return meipass
-        exe_dir = os.path.dirname(sys.executable)
-        # Prioritize root portable directory if shell.qml is present
-        if os.path.exists(os.path.join(exe_dir, "shell.qml")):
-            return exe_dir
-        internal_dir = os.path.join(exe_dir, "_internal")
-        if os.path.exists(os.path.join(internal_dir, "shell.qml")):
-            return internal_dir
-        return meipass or exe_dir
-    return os.path.dirname(os.path.abspath(__file__))
-
-APP_ROOT = resolve_app_root()
-os.environ["NUTSTY_APP_DIR"] = APP_ROOT
-if "HOME" not in os.environ:
-    os.environ["HOME"] = os.path.expanduser("~")
-
-bin_dir = os.path.join(APP_ROOT, "bin")
-if os.path.exists(bin_dir) and bin_dir not in os.environ.get("PATH", ""):
-    os.environ["PATH"] = bin_dir + os.pathsep + os.environ.get("PATH", "")
-
-sys.path.insert(0, os.path.join(APP_ROOT, "backend"))
-
-import platform_compat as pc
-pc.configure_windows_ssl()
-
-sys_argv_lock = threading.Lock()
-
-BACKEND_MAP = {
-    "player_daemon.py": "player_daemon",
-    "auth_server.py": "auth_server",
-    "download_manager.py": "download_manager",
-    "library.py": "library",
-    "palette_extractor.py": "palette_extractor",
-    "lyrics_helper.py": "lyrics_helper",
-    "playlist_manager.py": "playlist_manager",
-    "ytmusic_helper.py": "ytmusic_helper",
-    "social_notes.py": "social_notes",
-    "browser_login.py": "browser_login",
-    "spotify_importer.py": "spotify_importer",
-    "updater.py": "updater",
-}
-
-# Backend CLI Dispatcher: Prevents re-launching GUI when invoked as backend worker
-def check_cli_dispatch():
-    """
-    If Nutsty.exe is invoked with backend script arguments (e.g. from QML Process
-    or external scripts), dispatch to that script in headless mode and exit.
-    This prevents fork bombs and infinite window popup loops.
-    """
-    args = sys.argv[1:]
-    if not args:
-        return
-    if args and args[0] == "-c":
-        cmd_code = args[1] if len(args) > 1 else ""
-        sys.argv = [sys.argv[0]] + list(args[2:])
-        try:
-            exec(cmd_code, {"__name__": "__main__", "sys": sys, "os": os})
-            sys.exit(0)
-        except SystemExit as se:
-            sys.exit(se.code if isinstance(se.code, int) else 0)
-        except Exception as e:
-            sys.stderr.write(f"Error executing CLI -c: {e}\n")
-            sys.exit(1)
-    for i, a in enumerate(args):
-        base_a = os.path.basename(a)
-        if base_a in BACKEND_MAP:
-            mod_name = BACKEND_MAP[base_a]
-            sys.argv = [a] + args[i + 1:]
-            try:
-                import importlib
-                mod = importlib.import_module(mod_name)
-                if hasattr(mod, "handle_cli"):
-                    mod.handle_cli(args[i + 1:])
-                elif hasattr(mod, "main"):
-                    mod.main()
-                else:
-                    import runpy
-                    runpy.run_module(mod_name, run_name="__main__", alter_sys=True)
-                sys.exit(0)
-            except SystemExit as se:
-                sys.exit(se.code if isinstance(se.code, int) else 0)
-            except Exception as e:
-                sys.stderr.write(f"Error running {base_a}: {e}\n")
-                sys.exit(1)
-
-# Run CLI dispatch check immediately
-check_cli_dispatch()
-
-# Detect Qt bindings (PySide6 or PyQt6)
-try:
-    from PySide6.QtCore import QObject, Signal, Property, Slot, QUrl, QTimer, QThread, QRect, QAbstractNativeEventFilter
-    from PySide6.QtGui import QGuiApplication, QIcon, QWindow, QRegion
-    from PySide6.QtQml import QQmlApplicationEngine, qmlRegisterType, QmlAttached
-    from PySide6.QtQuick import QQuickWindow
-    IS_PYSIDE = True
-except ImportError:
-    try:
-        from PyQt6.QtCore import QObject, pyqtSignal as Signal, pyqtProperty as Property, pyqtSlot as Slot, QUrl, QTimer, QThread, QRect, QAbstractNativeEventFilter
-        from PyQt6.QtGui import QGuiApplication, QIcon, QWindow, QRegion
-        from PyQt6.QtQml import QQmlApplicationEngine, qmlRegisterType
-        from PyQt6.QtQuick import QQuickWindow
-        IS_PYSIDE = False
-    except ImportError:
-        sys.stderr.write("Fatal: Neither PySide6 nor PyQt6 is installed.\n")
-        sys.stderr.write("Please run: pip install PySide6\n")
-        sys.exit(1)
-
-class NativeHitTestFilter(QAbstractNativeEventFilter):
-    """
-    Win32 WM_NCHITTEST filter for transparent layered windows (DesktopLyricsWidget & PanelWindow).
-    Allows interactive areas to receive mouse clicks/dragging while passing through clicks outside
-    to the Windows desktop/background without breaking DWM per-pixel alpha or causing white boxes.
-    Supports Windows Per-Monitor High-DPI display scaling (125%, 150%, 200%).
-    """
-    def __init__(self):
-        super().__init__()
-        self._masks = {}  # hwnd -> (x, y, w, h)
-        self._panel_hwnds = set()
-        self._lock = threading.Lock()
-
-    def register_panel_hwnd(self, hwnd: int):
-        with self._lock:
-            self._panel_hwnds.add(hwnd)
-
-    def set_mask(self, hwnd: int, x: int, y: int, w: int, h: int):
-        with self._lock:
-            self._panel_hwnds.add(hwnd)
-            if w <= 0 or h <= 0:
-                self._masks[hwnd] = None
-            else:
-                self._masks[hwnd] = (int(x), int(y), int(w), int(h))
-
-    def clear_mask(self, hwnd: int):
-        with self._lock:
-            self._masks[hwnd] = None
-
-    def nativeEventFilter(self, eventType, message):
-        if eventType == b"windows_generic_MSG" or eventType == "windows_generic_MSG":
-            try:
-                msg = wintypes.MSG.from_address(int(message))
-                if msg.message == 0x0084:  # WM_NCHITTEST
-                    target_hwnd = int(msg.hWnd)
-                    with self._lock:
-                        if target_hwnd in self._panel_hwnds or target_hwnd in self._masks:
-                            rect = self._masks.get(target_hwnd)
-                            if not rect:
-                                return True, -1  # HTTRANSPARENT: clicks pass through to desktop
-                            pt = wintypes.POINT()
-                            pt.x = ctypes.c_short(msg.lParam & 0xFFFF).value
-                            pt.y = ctypes.c_short((msg.lParam >> 16) & 0xFFFF).value
-                            user32 = ctypes.windll.user32
-                            user32.ScreenToClient(target_hwnd, ctypes.byref(pt))
-
-                            # Handle Windows High-DPI scaling (physical pixels -> DIP logical pixels)
-                            dpr = 1.0
-                            if hasattr(user32, "GetDpiForWindow"):
-                                dpi = user32.GetDpiForWindow(target_hwnd)
-                                if dpi > 0:
-                                    dpr = dpi / 96.0
-
-                            px = pt.x / dpr
-                            py = pt.y / dpr
-                            rx, ry, rw, rh = rect
-                            if rx <= px <= (rx + rw) and ry <= py <= (ry + rh):
-                                return False, 0  # Inside interactive box: process event
-                            return True, -1  # Outside: pass through to desktop/window below
-            except Exception:
-                pass
-        return False, 0
-
-native_filter = NativeHitTestFilter()
-
-# Reusable Thread Pool for background tasks and IPC status queries (prevents 14,400 OS threads/hour)
-_WORKER_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="NutstyWorker")
-
-def _safe_submit(fn, *args, **kwargs):
-    try:
-        return _WORKER_POOL.submit(fn, *args, **kwargs)
-    except RuntimeError:
-        return None
-    except Exception as e:
-        sys.stderr.write(f"_safe_submit error: {e}\n")
-        return None
-
-tray_icon_ref = [None]
-bridge_ref = [None]
-main_win_ref = [None]
-engine_ref = [None]
-
-def request_open_settings(tab: int = 0, mock_update: bool = False):
-    try:
-        from PySide6.QtCore import QTimer, QObject
-        def _do():
-            if bridge_ref[0]:
-                try:
-                    bridge_ref[0].openSettingsRequested.emit(tab)
-                except Exception:
-                    pass
-            w = main_win_ref[0]
-            if not w:
-                try:
-                    from PySide6.QtGui import QGuiApplication
-                    for tw in QGuiApplication.topLevelWindows():
-                        if tw.width() >= 500:
-                            w = tw
-                            main_win_ref[0] = tw
-                            break
-                except Exception:
-                    pass
-            if w:
-                try:
-                    w.setProperty("visible", True)
-                    if bridge_ref[0]:
-                        bridge_ref[0].restoreWindow(w)
-                    search_targets = [w]
-                    if hasattr(w, "contentItem") and w.contentItem():
-                        search_targets.append(w.contentItem())
-                    if engine_ref[0]:
-                        search_targets.extend(engine_ref[0].rootObjects())
-                    
-                    found_modal = False
-                    for st in search_targets:
-                        if hasattr(st, "findChildren"):
-                            for child in st.findChildren(QObject):
-                                oname = child.objectName() if hasattr(child, "objectName") else ""
-                                if oname == "settingsModal":
-                                    child.setProperty("currentTab", tab)
-                                    child.setProperty("visible", True)
-                                    found_modal = True
-                                elif oname == "mainWindow":
-                                    child.setProperty("visible", True)
-                                    if mock_update:
-                                        child.setProperty("hasAppUpdate", True)
-                                        child.setProperty("latestVersion", "v1.0.5")
-                                        child.setProperty("appVersion", "1.0.5")
-                                        child.setProperty("updateUrl", "https://github.com/trancongduyhieu/FrostifyLocal/releases")
-                    sys.stderr.write(f"request_open_settings: found_modal={found_modal}\n")
-                except Exception as e:
-                    sys.stderr.write(f"request_open_settings _do error: {e}\n")
-        QTimer.singleShot(0, _do)
-    except Exception as e:
-        sys.stderr.write(f"request_open_settings error: {e}\n")
-
-def grab_screenshot(save_path: str = "") -> str:
-    import tempfile
-    if not save_path:
-        save_path = os.path.join(tempfile.gettempdir(), "nutsty_rendered.png")
-    w = main_win_ref[0]
-    if not w:
-        try:
-            from PySide6.QtGui import QGuiApplication
-            for tw in QGuiApplication.topLevelWindows():
-                if tw.width() >= 500:
-                    w = tw
-                    main_win_ref[0] = tw
-                    break
-        except Exception:
-            pass
-    if w:
-        try:
-            if hasattr(w, "grabWindow"):
-                img = w.grabWindow()
-                img.save(save_path)
-                return save_path
-        except Exception as e:
-            sys.stderr.write(f"grab_screenshot error: {e}\n")
-    return ""
-
-
-class TaskbarLyricsService:
-    """Manages TaskbarLyrics.exe companion process and WebSocket bridge."""
-    _instance = None
-
-    def __init__(self, app_root):
-        TaskbarLyricsService._instance = self
-        self.app_root = app_root
-        candidates = [
-            os.path.join(app_root, "bin"),
-            os.path.join(app_root, "_internal", "bin"),
-            os.path.join(os.path.dirname(sys.executable), "bin"),
-            os.path.join(os.path.dirname(sys.executable), "_internal", "bin"),
-            os.path.join(getattr(sys, "_MEIPASS", ""), "bin") if hasattr(sys, "_MEIPASS") else ""
-        ]
-        self.bin_dir = next((p for p in candidates if p and os.path.exists(os.path.join(p, "TaskbarLyrics.exe"))), os.path.join(app_root, "bin"))
-        self.exe_path = os.path.join(self.bin_dir, "TaskbarLyrics.exe")
-        self.config_path = os.path.join(self.bin_dir, "config.json")
-        self.proc = None
-        self.started_by_us = False
-        self._playback_state = {}
-        self._active_lyrics = []
-        self._ws = None
-        self._loop = None
-        self._ws_thread = None
-        self._stop_event = threading.Event()
-        self._lock = threading.Lock()
-        self._last_lyrics_key = None
-
-    def start(self):
-        if not pc.IS_WINDOWS or not os.path.exists(self.exe_path):
-            return
-        self.ensure_process()
-        if not self._ws_thread or not self._ws_thread.is_alive():
-            self._stop_event.clear()
-            self._ws_thread = threading.Thread(target=self._ws_loop_runner, daemon=True)
-            self._ws_thread.start()
-
-    def stop(self):
-        self._stop_event.set()
-        if self.proc and self.started_by_us:
-            try:
-                self.proc.terminate()
-            except Exception:
-                pass
-            self.proc = None
-
-    def ensure_process(self):
-        try:
-            check = subprocess.run(["tasklist", "/FI", "IMAGENAME eq TaskbarLyrics.exe"], capture_output=True, text=True, timeout=3)
-            if "TaskbarLyrics.exe" not in check.stdout:
-                self.proc = subprocess.Popen([self.exe_path], cwd=self.bin_dir, **pc.get_daemon_popen_kwargs())
-                self.started_by_us = True
-        except Exception as e:
-            sys.stderr.write(f"TaskbarLyrics ensure_process error: {e}\n")
-
-    def update_config(self, **kwargs):
-        try:
-            cfg = {}
-            if os.path.exists(self.config_path):
-                try:
-                    with open(self.config_path, "r", encoding="utf-8") as f:
-                        cfg = json.load(f)
-                except Exception:
-                    cfg = {}
-            for k, v in kwargs.items():
-                cfg[k] = v
-            tmp_path = self.config_path + ".tmp"
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                json.dump(cfg, f, indent=2)
-            os.replace(tmp_path, self.config_path)
-        except Exception as e:
-            sys.stderr.write(f"TaskbarLyrics update_config error: {e}\n")
-
-        if self._ws and self._loop and self._loop.is_running():
-            msg = {"type": "set_config"}
-            if "LyricsEnabled" in kwargs:
-                msg["enabled"] = bool(kwargs["LyricsEnabled"])
-            if "Placement" in kwargs:
-                msg["placement"] = str(kwargs["Placement"])
-            if "Align" in kwargs:
-                msg["align"] = str(kwargs["Align"])
-            asyncio.run_coroutine_threadsafe(self._send_raw(msg), self._loop)
-
-    async def _send_raw(self, msg):
-        try:
-            if self._ws and not self._ws.closed:
-                await self._ws.send(json.dumps(msg))
-        except Exception:
-            pass
-
-    def update_playback(self, playing: bool, position: float, duration: float, track, lyrics):
-        with self._lock:
-            if hasattr(track, "toVariant"):
-                track = track.toVariant()
-            if not isinstance(track, dict):
-                track = {}
-            
-            title = str(track.get("title") or "")
-            artist = str(track.get("artist") or "")
-            album = str(track.get("album") or "")
-            cover = str(track.get("thumbnail") or track.get("cover") or "")
-            track_id = str(track.get("id") or track.get("videoId") or f"{title}|{artist}")
-
-            self._playback_state = {
-                "type": "sp_state",
-                "playing": bool(playing),
-                "positionMs": float(position or 0) * 1000.0,
-                "durationMs": float(duration or 0) * 1000.0,
-                "trackId": f"sp:{track_id}" if track_id else "sp:idle",
-                "title": title,
-                "artist": artist,
-                "album": album,
-                "cover": cover
-            }
-            if lyrics is not None:
-                if hasattr(lyrics, "toVariant"):
-                    lyrics = lyrics.toVariant()
-                if isinstance(lyrics, list):
-                    self._active_lyrics = lyrics
-
-        if self._ws and self._loop and self._loop.is_running():
-            asyncio.run_coroutine_threadsafe(self._push_state(), self._loop)
-
-    def update_lyrics(self, lyrics):
-        with self._lock:
-            if hasattr(lyrics, "toVariant"):
-                lyrics = lyrics.toVariant()
-            if isinstance(lyrics, list):
-                self._active_lyrics = lyrics
-        if self._ws and self._loop and self._loop.is_running():
-            asyncio.run_coroutine_threadsafe(self._push_state(), self._loop)
-
-    async def _push_state(self):
-        try:
-            if self._ws and not self._ws.closed:
-                with self._lock:
-                    st = dict(self._playback_state)
-                    fmt = self._format_lyrics()
-                if st:
-                    await self._ws.send(json.dumps(st))
-                track_id = st.get("trackId") if st else None
-                raw_len = len(self._active_lyrics)
-                first_t = self._active_lyrics[0].get("time") if raw_len > 0 and isinstance(self._active_lyrics[0], dict) else 0
-                lyrics_key = (track_id, raw_len, first_t)
-                if fmt and (lyrics_key != self._last_lyrics_key):
-                    self._last_lyrics_key = lyrics_key
-                    await self._ws.send(json.dumps({"type": "push_lyrics", "lyrics": fmt}))
-        except Exception:
-            pass
-
-    def _format_lyrics(self):
-        with self._lock:
-            raw = list(self._active_lyrics)
-
-        if not raw:
-            return None
-
-        has_syllables = any(isinstance(line, dict) and line.get("words") and len(line["words"]) > 0 for line in raw)
-        
-        first_start = 0.0
-        for line in raw:
-            if isinstance(line, dict) and "time" in line:
-                first_start = float(line.get("time") or 0.0)
-                break
-
-        if has_syllables:
-            content = []
-            for line in raw:
-                if not isinstance(line, dict): continue
-                l_start = float(line.get("time") or 0.0)
-                words = line.get("words") or []
-                sylls = []
-                for w in words:
-                    if not isinstance(w, dict): continue
-                    sylls.append({
-                        "Text": str(w.get("text") or ""),
-                        "StartTime": float(w.get("start") or l_start),
-                        "EndTime": float(w.get("end") or (l_start + 0.5)),
-                        "IsPartOfWord": False
-                    })
-                l_end = sylls[-1]["EndTime"] if sylls else (l_start + 3.0)
-                content.append({
-                    "Lead": {
-                        "StartTime": l_start,
-                        "EndTime": l_end,
-                        "Syllables": sylls
-                    }
-                })
-            return {
-                "Type": "Syllable",
-                "StartTime": first_start,
-                "Content": content
-            }
-        else:
-            content = []
-            for i, line in enumerate(raw):
-                if not isinstance(line, dict): continue
-                l_start = float(line.get("time") or 0.0)
-                next_start = float(raw[i+1].get("time")) if (i+1 < len(raw) and isinstance(raw[i+1], dict) and "time" in raw[i+1]) else (l_start + 4.0)
-                content.append({
-                    "Text": str(line.get("text") or ""),
-                    "StartTime": l_start,
-                    "EndTime": next_start
-                })
-            return {
-                "Type": "Line",
-                "StartTime": first_start,
-                "Content": content
-            }
-
-    def _ws_loop_runner(self):
-        asyncio.run(self._ws_client_main())
-
-    async def _ws_client_main(self):
-        import websockets
-        uri = "ws://localhost:9012/"
-        self._loop = asyncio.get_running_loop()
-
-        while not self._stop_event.is_set():
-            try:
-                async with websockets.connect(uri) as ws:
-                    self._ws = ws
-                    self._last_lyrics_key = None
-                    await self._push_state()
-
-                    async for msg in ws:
-                        if self._stop_event.is_set():
-                            break
-                        try:
-                            data = json.loads(msg)
-                            req_type = data.get("type")
-                            req_id = data.get("reqId")
-
-                            if req_type == "search":
-                                with self._lock:
-                                    t = dict(self._playback_state)
-                                resp = {
-                                    "type": "resp",
-                                    "reqId": req_id,
-                                    "ok": True,
-                                    "results": [
-                                        {
-                                            "id": t.get("trackId", "sp:current"),
-                                            "name": t.get("title", ""),
-                                            "durationMs": t.get("durationMs", 240000.0),
-                                            "artists": [t.get("artist", "")]
-                                        }
-                                    ]
-                                }
-                                await ws.send(json.dumps(resp))
-                            elif req_type == "lyrics":
-                                fmt_lyrics = self._format_lyrics()
-                                if fmt_lyrics:
-                                    resp = {
-                                        "type": "resp",
-                                        "reqId": req_id,
-                                        "ok": True,
-                                        "status": 200,
-                                        "lyrics": fmt_lyrics
-                                    }
-                                else:
-                                    resp = {
-                                        "type": "resp",
-                                        "reqId": req_id,
-                                        "ok": False,
-                                        "status": 404
-                                    }
-                                await ws.send(json.dumps(resp))
-                        except Exception as e:
-                            sys.stderr.write(f"TaskbarLyrics msg handler error: {e}\n")
-            except Exception:
-                self._ws = None
-                await asyncio.sleep(2.0)
-
-
-class NutstyBridge(QObject):
-    processFinished = Signal(int, str, str, int)
-    openSettingsRequested = Signal(int)
-    taskbarLyricsToggled = Signal(bool)
-
-    @Slot(int)
-    def openSettings(self, tab: int = 0):
-        self.openSettingsRequested.emit(tab)
-
-    @Slot(bool)
-    def notifyTaskbarLyricsState(self, enabled: bool):
-        self.taskbarLyricsToggled.emit(enabled)
-        if TaskbarLyricsService._instance:
-            TaskbarLyricsService._instance.update_config(LyricsEnabled=bool(enabled))
-            if enabled:
-                TaskbarLyricsService._instance.ensure_process()
-
-    @Slot(str)
-    def setTaskbarLyricsPlacement(self, placement: str):
-        if TaskbarLyricsService._instance:
-            TaskbarLyricsService._instance.update_config(Placement=str(placement))
-
-    @Slot(str)
-    def setTaskbarLyricsAlign(self, align: str):
-        if TaskbarLyricsService._instance:
-            TaskbarLyricsService._instance.update_config(Align=str(align))
-
-    @Slot(bool, float, float, "QJSValue", "QJSValue")
-    def updateTaskbarPlayback(self, playing: bool, position: float, duration: float, track, lyrics):
-        if TaskbarLyricsService._instance:
-            TaskbarLyricsService._instance.update_playback(playing, position, duration, track, lyrics)
-
-    @Slot("QJSValue")
-    def updateTaskbarLyrics(self, lyrics):
-        if TaskbarLyricsService._instance:
-            TaskbarLyricsService._instance.update_lyrics(lyrics)
-
-    @Slot(result=str)
-    def getTaskbarGeometry(self) -> str:
-        """Returns JSON string containing taskbar bounding box and work area in DIPs."""
-        try:
-            from PySide6.QtGui import QGuiApplication
-            s = QGuiApplication.primaryScreen()
-            if not s:
-                return "{}"
-            geom = s.geometry()
-            avail = s.availableGeometry()
-
-            gx, gy, gw, gh = geom.x(), geom.y(), geom.width(), geom.height()
-            ax, ay, aw, ah = avail.x(), avail.y(), avail.width(), avail.height()
-
-            edge = "bottom"
-            tx, ty, tw, th = ax, ay + ah, aw, gh - ah
-            if ay > gy:
-                edge = "top"
-                tx, ty, tw, th = gx, gy, gw, ay - gy
-            elif ax > gx:
-                edge = "left"
-                tx, ty, tw, th = gx, gy, ax - gx, gh
-            elif aw < gw:
-                edge = "right"
-                tx, ty, tw, th = ax + aw, gy, gw - aw, gh
-
-            return json.dumps({
-                "edge": edge,
-                "taskbarX": tx,
-                "taskbarY": ty,
-                "taskbarW": tw,
-                "taskbarH": max(th, 40),
-                "workX": ax,
-                "workY": ay,
-                "workW": aw,
-                "workH": ah,
-                "screenX": gx,
-                "screenY": gy,
-                "screenW": gw,
-                "screenH": gh,
-                "dpr": float(s.devicePixelRatio())
-            })
-        except Exception as e:
-            sys.stderr.write(f"getTaskbarGeometry error: {e}\n")
-            return "{}"
-
-    @Slot(QObject)
-    def setupTaskbarWindow(self, win_obj):
-        """Configure Taskbar Lyrics Window for Windows: 100% click-through, non-activating, topmost."""
-        if not win_obj:
-            return
-        try:
-            if pc.IS_WINDOWS and hasattr(win_obj, "winId"):
-                import ctypes
-                from ctypes import wintypes
-                hwnd = int(win_obj.winId())
-                if hwnd <= 0:
-                    return
-
-                user32 = ctypes.windll.user32
-                GWL_EXSTYLE = -20
-                WS_EX_TRANSPARENT = 0x00000020
-                WS_EX_TOOLWINDOW = 0x00000080
-                WS_EX_NOACTIVATE = 0x08000000
-                WS_EX_APPWINDOW = 0x00040000
-
-                if hasattr(user32, "GetWindowLongPtrW"):
-                    user32.GetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int]
-                    user32.GetWindowLongPtrW.restype = ctypes.c_ssize_t
-                    ex_style = user32.GetWindowLongPtrW(hwnd, GWL_EXSTYLE)
-                else:
-                    user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
-                    user32.GetWindowLongW.restype = wintypes.LONG
-                    ex_style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-
-                target_ex = (ex_style | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE) & ~WS_EX_APPWINDOW
-                if ex_style != target_ex:
-                    if hasattr(user32, "SetWindowLongPtrW"):
-                        user32.SetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t]
-                        user32.SetWindowLongPtrW.restype = ctypes.c_ssize_t
-                        user32.SetWindowLongPtrW(hwnd, GWL_EXSTYLE, target_ex)
-                    else:
-                        user32.SetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int, wintypes.LONG]
-                        user32.SetWindowLongW.restype = wintypes.LONG
-                        user32.SetWindowLongW(hwnd, GWL_EXSTYLE, target_ex)
-
-                # Skip DWM frame extension inside VirtualBox / Hypervisors to prevent VBoxDxVk SEGV
-                if not _detect_hypervisor_vm():
-                    try:
-                        class MARGINS(ctypes.Structure):
-                            _fields_ = [
-                                ("cxLeftWidth", ctypes.c_int),
-                                ("cxRightWidth", ctypes.c_int),
-                                ("cyTopHeight", ctypes.c_int),
-                                ("cyBottomHeight", ctypes.c_int),
-                            ]
-                        margins = MARGINS(-1, -1, -1, -1)
-                        ctypes.windll.dwmapi.DwmExtendFrameIntoClientArea(hwnd, ctypes.byref(margins))
-                    except Exception:
-                        pass
-
-                HWND_TOPMOST = -1
-                SWP_NOSIZE = 0x0001
-                SWP_NOMOVE = 0x0002
-                SWP_NOACTIVATE = 0x0010
-                SWP_SHOWWINDOW = 0x0040
-                user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
-                user32.SetWindowPos.restype = wintypes.BOOL
-                user32.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_SHOWWINDOW)
-
-                if hasattr(win_obj, "show") and not getattr(win_obj, "isVisible", lambda: False)():
-                    win_obj.show()
-        except Exception as e:
-            sys.stderr.write(f"setupTaskbarWindow error: {e}\n")
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._callbacks = {}
-        self._cb_id = 0
-        self._cb_lock = threading.Lock()
-        self.processFinished.connect(self._onProcessFinished)
-
-    @Slot(int, str, str, int)
-    def _onProcessFinished(self, cb_id, out, err, code):
-        cb = None
-        with self._cb_lock:
-            cb = self._callbacks.pop(cb_id, None)
-        if cb:
-            try:
-                if hasattr(cb, "call"):
-                    if IS_PYSIDE:
-                        from PySide6.QtQml import QJSValue
-                        cb.call([QJSValue(str(out or "")), QJSValue(str(err or "")), QJSValue(int(code or 0))])
-                    else:
-                        cb.call([str(out or ""), str(err or ""), int(code or 0)])
-                elif callable(cb):
-                    cb(str(out or ""), str(err or ""), int(code or 0))
-            except Exception as e:
-                sys.stderr.write(f"Process callback execution error: {e}\n")
-
-    @Slot(str, result=str)
-    def getEnv(self, key: str) -> str:
-        if key == "HOME":
-            return os.path.expanduser("~")
-        elif key == "NUTSTY_APP_DIR":
-            return APP_ROOT
-        return os.environ.get(key, "")
-
-    @Slot(result=str)
-    def getAppDir(self) -> str:
-        if getattr(sys, "frozen", False):
-            return os.path.dirname(os.path.abspath(sys.executable))
-        return os.path.abspath(os.path.dirname(__file__))
-
-    @Slot()
-    def quitApp(self):
-        try:
-            from PySide6.QtCore import QCoreApplication
-            QCoreApplication.quit()
-        except Exception:
-            pass
-        def _force_exit():
-            time.sleep(0.5)
-            os._exit(0)
-        t = threading.Thread(target=_force_exit, daemon=True)
-        t.start()
-
-    @Slot(str, result=str)
-    def readFile(self, path: str) -> str:
-        if not path:
-            return ""
-        if path.startswith("/tmp"):
-            path = os.path.join(pc.get_temp_dir(), path[5:].lstrip("/\\"))
-        if not os.path.exists(path):
-            return ""
-        try:
-            with open(path, "r", encoding="utf-8", errors="replace") as f:
-                return f.read()
-        except Exception:
-            return ""
-
-    @Slot(str, result=str)
-    def checkFileMtime(self, path: str) -> str:
-        if not path:
-            return ""
-        if path.startswith("/tmp"):
-            path = os.path.join(pc.get_temp_dir(), path[5:].lstrip("/\\"))
-        if not os.path.exists(path):
-            return ""
-        try:
-            return str(os.path.getmtime(path))
-        except Exception:
-            return ""
-
-    @Slot(str)
-    def copyToClipboard(self, text: str):
-        try:
-            from PySide6.QtGui import QGuiApplication
-            cb = QGuiApplication.clipboard()
-            if cb:
-                cb.setText(str(text))
-        except Exception as e:
-            sys.stderr.write(f"copyToClipboard failed: {e}\n")
-
-    @Slot(result=str)
-    def getClipboardText(self) -> str:
-        try:
-            from PySide6.QtGui import QGuiApplication
-            cb = QGuiApplication.clipboard()
-            if cb:
-                return cb.text() or ""
-        except Exception as e:
-            sys.stderr.write(f"getClipboardText failed: {e}\n")
-        return ""
-
-    @Slot(str, str)
-    def showTrayNotification(self, title: str, message: str):
-        try:
-            if tray_icon_ref[0] and hasattr(tray_icon_ref[0], "showMessage"):
-                tray_icon_ref[0].showMessage(str(title), str(message))
-        except Exception as e:
-            sys.stderr.write(f"showTrayNotification error: {e}\n")
-
-    @Slot(str)
-    def openUrl(self, url: str):
-        try:
-            if url:
-                if hasattr(os, "startfile"):
-                    os.startfile(url)
-                else:
-                    import webbrowser
-                    webbrowser.open(url)
-        except Exception as e:
-            sys.stderr.write(f"openUrl error: {e}\n")
-
-    @Slot(str, str)
-    def writeConfigFile(self, rel_path: str, content: str):
-        """Atomically write a configuration file into ~/.config/noctalia/ or specified path."""
-        def _write_worker():
-            try:
-                if rel_path.startswith("~") or os.path.isabs(rel_path):
-                    target_path = os.path.expanduser(rel_path)
-                else:
-                    target_path = os.path.expanduser(os.path.join("~/.config/noctalia", rel_path))
-                os.makedirs(os.path.dirname(target_path), exist_ok=True)
-                tmp_path = target_path + ".tmp"
-                with open(tmp_path, "w", encoding="utf-8") as f:
-                    f.write(content)
-                os.replace(tmp_path, target_path)
-            except Exception as e:
-                sys.stderr.write(f"writeConfigFile failed for {rel_path}: {e}\n")
-        _safe_submit(_write_worker)
-
-    @Slot(QObject, int, int, int, int)
-    def setWindowMaskRect(self, win_obj, x: int, y: int, w: int, h: int):
-        try:
-            if win_obj and hasattr(win_obj, "winId"):
-                hwnd = int(win_obj.winId())
-                native_filter.set_mask(hwnd, x, y, w, h)
-        except Exception as e:
-            sys.stderr.write(f"setWindowMaskRect error: {e}\n")
-
-    @Slot(QObject)
-    def clearWindowMask(self, win_obj):
-        try:
-            if win_obj and hasattr(win_obj, "winId"):
-                hwnd = int(win_obj.winId())
-                native_filter.clear_mask(hwnd)
-        except Exception as e:
-            sys.stderr.write(f"clearWindowMask error: {e}\n")
-
-    @Slot(QObject)
-    def pinWindowToDesktopBottom(self, win_obj):
-        """Pin DesktopMusicWidget and DesktopLyricsWidget to Win32 HWND_BOTTOM (matching WlrLayer.Bottom)."""
-        try:
-            if not win_obj:
-                return
-            if hasattr(win_obj, "lower"):
-                win_obj.lower()
-            if pc.IS_WINDOWS and (win_obj.property("objectName") == "bottomPanel" or getattr(win_obj, "isDesktopBottomPanel", False) or bool(win_obj.property("isDesktopBottomPanel"))):
-                try:
-                    if hasattr(win_obj, "hide"):
-                        win_obj.hide()
-                    if hasattr(win_obj, "setVisible"):
-                        win_obj.setVisible(False)
-                except Exception:
-                    pass
-                return
-
-            if pc.IS_WINDOWS and hasattr(win_obj, "winId"):
-                import ctypes
-                from ctypes import wintypes
-                hwnd = int(win_obj.winId())
-                if hwnd > 0:
-                    native_filter.register_panel_hwnd(hwnd)
-                    user32 = ctypes.windll.user32
-                    GWL_EXSTYLE = -20
-                    WS_EX_NOACTIVATE = 0x08000000
-                    WS_EX_TOOLWINDOW = 0x00000080
-                    WS_EX_APPWINDOW = 0x00040000
-                    WS_EX_TOPMOST = 0x00000008
-
-                    # 64-bit safe Get/SetWindowLongPtr
-                    if hasattr(user32, "GetWindowLongPtrW"):
-                        user32.GetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int]
-                        user32.GetWindowLongPtrW.restype = ctypes.c_ssize_t
-                        ex_style = user32.GetWindowLongPtrW(hwnd, GWL_EXSTYLE)
-                    else:
-                        user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
-                        user32.GetWindowLongW.restype = wintypes.LONG
-                        ex_style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-
-                    target_ex = (ex_style | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW) & ~(WS_EX_APPWINDOW | WS_EX_TOPMOST)
-                    if ex_style != target_ex:
-                        if hasattr(user32, "SetWindowLongPtrW"):
-                            user32.SetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t]
-                            user32.SetWindowLongPtrW.restype = ctypes.c_ssize_t
-                            user32.SetWindowLongPtrW(hwnd, GWL_EXSTYLE, target_ex)
-                        else:
-                            user32.SetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int, wintypes.LONG]
-                            user32.SetWindowLongW.restype = wintypes.LONG
-                            user32.SetWindowLongW(hwnd, GWL_EXSTYLE, target_ex)
-
-                    # Extend DWM frame for true transparent alpha composition on Windows
-                    try:
-                        class MARGINS(ctypes.Structure):
-                            _fields_ = [
-                                ("cxLeftWidth", ctypes.c_int),
-                                ("cxRightWidth", ctypes.c_int),
-                                ("cyTopHeight", ctypes.c_int),
-                                ("cyBottomHeight", ctypes.c_int),
-                            ]
-                        margins = MARGINS(-1, -1, -1, -1)
-                        ctypes.windll.dwmapi.DwmExtendFrameIntoClientArea(hwnd, ctypes.byref(margins))
-                    except Exception:
-                        pass
-
-                    # Place above desktop wallpaper/icons while remaining below normal active app windows
-                    HWND_NOTOPMOST = -2
-                    SWP_NOSIZE = 0x0001
-                    SWP_NOMOVE = 0x0002
-                    SWP_NOACTIVATE = 0x0010
-                    user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
-                    user32.SetWindowPos.restype = wintypes.BOOL
-                    user32.SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE)
-        except Exception as e:
-            sys.stderr.write(f"pinWindowToDesktopBottom error: {e}\n")
-
-    @Slot()
-    @Slot(QObject)
-    def restoreWindow(self, win_obj=None):
-        try:
-            if not win_obj:
-                win_obj = main_win_ref[0]
-            if not win_obj:
-                for tw in QGuiApplication.topLevelWindows():
-                    try:
-                        if not bool(tw.property("isDesktopBottomPanel")) and tw.width() >= 500:
-                            win_obj = tw
-                            main_win_ref[0] = tw
-                            break
-                    except Exception:
-                        pass
-            if not win_obj:
-                return
-            if hasattr(win_obj, "setVisible"):
-                win_obj.setVisible(True)
-            if hasattr(win_obj, "setProperty"):
-                win_obj.setProperty("visible", True)
-            if hasattr(win_obj, "showNormal"):
-                win_obj.showNormal()
-            if hasattr(win_obj, "show"):
-                win_obj.show()
-            if hasattr(win_obj, "raise_"):
-                win_obj.raise_()
-            elif hasattr(win_obj, "raise"):
-                getattr(win_obj, "raise")()
-            if hasattr(win_obj, "requestActivate"):
-                win_obj.requestActivate()
-            if pc.IS_WINDOWS:
-                import ctypes
-                from ctypes import wintypes
-                user32 = ctypes.windll.user32
-                hwnd = 0
-                if hasattr(win_obj, "winId"):
-                    try:
-                        hwnd = int(win_obj.winId())
-                    except Exception:
-                        hwnd = 0
-                if hwnd > 0:
-                    SW_RESTORE = 9
-                    SW_SHOW = 5
-                    HWND_TOPMOST = -1
-                    HWND_NOTOPMOST = -2
-                    SWP_NOSIZE = 0x0001
-                    SWP_NOMOVE = 0x0002
-                    SWP_SHOWWINDOW = 0x0040
-
-                    user32.AllowSetForegroundWindow.argtypes = [wintypes.DWORD]
-                    user32.AllowSetForegroundWindow.restype = wintypes.BOOL
-                    user32.AllowSetForegroundWindow(0xFFFFFFFF)  # ASFW_ANY = -1
-                    user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
-                    user32.ShowWindow.restype = wintypes.BOOL
-                    user32.BringWindowToTop.argtypes = [wintypes.HWND]
-                    user32.BringWindowToTop.restype = wintypes.BOOL
-                    user32.SetForegroundWindow.argtypes = [wintypes.HWND]
-                    user32.SetForegroundWindow.restype = wintypes.BOOL
-                    user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
-                    user32.SetWindowPos.restype = wintypes.BOOL
-
-                    # Bring window to front by temporarily toggling TOPMOST (bypasses Windows foreground lock)
-                    user32.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW)
-                    user32.SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW)
-
-                    user32.ShowWindow(hwnd, SW_RESTORE)
-                    user32.ShowWindow(hwnd, SW_SHOW)
-
-                    fg_hwnd = user32.GetForegroundWindow()
-                    fg_thread = user32.GetWindowThreadProcessId(fg_hwnd, None)
-                    cur_thread = ctypes.windll.kernel32.GetCurrentThreadId()
-                    if fg_thread and fg_thread != cur_thread:
-                        user32.AttachThreadInput(cur_thread, fg_thread, True)
-                        user32.BringWindowToTop(hwnd)
-                        user32.SetForegroundWindow(hwnd)
-                        user32.AttachThreadInput(cur_thread, fg_thread, False)
-                    else:
-                        user32.BringWindowToTop(hwnd)
-                        user32.SetForegroundWindow(hwnd)
-        except Exception as e:
-            sys.stderr.write(f"restoreWindow error: {e}\n")
-
-
-    @Slot()
-    def stopImmediate(self):
-        """Immediately stop and pause MPV playback with 0ms latency upon track change."""
-        try:
-            import player_daemon
-            player_daemon.send_mpv_cmd(["set_property", "pause", True])
-            player_daemon.send_mpv_cmd(["stop"])
-        except Exception as e:
-            sys.stderr.write(f"stopImmediate error: {e}\n")
-
-    @Slot(list)
-    def execDetached(self, args: list):
-        if not args:
-            return
-
-        if args[0] == "wl-copy":
-            self.copyToClipboard(args[1] if len(args) > 1 else "")
-            return
-
-        if args[0] == "xdg-open" and len(args) > 1:
-            try:
-                target_path = os.path.normpath(args[1])
-                os.makedirs(target_path, exist_ok=True)
-                if hasattr(os, "startfile"):
-                    os.startfile(target_path)
-            except Exception as e:
-                sys.stderr.write(f"xdg-open failed: {e}\n")
-            return
-
-        # Fast path for python3 -c inline commands (prevents spawning Nutsty.exe subprocess and hourglass cursor)
-        if args and args[0] in ("python3", "python") and len(args) >= 3 and args[1] == "-c":
-            code_str = args[2]
-            code_argv = [args[0]] + list(args[3:])
-            def _in_proc_c():
-                with sys_argv_lock:
-                    old_argv = sys.argv
-                    sys.argv = code_argv
-                    try:
-                        exec(code_str, {"__name__": "__main__", "sys": sys, "os": os})
-                    except Exception as e:
-                        sys.stderr.write(f"In-process execDetached -c failed: {e}\n")
-                    finally:
-                        sys.argv = old_argv
-            _safe_submit(_in_proc_c)
-            return
-
-        # In-process fast path for backend Python scripts (prevents heavy Nutsty.exe subprocess spawn)
-        target_script = ""
-        script_args = []
-        for i, a in enumerate(args):
-            base_a = os.path.basename(a)
-            if base_a in BACKEND_MAP:
-                target_script = base_a
-                script_args = list(args[i+1:])
-                break
-
-        if target_script:
-            mod_name = BACKEND_MAP[target_script]
-            def _in_proc_detached():
-                try:
-                    import importlib
-                    if mod_name in sys.modules:
-                        mod = sys.modules[mod_name]
-                    else:
-                        mod = importlib.import_module(mod_name)
-                    if hasattr(mod, "handle_cli"):
-                        mod.handle_cli(script_args)
-                    elif hasattr(mod, "main"):
-                        with sys_argv_lock:
-                            old_argv = sys.argv
-                            sys.argv = [target_script] + script_args
-                            try:
-                                mod.main()
-                            finally:
-                                sys.argv = old_argv
-                    else:
-                        import runpy
-                        with sys_argv_lock:
-                            old_argv = sys.argv
-                            sys.argv = [target_script] + script_args
-                            try:
-                                runpy.run_module(mod_name, run_name="__main__", alter_sys=False)
-                            finally:
-                                sys.argv = old_argv
-                except SystemExit:
-                    pass
-                except Exception as e:
-                    sys.stderr.write(f"In-process execDetached {target_script} failed: {e}\n")
-            _safe_submit(_in_proc_detached)
-            return
-
-        cmd = list(args)
-        if cmd[0] == "python3" or cmd[0] == "python":
-            cmd[0] = sys.executable
-        try:
-            subprocess.Popen(cmd, **pc.get_daemon_popen_kwargs())
-        except Exception as e:
-            sys.stderr.write(f"execDetached failed: {e}\n")
-
-    @Slot(list, "QJSValue")
-    def runProcess(self, args: list, callback):
-        """Run process asynchronously and invoke JS callback(stdout, stderr, exitCode)."""
-        if not args:
-            return
-
-        with self._cb_lock:
-            self._cb_id += 1
-            cb_id = self._cb_id
-            self._callbacks[cb_id] = callback
-
-        if args[0] == "wl-copy":
-            self.copyToClipboard(args[1] if len(args) > 1 else "")
-            self.processFinished.emit(cb_id, "", "", 0)
-            return
-
-        target_script = ""
-        script_args = []
-        for i, a in enumerate(args):
-            base_a = os.path.basename(a)
-            if base_a in BACKEND_MAP:
-                target_script = base_a
-                script_args = list(args[i+1:])
-                break
-
-        # Fast path for player_daemon status (executes in 0.1ms in-process with direct JSON getter)
-        if target_script == "player_daemon.py" and script_args and script_args[0] == "status":
-            def _status_worker():
-                try:
-                    import player_daemon
-                    out = player_daemon.get_status_json()
-                    err = ""
-                    code = 0
-                except Exception as e:
-                    out = ""
-                    err = str(e)
-                    code = 1
-                self.processFinished.emit(cb_id, out, err, code)
-            _safe_submit(_status_worker)
-            return
-
-        # Fast unified in-process execution for all backend scripts in BACKEND_MAP (except browser_login which requires isolated subprocess)
-        if target_script and target_script != "browser_login.py":
-            mod_name = BACKEND_MAP[target_script]
-            def _in_proc_run():
-                import io, importlib
-                out_buf = io.StringIO()
-                err_buf = io.StringIO()
-                code = 0
-
-                # Set thread-local output streams so concurrent calls don't interfere
-                if hasattr(sys.stdout, "set_stream"):
-                    sys.stdout.set_stream(out_buf)
-                if hasattr(sys.stderr, "set_stream"):
-                    sys.stderr.set_stream(err_buf)
-
-                try:
-                    if mod_name in sys.modules:
-                        mod = sys.modules[mod_name]
-                    else:
-                        mod = importlib.import_module(mod_name)
-
-                    if hasattr(mod, "handle_cli"):
-                        mod.handle_cli(script_args)
-                    elif hasattr(mod, "main"):
-                        with sys_argv_lock:
-                            old_argv = sys.argv
-                            sys.argv = [target_script] + script_args
-                            try:
-                                mod.main()
-                            finally:
-                                sys.argv = old_argv
-                    else:
-                        import runpy
-                        with sys_argv_lock:
-                            old_argv = sys.argv
-                            sys.argv = [target_script] + script_args
-                            try:
-                                runpy.run_module(mod_name, run_name="__main__", alter_sys=False)
-                            finally:
-                                sys.argv = old_argv
-                except SystemExit as se:
-                    code = se.code if isinstance(se.code, int) else 0
-                except Exception as e:
-                    err_buf.write(str(e))
-                    code = 1
-                finally:
-                    if hasattr(sys.stdout, "clear_stream"):
-                        sys.stdout.clear_stream()
-                    if hasattr(sys.stderr, "clear_stream"):
-                        sys.stderr.clear_stream()
-
-                out = out_buf.getvalue()
-                err = err_buf.getvalue()
-                if err and default_err:
-                    try:
-                        default_err.write(f"[_in_proc_run {target_script}]: {err}\n")
-                        default_err.flush()
-                    except Exception:
-                        pass
-                self.processFinished.emit(cb_id, out, err, code)
-
-            _safe_submit(_in_proc_run)
-            return
-
-        cmd = list(args)
-        if cmd[0] == "python3" or cmd[0] == "python":
-            cmd[0] = sys.executable
-
-        def _worker():
-            try:
-                proc_timeout = 360 if any("browser_login" in str(x) for x in cmd) else 60
-                res = subprocess.run(cmd, capture_output=True, text=True, timeout=proc_timeout, **pc.get_daemon_popen_kwargs())
-                out = res.stdout or ""
-                err = res.stderr or ""
-                code = res.returncode
-            except Exception as e:
-                out = ""
-                err = str(e)
-                code = 1
-            
-            self.processFinished.emit(cb_id, out, err, code)
-
-        _safe_submit(_worker)
-
-# Quickshell Compatibility Classes
-class WlrLayershellAttached(QObject):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._layer = 0
-        self._namespace = ""
-    @Property(int)
-    def layer(self): return self._layer
-    @layer.setter
-    def layer(self, v): self._layer = v
-    @Property(str)
-    def namespace(self): return self._namespace
-    @namespace.setter
-    def namespace(self, v): self._namespace = v
-
-def register_qml_types():
-    if IS_PYSIDE:
-        @QmlAttached(WlrLayershellAttached)
-        class WlrLayershell(QObject):
-            @staticmethod
-            def qmlAttachedProperties(*args, **kwargs):
-                parent = args[-1] if (args and isinstance(args[-1], QObject)) else None
-                return WlrLayershellAttached(parent)
-        qmlRegisterType(WlrLayershell, "Quickshell.Wayland", 1, 0, "WlrLayershell")
-    else:
-        class WlrLayershell(QObject):
-            qmlAttachedProperties = WlrLayershellAttached
-        qmlRegisterType(WlrLayershell, "Quickshell.Wayland", 1, 0, "WlrLayershell", attachedProperties=WlrLayershellAttached)
-
-def start_daemons():
-    """Start resident backend daemons (auth_server HTTP daemon, palette_extractor)."""
-    def _auth_runner():
-        try:
-            import auth_server
-            if hasattr(auth_server, "run_server"):
-                auth_server.run_server()
-            elif hasattr(auth_server, "main"):
-                auth_server.main()
-        except Exception as e:
-            sys.stderr.write(f"auth_server daemon thread error: {e}\n")
-
-    def _palette_runner():
-        try:
-            import palette_extractor
-            if hasattr(palette_extractor, "main"):
-                palette_extractor.main()
-        except Exception as e:
-            sys.stderr.write(f"palette_extractor daemon thread error: {e}\n")
-
-    def _library_runner():
-        try:
-            import library
-            if hasattr(library, "main"):
-                library.main()
-        except Exception as e:
-            sys.stderr.write(f"library scanner daemon thread error: {e}\n")
-
-    threading.Thread(target=_auth_runner, daemon=True).start()
-    threading.Thread(target=_palette_runner, daemon=True).start()
-    threading.Thread(target=_library_runner, daemon=True).start()
-
-def _create_nutsty_app_icon(icon_save_path: str) -> QIcon:
-    """Create a crisp Dark Glass + Equalizer wave icon for Nutsty taskbar & Windows System Tray."""
-    try:
-        from PySide6.QtGui import QPixmap, QPainter, QColor, QPen, QBrush
-        from PySide6.QtCore import Qt, QRectF
-        pix = QPixmap(64, 64)
-        pix.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(pix)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-
-        # Outer Dark Glass Rounded Square (R=16)
-        bg_rect = QRectF(2, 2, 60, 60)
-        painter.setPen(QPen(QColor(222, 176, 108, 210), 2.5))
-        painter.setBrush(QBrush(QColor(16, 18, 24, 248)))
-        painter.drawRoundedRect(bg_rect, 16, 16)
-
-        # 3 Warm Gold Equalizer Bars (Nutsty signature soundwave)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QBrush(QColor(222, 176, 108, 255)))
-        painter.drawRoundedRect(QRectF(16, 24, 6, 18), 3, 3)
-        painter.drawRoundedRect(QRectF(29, 15, 6, 34), 3, 3)
-        painter.drawRoundedRect(QRectF(42, 21, 6, 24), 3, 3)
-        painter.end()
-
-        if icon_save_path and not os.path.exists(icon_save_path):
-            try:
-                os.makedirs(os.path.dirname(icon_save_path), exist_ok=True)
-                pix.save(icon_save_path, "PNG")
-            except Exception:
-                pass
-        return QIcon(pix)
-    except Exception:
-        return QIcon()
-
-
+#!/usr/bin/env python3
+"""
+Nutsty Cross-Platform Launcher (Windows & Desktop Qt Quick)
+Launches Nutsty with PySide6 / PyQt6, injects compatibility bridges for Quickshell APIs,
+starts background services, and displays the main window.
+"""
+import os
+import sys
+import json
+import time
+import subprocess
+import threading
+import asyncio
+import concurrent.futures
+import ctypes
+from ctypes import wintypes
+from pathlib import Path
+
+def _detect_hypervisor_vm():
+    """
+    Multi-tiered detection for VirtualBox and other hypervisors.
+    In VirtualBox, Direct3D 11 backend causes VBoxWddm.sys memory exhaustion
+    and BugCheck 0x10E (VIDEO_MEMORY_MANAGEMENT_INTERNAL). Falling back to
+    OpenGL (Mesa Gallium3D VBoxGL.dll) prevents VM crashes.
+    """
+    if sys.platform != "win32":
+        return False
+    try:
+        import winreg
+
+        reg_access = winreg.KEY_READ | getattr(winreg, "KEY_WOW64_64KEY", 0)
+
+        # Tier 1: Check Kernel Miniport Driver Services
+        # (VBoxWddm, VBoxGuest, VBoxMouse, VBoxVideo, VBoxSF in SYSTEM\CurrentControlSet\Services)
+        vbox_services = ("VBoxWddm", "VBoxGuest", "VBoxMouse", "VBoxVideo", "VBoxSF")
+        for svc in vbox_services:
+            try:
+                k = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, f"SYSTEM\\CurrentControlSet\\Services\\{svc}", 0, reg_access)
+                winreg.CloseKey(k)
+                return True
+            except OSError:
+                pass
+
+        # Tier 2: Enumerate display adapter subkeys under
+        # SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}
+        # (strictly filter for numeric subkeys sub.isdigit() to prevent Access Denied on Properties)
+        display_class_path = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"
+        try:
+            class_key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, display_class_path, 0, reg_access)
+            idx = 0
+            while True:
+                try:
+                    sub_name = winreg.EnumKey(class_key, idx)
+                    idx += 1
+                except OSError:
+                    break
+                if not sub_name.isdigit():
+                    continue
+                try:
+                    sub_key = winreg.OpenKey(class_key, sub_name, 0, reg_access)
+                    for val_name in ("DriverDesc", "ProviderName"):
+                        try:
+                            val, _ = winreg.QueryValueEx(sub_key, val_name)
+                            val_lower = str(val).lower()
+                            if any(target in val_lower for target in ("virtualbox", "innotek", "oracle", "vbox")):
+                                winreg.CloseKey(sub_key)
+                                winreg.CloseKey(class_key)
+                                return True
+                        except OSError:
+                            pass
+                    winreg.CloseKey(sub_key)
+                except OSError:
+                    pass
+            winreg.CloseKey(class_key)
+        except OSError:
+            pass
+
+        # Tier 3: Check BIOS strings
+        # (SystemManufacturer, SystemProductName, BaseBoardManufacturer, etc. in HARDWARE\DESCRIPTION\System\BIOS)
+        try:
+            bios_key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\BIOS", 0, reg_access)
+            bios_targets = ("virtualbox", "innotek", "oracle", "vbox", "qemu", "kvm", "vmware")
+            bios_fields = ("SystemManufacturer", "SystemProductName", "BaseBoardManufacturer", "BaseBoardProduct", "BIOSVendor", "BIOSVersion", "SystemFamily")
+            for val_name in bios_fields:
+                try:
+                    val, _ = winreg.QueryValueEx(bios_key, val_name)
+                    val_lower = str(val).lower()
+                    if any(target in val_lower for target in bios_targets):
+                        winreg.CloseKey(bios_key)
+                        return True
+                except OSError:
+                    pass
+            winreg.CloseKey(bios_key)
+        except OSError:
+            pass
+
+    except Exception:
+        pass
+    return False
+
+
+# Select RHI graphics backend:
+# Direct3D 11 backend enables Windows DirectComposition for 100% per-pixel alpha window border transparency on bare metal.
+# Hypervisors (VirtualBox) crash under D3D11 MultiEffect blur and require OpenGL (Mesa Gallium3D VBoxGL.dll).
+if sys.platform == "win32" and not os.environ.get("QSG_RHI_BACKEND", "").strip():
+    if _detect_hypervisor_vm():
+        os.environ["QSG_RHI_BACKEND"] = "opengl"
+    else:
+        os.environ["QSG_RHI_BACKEND"] = "d3d11"
+
+# Register active launcher instance in sys.modules so background threads (like auth_server) get the active instance
+sys.modules["launcher_win"] = sys.modules[__name__]
+
+# Safe logging for Windows PyInstaller GUI mode (where sys.stdout/stderr are None)
+class SafeLogWriter:
+    def __init__(self, log_path=None):
+        self.log_file = None
+        if log_path:
+            try:
+                os.makedirs(os.path.dirname(log_path), exist_ok=True)
+                self.log_file = open(log_path, "a", encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+    def write(self, s):
+        if self.log_file:
+            try:
+                self.log_file.write(str(s))
+                self.log_file.flush()
+            except Exception:
+                pass
+
+    def flush(self):
+        if self.log_file:
+            try:
+                self.log_file.flush()
+            except Exception:
+                pass
+
+class ThreadLocalStream:
+    def __init__(self, default_stream):
+        self._local = threading.local()
+        self._default = default_stream
+
+    def set_stream(self, stream):
+        self._local.stream = stream
+
+    def clear_stream(self):
+        if hasattr(self._local, "stream"):
+            del self._local.stream
+
+    def write(self, s):
+        stream = getattr(self._local, "stream", self._default)
+        if stream:
+            try:
+                return stream.write(s)
+            except Exception:
+                pass
+
+    def flush(self):
+        stream = getattr(self._local, "stream", self._default)
+        if stream and hasattr(stream, "flush"):
+            try:
+                return stream.flush()
+            except Exception:
+                pass
+
+if sys.platform == "win32":
+    if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+    if sys.stderr and hasattr(sys.stderr, "reconfigure"):
+        try:
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+log_dir = os.path.join(os.environ.get("TEMP", os.path.expanduser("~")), "nutsty")
+log_file_path = os.path.join(log_dir, "launcher.log")
+default_out = sys.stdout if sys.stdout is not None else SafeLogWriter(log_file_path)
+default_err = sys.stderr if sys.stderr is not None else SafeLogWriter(log_file_path)
+
+sys.stdout = ThreadLocalStream(default_out)
+sys.stderr = ThreadLocalStream(default_err)
+
+# Resolve App and Resource Root across source runs and PyInstaller onedir bundles
+def resolve_app_root():
+    if getattr(sys, "frozen", False):
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass and os.path.exists(os.path.join(meipass, "shell.qml")):
+            return meipass
+        exe_dir = os.path.dirname(sys.executable)
+        # Prioritize root portable directory if shell.qml is present
+        if os.path.exists(os.path.join(exe_dir, "shell.qml")):
+            return exe_dir
+        internal_dir = os.path.join(exe_dir, "_internal")
+        if os.path.exists(os.path.join(internal_dir, "shell.qml")):
+            return internal_dir
+        return meipass or exe_dir
+    return os.path.dirname(os.path.abspath(__file__))
+
+APP_ROOT = resolve_app_root()
+os.environ["NUTSTY_APP_DIR"] = APP_ROOT
+if "HOME" not in os.environ:
+    os.environ["HOME"] = os.path.expanduser("~")
+
+bin_dir = os.path.join(APP_ROOT, "bin")
+if os.path.exists(bin_dir) and bin_dir not in os.environ.get("PATH", ""):
+    os.environ["PATH"] = bin_dir + os.pathsep + os.environ.get("PATH", "")
+
+sys.path.insert(0, os.path.join(APP_ROOT, "backend"))
+
+import platform_compat as pc
+pc.configure_windows_ssl()
+
+sys_argv_lock = threading.Lock()
+
+BACKEND_MAP = {
+    "player_daemon.py": "player_daemon",
+    "auth_server.py": "auth_server",
+    "download_manager.py": "download_manager",
+    "library.py": "library",
+    "palette_extractor.py": "palette_extractor",
+    "lyrics_helper.py": "lyrics_helper",
+    "playlist_manager.py": "playlist_manager",
+    "ytmusic_helper.py": "ytmusic_helper",
+    "social_notes.py": "social_notes",
+    "browser_login.py": "browser_login",
+    "spotify_importer.py": "spotify_importer",
+    "updater.py": "updater",
+}
+
+# Backend CLI Dispatcher: Prevents re-launching GUI when invoked as backend worker
+def check_cli_dispatch():
+    """
+    If Nutsty.exe is invoked with backend script arguments (e.g. from QML Process
+    or external scripts), dispatch to that script in headless mode and exit.
+    This prevents fork bombs and infinite window popup loops.
+    """
+    args = sys.argv[1:]
+    if not args:
+        return
+    if args and args[0] == "-c":
+        cmd_code = args[1] if len(args) > 1 else ""
+        sys.argv = [sys.argv[0]] + list(args[2:])
+        try:
+            exec(cmd_code, {"__name__": "__main__", "sys": sys, "os": os})
+            sys.exit(0)
+        except SystemExit as se:
+            sys.exit(se.code if isinstance(se.code, int) else 0)
+        except Exception as e:
+            sys.stderr.write(f"Error executing CLI -c: {e}\n")
+            sys.exit(1)
+    for i, a in enumerate(args):
+        base_a = os.path.basename(a)
+        if base_a in BACKEND_MAP:
+            mod_name = BACKEND_MAP[base_a]
+            sys.argv = [a] + args[i + 1:]
+            try:
+                import importlib
+                mod = importlib.import_module(mod_name)
+                if hasattr(mod, "handle_cli"):
+                    mod.handle_cli(args[i + 1:])
+                elif hasattr(mod, "main"):
+                    mod.main()
+                else:
+                    import runpy
+                    runpy.run_module(mod_name, run_name="__main__", alter_sys=True)
+                sys.exit(0)
+            except SystemExit as se:
+                sys.exit(se.code if isinstance(se.code, int) else 0)
+            except Exception as e:
+                sys.stderr.write(f"Error running {base_a}: {e}\n")
+                sys.exit(1)
+
+# Run CLI dispatch check immediately
+check_cli_dispatch()
+
+# Detect Qt bindings (PySide6 or PyQt6)
+try:
+    from PySide6.QtCore import QObject, Signal, Property, Slot, QUrl, QTimer, QThread, QRect, QAbstractNativeEventFilter
+    from PySide6.QtGui import QGuiApplication, QIcon, QWindow, QRegion
+    from PySide6.QtQml import QQmlApplicationEngine, qmlRegisterType, QmlAttached
+    from PySide6.QtQuick import QQuickWindow
+    IS_PYSIDE = True
+except ImportError:
+    try:
+        from PyQt6.QtCore import QObject, pyqtSignal as Signal, pyqtProperty as Property, pyqtSlot as Slot, QUrl, QTimer, QThread, QRect, QAbstractNativeEventFilter
+        from PyQt6.QtGui import QGuiApplication, QIcon, QWindow, QRegion
+        from PyQt6.QtQml import QQmlApplicationEngine, qmlRegisterType
+        from PyQt6.QtQuick import QQuickWindow
+        IS_PYSIDE = False
+    except ImportError:
+        sys.stderr.write("Fatal: Neither PySide6 nor PyQt6 is installed.\n")
+        sys.stderr.write("Please run: pip install PySide6\n")
+        sys.exit(1)
+
+class NativeHitTestFilter(QAbstractNativeEventFilter):
+    """
+    Win32 WM_NCHITTEST filter for transparent layered windows (DesktopLyricsWidget & PanelWindow).
+    Allows interactive areas to receive mouse clicks/dragging while passing through clicks outside
+    to the Windows desktop/background without breaking DWM per-pixel alpha or causing white boxes.
+    Supports Windows Per-Monitor High-DPI display scaling (125%, 150%, 200%).
+    """
+    def __init__(self):
+        super().__init__()
+        self._masks = {}  # hwnd -> (x, y, w, h)
+        self._panel_hwnds = set()
+        self._lock = threading.Lock()
+
+    def register_panel_hwnd(self, hwnd: int):
+        with self._lock:
+            self._panel_hwnds.add(hwnd)
+
+    def set_mask(self, hwnd: int, x: int, y: int, w: int, h: int):
+        with self._lock:
+            self._panel_hwnds.add(hwnd)
+            if w <= 0 or h <= 0:
+                self._masks[hwnd] = None
+            else:
+                self._masks[hwnd] = (int(x), int(y), int(w), int(h))
+
+    def clear_mask(self, hwnd: int):
+        with self._lock:
+            self._masks[hwnd] = None
+
+    def nativeEventFilter(self, eventType, message):
+        if eventType == b"windows_generic_MSG" or eventType == "windows_generic_MSG":
+            try:
+                msg = wintypes.MSG.from_address(int(message))
+                if msg.message == 0x0084:  # WM_NCHITTEST
+                    target_hwnd = int(msg.hWnd)
+                    with self._lock:
+                        if target_hwnd in self._panel_hwnds or target_hwnd in self._masks:
+                            rect = self._masks.get(target_hwnd)
+                            if not rect:
+                                return True, -1  # HTTRANSPARENT: clicks pass through to desktop
+                            pt = wintypes.POINT()
+                            pt.x = ctypes.c_short(msg.lParam & 0xFFFF).value
+                            pt.y = ctypes.c_short((msg.lParam >> 16) & 0xFFFF).value
+                            user32 = ctypes.windll.user32
+                            user32.ScreenToClient(target_hwnd, ctypes.byref(pt))
+
+                            # Handle Windows High-DPI scaling (physical pixels -> DIP logical pixels)
+                            dpr = 1.0
+                            if hasattr(user32, "GetDpiForWindow"):
+                                dpi = user32.GetDpiForWindow(target_hwnd)
+                                if dpi > 0:
+                                    dpr = dpi / 96.0
+
+                            px = pt.x / dpr
+                            py = pt.y / dpr
+                            rx, ry, rw, rh = rect
+                            if rx <= px <= (rx + rw) and ry <= py <= (ry + rh):
+                                return False, 0  # Inside interactive box: process event
+                            return True, -1  # Outside: pass through to desktop/window below
+            except Exception:
+                pass
+        return False, 0
+
+native_filter = NativeHitTestFilter()
+
+# Reusable Thread Pool for background tasks and IPC status queries (prevents 14,400 OS threads/hour)
+_WORKER_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="NutstyWorker")
+
+def _safe_submit(fn, *args, **kwargs):
+    try:
+        return _WORKER_POOL.submit(fn, *args, **kwargs)
+    except RuntimeError:
+        return None
+    except Exception as e:
+        sys.stderr.write(f"_safe_submit error: {e}\n")
+        return None
+
+tray_icon_ref = [None]
+bridge_ref = [None]
+main_win_ref = [None]
+engine_ref = [None]
+
+def request_open_settings(tab: int = 0, mock_update: bool = False):
+    try:
+        from PySide6.QtCore import QTimer, QObject
+        def _do():
+            if bridge_ref[0]:
+                try:
+                    bridge_ref[0].openSettingsRequested.emit(tab)
+                except Exception:
+                    pass
+            w = main_win_ref[0]
+            if not w:
+                try:
+                    from PySide6.QtGui import QGuiApplication
+                    for tw in QGuiApplication.topLevelWindows():
+                        if tw.width() >= 500:
+                            w = tw
+                            main_win_ref[0] = tw
+                            break
+                except Exception:
+                    pass
+            if w:
+                try:
+                    w.setProperty("visible", True)
+                    if bridge_ref[0]:
+                        bridge_ref[0].restoreWindow(w)
+                    search_targets = [w]
+                    if hasattr(w, "contentItem") and w.contentItem():
+                        search_targets.append(w.contentItem())
+                    if engine_ref[0]:
+                        search_targets.extend(engine_ref[0].rootObjects())
+                    
+                    found_modal = False
+                    for st in search_targets:
+                        if hasattr(st, "findChildren"):
+                            for child in st.findChildren(QObject):
+                                oname = child.objectName() if hasattr(child, "objectName") else ""
+                                if oname == "settingsModal":
+                                    child.setProperty("currentTab", tab)
+                                    child.setProperty("visible", True)
+                                    found_modal = True
+                                elif oname == "mainWindow":
+                                    child.setProperty("visible", True)
+                                    if mock_update:
+                                        child.setProperty("hasAppUpdate", True)
+                                        child.setProperty("latestVersion", "v1.0.5")
+                                        child.setProperty("appVersion", "1.0.5")
+                                        child.setProperty("updateUrl", "https://github.com/trancongduyhieu/FrostifyLocal/releases")
+                    sys.stderr.write(f"request_open_settings: found_modal={found_modal}\n")
+                except Exception as e:
+                    sys.stderr.write(f"request_open_settings _do error: {e}\n")
+        QTimer.singleShot(0, _do)
+    except Exception as e:
+        sys.stderr.write(f"request_open_settings error: {e}\n")
+
+def grab_screenshot(save_path: str = "") -> str:
+    import tempfile
+    if not save_path:
+        save_path = os.path.join(tempfile.gettempdir(), "nutsty_rendered.png")
+    w = main_win_ref[0]
+    if not w:
+        try:
+            from PySide6.QtGui import QGuiApplication
+            for tw in QGuiApplication.topLevelWindows():
+                if tw.width() >= 500:
+                    w = tw
+                    main_win_ref[0] = tw
+                    break
+        except Exception:
+            pass
+    if w:
+        try:
+            if hasattr(w, "grabWindow"):
+                img = w.grabWindow()
+                img.save(save_path)
+                return save_path
+        except Exception as e:
+            sys.stderr.write(f"grab_screenshot error: {e}\n")
+    return ""
+
+
+class TaskbarLyricsService:
+    """Manages TaskbarLyrics.exe companion process and WebSocket bridge."""
+    _instance = None
+
+    def __init__(self, app_root):
+        TaskbarLyricsService._instance = self
+        self.app_root = app_root
+        candidates = [
+            os.path.join(app_root, "bin"),
+            os.path.join(app_root, "_internal", "bin"),
+            os.path.join(os.path.dirname(sys.executable), "bin"),
+            os.path.join(os.path.dirname(sys.executable), "_internal", "bin"),
+            os.path.join(getattr(sys, "_MEIPASS", ""), "bin") if hasattr(sys, "_MEIPASS") else ""
+        ]
+        self.bin_dir = next((p for p in candidates if p and os.path.exists(os.path.join(p, "TaskbarLyrics.exe"))), os.path.join(app_root, "bin"))
+        self.exe_path = os.path.join(self.bin_dir, "TaskbarLyrics.exe")
+        self.config_path = os.path.join(self.bin_dir, "config.json")
+        self.proc = None
+        self.started_by_us = False
+        self._playback_state = {}
+        self._active_lyrics = []
+        self._ws = None
+        self._loop = None
+        self._ws_thread = None
+        self._stop_event = threading.Event()
+        self._lock = threading.Lock()
+        self._last_lyrics_key = None
+        self._send_lock = None
+
+    def start(self):
+        if not pc.IS_WINDOWS or not os.path.exists(self.exe_path):
+            return
+        self.ensure_process()
+        if not self._ws_thread or not self._ws_thread.is_alive():
+            self._stop_event.clear()
+            self._ws_thread = threading.Thread(target=self._ws_loop_runner, daemon=True)
+            self._ws_thread.start()
+
+    def stop(self):
+        self._stop_event.set()
+        if self.proc and self.started_by_us:
+            try:
+                self.proc.terminate()
+            except Exception:
+                pass
+            self.proc = None
+
+    def ensure_process(self):
+        try:
+            check = subprocess.run(["tasklist", "/FI", "IMAGENAME eq TaskbarLyrics.exe"], capture_output=True, text=True, timeout=3)
+            if "TaskbarLyrics.exe" not in check.stdout:
+                self.proc = subprocess.Popen([self.exe_path], cwd=self.bin_dir, **pc.get_daemon_popen_kwargs())
+                self.started_by_us = True
+        except Exception as e:
+            sys.stderr.write(f"TaskbarLyrics ensure_process error: {e}\n")
+
+    def update_config(self, **kwargs):
+        try:
+            cfg = {}
+            if os.path.exists(self.config_path):
+                try:
+                    with open(self.config_path, "r", encoding="utf-8") as f:
+                        cfg = json.load(f)
+                except Exception:
+                    cfg = {}
+            for k, v in kwargs.items():
+                cfg[k] = v
+            tmp_path = self.config_path + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(cfg, f, indent=2)
+            os.replace(tmp_path, self.config_path)
+        except Exception as e:
+            sys.stderr.write(f"TaskbarLyrics update_config error: {e}\n")
+
+        if self._ws and self._loop and self._loop.is_running():
+            msg = {"type": "set_config"}
+            if "LyricsEnabled" in kwargs:
+                msg["enabled"] = bool(kwargs["LyricsEnabled"])
+            if "Placement" in kwargs:
+                msg["placement"] = str(kwargs["Placement"])
+            if "Align" in kwargs:
+                msg["align"] = str(kwargs["Align"])
+            asyncio.run_coroutine_threadsafe(self._send_raw(msg), self._loop)
+
+    def _is_ws_open(self):
+        ws = self._ws
+        if ws is None:
+            return False
+        if hasattr(ws, "state"):
+            try:
+                return getattr(ws.state, "name", "") == "OPEN" or int(ws.state) == 1
+            except Exception:
+                pass
+        if hasattr(ws, "closed"):
+            return not ws.closed
+        return True
+
+    async def _safe_send(self, msg):
+        try:
+            if self._is_ws_open():
+                if self._send_lock is None:
+                    self._send_lock = asyncio.Lock()
+                async with self._send_lock:
+                    await self._ws.send(json.dumps(msg))
+        except Exception as e:
+            sys.stderr.write(f"TaskbarLyrics _safe_send error: {e}\n")
+
+    async def _send_raw(self, msg):
+        await self._safe_send(msg)
+
+    def update_playback(self, playing: bool, position: float, duration: float, track, lyrics):
+        with self._lock:
+            if hasattr(track, "toVariant"):
+                track = track.toVariant()
+            if not isinstance(track, dict):
+                track = {}
+            
+            title = str(track.get("title") or "")
+            artist = str(track.get("artist") or "")
+            album = str(track.get("album") or "")
+            cover = str(track.get("thumbnail") or track.get("cover") or "")
+            track_id = str(track.get("id") or track.get("videoId") or f"{title}|{artist}")
+
+            self._playback_state = {
+                "type": "sp_state",
+                "playing": bool(playing),
+                "positionMs": float(position or 0) * 1000.0,
+                "durationMs": float(duration or 0) * 1000.0,
+                "trackId": f"sp:{track_id}" if track_id else "sp:idle",
+                "title": title,
+                "artist": artist,
+                "album": album,
+                "cover": cover
+            }
+            if lyrics is not None:
+                if hasattr(lyrics, "toVariant"):
+                    lyrics = lyrics.toVariant()
+                if isinstance(lyrics, list):
+                    self._active_lyrics = lyrics
+
+        if self._ws and self._loop and self._loop.is_running():
+            asyncio.run_coroutine_threadsafe(self._push_state(), self._loop)
+
+    def update_lyrics(self, lyrics):
+        with self._lock:
+            if hasattr(lyrics, "toVariant"):
+                lyrics = lyrics.toVariant()
+            if isinstance(lyrics, list):
+                self._active_lyrics = lyrics
+        if self._ws and self._loop and self._loop.is_running():
+            asyncio.run_coroutine_threadsafe(self._push_state(), self._loop)
+
+    async def _push_state(self):
+        try:
+            if not self._is_ws_open():
+                return
+            with self._lock:
+                st = dict(self._playback_state)
+                fmt = self._format_lyrics()
+                track_id = st.get("trackId") if st else None
+                raw_len = len(self._active_lyrics)
+                first_t = self._active_lyrics[0].get("time") if raw_len > 0 and isinstance(self._active_lyrics[0], dict) else 0
+                last_t = self._active_lyrics[-1].get("time") if raw_len > 0 and isinstance(self._active_lyrics[-1], dict) else 0
+                lyrics_key = (track_id, raw_len, first_t, last_t)
+
+            if st:
+                await self._safe_send(st)
+            if fmt and (lyrics_key != self._last_lyrics_key):
+                self._last_lyrics_key = lyrics_key
+                await self._safe_send({"type": "push_lyrics", "lyrics": fmt})
+        except Exception as e:
+            sys.stderr.write(f"TaskbarLyrics _push_state error: {e}\n")
+
+    def _format_lyrics(self):
+        with self._lock:
+            raw = list(self._active_lyrics)
+
+        if not raw:
+            return None
+
+        has_syllables = any(isinstance(line, dict) and line.get("words") and len(line["words"]) > 0 for line in raw)
+        
+        first_start = 0.0
+        for line in raw:
+            if isinstance(line, dict) and "time" in line:
+                first_start = float(line.get("time") or 0.0)
+                break
+
+        if has_syllables:
+            content = []
+            for line in raw:
+                if not isinstance(line, dict): continue
+                l_start = float(line.get("time") or 0.0)
+                words = line.get("words") or []
+                sylls = []
+                for w in words:
+                    if not isinstance(w, dict): continue
+                    sylls.append({
+                        "Text": str(w.get("text") or ""),
+                        "StartTime": float(w.get("start") or l_start),
+                        "EndTime": float(w.get("end") or (l_start + 0.5)),
+                        "IsPartOfWord": False
+                    })
+                l_end = sylls[-1]["EndTime"] if sylls else (l_start + 3.0)
+                content.append({
+                    "Lead": {
+                        "StartTime": l_start,
+                        "EndTime": l_end,
+                        "Syllables": sylls
+                    }
+                })
+            return {
+                "Type": "Syllable",
+                "StartTime": first_start,
+                "Content": content
+            }
+        else:
+            content = []
+            for i, line in enumerate(raw):
+                if not isinstance(line, dict): continue
+                l_start = float(line.get("time") or 0.0)
+                next_start = float(raw[i+1].get("time")) if (i+1 < len(raw) and isinstance(raw[i+1], dict) and "time" in raw[i+1]) else (l_start + 4.0)
+                content.append({
+                    "Text": str(line.get("text") or ""),
+                    "StartTime": l_start,
+                    "EndTime": next_start
+                })
+            return {
+                "Type": "Line",
+                "StartTime": first_start,
+                "Content": content
+            }
+
+    def _ws_loop_runner(self):
+        asyncio.run(self._ws_client_main())
+
+    async def _ws_client_main(self):
+        import websockets
+        uri = "ws://localhost:9012/"
+        self._loop = asyncio.get_running_loop()
+
+        self._send_lock = asyncio.Lock()
+        while not self._stop_event.is_set():
+            try:
+                async with websockets.connect(uri) as ws:
+                    self._ws = ws
+                    self._last_lyrics_key = None
+                    await self._push_state()
+
+                    async for msg in ws:
+                        if self._stop_event.is_set():
+                            break
+                        try:
+                            data = json.loads(msg)
+                            req_type = data.get("type")
+                            req_id = data.get("reqId")
+
+                            if req_type == "search":
+                                with self._lock:
+                                    t = dict(self._playback_state)
+                                resp = {
+                                    "type": "resp",
+                                    "reqId": req_id,
+                                    "ok": True,
+                                    "results": [
+                                        {
+                                            "id": t.get("trackId", "sp:current"),
+                                            "name": t.get("title", ""),
+                                            "durationMs": t.get("durationMs", 240000.0),
+                                            "artists": [t.get("artist", "")]
+                                        }
+                                    ]
+                                }
+                                await self._safe_send(resp)
+                            elif req_type == "lyrics":
+                                fmt_lyrics = self._format_lyrics()
+                                if fmt_lyrics:
+                                    resp = {
+                                        "type": "resp",
+                                        "reqId": req_id,
+                                        "ok": True,
+                                        "status": 200,
+                                        "lyrics": fmt_lyrics
+                                    }
+                                else:
+                                    resp = {
+                                        "type": "resp",
+                                        "reqId": req_id,
+                                        "ok": False,
+                                        "status": 404
+                                    }
+                                await self._safe_send(resp)
+                        except Exception as e:
+                            sys.stderr.write(f"TaskbarLyrics msg handler error: {e}\n")
+            except Exception:
+                self._ws = None
+                await asyncio.sleep(2.0)
+
+
+class NutstyBridge(QObject):
+    processFinished = Signal(int, str, str, int)
+    openSettingsRequested = Signal(int)
+    taskbarLyricsToggled = Signal(bool)
+
+    @Slot(int)
+    def openSettings(self, tab: int = 0):
+        self.openSettingsRequested.emit(tab)
+
+    @Slot(bool)
+    def notifyTaskbarLyricsState(self, enabled: bool):
+        self.taskbarLyricsToggled.emit(enabled)
+        if TaskbarLyricsService._instance:
+            TaskbarLyricsService._instance.update_config(LyricsEnabled=bool(enabled))
+            if enabled:
+                TaskbarLyricsService._instance.ensure_process()
+
+    @Slot(str)
+    def setTaskbarLyricsPlacement(self, placement: str):
+        if TaskbarLyricsService._instance:
+            TaskbarLyricsService._instance.update_config(Placement=str(placement))
+
+    @Slot(str)
+    def setTaskbarLyricsAlign(self, align: str):
+        if TaskbarLyricsService._instance:
+            TaskbarLyricsService._instance.update_config(Align=str(align))
+
+    @Slot(bool, float, float, "QJSValue", "QJSValue")
+    def updateTaskbarPlayback(self, playing: bool, position: float, duration: float, track, lyrics):
+        if TaskbarLyricsService._instance:
+            TaskbarLyricsService._instance.update_playback(playing, position, duration, track, lyrics)
+
+    @Slot("QJSValue")
+    def updateTaskbarLyrics(self, lyrics):
+        if TaskbarLyricsService._instance:
+            TaskbarLyricsService._instance.update_lyrics(lyrics)
+
+    @Slot(result=str)
+    def getTaskbarGeometry(self) -> str:
+        """Returns JSON string containing taskbar bounding box and work area in DIPs."""
+        try:
+            from PySide6.QtGui import QGuiApplication
+            s = QGuiApplication.primaryScreen()
+            if not s:
+                return "{}"
+            geom = s.geometry()
+            avail = s.availableGeometry()
+
+            gx, gy, gw, gh = geom.x(), geom.y(), geom.width(), geom.height()
+            ax, ay, aw, ah = avail.x(), avail.y(), avail.width(), avail.height()
+
+            edge = "bottom"
+            tx, ty, tw, th = ax, ay + ah, aw, gh - ah
+            if ay > gy:
+                edge = "top"
+                tx, ty, tw, th = gx, gy, gw, ay - gy
+            elif ax > gx:
+                edge = "left"
+                tx, ty, tw, th = gx, gy, ax - gx, gh
+            elif aw < gw:
+                edge = "right"
+                tx, ty, tw, th = ax + aw, gy, gw - aw, gh
+
+            return json.dumps({
+                "edge": edge,
+                "taskbarX": tx,
+                "taskbarY": ty,
+                "taskbarW": tw,
+                "taskbarH": max(th, 40),
+                "workX": ax,
+                "workY": ay,
+                "workW": aw,
+                "workH": ah,
+                "screenX": gx,
+                "screenY": gy,
+                "screenW": gw,
+                "screenH": gh,
+                "dpr": float(s.devicePixelRatio())
+            })
+        except Exception as e:
+            sys.stderr.write(f"getTaskbarGeometry error: {e}\n")
+            return "{}"
+
+    @Slot(QObject)
+    def setupTaskbarWindow(self, win_obj):
+        """Configure Taskbar Lyrics Window for Windows: 100% click-through, non-activating, topmost."""
+        if not win_obj:
+            return
+        try:
+            if pc.IS_WINDOWS and hasattr(win_obj, "winId"):
+                import ctypes
+                from ctypes import wintypes
+                hwnd = int(win_obj.winId())
+                if hwnd <= 0:
+                    return
+
+                user32 = ctypes.windll.user32
+                GWL_EXSTYLE = -20
+                WS_EX_TRANSPARENT = 0x00000020
+                WS_EX_TOOLWINDOW = 0x00000080
+                WS_EX_NOACTIVATE = 0x08000000
+                WS_EX_APPWINDOW = 0x00040000
+
+                if hasattr(user32, "GetWindowLongPtrW"):
+                    user32.GetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int]
+                    user32.GetWindowLongPtrW.restype = ctypes.c_ssize_t
+                    ex_style = user32.GetWindowLongPtrW(hwnd, GWL_EXSTYLE)
+                else:
+                    user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+                    user32.GetWindowLongW.restype = wintypes.LONG
+                    ex_style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+
+                target_ex = (ex_style | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE) & ~WS_EX_APPWINDOW
+                if ex_style != target_ex:
+                    if hasattr(user32, "SetWindowLongPtrW"):
+                        user32.SetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t]
+                        user32.SetWindowLongPtrW.restype = ctypes.c_ssize_t
+                        user32.SetWindowLongPtrW(hwnd, GWL_EXSTYLE, target_ex)
+                    else:
+                        user32.SetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int, wintypes.LONG]
+                        user32.SetWindowLongW.restype = wintypes.LONG
+                        user32.SetWindowLongW(hwnd, GWL_EXSTYLE, target_ex)
+
+                # Skip DWM frame extension inside VirtualBox / Hypervisors to prevent VBoxDxVk SEGV
+                if not _detect_hypervisor_vm():
+                    try:
+                        class MARGINS(ctypes.Structure):
+                            _fields_ = [
+                                ("cxLeftWidth", ctypes.c_int),
+                                ("cxRightWidth", ctypes.c_int),
+                                ("cyTopHeight", ctypes.c_int),
+                                ("cyBottomHeight", ctypes.c_int),
+                            ]
+                        margins = MARGINS(-1, -1, -1, -1)
+                        ctypes.windll.dwmapi.DwmExtendFrameIntoClientArea(hwnd, ctypes.byref(margins))
+                    except Exception:
+                        pass
+
+                HWND_TOPMOST = -1
+                SWP_NOSIZE = 0x0001
+                SWP_NOMOVE = 0x0002
+                SWP_NOACTIVATE = 0x0010
+                SWP_SHOWWINDOW = 0x0040
+                user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
+                user32.SetWindowPos.restype = wintypes.BOOL
+                user32.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_SHOWWINDOW)
+
+                if hasattr(win_obj, "show") and not getattr(win_obj, "isVisible", lambda: False)():
+                    win_obj.show()
+        except Exception as e:
+            sys.stderr.write(f"setupTaskbarWindow error: {e}\n")
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._callbacks = {}
+        self._cb_id = 0
+        self._cb_lock = threading.Lock()
+        self.processFinished.connect(self._onProcessFinished)
+
+    @Slot(int, str, str, int)
+    def _onProcessFinished(self, cb_id, out, err, code):
+        cb = None
+        with self._cb_lock:
+            cb = self._callbacks.pop(cb_id, None)
+        if cb:
+            try:
+                if hasattr(cb, "call"):
+                    if IS_PYSIDE:
+                        from PySide6.QtQml import QJSValue
+                        cb.call([QJSValue(str(out or "")), QJSValue(str(err or "")), QJSValue(int(code or 0))])
+                    else:
+                        cb.call([str(out or ""), str(err or ""), int(code or 0)])
+                elif callable(cb):
+                    cb(str(out or ""), str(err or ""), int(code or 0))
+            except Exception as e:
+                sys.stderr.write(f"Process callback execution error: {e}\n")
+
+    @Slot(str, result=str)
+    def getEnv(self, key: str) -> str:
+        if key == "HOME":
+            return os.path.expanduser("~")
+        elif key == "NUTSTY_APP_DIR":
+            return APP_ROOT
+        return os.environ.get(key, "")
+
+    @Slot(result=str)
+    def getAppDir(self) -> str:
+        if getattr(sys, "frozen", False):
+            return os.path.dirname(os.path.abspath(sys.executable))
+        return os.path.abspath(os.path.dirname(__file__))
+
+    @Slot()
+    def quitApp(self):
+        try:
+            from PySide6.QtCore import QCoreApplication
+            QCoreApplication.quit()
+        except Exception:
+            pass
+        def _force_exit():
+            time.sleep(0.5)
+            os._exit(0)
+        t = threading.Thread(target=_force_exit, daemon=True)
+        t.start()
+
+    @Slot(str, result=str)
+    def readFile(self, path: str) -> str:
+        if not path:
+            return ""
+        if path.startswith("/tmp"):
+            path = os.path.join(pc.get_temp_dir(), path[5:].lstrip("/\\"))
+        if not os.path.exists(path):
+            return ""
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                return f.read()
+        except Exception:
+            return ""
+
+    @Slot(str, result=str)
+    def checkFileMtime(self, path: str) -> str:
+        if not path:
+            return ""
+        if path.startswith("/tmp"):
+            path = os.path.join(pc.get_temp_dir(), path[5:].lstrip("/\\"))
+        if not os.path.exists(path):
+            return ""
+        try:
+            return str(os.path.getmtime(path))
+        except Exception:
+            return ""
+
+    @Slot(str)
+    def copyToClipboard(self, text: str):
+        try:
+            from PySide6.QtGui import QGuiApplication
+            cb = QGuiApplication.clipboard()
+            if cb:
+                cb.setText(str(text))
+        except Exception as e:
+            sys.stderr.write(f"copyToClipboard failed: {e}\n")
+
+    @Slot(result=str)
+    def getClipboardText(self) -> str:
+        try:
+            from PySide6.QtGui import QGuiApplication
+            cb = QGuiApplication.clipboard()
+            if cb:
+                return cb.text() or ""
+        except Exception as e:
+            sys.stderr.write(f"getClipboardText failed: {e}\n")
+        return ""
+
+    @Slot(str, str)
+    def showTrayNotification(self, title: str, message: str):
+        try:
+            if tray_icon_ref[0] and hasattr(tray_icon_ref[0], "showMessage"):
+                tray_icon_ref[0].showMessage(str(title), str(message))
+        except Exception as e:
+            sys.stderr.write(f"showTrayNotification error: {e}\n")
+
+    @Slot(str)
+    def openUrl(self, url: str):
+        try:
+            if url:
+                if hasattr(os, "startfile"):
+                    os.startfile(url)
+                else:
+                    import webbrowser
+                    webbrowser.open(url)
+        except Exception as e:
+            sys.stderr.write(f"openUrl error: {e}\n")
+
+    @Slot(str, str)
+    def writeConfigFile(self, rel_path: str, content: str):
+        """Atomically write a configuration file into ~/.config/noctalia/ or specified path."""
+        def _write_worker():
+            try:
+                if rel_path.startswith("~") or os.path.isabs(rel_path):
+                    target_path = os.path.expanduser(rel_path)
+                else:
+                    target_path = os.path.expanduser(os.path.join("~/.config/noctalia", rel_path))
+                os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                tmp_path = target_path + ".tmp"
+                with open(tmp_path, "w", encoding="utf-8") as f:
+                    f.write(content)
+                os.replace(tmp_path, target_path)
+            except Exception as e:
+                sys.stderr.write(f"writeConfigFile failed for {rel_path}: {e}\n")
+        _safe_submit(_write_worker)
+
+    @Slot(QObject, int, int, int, int)
+    def setWindowMaskRect(self, win_obj, x: int, y: int, w: int, h: int):
+        try:
+            if win_obj and hasattr(win_obj, "winId"):
+                hwnd = int(win_obj.winId())
+                native_filter.set_mask(hwnd, x, y, w, h)
+        except Exception as e:
+            sys.stderr.write(f"setWindowMaskRect error: {e}\n")
+
+    @Slot(QObject)
+    def clearWindowMask(self, win_obj):
+        try:
+            if win_obj and hasattr(win_obj, "winId"):
+                hwnd = int(win_obj.winId())
+                native_filter.clear_mask(hwnd)
+        except Exception as e:
+            sys.stderr.write(f"clearWindowMask error: {e}\n")
+
+    @Slot(QObject)
+    def pinWindowToDesktopBottom(self, win_obj):
+        """Pin DesktopMusicWidget and DesktopLyricsWidget to Win32 HWND_BOTTOM (matching WlrLayer.Bottom)."""
+        try:
+            if not win_obj:
+                return
+            if hasattr(win_obj, "lower"):
+                win_obj.lower()
+            if pc.IS_WINDOWS and (win_obj.property("objectName") == "bottomPanel" or getattr(win_obj, "isDesktopBottomPanel", False) or bool(win_obj.property("isDesktopBottomPanel"))):
+                try:
+                    if hasattr(win_obj, "hide"):
+                        win_obj.hide()
+                    if hasattr(win_obj, "setVisible"):
+                        win_obj.setVisible(False)
+                except Exception:
+                    pass
+                return
+
+            if pc.IS_WINDOWS and hasattr(win_obj, "winId"):
+                import ctypes
+                from ctypes import wintypes
+                hwnd = int(win_obj.winId())
+                if hwnd > 0:
+                    native_filter.register_panel_hwnd(hwnd)
+                    user32 = ctypes.windll.user32
+                    GWL_EXSTYLE = -20
+                    WS_EX_NOACTIVATE = 0x08000000
+                    WS_EX_TOOLWINDOW = 0x00000080
+                    WS_EX_APPWINDOW = 0x00040000
+                    WS_EX_TOPMOST = 0x00000008
+
+                    # 64-bit safe Get/SetWindowLongPtr
+                    if hasattr(user32, "GetWindowLongPtrW"):
+                        user32.GetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int]
+                        user32.GetWindowLongPtrW.restype = ctypes.c_ssize_t
+                        ex_style = user32.GetWindowLongPtrW(hwnd, GWL_EXSTYLE)
+                    else:
+                        user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+                        user32.GetWindowLongW.restype = wintypes.LONG
+                        ex_style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+
+                    target_ex = (ex_style | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW) & ~(WS_EX_APPWINDOW | WS_EX_TOPMOST)
+                    if ex_style != target_ex:
+                        if hasattr(user32, "SetWindowLongPtrW"):
+                            user32.SetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t]
+                            user32.SetWindowLongPtrW.restype = ctypes.c_ssize_t
+                            user32.SetWindowLongPtrW(hwnd, GWL_EXSTYLE, target_ex)
+                        else:
+                            user32.SetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int, wintypes.LONG]
+                            user32.SetWindowLongW.restype = wintypes.LONG
+                            user32.SetWindowLongW(hwnd, GWL_EXSTYLE, target_ex)
+
+                    # Extend DWM frame for true transparent alpha composition on Windows
+                    try:
+                        class MARGINS(ctypes.Structure):
+                            _fields_ = [
+                                ("cxLeftWidth", ctypes.c_int),
+                                ("cxRightWidth", ctypes.c_int),
+                                ("cyTopHeight", ctypes.c_int),
+                                ("cyBottomHeight", ctypes.c_int),
+                            ]
+                        margins = MARGINS(-1, -1, -1, -1)
+                        ctypes.windll.dwmapi.DwmExtendFrameIntoClientArea(hwnd, ctypes.byref(margins))
+                    except Exception:
+                        pass
+
+                    # Place above desktop wallpaper/icons while remaining below normal active app windows
+                    HWND_NOTOPMOST = -2
+                    SWP_NOSIZE = 0x0001
+                    SWP_NOMOVE = 0x0002
+                    SWP_NOACTIVATE = 0x0010
+                    user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
+                    user32.SetWindowPos.restype = wintypes.BOOL
+                    user32.SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE)
+        except Exception as e:
+            sys.stderr.write(f"pinWindowToDesktopBottom error: {e}\n")
+
+    @Slot()
+    @Slot(QObject)
+    def restoreWindow(self, win_obj=None):
+        try:
+            if not win_obj:
+                win_obj = main_win_ref[0]
+            if not win_obj:
+                for tw in QGuiApplication.topLevelWindows():
+                    try:
+                        if not bool(tw.property("isDesktopBottomPanel")) and tw.width() >= 500:
+                            win_obj = tw
+                            main_win_ref[0] = tw
+                            break
+                    except Exception:
+                        pass
+            if not win_obj:
+                return
+            if hasattr(win_obj, "setVisible"):
+                win_obj.setVisible(True)
+            if hasattr(win_obj, "setProperty"):
+                win_obj.setProperty("visible", True)
+            if hasattr(win_obj, "showNormal"):
+                win_obj.showNormal()
+            if hasattr(win_obj, "show"):
+                win_obj.show()
+            if hasattr(win_obj, "raise_"):
+                win_obj.raise_()
+            elif hasattr(win_obj, "raise"):
+                getattr(win_obj, "raise")()
+            if hasattr(win_obj, "requestActivate"):
+                win_obj.requestActivate()
+            if pc.IS_WINDOWS:
+                import ctypes
+                from ctypes import wintypes
+                user32 = ctypes.windll.user32
+                hwnd = 0
+                if hasattr(win_obj, "winId"):
+                    try:
+                        hwnd = int(win_obj.winId())
+                    except Exception:
+                        hwnd = 0
+                if hwnd > 0:
+                    SW_RESTORE = 9
+                    SW_SHOW = 5
+                    HWND_TOPMOST = -1
+                    HWND_NOTOPMOST = -2
+                    SWP_NOSIZE = 0x0001
+                    SWP_NOMOVE = 0x0002
+                    SWP_SHOWWINDOW = 0x0040
+
+                    user32.AllowSetForegroundWindow.argtypes = [wintypes.DWORD]
+                    user32.AllowSetForegroundWindow.restype = wintypes.BOOL
+                    user32.AllowSetForegroundWindow(0xFFFFFFFF)  # ASFW_ANY = -1
+                    user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+                    user32.ShowWindow.restype = wintypes.BOOL
+                    user32.BringWindowToTop.argtypes = [wintypes.HWND]
+                    user32.BringWindowToTop.restype = wintypes.BOOL
+                    user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+                    user32.SetForegroundWindow.restype = wintypes.BOOL
+                    user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
+                    user32.SetWindowPos.restype = wintypes.BOOL
+
+                    # Bring window to front by temporarily toggling TOPMOST (bypasses Windows foreground lock)
+                    user32.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW)
+                    user32.SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW)
+
+                    user32.ShowWindow(hwnd, SW_RESTORE)
+                    user32.ShowWindow(hwnd, SW_SHOW)
+
+                    fg_hwnd = user32.GetForegroundWindow()
+                    fg_thread = user32.GetWindowThreadProcessId(fg_hwnd, None)
+                    cur_thread = ctypes.windll.kernel32.GetCurrentThreadId()
+                    if fg_thread and fg_thread != cur_thread:
+                        user32.AttachThreadInput(cur_thread, fg_thread, True)
+                        user32.BringWindowToTop(hwnd)
+                        user32.SetForegroundWindow(hwnd)
+                        user32.AttachThreadInput(cur_thread, fg_thread, False)
+                    else:
+                        user32.BringWindowToTop(hwnd)
+                        user32.SetForegroundWindow(hwnd)
+        except Exception as e:
+            sys.stderr.write(f"restoreWindow error: {e}\n")
+
+
+    @Slot()
+    def stopImmediate(self):
+        """Immediately stop and pause MPV playback with 0ms latency upon track change."""
+        try:
+            import player_daemon
+            player_daemon.send_mpv_cmd(["set_property", "pause", True])
+            player_daemon.send_mpv_cmd(["stop"])
+        except Exception as e:
+            sys.stderr.write(f"stopImmediate error: {e}\n")
+
+    @Slot(list)
+    def execDetached(self, args: list):
+        if not args:
+            return
+
+        if args[0] == "wl-copy":
+            self.copyToClipboard(args[1] if len(args) > 1 else "")
+            return
+
+        if args[0] == "xdg-open" and len(args) > 1:
+            try:
+                target_path = os.path.normpath(args[1])
+                os.makedirs(target_path, exist_ok=True)
+                if hasattr(os, "startfile"):
+                    os.startfile(target_path)
+            except Exception as e:
+                sys.stderr.write(f"xdg-open failed: {e}\n")
+            return
+
+        # Fast path for python3 -c inline commands (prevents spawning Nutsty.exe subprocess and hourglass cursor)
+        if args and args[0] in ("python3", "python") and len(args) >= 3 and args[1] == "-c":
+            code_str = args[2]
+            code_argv = [args[0]] + list(args[3:])
+            def _in_proc_c():
+                with sys_argv_lock:
+                    old_argv = sys.argv
+                    sys.argv = code_argv
+                    try:
+                        exec(code_str, {"__name__": "__main__", "sys": sys, "os": os})
+                    except Exception as e:
+                        sys.stderr.write(f"In-process execDetached -c failed: {e}\n")
+                    finally:
+                        sys.argv = old_argv
+            _safe_submit(_in_proc_c)
+            return
+
+        # In-process fast path for backend Python scripts (prevents heavy Nutsty.exe subprocess spawn)
+        target_script = ""
+        script_args = []
+        for i, a in enumerate(args):
+            base_a = os.path.basename(a)
+            if base_a in BACKEND_MAP:
+                target_script = base_a
+                script_args = list(args[i+1:])
+                break
+
+        if target_script:
+            mod_name = BACKEND_MAP[target_script]
+            def _in_proc_detached():
+                try:
+                    import importlib
+                    if mod_name in sys.modules:
+                        mod = sys.modules[mod_name]
+                    else:
+                        mod = importlib.import_module(mod_name)
+                    if hasattr(mod, "handle_cli"):
+                        mod.handle_cli(script_args)
+                    elif hasattr(mod, "main"):
+                        with sys_argv_lock:
+                            old_argv = sys.argv
+                            sys.argv = [target_script] + script_args
+                            try:
+                                mod.main()
+                            finally:
+                                sys.argv = old_argv
+                    else:
+                        import runpy
+                        with sys_argv_lock:
+                            old_argv = sys.argv
+                            sys.argv = [target_script] + script_args
+                            try:
+                                runpy.run_module(mod_name, run_name="__main__", alter_sys=False)
+                            finally:
+                                sys.argv = old_argv
+                except SystemExit:
+                    pass
+                except Exception as e:
+                    sys.stderr.write(f"In-process execDetached {target_script} failed: {e}\n")
+            _safe_submit(_in_proc_detached)
+            return
+
+        cmd = list(args)
+        if cmd[0] == "python3" or cmd[0] == "python":
+            cmd[0] = sys.executable
+        try:
+            subprocess.Popen(cmd, **pc.get_daemon_popen_kwargs())
+        except Exception as e:
+            sys.stderr.write(f"execDetached failed: {e}\n")
+
+    @Slot(list, "QJSValue")
+    def runProcess(self, args: list, callback):
+        """Run process asynchronously and invoke JS callback(stdout, stderr, exitCode)."""
+        if not args:
+            return
+
+        with self._cb_lock:
+            self._cb_id += 1
+            cb_id = self._cb_id
+            self._callbacks[cb_id] = callback
+
+        if args[0] == "wl-copy":
+            self.copyToClipboard(args[1] if len(args) > 1 else "")
+            self.processFinished.emit(cb_id, "", "", 0)
+            return
+
+        target_script = ""
+        script_args = []
+        for i, a in enumerate(args):
+            base_a = os.path.basename(a)
+            if base_a in BACKEND_MAP:
+                target_script = base_a
+                script_args = list(args[i+1:])
+                break
+
+        # Fast path for player_daemon status (executes in 0.1ms in-process with direct JSON getter)
+        if target_script == "player_daemon.py" and script_args and script_args[0] == "status":
+            def _status_worker():
+                try:
+                    import player_daemon
+                    out = player_daemon.get_status_json()
+                    err = ""
+                    code = 0
+                except Exception as e:
+                    out = ""
+                    err = str(e)
+                    code = 1
+                self.processFinished.emit(cb_id, out, err, code)
+            _safe_submit(_status_worker)
+            return
+
+        # Fast unified in-process execution for all backend scripts in BACKEND_MAP (except browser_login which requires isolated subprocess)
+        if target_script and target_script != "browser_login.py":
+            mod_name = BACKEND_MAP[target_script]
+            def _in_proc_run():
+                import io, importlib
+                out_buf = io.StringIO()
+                err_buf = io.StringIO()
+                code = 0
+
+                # Set thread-local output streams so concurrent calls don't interfere
+                if hasattr(sys.stdout, "set_stream"):
+                    sys.stdout.set_stream(out_buf)
+                if hasattr(sys.stderr, "set_stream"):
+                    sys.stderr.set_stream(err_buf)
+
+                try:
+                    if mod_name in sys.modules:
+                        mod = sys.modules[mod_name]
+                    else:
+                        mod = importlib.import_module(mod_name)
+
+                    if hasattr(mod, "handle_cli"):
+                        mod.handle_cli(script_args)
+                    elif hasattr(mod, "main"):
+                        with sys_argv_lock:
+                            old_argv = sys.argv
+                            sys.argv = [target_script] + script_args
+                            try:
+                                mod.main()
+                            finally:
+                                sys.argv = old_argv
+                    else:
+                        import runpy
+                        with sys_argv_lock:
+                            old_argv = sys.argv
+                            sys.argv = [target_script] + script_args
+                            try:
+                                runpy.run_module(mod_name, run_name="__main__", alter_sys=False)
+                            finally:
+                                sys.argv = old_argv
+                except SystemExit as se:
+                    code = se.code if isinstance(se.code, int) else 0
+                except Exception as e:
+                    err_buf.write(str(e))
+                    code = 1
+                finally:
+                    if hasattr(sys.stdout, "clear_stream"):
+                        sys.stdout.clear_stream()
+                    if hasattr(sys.stderr, "clear_stream"):
+                        sys.stderr.clear_stream()
+
+                out = out_buf.getvalue()
+                err = err_buf.getvalue()
+                if err and default_err:
+                    try:
+                        default_err.write(f"[_in_proc_run {target_script}]: {err}\n")
+                        default_err.flush()
+                    except Exception:
+                        pass
+                self.processFinished.emit(cb_id, out, err, code)
+
+            _safe_submit(_in_proc_run)
+            return
+
+        cmd = list(args)
+        if cmd[0] == "python3" or cmd[0] == "python":
+            cmd[0] = sys.executable
+
+        def _worker():
+            try:
+                proc_timeout = 360 if any("browser_login" in str(x) for x in cmd) else 60
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=proc_timeout, **pc.get_daemon_popen_kwargs())
+                out = res.stdout or ""
+                err = res.stderr or ""
+                code = res.returncode
+            except Exception as e:
+                out = ""
+                err = str(e)
+                code = 1
+            
+            self.processFinished.emit(cb_id, out, err, code)
+
+        _safe_submit(_worker)
+
+# Quickshell Compatibility Classes
+class WlrLayershellAttached(QObject):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._layer = 0
+        self._namespace = ""
+    @Property(int)
+    def layer(self): return self._layer
+    @layer.setter
+    def layer(self, v): self._layer = v
+    @Property(str)
+    def namespace(self): return self._namespace
+    @namespace.setter
+    def namespace(self, v): self._namespace = v
+
+def register_qml_types():
+    if IS_PYSIDE:
+        @QmlAttached(WlrLayershellAttached)
+        class WlrLayershell(QObject):
+            @staticmethod
+            def qmlAttachedProperties(*args, **kwargs):
+                parent = args[-1] if (args and isinstance(args[-1], QObject)) else None
+                return WlrLayershellAttached(parent)
+        qmlRegisterType(WlrLayershell, "Quickshell.Wayland", 1, 0, "WlrLayershell")
+    else:
+        class WlrLayershell(QObject):
+            qmlAttachedProperties = WlrLayershellAttached
+        qmlRegisterType(WlrLayershell, "Quickshell.Wayland", 1, 0, "WlrLayershell", attachedProperties=WlrLayershellAttached)
+
+def start_daemons():
+    """Start resident backend daemons (auth_server HTTP daemon, palette_extractor)."""
+    def _auth_runner():
+        try:
+            import auth_server
+            if hasattr(auth_server, "run_server"):
+                auth_server.run_server()
+            elif hasattr(auth_server, "main"):
+                auth_server.main()
+        except Exception as e:
+            sys.stderr.write(f"auth_server daemon thread error: {e}\n")
+
+    def _palette_runner():
+        try:
+            import palette_extractor
+            if hasattr(palette_extractor, "main"):
+                palette_extractor.main()
+        except Exception as e:
+            sys.stderr.write(f"palette_extractor daemon thread error: {e}\n")
+
+    def _library_runner():
+        try:
+            import library
+            if hasattr(library, "main"):
+                library.main()
+        except Exception as e:
+            sys.stderr.write(f"library scanner daemon thread error: {e}\n")
+
+    threading.Thread(target=_auth_runner, daemon=True).start()
+    threading.Thread(target=_palette_runner, daemon=True).start()
+    threading.Thread(target=_library_runner, daemon=True).start()
+
+def _create_nutsty_app_icon(icon_save_path: str) -> QIcon:
+    """Create a crisp Dark Glass + Equalizer wave icon for Nutsty taskbar & Windows System Tray."""
+    try:
+        from PySide6.QtGui import QPixmap, QPainter, QColor, QPen, QBrush
+        from PySide6.QtCore import Qt, QRectF
+        pix = QPixmap(64, 64)
+        pix.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pix)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        # Outer Dark Glass Rounded Square (R=16)
+        bg_rect = QRectF(2, 2, 60, 60)
+        painter.setPen(QPen(QColor(222, 176, 108, 210), 2.5))
+        painter.setBrush(QBrush(QColor(16, 18, 24, 248)))
+        painter.drawRoundedRect(bg_rect, 16, 16)
+
+        # 3 Warm Gold Equalizer Bars (Nutsty signature soundwave)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(QColor(222, 176, 108, 255)))
+        painter.drawRoundedRect(QRectF(16, 24, 6, 18), 3, 3)
+        painter.drawRoundedRect(QRectF(29, 15, 6, 34), 3, 3)
+        painter.drawRoundedRect(QRectF(42, 21, 6, 24), 3, 3)
+        painter.end()
+
+        if icon_save_path and not os.path.exists(icon_save_path):
+            try:
+                os.makedirs(os.path.dirname(icon_save_path), exist_ok=True)
+                pix.save(icon_save_path, "PNG")
+            except Exception:
+                pass
+        return QIcon(pix)
+    except Exception:
+        return QIcon()
+
+
+_single_instance_mutex = None
+
 def _check_single_instance_or_activate(server_name="Nutsty_Single_Instance_IPC") -> bool:
+    """
+    Guarantees strict single-instance execution via Win32 Named Mutex + QLocalSocket IPC.
+    Returns True if this is the primary master instance, False if secondary (and activated primary).
+    """
+    global _single_instance_mutex
     if sys.platform != "win32":
         return True
-    try:
-        from PySide6.QtNetwork import QLocalSocket
-        sock = QLocalSocket()
-        sock.connectToServer(server_name)
-        if sock.waitForConnected(250):
-            sock.write(b"SHOW")
-            sock.waitForBytesWritten(400)
-            sock.disconnectFromServer()
-            sys.stderr.write("Sent SHOW to active Nutsty instance. Exiting secondary launcher.\n")
-            return False
-    except Exception as e:
-        sys.stderr.write(f"Single instance check fallback: {e}\n")
+
+    import ctypes
+    kernel32 = ctypes.windll.kernel32
+    ERROR_ALREADY_EXISTS = 183
+
+    # Named mutex scoped to user session (Local\) guarantees atomic exclusivity across processes
+    mutex_name = r"Local\Nutsty_Master_SingleInstance_Mutex_Apple"
+    _single_instance_mutex = kernel32.CreateMutexW(None, True, mutex_name)
+    last_err = kernel32.GetLastError()
+
+    if last_err == ERROR_ALREADY_EXISTS:
+        # A master instance is already running or starting up!
+        # Send SHOW to bring it to foreground, then exit secondary launcher immediately.
+        try:
+            from PySide6.QtNetwork import QLocalSocket
+            # Retry connection for up to 3 seconds in case master is currently loading QML
+            for _ in range(15):
+                sock = QLocalSocket()
+                sock.connectToServer(server_name)
+                if sock.waitForConnected(200):
+                    sock.write(b"SHOW")
+                    sock.waitForBytesWritten(500)
+                    sock.disconnectFromServer()
+                    break
+                import time
+                time.sleep(0.2)
+        except Exception:
+            pass
+        sys.stderr.write("Secondary Nutsty launcher detected and activated primary window. Exiting.\n")
+        return False
+
     return True
 
 def main():
     if not _check_single_instance_or_activate():
-        sys.exit(0)
-    os.environ["QT_QUICK_CONTROLS_STYLE"] = "Basic"
-    sys.stderr.write(f"Nutsty starting. Active QSG_RHI_BACKEND: {os.environ.get('QSG_RHI_BACKEND', 'default')}\n")
-
-    try:
-        from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
-        from PySide6.QtGui import QCursor, QAction, QSurfaceFormat
-        # Request explicit 8-bit alpha channel for Direct3D 11/OpenGL RHI swapchains
-        from PySide6.QtQuick import QQuickWindow
-        fmt = QSurfaceFormat.defaultFormat()
-        fmt.setAlphaBufferSize(8)
-        QSurfaceFormat.setDefaultFormat(fmt)
-        QQuickWindow.setDefaultAlphaBuffer(True)
-        app = QApplication(sys.argv)
-        has_widgets = True
-    except Exception:
-        from PySide6.QtGui import QSurfaceFormat
-        from PySide6.QtQuick import QQuickWindow
-        fmt = QSurfaceFormat.defaultFormat()
-        fmt.setAlphaBufferSize(8)
-        QSurfaceFormat.setDefaultFormat(fmt)
-        QQuickWindow.setDefaultAlphaBuffer(True)
-        app = QGuiApplication(sys.argv)
-        has_widgets = False
-
-    app.installNativeEventFilter(native_filter)
-    app.setQuitOnLastWindowClosed(False)
-    app.setApplicationName("Nutsty")
-    app.setOrganizationName("Nutsty")
-
-    icon_path = os.path.join(APP_ROOT, "assets", "icons", "nutsty.png")
-    app_icon = _create_nutsty_app_icon(icon_path)
-    if os.path.exists(icon_path) and app_icon.isNull():
-        app_icon = QIcon(icon_path)
-    if not app_icon.isNull():
-        app.setWindowIcon(app_icon)
-
-    register_qml_types()
-    start_daemons()
-    if pc.IS_WINDOWS:
-        try:
-            taskbar_srv = TaskbarLyricsService(APP_ROOT)
-            taskbar_srv.start()
-        except Exception as e:
-            sys.stderr.write(f"TaskbarLyricsService start error: {e}\n")
-
-    engine = QQmlApplicationEngine()
-    engine_ref[0] = engine
-    engine.warnings.connect(lambda warns: [sys.stderr.write(f"QML Warning: {w.toString()}\n") for w in warns])
-
-    compat_path = os.path.join(APP_ROOT, "compat")
-    engine.addImportPath(compat_path)
-    engine.addImportPath(APP_ROOT)
-    engine.addImportPath(os.path.join(APP_ROOT, "components"))
-
-    if getattr(sys, "frozen", False):
-        pyside_qml = os.path.join(APP_ROOT, "PySide6", "qml")
-        if os.path.exists(pyside_qml):
-            engine.addImportPath(pyside_qml)
-        exe_dir = os.path.dirname(sys.executable)
-        alt_pyside_qml = os.path.join(exe_dir, "_internal", "PySide6", "qml")
-        if os.path.exists(alt_pyside_qml):
-            engine.addImportPath(alt_pyside_qml)
-
-    bridge = NutstyBridge()
-    bridge_ref[0] = bridge
-    engine.rootContext().setContextProperty("__NutstyBridge", bridge)
-
-    shell_qml = os.path.join(APP_ROOT, "shell.qml")
-    engine.load(QUrl.fromLocalFile(shell_qml))
-
-    if not engine.rootObjects():
-        err_details = [
-            f"Target QML: {shell_qml}",
-            f"File Exists: {os.path.exists(shell_qml)}",
-            f"APP_ROOT: {APP_ROOT}",
-            f"Executable: {sys.executable}",
-            f"sys._MEIPASS: {getattr(sys, '_MEIPASS', 'N/A')}",
-            f"Log File: {log_file_path}",
-        ]
-        msg = "Fatal: Failed to load QML root object.\n\n" + "\n".join(err_details)
-        sys.stderr.write(msg + "\n")
-        try:
-            if sys.platform == "win32":
-                import ctypes
-                ctypes.windll.user32.MessageBoxW(0, msg, "Nutsty Error", 0x10)
-        except Exception:
-            pass
-        sys.exit(1)
-
-    def _is_bottom_panel(w):
-        try:
-            return bool(w.property("isDesktopBottomPanel"))
-        except Exception:
-            return False
-
-    def _setup_frameless_window(win_obj, radius=24):
-        if not pc.IS_WINDOWS or not hasattr(win_obj, "winId"):
-            return
-        try:
-            import ctypes
-            from ctypes import wintypes
-            hwnd = int(win_obj.winId())
-            if hwnd <= 0:
-                return
-
-            dwmapi = ctypes.windll.dwmapi
-            user32 = ctypes.windll.user32
-            gdi32 = ctypes.windll.gdi32
-
-            class MARGINS(ctypes.Structure):
-                _fields_ = [
-                    ("cxLeftWidth", ctypes.c_int),
-                    ("cxRightWidth", ctypes.c_int),
-                    ("cyTopHeight", ctypes.c_int),
-                    ("cyBottomHeight", ctypes.c_int),
-                ]
-            margins = MARGINS(-1, -1, -1, -1)
-            try:
-                dwmapi.DwmExtendFrameIntoClientArea(hwnd, ctypes.byref(margins))
-            except Exception:
-                pass
-
-            try:
-                DWMWA_WINDOW_CORNER_PREFERENCE = 33
-                DWMWCP_ROUND = 2
-                val = ctypes.c_int(DWMWCP_ROUND)
-                dwmapi.DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ctypes.byref(val), ctypes.sizeof(val))
-            except Exception:
-                pass
-
-            def _apply_rgn():
-                try:
-                    vis = win_obj.property("visibility")
-                    if vis in (3, 4):  # Maximized = 3, FullScreen = 4
-                        user32.SetWindowRgn(hwnd, None, True)
-                        return
-                    rect = wintypes.RECT()
-                    user32.GetClientRect(hwnd, ctypes.byref(rect))
-                    phys_w = rect.right - rect.left
-                    phys_h = rect.bottom - rect.top
-                    if phys_w > 0 and phys_h > 0:
-                        dpi = user32.GetDpiForWindow(hwnd) if hasattr(user32, "GetDpiForWindow") else 96
-                        scale = dpi / 96.0
-                        r = int(radius * scale * 2)
-                        hrgn = gdi32.CreateRoundRectRgn(0, 0, phys_w + 1, phys_h + 1, r, r)
-                        if hrgn:
-                            user32.SetWindowRgn(hwnd, hrgn, True)
-                except Exception:
-                    pass
-
-            _apply_rgn()
-            if hasattr(win_obj, "widthChanged"):
-                win_obj.widthChanged.connect(_apply_rgn)
-            if hasattr(win_obj, "heightChanged"):
-                win_obj.heightChanged.connect(_apply_rgn)
-            if hasattr(win_obj, "visibilityChanged"):
-                win_obj.visibilityChanged.connect(_apply_rgn)
-        except Exception as e:
-            sys.stderr.write(f"_setup_frameless_window error: {e}\n")
-
-    def _init_win(w):
-        if getattr(w, "property", None) and bool(w.property("isTaskbarLyrics")):
-            bridge.setupTaskbarWindow(w)
-            if bool(w.property("visible")):
-                w.show()
-            return
-        elif _is_bottom_panel(w):
-            if "desktoplyrics" in w.metaObject().className().lower():
-                try:
-                    w.hide()
-                except Exception:
-                    pass
-                return
-            elif bool(w.property("visible")):
-                w.show()
-                bridge.pinWindowToDesktopBottom(w)
-        else:
-            if main_win_ref[0] is None and w.width() >= 500 and not bool(w.property("isTaskbarLyrics")):
-                main_win_ref[0] = w
-            _setup_frameless_window(w, radius=24)
-            w.show()
-            w.raise_()
-            w.requestActivate()
-
-    main_win_ref[0] = None
-    def _init_all_windows():
-        for top_win in app.topLevelWindows():
-            _init_win(top_win)
-
-    _init_all_windows()
-    QTimer.singleShot(50, _init_all_windows)
-    QTimer.singleShot(250, _init_all_windows)
-    QTimer.singleShot(750, _init_all_windows)
-
-    # Setup Windows System Tray Icon with "Mở toàn màn hình / Mở cửa sổ chính" & "Tắt ứng dụng"
-    tray_icon = None
-    if has_widgets and QSystemTrayIcon.isSystemTrayAvailable():
-        tray_icon = QSystemTrayIcon(app_icon, app)
-        tray_icon_ref[0] = tray_icon
-        tray_icon.setToolTip("Nutsty Music Player")
-
-        tray_menu = QMenu()
-        tray_menu.setStyleSheet("""
-            QMenu {
-                background-color: #101218;
-                color: #ffffff;
-                border: 1px solid rgba(222, 176, 108, 0.38);
-                border-radius: 10px;
-                padding: 6px;
-                font-family: 'Segoe UI', 'Inter', sans-serif;
-                font-size: 13px;
-                font-weight: 600;
-            }
-            QMenu::item {
-                padding: 8px 18px;
-                border-radius: 6px;
-                margin: 2px 2px;
-            }
-            QMenu::item:selected {
-                background-color: rgba(222, 176, 108, 0.22);
-                color: #ffffff;
-            }
-            QMenu::separator {
-                height: 1px;
-                background: rgba(255, 255, 255, 0.10);
-                margin: 4px 8px;
-            }
-        """)
-
-        def _open_full_window():
-            target_w = main_win_ref[0]
-            if not target_w or _is_bottom_panel(target_w):
-                for tw in app.topLevelWindows():
-                    if not _is_bottom_panel(tw) and tw.width() >= 500:
-                        target_w = tw
-                        main_win_ref[0] = tw
-                        break
-            if target_w:
-                target_w.setProperty("visible", True)
-                bridge.restoreWindow(target_w)
-
-        # Single-instance server listener
-        from PySide6.QtNetwork import QLocalServer
-        single_inst_server = QLocalServer(app)
-        single_inst_server.removeServer("Nutsty_Single_Instance_IPC")
-        single_inst_server.listen("Nutsty_Single_Instance_IPC")
-
-        def _on_single_inst_conn():
-            s = single_inst_server.nextPendingConnection()
-            if s:
-                def _on_read():
-                    try:
-                        msg = bytes(s.readAll())
-                        if b"SHOW" in msg:
-                            _open_full_window()
-                    except Exception:
-                        pass
-                s.readyRead.connect(_on_read)
-        single_inst_server.newConnection.connect(_on_single_inst_conn)
-
-        def _quit_nutsty_completely():
-            try:
-                if tray_icon:
-                    tray_icon.hide()
-            except Exception:
-                pass
-            try:
-                if TaskbarLyricsService._instance:
-                    TaskbarLyricsService._instance.stop()
-            except Exception:
-                pass
-            try:
-                import player_daemon
-                player_daemon.handle_cli(["stop"])
-            except Exception:
-                pass
-            os._exit(0)
-
-        act_open = QAction("Mở cửa sổ chính (Open Full)", tray_menu)
-        act_open.triggered.connect(_open_full_window)
-        tray_menu.addAction(act_open)
-
-        act_lyrics = QAction("Lời bài hát Taskbar (Taskbar Lyrics)", tray_menu)
-        act_lyrics.setCheckable(True)
-        try:
-            cfg_p = pc.get_config_path("nutsty_settings.json")
-            if os.path.exists(cfg_p):
-                with open(cfg_p, "r", encoding="utf-8") as f:
-                    s_data = json.load(f)
-                    act_lyrics.setChecked(bool(s_data.get("taskbarLyricsEnabled", True)))
-            else:
-                act_lyrics.setChecked(True)
-        except Exception:
-            act_lyrics.setChecked(True)
-
-        def _on_toggle_tray_lyrics():
-            target_w = main_win_ref[0]
-            if target_w and hasattr(target_w, "setProperty"):
-                try:
-                    cur = bool(target_w.property("taskbarLyricsEnabled"))
-                    target_w.setProperty("taskbarLyricsEnabled", not cur)
-                    act_lyrics.setChecked(not cur)
-                    if hasattr(target_w, "saveSettings"):
-                        target_w.saveSettings()
-                except Exception:
-                    pass
-
-        act_lyrics.triggered.connect(_on_toggle_tray_lyrics)
-        tray_menu.addAction(act_lyrics)
-        bridge.taskbarLyricsToggled.connect(lambda state: act_lyrics.setChecked(state))
-
-        act_settings = QAction("Cài đặt & Cập nhật (Settings)", tray_menu)
-        act_settings.triggered.connect(lambda: request_open_settings(0))
-        tray_menu.addAction(act_settings)
-
-        tray_menu.addSeparator()
-
-        act_quit = QAction("Tắt ứng dụng (Quit)", tray_menu)
-        act_quit.triggered.connect(_quit_nutsty_completely)
-        tray_menu.addAction(act_quit)
-
-        tray_icon.setContextMenu(tray_menu)
-
-        def _on_tray_activated(reason):
-            if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
-                _open_full_window()
-            elif reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.Context):
-                tray_menu.popup(QCursor.pos())
-                tray_menu.activateWindow()
-
-        tray_icon.activated.connect(_on_tray_activated)
-        tray_icon.show()
-
-    # Periodic Python GC & Qt Quick image cache cleanup (Runs every 45s without touching Win32 WorkingSet)
-    def _trim_ram():
-        try:
-            import gc
-            gc.collect()
-            if engine_ref[0] is not None:
-                engine_ref[0].trimComponentCache()
-            from PySide6.QtGui import QPixmapCache
-            QPixmapCache.clear()
-        except Exception:
-            pass
-
-    mem_timer = QTimer(app)
-    mem_timer.setInterval(45000)
-    mem_timer.timeout.connect(_trim_ram)
-    mem_timer.start()
-
-    sys.exit(app.exec())
-
-if __name__ == "__main__":
-    main()
-
+        sys.exit(0)
+    os.environ["QT_QUICK_CONTROLS_STYLE"] = "Basic"
+    sys.stderr.write(f"Nutsty starting. Active QSG_RHI_BACKEND: {os.environ.get('QSG_RHI_BACKEND', 'default')}\n")
+
+    try:
+        from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
+        from PySide6.QtGui import QCursor, QAction, QSurfaceFormat
+        # Request explicit 8-bit alpha channel for Direct3D 11/OpenGL RHI swapchains
+        from PySide6.QtQuick import QQuickWindow
+        fmt = QSurfaceFormat.defaultFormat()
+        fmt.setAlphaBufferSize(8)
+        QSurfaceFormat.setDefaultFormat(fmt)
+        QQuickWindow.setDefaultAlphaBuffer(True)
+        app = QApplication(sys.argv)
+        has_widgets = True
+    except Exception:
+        from PySide6.QtGui import QSurfaceFormat
+        from PySide6.QtQuick import QQuickWindow
+        fmt = QSurfaceFormat.defaultFormat()
+        fmt.setAlphaBufferSize(8)
+        QSurfaceFormat.setDefaultFormat(fmt)
+        QQuickWindow.setDefaultAlphaBuffer(True)
+        app = QGuiApplication(sys.argv)
+        has_widgets = False
+
+    app.installNativeEventFilter(native_filter)
+
+    bridge = NutstyBridge()
+    bridge_ref[0] = bridge
+
+    def _open_full_window():
+        target_w = main_win_ref[0]
+        if not target_w or _is_bottom_panel(target_w):
+            for tw in app.topLevelWindows():
+                if not _is_bottom_panel(tw) and tw.width() >= 500:
+                    target_w = tw
+                    main_win_ref[0] = tw
+                    break
+        if target_w:
+            target_w.setProperty("visible", True)
+            bridge.restoreWindow(target_w)
+
+    pending_single_inst_show = [False]
+
+    # Start single-instance IPC listener immediately (within milliseconds of launch)
+    from PySide6.QtNetwork import QLocalServer
+    single_inst_server = QLocalServer(app)
+    single_inst_server.removeServer("Nutsty_Single_Instance_IPC")
+    single_inst_server.listen("Nutsty_Single_Instance_IPC")
+
+    def _on_single_inst_conn():
+        s = single_inst_server.nextPendingConnection()
+        if s:
+            def _on_read():
+                try:
+                    msg = bytes(s.readAll())
+                    if b"SHOW" in msg:
+                        target_w = main_win_ref[0]
+                        if target_w:
+                            _open_full_window()
+                        else:
+                            pending_single_inst_show[0] = True
+                except Exception:
+                    pass
+            s.readyRead.connect(_on_read)
+    single_inst_server.newConnection.connect(_on_single_inst_conn)
+    app.setQuitOnLastWindowClosed(False)
+    app.setApplicationName("Nutsty")
+    app.setOrganizationName("Nutsty")
+
+    icon_path = os.path.join(APP_ROOT, "assets", "icons", "nutsty.png")
+    app_icon = _create_nutsty_app_icon(icon_path)
+    if os.path.exists(icon_path) and app_icon.isNull():
+        app_icon = QIcon(icon_path)
+    if not app_icon.isNull():
+        app.setWindowIcon(app_icon)
+
+    register_qml_types()
+    start_daemons()
+    if pc.IS_WINDOWS:
+        try:
+            taskbar_srv = TaskbarLyricsService(APP_ROOT)
+            taskbar_srv.start()
+        except Exception as e:
+            sys.stderr.write(f"TaskbarLyricsService start error: {e}\n")
+
+    engine = QQmlApplicationEngine()
+    engine_ref[0] = engine
+    engine.warnings.connect(lambda warns: [sys.stderr.write(f"QML Warning: {w.toString()}\n") for w in warns])
+
+    compat_path = os.path.join(APP_ROOT, "compat")
+    engine.addImportPath(compat_path)
+    engine.addImportPath(APP_ROOT)
+    engine.addImportPath(os.path.join(APP_ROOT, "components"))
+
+    if getattr(sys, "frozen", False):
+        pyside_qml = os.path.join(APP_ROOT, "PySide6", "qml")
+        if os.path.exists(pyside_qml):
+            engine.addImportPath(pyside_qml)
+        exe_dir = os.path.dirname(sys.executable)
+        alt_pyside_qml = os.path.join(exe_dir, "_internal", "PySide6", "qml")
+        if os.path.exists(alt_pyside_qml):
+            engine.addImportPath(alt_pyside_qml)
+
+    engine.rootContext().setContextProperty("__NutstyBridge", bridge)
+
+    shell_qml = os.path.join(APP_ROOT, "shell.qml")
+    engine.load(QUrl.fromLocalFile(shell_qml))
+
+    if not engine.rootObjects():
+        err_details = [
+            f"Target QML: {shell_qml}",
+            f"File Exists: {os.path.exists(shell_qml)}",
+            f"APP_ROOT: {APP_ROOT}",
+            f"Executable: {sys.executable}",
+            f"sys._MEIPASS: {getattr(sys, '_MEIPASS', 'N/A')}",
+            f"Log File: {log_file_path}",
+        ]
+        msg = "Fatal: Failed to load QML root object.\n\n" + "\n".join(err_details)
+        sys.stderr.write(msg + "\n")
+        try:
+            if sys.platform == "win32":
+                import ctypes
+                ctypes.windll.user32.MessageBoxW(0, msg, "Nutsty Error", 0x10)
+        except Exception:
+            pass
+        sys.exit(1)
+
+    def _is_bottom_panel(w):
+        try:
+            return bool(w.property("isDesktopBottomPanel"))
+        except Exception:
+            return False
+
+    def _setup_frameless_window(win_obj, radius=24):
+        if not pc.IS_WINDOWS or not hasattr(win_obj, "winId"):
+            return
+        try:
+            import ctypes
+            from ctypes import wintypes
+            hwnd = int(win_obj.winId())
+            if hwnd <= 0:
+                return
+
+            dwmapi = ctypes.windll.dwmapi
+            user32 = ctypes.windll.user32
+            gdi32 = ctypes.windll.gdi32
+
+            class MARGINS(ctypes.Structure):
+                _fields_ = [
+                    ("cxLeftWidth", ctypes.c_int),
+                    ("cxRightWidth", ctypes.c_int),
+                    ("cyTopHeight", ctypes.c_int),
+                    ("cyBottomHeight", ctypes.c_int),
+                ]
+            margins = MARGINS(-1, -1, -1, -1)
+            try:
+                dwmapi.DwmExtendFrameIntoClientArea(hwnd, ctypes.byref(margins))
+            except Exception:
+                pass
+
+            try:
+                DWMWA_WINDOW_CORNER_PREFERENCE = 33
+                DWMWCP_ROUND = 2
+                val = ctypes.c_int(DWMWCP_ROUND)
+                dwmapi.DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ctypes.byref(val), ctypes.sizeof(val))
+            except Exception:
+                pass
+
+            def _apply_rgn():
+                try:
+                    vis = win_obj.property("visibility")
+                    if vis in (3, 4):  # Maximized = 3, FullScreen = 4
+                        user32.SetWindowRgn(hwnd, None, True)
+                        return
+                    rect = wintypes.RECT()
+                    user32.GetClientRect(hwnd, ctypes.byref(rect))
+                    phys_w = rect.right - rect.left
+                    phys_h = rect.bottom - rect.top
+                    if phys_w > 0 and phys_h > 0:
+                        dpi = user32.GetDpiForWindow(hwnd) if hasattr(user32, "GetDpiForWindow") else 96
+                        scale = dpi / 96.0
+                        r = int(radius * scale * 2)
+                        hrgn = gdi32.CreateRoundRectRgn(0, 0, phys_w + 1, phys_h + 1, r, r)
+                        if hrgn:
+                            user32.SetWindowRgn(hwnd, hrgn, True)
+                except Exception:
+                    pass
+
+            _apply_rgn()
+            if hasattr(win_obj, "widthChanged"):
+                win_obj.widthChanged.connect(_apply_rgn)
+            if hasattr(win_obj, "heightChanged"):
+                win_obj.heightChanged.connect(_apply_rgn)
+            if hasattr(win_obj, "visibilityChanged"):
+                win_obj.visibilityChanged.connect(_apply_rgn)
+        except Exception as e:
+            sys.stderr.write(f"_setup_frameless_window error: {e}\n")
+
+    def _init_win(w):
+        if getattr(w, "property", None) and bool(w.property("isTaskbarLyrics")):
+            bridge.setupTaskbarWindow(w)
+            if bool(w.property("visible")):
+                w.show()
+            return
+        elif _is_bottom_panel(w):
+            if "desktoplyrics" in w.metaObject().className().lower():
+                try:
+                    w.hide()
+                except Exception:
+                    pass
+                return
+            elif bool(w.property("visible")):
+                w.show()
+                bridge.pinWindowToDesktopBottom(w)
+        else:
+            if main_win_ref[0] is None and w.width() >= 500 and not bool(w.property("isTaskbarLyrics")):
+                main_win_ref[0] = w
+            _setup_frameless_window(w, radius=24)
+            w.show()
+            w.raise_()
+            w.requestActivate()
+
+    main_win_ref[0] = None
+    def _init_all_windows():
+        for top_win in app.topLevelWindows():
+            _init_win(top_win)
+        if pending_single_inst_show[0]:
+            _open_full_window()
+
+    _init_all_windows()
+    QTimer.singleShot(50, _init_all_windows)
+    QTimer.singleShot(250, _init_all_windows)
+    QTimer.singleShot(750, _init_all_windows)
+
+    # Setup Windows System Tray Icon with "Mở toàn màn hình / Mở cửa sổ chính" & "Tắt ứng dụng"
+    tray_icon = None
+    if has_widgets and QSystemTrayIcon.isSystemTrayAvailable():
+        tray_icon = QSystemTrayIcon(app_icon, app)
+        tray_icon_ref[0] = tray_icon
+        tray_icon.setToolTip("Nutsty Music Player")
+
+        tray_menu = QMenu()
+        tray_menu.setStyleSheet("""
+            QMenu {
+                background-color: #101218;
+                color: #ffffff;
+                border: 1px solid rgba(222, 176, 108, 0.38);
+                border-radius: 10px;
+                padding: 6px;
+                font-family: 'Segoe UI', 'Inter', sans-serif;
+                font-size: 13px;
+                font-weight: 600;
+            }
+            QMenu::item {
+                padding: 8px 18px;
+                border-radius: 6px;
+                margin: 2px 2px;
+            }
+            QMenu::item:selected {
+                background-color: rgba(222, 176, 108, 0.22);
+                color: #ffffff;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: rgba(255, 255, 255, 0.10);
+                margin: 4px 8px;
+            }
+        """)
+
+
+
+
+
+        def _quit_nutsty_completely():
+            try:
+                if tray_icon:
+                    tray_icon.hide()
+            except Exception:
+                pass
+            try:
+                if TaskbarLyricsService._instance:
+                    TaskbarLyricsService._instance.stop()
+            except Exception:
+                pass
+            try:
+                import player_daemon
+                player_daemon.handle_cli(["stop"])
+            except Exception:
+                pass
+            os._exit(0)
+
+        act_open = QAction("Mở cửa sổ chính (Open Full)", tray_menu)
+        act_open.triggered.connect(_open_full_window)
+        tray_menu.addAction(act_open)
+
+        act_lyrics = QAction("Lời bài hát Taskbar (Taskbar Lyrics)", tray_menu)
+        act_lyrics.setCheckable(True)
+        try:
+            cfg_p = pc.get_config_path("nutsty_settings.json")
+            if os.path.exists(cfg_p):
+                with open(cfg_p, "r", encoding="utf-8") as f:
+                    s_data = json.load(f)
+                    act_lyrics.setChecked(bool(s_data.get("taskbarLyricsEnabled", True)))
+            else:
+                act_lyrics.setChecked(True)
+        except Exception:
+            act_lyrics.setChecked(True)
+
+        def _on_toggle_tray_lyrics():
+            target_w = main_win_ref[0]
+            if target_w and hasattr(target_w, "setProperty"):
+                try:
+                    cur = bool(target_w.property("taskbarLyricsEnabled"))
+                    target_w.setProperty("taskbarLyricsEnabled", not cur)
+                    act_lyrics.setChecked(not cur)
+                    if hasattr(target_w, "saveSettings"):
+                        target_w.saveSettings()
+                except Exception:
+                    pass
+
+        act_lyrics.triggered.connect(_on_toggle_tray_lyrics)
+        tray_menu.addAction(act_lyrics)
+        bridge.taskbarLyricsToggled.connect(lambda state: act_lyrics.setChecked(state))
+
+        act_settings = QAction("Cài đặt & Cập nhật (Settings)", tray_menu)
+        act_settings.triggered.connect(lambda: request_open_settings(0))
+        tray_menu.addAction(act_settings)
+
+        tray_menu.addSeparator()
+
+        act_quit = QAction("Tắt ứng dụng (Quit)", tray_menu)
+        act_quit.triggered.connect(_quit_nutsty_completely)
+        tray_menu.addAction(act_quit)
+
+        tray_icon.setContextMenu(tray_menu)
+
+        def _on_tray_activated(reason):
+            if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+                _open_full_window()
+            elif reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.Context):
+                tray_menu.popup(QCursor.pos())
+                tray_menu.activateWindow()
+
+        tray_icon.activated.connect(_on_tray_activated)
+        tray_icon.show()
+
+    # Periodic Python GC & Qt Quick image cache cleanup (Runs every 45s without touching Win32 WorkingSet)
+    def _trim_ram():
+        try:
+            import gc
+            gc.collect()
+            if engine_ref[0] is not None:
+                engine_ref[0].trimComponentCache()
+            from PySide6.QtGui import QPixmapCache
+            QPixmapCache.clear()
+        except Exception:
+            pass
+
+    mem_timer = QTimer(app)
+    mem_timer.setInterval(45000)
+    mem_timer.timeout.connect(_trim_ram)
+    mem_timer.start()
+
+    sys.exit(app.exec())
+
+if __name__ == "__main__":
+    main()
+
