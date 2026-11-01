@@ -78,7 +78,7 @@ Scope {
     property bool syncHistoryToGoogle: true
     property bool desktopLyricsEnabled: Qt.platform.os !== "windows"
     property bool taskbarLyricsEnabled: Qt.platform.os === "windows"
-    property string taskbarLyricsPlacement: "taskbar" // "taskbar" | "above"
+    property string taskbarLyricsPlacement: "above" // "above" | "taskbar"
     property string taskbarLyricsAlign: "center"      // "center" | "left" | "right"
     property string taskbarLyricsVPos: "bottom"       // "bottom" | "top"
     onTaskbarLyricsEnabledChanged: {
