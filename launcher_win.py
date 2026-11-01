@@ -1522,48 +1522,26 @@ def _create_nutsty_app_icon(icon_save_path: str) -> QIcon:
         return QIcon()
 
 
-_single_instance_mutex = None
-
-def _acquire_single_instance_mutex():
-    global _single_instance_mutex
+def _check_single_instance_or_activate(server_name="Nutsty_Single_Instance_IPC") -> bool:
     if sys.platform != "win32":
-        return None
+        return True
     try:
-        import ctypes
-        from ctypes import wintypes
-        kernel32 = ctypes.windll.kernel32
-        user32 = ctypes.windll.user32
-        mutex = kernel32.CreateMutexW(None, True, "Global\\Nutsty_SingleInstance_Mutex_Apple")
-        if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
-            sys.stderr.write("Nutsty instance already running. Restoring existing window.\n")
-            def _enum_cb(hwnd, lparam):
-                if user32.IsWindowVisible(hwnd):
-                    length = user32.GetWindowTextLengthW(hwnd)
-                    buf = ctypes.create_unicode_buffer(length + 1)
-                    user32.GetWindowTextW(hwnd, buf, length + 1)
-                    cls_buf = ctypes.create_unicode_buffer(256)
-                    user32.GetClassNameW(hwnd, cls_buf, 256)
-                    rect = wintypes.RECT()
-                    user32.GetWindowRect(hwnd, ctypes.byref(rect))
-                    w = rect.right - rect.left
-                    h = rect.bottom - rect.top
-                    if ("Nutsty" in buf.value or "QWindow" in cls_buf.value) and w >= 500:
-                        user32.ShowWindow(hwnd, 9)  # SW_RESTORE
-                        user32.SetForegroundWindow(hwnd)
-                        return False
-                return True
-            cb = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)(_enum_cb)
-            user32.EnumWindows(cb, 0)
-            sys.exit(0)
-        _single_instance_mutex = mutex
-        return mutex
+        from PySide6.QtNetwork import QLocalSocket
+        sock = QLocalSocket()
+        sock.connectToServer(server_name)
+        if sock.waitForConnected(250):
+            sock.write(b"SHOW")
+            sock.waitForBytesWritten(400)
+            sock.disconnectFromServer()
+            sys.stderr.write("Sent SHOW to active Nutsty instance. Exiting secondary launcher.\n")
+            return False
     except Exception as e:
-        sys.stderr.write(f"single instance error: {e}\n")
-        return None
+        sys.stderr.write(f"Single instance check fallback: {e}\n")
+    return True
 
 def main():
-
-    _acquire_single_instance_mutex()
+    if not _check_single_instance_or_activate():
+        sys.exit(0)
     os.environ["QT_QUICK_CONTROLS_STYLE"] = "Basic"
     sys.stderr.write(f"Nutsty starting. Active QSG_RHI_BACKEND: {os.environ.get('QSG_RHI_BACKEND', 'default')}\n")
 
@@ -1804,6 +1782,25 @@ def main():
             if target_w:
                 target_w.setProperty("visible", True)
                 bridge.restoreWindow(target_w)
+
+        # Single-instance server listener
+        from PySide6.QtNetwork import QLocalServer
+        single_inst_server = QLocalServer(app)
+        single_inst_server.removeServer("Nutsty_Single_Instance_IPC")
+        single_inst_server.listen("Nutsty_Single_Instance_IPC")
+
+        def _on_single_inst_conn():
+            s = single_inst_server.nextPendingConnection()
+            if s:
+                def _on_read():
+                    try:
+                        msg = bytes(s.readAll())
+                        if b"SHOW" in msg:
+                            _open_full_window()
+                    except Exception:
+                        pass
+                s.readyRead.connect(_on_read)
+        single_inst_server.newConnection.connect(_on_single_inst_conn)
 
         def _quit_nutsty_completely():
             try:
