@@ -4405,7 +4405,7 @@ Scope {
         running: Qt.platform.os === "windows" && win.taskbarLyricsEnabled && win.currentTrack !== null
         onTriggered: {
             if (typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.updateTaskbarPlayback === "function") {
-                __NutstyBridge.updateTaskbarPlayback(win.isPlaying, win.currentTime, win.totalDuration, win.currentTrack, win.activeLyrics);
+                __NutstyBridge.updateTaskbarPlayback(win.isPlaying, win.currentTime, win.totalDuration, win.currentTrack, null);
             }
         }
     }
@@ -4413,12 +4413,12 @@ Scope {
         target: win
         function onCurrentTrackChanged() {
             if (Qt.platform.os === "windows" && typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.updateTaskbarPlayback === "function") {
-                __NutstyBridge.updateTaskbarPlayback(win.isPlaying, win.currentTime, win.totalDuration, win.currentTrack, win.activeLyrics);
+                __NutstyBridge.updateTaskbarPlayback(win.isPlaying, win.currentTime, win.totalDuration, win.currentTrack, null);
             }
         }
         function onIsPlayingChanged() {
             if (Qt.platform.os === "windows" && typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.updateTaskbarPlayback === "function") {
-                __NutstyBridge.updateTaskbarPlayback(win.isPlaying, win.currentTime, win.totalDuration, win.currentTrack, win.activeLyrics);
+                __NutstyBridge.updateTaskbarPlayback(win.isPlaying, win.currentTime, win.totalDuration, win.currentTrack, null);
             }
         }
         function onActiveLyricsChanged() {

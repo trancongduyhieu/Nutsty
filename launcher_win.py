@@ -308,7 +308,7 @@ class NativeHitTestFilter(QAbstractNativeEventFilter):
         super().__init__()
         self._masks = {}  # hwnd -> (x, y, w, h)
         self._panel_hwnds = set()
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     def register_panel_hwnd(self, hwnd: int):
         with self._lock:
@@ -484,7 +484,7 @@ class TaskbarLyricsService:
         self._loop = None
         self._ws_thread = None
         self._stop_event = threading.Event()
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._last_lyrics_key = None
         self._send_lock = None
 
@@ -569,7 +569,7 @@ class TaskbarLyricsService:
     async def _send_raw(self, msg):
         await self._safe_send(msg)
 
-    def update_playback(self, playing: bool, position: float, duration: float, track, lyrics):
+    def update_playback(self, playing: bool, position: float, duration: float, track, lyrics=None):
         with self._lock:
             if hasattr(track, "toVariant"):
                 track = track.toVariant()
@@ -594,7 +594,11 @@ class TaskbarLyricsService:
                 "cover": cover
             }
             if lyrics is not None:
-                if hasattr(lyrics, "toVariant"):
+                if hasattr(lyrics, "isNull") and lyrics.isNull():
+                    lyrics = None
+                elif hasattr(lyrics, "isUndefined") and lyrics.isUndefined():
+                    lyrics = None
+                elif hasattr(lyrics, "toVariant"):
                     lyrics = lyrics.toVariant()
                 if isinstance(lyrics, list):
                     self._active_lyrics = lyrics
@@ -604,7 +608,11 @@ class TaskbarLyricsService:
 
     def update_lyrics(self, lyrics):
         with self._lock:
-            if hasattr(lyrics, "toVariant"):
+            if hasattr(lyrics, "isNull") and lyrics.isNull():
+                lyrics = None
+            elif hasattr(lyrics, "isUndefined") and lyrics.isUndefined():
+                lyrics = None
+            elif hasattr(lyrics, "toVariant"):
                 lyrics = lyrics.toVariant()
             if isinstance(lyrics, list):
                 self._active_lyrics = lyrics
@@ -617,12 +625,14 @@ class TaskbarLyricsService:
                 return
             with self._lock:
                 st = dict(self._playback_state)
-                fmt = self._format_lyrics()
+                raw_lyrics = list(self._active_lyrics)
                 track_id = st.get("trackId") if st else None
-                raw_len = len(self._active_lyrics)
-                first_t = self._active_lyrics[0].get("time") if raw_len > 0 and isinstance(self._active_lyrics[0], dict) else 0
-                last_t = self._active_lyrics[-1].get("time") if raw_len > 0 and isinstance(self._active_lyrics[-1], dict) else 0
+                raw_len = len(raw_lyrics)
+                first_t = raw_lyrics[0].get("time") if raw_len > 0 and isinstance(raw_lyrics[0], dict) else 0
+                last_t = raw_lyrics[-1].get("time") if raw_len > 0 and isinstance(raw_lyrics[-1], dict) else 0
                 lyrics_key = (track_id, raw_len, first_t, last_t)
+
+            fmt = self._format_lyrics(raw_lyrics) if raw_lyrics else None
 
             if st:
                 await self._safe_send(st)
@@ -632,9 +642,12 @@ class TaskbarLyricsService:
         except Exception as e:
             sys.stderr.write(f"TaskbarLyrics _push_state error: {e}\n")
 
-    def _format_lyrics(self):
-        with self._lock:
-            raw = list(self._active_lyrics)
+    def _format_lyrics(self, raw_lyrics=None):
+        if raw_lyrics is None:
+            with self._lock:
+                raw = list(self._active_lyrics)
+        else:
+            raw = list(raw_lyrics)
 
         if not raw:
             return None
