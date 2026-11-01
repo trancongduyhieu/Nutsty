@@ -1,11 +1,11 @@
 {
-  "wallpaper": "C:/Users/apple/AppData/Local/Packages/MicrosoftWindows.Client.CBS_cw5n1h2txyewy/LocalCache/Microsoft/IrisService/16589437814299591839/134373335584207623.jpg",
-  "meanLuminance": 0.405,
-  "brightRatio": 0.031,
-  "isLightArea": false,
+  "wallpaper": "C:/Users/apple/AppData/Local/Packages/MicrosoftWindows.Client.CBS_cw5n1h2txyewy/LocalCache/Microsoft/IrisService/2227870887077505774/134380020551717287.jpg",
+  "meanLuminance": 0.471,
+  "brightRatio": 0.528,
+  "isLightArea": true,
   "theme": "sapphire",
   "baseTextColor": "#f8fafc",
-  "highlightColor": "#89c9ff",
+  "highlightColor": "#97cbf4",
   "deadTextColor": "#f1f5f9",
   "shadowDirectional": "#a6020305",
   "shadowAmbient": "#66000000"

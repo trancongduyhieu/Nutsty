@@ -485,6 +485,8 @@ class TaskbarLyricsService:
         self._ws_thread = None
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
+        self._last_lyrics_track_id = None
+        self._lyrics_pushed = False
 
     def start(self):
         if not pc.IS_WINDOWS or not os.path.exists(self.exe_path):
@@ -587,6 +589,7 @@ class TaskbarLyricsService:
                 lyrics = lyrics.toVariant()
             if isinstance(lyrics, list):
                 self._active_lyrics = lyrics
+                self._lyrics_pushed = False
         if self._ws and self._loop and self._loop.is_running():
             asyncio.run_coroutine_threadsafe(self._push_state(), self._loop)
 
@@ -598,7 +601,10 @@ class TaskbarLyricsService:
                     fmt = self._format_lyrics()
                 if st:
                     await self._ws.send(json.dumps(st))
-                if fmt:
+                track_id = st.get("trackId") if st else None
+                if fmt and (track_id != self._last_lyrics_track_id or not self._lyrics_pushed):
+                    self._last_lyrics_track_id = track_id
+                    self._lyrics_pushed = True
                     await self._ws.send(json.dumps({"type": "push_lyrics", "lyrics": fmt}))
         except Exception:
             pass
@@ -1516,7 +1522,48 @@ def _create_nutsty_app_icon(icon_save_path: str) -> QIcon:
         return QIcon()
 
 
-def main():
+_single_instance_mutex = None
+
+def _acquire_single_instance_mutex():
+    global _single_instance_mutex
+    if sys.platform != "win32":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+        kernel32 = ctypes.windll.kernel32
+        user32 = ctypes.windll.user32
+        mutex = kernel32.CreateMutexW(None, True, "Global\\Nutsty_SingleInstance_Mutex_Apple")
+        if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+            sys.stderr.write("Nutsty instance already running. Restoring existing window.\n")
+            def _enum_cb(hwnd, lparam):
+                if user32.IsWindowVisible(hwnd):
+                    length = user32.GetWindowTextLengthW(hwnd)
+                    buf = ctypes.create_unicode_buffer(length + 1)
+                    user32.GetWindowTextW(hwnd, buf, length + 1)
+                    cls_buf = ctypes.create_unicode_buffer(256)
+                    user32.GetClassNameW(hwnd, cls_buf, 256)
+                    rect = wintypes.RECT()
+                    user32.GetWindowRect(hwnd, ctypes.byref(rect))
+                    w = rect.right - rect.left
+                    h = rect.bottom - rect.top
+                    if ("Nutsty" in buf.value or "QWindow" in cls_buf.value) and w >= 500:
+                        user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                        user32.SetForegroundWindow(hwnd)
+                        return False
+                return True
+            cb = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)(_enum_cb)
+            user32.EnumWindows(cb, 0)
+            sys.exit(0)
+        _single_instance_mutex = mutex
+        return mutex
+    except Exception as e:
+        sys.stderr.write(f"single instance error: {e}\n")
+        return None
+
+def main():
+
+    _acquire_single_instance_mutex()
     os.environ["QT_QUICK_CONTROLS_STYLE"] = "Basic"
     sys.stderr.write(f"Nutsty starting. Active QSG_RHI_BACKEND: {os.environ.get('QSG_RHI_BACKEND', 'default')}\n")
 
