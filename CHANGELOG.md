@@ -18,6 +18,8 @@
   *Fixed stale/hung companion process handling for taskbar lyrics.*
 - Exe build trong `dist\` chạy ở quyền Low Integrity (do nhãn thừa kế từ workspace sandbox) nên không ghi được `%LOCALAPPDATA%` và không mở được cổng `9012`. `build_exe.bat` nay tự đặt lại nhãn Medium sau khi đóng gói.
   *`build_exe.bat` now resets the integrity label to Medium so the packaged app can write AppData and bind localhost:9012.*
+- Kẹt tiến trình chuyển bài (Next / Prev / Dislike) khi bài đang phát lệch khỏi hàng đợi: trong `components/playback_engine.js`, `playNext()` và `playPrev()` nay tự động chuyển sang bài đầu tiên của hàng đợi thay vì hủy lệnh khi `curIdx === -1`; nút Dislike lập tức dừng bài bị ghét và chuyển bài kế tiếp.
+  *Fixed playback freeze on Next, Prev, and Dislike when the playing track is not found in the active queue: `playNext` and `playPrev` now fallback to the queue's first track instead of silently aborting, and Dislike immediately advances playback.*
 
 ### Ghi chú / Notes
 - Linux (Niri / CachyOS): hành vi Desktop lyrics (layer-shell) giữ nguyên, các thay đổi Windows nằm sau nhánh `Qt.platform.os === "windows"` hoặc trong `launcher_win.py`.

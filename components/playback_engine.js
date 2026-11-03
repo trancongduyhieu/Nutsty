@@ -335,9 +335,10 @@ function playNext(win) {
     }
     if (!win.currentTrack || !win.currentTracks || win.currentTracks.length === 0) return;
     var curIdx = win.currentTracks.findIndex(t => win.isSameTrack(t, win.currentTrack));
-    if (curIdx === -1) return;
     var nextIdx = 0;
-    if (win.isShuffle && win.currentTracks.length > 1) {
+    if (curIdx === -1) {
+        nextIdx = 0;
+    } else if (win.isShuffle && win.currentTracks.length > 1) {
         nextIdx = curIdx;
         while (nextIdx === curIdx) {
             nextIdx = Math.floor(Math.random() * win.currentTracks.length);
@@ -369,8 +370,7 @@ function playPrev(win) {
         return;
     }
     var curIdx = win.currentTracks.findIndex(t => win.isSameTrack(t, win.currentTrack));
-    if (curIdx === -1) return;
-    var prevIdx = (curIdx - 1 + win.currentTracks.length) % win.currentTracks.length;
+    var prevIdx = (curIdx === -1 || curIdx === 0) ? (win.currentTracks.length - 1) : (curIdx - 1);
     var prevTrk = win.currentTracks[prevIdx];
     if (prevTrk) {
         if ((prevTrk.path && prevTrk.path.startsWith("ytdl://")) || prevTrk.videoId) {
@@ -472,7 +472,13 @@ function handleDislikedTrack(win, trk) {
         }
     }
     win.browsingTracks = newBrowse;
-    win.playNext();
+    if (win.currentTracks && win.currentTracks.length > 0) {
+        win.playNext();
+    } else {
+        win.isPlaying = false;
+        win.currentTrack = null;
+        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
+    }
 }
 
 function insertTrackPlayNext(win, trk) {
