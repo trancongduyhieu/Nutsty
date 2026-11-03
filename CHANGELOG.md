@@ -9,6 +9,8 @@
   *Desktop lyrics are available again on Windows with their own toggle in Settings.*
 - **Lời bài hát trên và trong Taskbar (Windows)**: Dải lyric karaoke theo âm tiết trên thanh tác vụ (vị trí "above" / "taskbar"), công tắc riêng tách khỏi Desktop lyrics.
   *Syllable-level karaoke lyrics above and inside the Windows taskbar, with a separate toggle.*
+- **Hiệu ứng 3 Dấu Chấm Đếm Ngược Dạo Nhạc (Interlude Countdown Dots `• • •`)**: Lấy cảm hứng từ SimpMusic & Apple Music, khi bài hát có khúc dạo đầu hoặc đoạn nghỉ solo nhạc cụ giữa các câu hát ($\ge 3.5\text{s}$), hệ thống tự động chèn dải 3 hạt ngọc phát sáng đếm ngược 3... 2... 1... nhấp nháy chuyển màu theo `accentColor` trước khi câu hát tiếp theo xuất hiện. Hoạt động đồng bộ trên Tab Lời bài hát, Amberol player và Desktop lyrics.
+  *SimpMusic / Apple Music style interlude countdown dots (`• • •`): automatically displays 3 glowing countdown beads during instrumental intros or breaks ($\ge 3.5\text{s}$), synchronized across Now Playing lyrics, Amberol view, and Desktop lyrics.*
 - `CHANGELOG.md` và bài học build Windows `.agents/rules/05-windows-build-and-runtime-lessons.md`.
 
 ### Sửa lỗi / Fixed

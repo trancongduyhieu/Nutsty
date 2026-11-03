@@ -182,13 +182,58 @@ Item {
             layer.enabled: false
 
 
+            readonly property bool isInterlude: !!(modelData && modelData.isInterlude)
+
+            // ── 0. SimpMusic / Apple Music Interlude Countdown Dots (• • •) ───
+            Row {
+                id: interludeDotsRow
+                visible: lyricRow.isInterlude
+                spacing: 14
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                height: 32
+
+                Repeater {
+                    model: (modelData && modelData.words && modelData.words.length === 3) ? modelData.words : 3
+
+                    Rectangle {
+                        id: dotBall
+                        readonly property real dotStart: (typeof modelData === "object" && modelData.start !== undefined) ? modelData.start : 0
+                        readonly property real dotEnd: (typeof modelData === "object" && modelData.end !== undefined) ? modelData.end : 0
+                        readonly property bool isLit: root.currentTime >= dotStart
+                        readonly property bool isPulse: root.currentTime >= dotStart && root.currentTime < dotEnd
+
+                        width: 12
+                        height: 12
+                        radius: 6
+                        anchors.verticalCenter: parent.verticalCenter
+                        scale: isPulse ? 1.40 : (isLit ? 1.18 : 1.0)
+                        color: isLit ? root.colHighlight : Qt.rgba(255, 255, 255, 0.28)
+
+                        Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutBack } }
+                        Behavior on color { ColorAnimation { duration: 180 } }
+
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: parent.width + 12
+                            height: parent.height + 12
+                            radius: width / 2
+                            color: root.colHighlight
+                            opacity: dotBall.isPulse ? 0.45 : (dotBall.isLit ? 0.20 : 0.0)
+                            z: -1
+                            Behavior on opacity { NumberAnimation { duration: 180 } }
+                        }
+                    }
+                }
+            }
+
             // ── 1. Syllable Engine (AppleMusicWordFlow) ────────────────────────
             // Loads ONLY for genuine syllable lines (hasWords) around active line.
             // Starts with words dim (#757a88, layer 1) and lights up word-by-word into white bloom (layer 2).
             Loader {
                 id: flowLoader
                 anchors.fill: parent
-                active: lyricRow.hasWords && (lyricRow.dist >= -1 && lyricRow.dist <= 1)
+                active: !lyricRow.isInterlude && lyricRow.hasWords && (lyricRow.dist >= -1 && lyricRow.dist <= 1)
                 visible: active && (lyricRow.isCurrent || lyricRow.isHeldNoteActive)
 
                 sourceComponent: Component {
@@ -214,7 +259,7 @@ Item {
                 id: staticTxt
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.verticalCenterOffset: lyricRow.hasRomanized ? -9 : 0
-                visible: !flowLoader.visible
+                visible: !lyricRow.isInterlude && !flowLoader.visible
                 text: (modelData && modelData.text) ? modelData.text : ""
                 font.family: Theme.fontFamily
                 font.pixelSize: 28
@@ -237,7 +282,7 @@ Item {
                 anchors.topMargin: 0
                 anchors.left: parent.left
                 anchors.right: parent.right
-                visible: lyricRow.hasRomanized
+                visible: !lyricRow.isInterlude && lyricRow.hasRomanized
                 text: (modelData && modelData.romanized) ? modelData.romanized : ""
                 font.family: Theme.fontFamily
                 font.pixelSize: 14

@@ -685,7 +685,7 @@ class TaskbarLyricsService:
         if not raw:
             return None
 
-        has_syllables = any(isinstance(line, dict) and line.get("words") and len(line["words"]) > 0 for line in raw)
+        has_syllables = any(isinstance(line, dict) and not line.get("isInterlude") and line.get("words") and len(line["words"]) > 0 for line in raw)
         
         first_start = 0.0
         for line in raw:

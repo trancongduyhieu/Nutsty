@@ -1174,9 +1174,93 @@ def _enrich_with_romanization(lines):
     return lines
 
 
+def _insert_interlude_dots(lines):
+    """
+    SimpMusic / Apple Music style interlude countdown dots:
+    During intro (>= 3.5s) or instrumental gaps (>= 3.5s) between lyric lines,
+    inserts an interlude line with 3 countdown syllable dots ('• • •').
+    Each dot counts down during the last 3.0s before the next vocal line starts.
+    """
+    if not lines or not isinstance(lines, list) or len(lines) == 0:
+        return lines
+
+    if not any(isinstance(l, dict) and l.get("time", 0) > 0 for l in lines):
+        return lines
+
+    result = []
+
+    # 1. Check Intro gap before first vocal line
+    first_line = lines[0]
+    if isinstance(first_line, dict) and "time" in first_line:
+        first_time = float(first_line.get("time") or 0.0)
+        if first_time >= 3.5:
+            cd_start = max(0.5, first_time - 3.0)
+            dot_dur = (first_time - cd_start) / 3.0
+            interlude_item = {
+                "time": round(max(0.0, first_time - 6.0), 3),
+                "endTime": round(first_time, 3),
+                "text": "• • •",
+                "isInterlude": True,
+                "hasWords": True,
+                "isSynthetic": False,
+                "words": [
+                    {"text": "•", "start": round(cd_start, 3), "end": round(cd_start + dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": False},
+                    {"text": "•", "start": round(cd_start + dot_dur, 3), "end": round(cd_start + 2 * dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": False},
+                    {"text": "•", "start": round(cd_start + 2 * dot_dur, 3), "end": round(first_time, 3), "duration": round(dot_dur, 3), "isHeld": False},
+                ],
+                "romanized": ""
+            }
+            result.append(interlude_item)
+
+    for i, line in enumerate(lines):
+        result.append(line)
+        if not isinstance(line, dict):
+            continue
+
+        if i + 1 < len(lines) and isinstance(lines[i + 1], dict):
+            next_line = lines[i + 1]
+            cur_time = float(line.get("time") or 0.0)
+            next_time = float(next_line.get("time") or 0.0)
+
+            cur_end = float(line.get("endTime") or 0.0)
+            if cur_end <= cur_time:
+                words = line.get("words") or []
+                if words and isinstance(words, list):
+                    w_ends = [float(w.get("end") or 0.0) for w in words if isinstance(w, dict) and "end" in w]
+                    if w_ends:
+                        cur_end = max(w_ends)
+                if cur_end <= cur_time:
+                    txt_len = len(line.get("text") or "")
+                    cur_end = cur_time + min(5.0, max(2.2, txt_len * 0.25))
+
+            gap = next_time - cur_end
+            if gap >= 3.5:
+                cd_start = max(cur_end + 0.3, next_time - 3.0)
+                dot_dur = (next_time - cd_start) / 3.0
+                interlude_start = max(cur_end + 0.2, next_time - 6.0)
+                interlude_item = {
+                    "time": round(interlude_start, 3),
+                    "endTime": round(next_time, 3),
+                    "text": "• • •",
+                    "isInterlude": True,
+                    "hasWords": True,
+                    "isSynthetic": False,
+                    "words": [
+                        {"text": "•", "start": round(cd_start, 3), "end": round(cd_start + dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": False},
+                        {"text": "•", "start": round(cd_start + dot_dur, 3), "end": round(cd_start + 2 * dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": False},
+                        {"text": "•", "start": round(cd_start + 2 * dot_dur, 3), "end": round(next_time, 3), "duration": round(dot_dur, 3), "isHeld": False},
+                    ],
+                    "romanized": ""
+                }
+                result.append(interlude_item)
+
+    return result
+
+
 def get_lyrics(title, artist=None, video_id=None, file_path=None, duration_sec=None):
     res = _get_lyrics_raw(title, artist, video_id, file_path, duration_sec)
-    return _enrich_with_romanization(res)
+    res = _enrich_with_romanization(res)
+    return _insert_interlude_dots(res)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Cache write helpers
