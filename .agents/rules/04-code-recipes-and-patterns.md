@@ -95,36 +95,21 @@ RoundedImage {
 ```
 - **Lưu ý**: BẮT BUỘC dùng `RoundedImage` thay vì tự tạo `Rectangle mask + MultiEffect`. Tự động downscale HiDPI 2x tiết kiệm 99% RAM, và tiêu tốn 0 byte VRAM shader khi ảnh chưa tải.
 
-
 ---
 
-## Pattern 4: Single-Instance Độc Quyền Tuyệt Đối (Win32 Mutex + QLocalServer IPC)
-- **Bài toán**: Ngăn chặn 100% hiện tượng chạy 2 tiến trình Nutsty song song khi người dùng nhấp đúp nhanh vào shortcut, triệt tiêu xung đột WebSocket port 9012, giảm 50% RAM (<250MB) và đưa cửa sổ đang chạy lên tiền cảnh.
+## Pattern 4: Đồng Bộ Điểm Mới (What's New) & Quy Chuẩn Ngôn Từ Thân Thiện
+- **Bài toán**: Tự động đồng bộ nội dung modal Điểm mới (`WhatsNewModal.qml`) từ `CHANGELOG.md` theo phiên bản hiện tại, loại bỏ hoàn toàn việc gán cứng nội dung vào file QML mỗi khi phát hành bản mới.
 - **Mã nguồn chuẩn**:
-```python
-_single_instance_mutex = None
-
-def _check_single_instance_or_activate(server_name="Nutsty_Single_Instance_IPC") -> bool:
-    global _single_instance_mutex
-    if sys.platform != "win32": return True
-    import ctypes
-    kernel32 = ctypes.windll.kernel32
-    # Mutex session-scoped (Local\) bảo vệ độc quyền cấp hạt nhân Windows
-    _single_instance_mutex = kernel32.CreateMutexW(None, True, r"Local\Nutsty_Master_SingleInstance_Mutex_Apple")
-    if kernel32.GetLastError() == 183: # ERROR_ALREADY_EXISTS
-        try:
-            from PySide6.QtNetwork import QLocalSocket
-            for _ in range(15):
-                sock = QLocalSocket()
-                sock.connectToServer(server_name)
-                if sock.waitForConnected(200):
-                    sock.write(b"SHOW")
-                    sock.waitForBytesWritten(500)
-                    sock.disconnectFromServer()
-                    break
-                import time; time.sleep(0.2)
-        except Exception: pass
-        return False
-    return True
+```qml
+FileView {
+    id: changelogFileView
+    path: ((typeof win !== "undefined" && win.appDir) ? win.appDir : Quickshell.env("HOME") + "/Applications/FrostifyLocal") + "/CHANGELOG.md"
+    watchChanges: true
+    onFileChanged: { this.reload(); root.refreshChangelog(); }
+}
 ```
-- **Lưu ý**: Khởi tạo mutex ngay đầu `main()` trước khi tải Qt Quick / QML. Server `QLocalServer` bắt buộc listen ngay khi tạo `QApplication(sys.argv)` để tiến trình phụ kích hoạt tức thì (< 300ms) rồi thoát êm.
+- **Quy chuẩn ngôn từ (Tuyệt đối không lạm dụng thuật ngữ)**:
+  - `CHANGELOG.md` là nguồn chuẩn duy nhất (SSOT).
+  - Mỗi mục ghi dạng `- **Tính năng thân thiện**: Giải thích dễ hiểu giá trị mang lại cho người dùng bình thường`.
+  - Tuyệt đối CẤM lạm dụng thuật ngữ kỹ thuật (như "IPC", "Quickshell C++", "PySide6", "GLSL shader", "MultiEffect Gaussian Glow", "rolling wave lift -2.0px"...).
+  - Tuyệt đối CẤM đưa các bước tải/cài đặt (như "Bước 1", "Bước 2", "Bước 3") vào changelog hiển thị trong ứng dụng. Bộ lọc `parseChangelogText()` sẽ tự động bỏ qua nếu phát hiện.

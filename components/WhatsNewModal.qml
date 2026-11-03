@@ -2,6 +2,8 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls.Basic
 import QtQuick.Effects
+import Quickshell
+import Quickshell.Io
 import "."
 
 Item {
@@ -22,8 +24,134 @@ Item {
     property Item backgroundSourceItem: null
     property string versionString: (typeof win !== "undefined" && win.appVersion) ? win.appVersion : "1.0.6"
     property string customReleaseNotes: ""
+    property var changelogItems: []
 
     signal closeRequested()
+
+    FileView {
+        id: changelogFileView
+        path: {
+            var dir = (typeof win !== "undefined" && win.appDir) ? win.appDir : (Quickshell.env("HOME") + "/Applications/FrostifyLocal");
+            return dir + "/CHANGELOG.md";
+        }
+        watchChanges: true
+        onFileChanged: {
+            this.reload();
+            root.refreshChangelog();
+        }
+        onLoadedChanged: {
+            if (this.loaded) root.refreshChangelog();
+        }
+        Component.onCompleted: {
+            if (this.loaded) root.refreshChangelog();
+        }
+    }
+
+    function parseChangelogText(rawText, targetVer) {
+        if (!rawText || typeof rawText !== "string") return [];
+        var lines = rawText.split(/\r?\n/);
+        var targetNorm = String(targetVer || "").replace(/^[vV]/, "").trim();
+
+        var hasHeadings = lines.some(function(l) {
+            return /^##\s+\[?v?[\d\.]+/.test(l.trim());
+        });
+        var extractedLines = [];
+
+        if (hasHeadings) {
+            var capturing = false;
+            var foundAny = false;
+            for (var i = 0; i < lines.length; i++) {
+                var line = lines[i].trim();
+                var hMatch = line.match(/^##\s+\[?v?([0-9\.\-_a-zA-Z]+)\]?/);
+                if (hMatch) {
+                    var ver = hMatch[1].replace(/^[vV]/, "").trim();
+                    if (targetNorm && ver.indexOf(targetNorm) === 0) {
+                        capturing = true;
+                        foundAny = true;
+                        continue;
+                    } else if (capturing) {
+                        break;
+                    }
+                } else if (capturing) {
+                    extractedLines.push(lines[i]);
+                }
+            }
+            if (!foundAny) {
+                capturing = false;
+                for (var j = 0; j < lines.length; j++) {
+                    var l2 = lines[j].trim();
+                    if (/^##\s+\[?v?[0-9]/.test(l2)) {
+                        if (!capturing) {
+                            capturing = true;
+                            continue;
+                        } else {
+                            break;
+                        }
+                    } else if (capturing) {
+                        extractedLines.push(lines[j]);
+                    }
+                }
+            }
+        } else {
+            extractedLines = lines;
+        }
+
+        var items = [];
+        for (var k = 0; k < extractedLines.length; k++) {
+            var rawL = extractedLines[k].trim();
+            if (!rawL || rawL.startsWith("#") || rawL.startsWith("---")) continue;
+            // Ignore installation instructions or step-by-step download guides
+            if (/^[-*•]?\s*\**bước\s*\d+/i.test(rawL)) continue;
+            if (/^[-*•]\s+/.test(rawL)) {
+                var content = rawL.replace(/^[-*•]\s+/, "").trim();
+                var title = "";
+                var detail = "";
+
+                var boldMatch = content.match(/^\*\*([^*]+)\*\*[:\s\-—]+(.*)$/);
+                if (boldMatch) {
+                    title = boldMatch[1].trim();
+                    detail = boldMatch[2].trim();
+                } else {
+                    var colonIdx = content.indexOf(":");
+                    if (colonIdx > 0 && colonIdx < 60) {
+                        title = content.substring(0, colonIdx).replace(/\*\*/g, "").trim();
+                        detail = content.substring(colonIdx + 1).trim();
+                    } else {
+                        title = content.replace(/\*\*/g, "").trim();
+                        detail = "";
+                    }
+                }
+                if (title) {
+                    items.push({ "title": title, "detail": detail });
+                }
+            }
+        }
+        return items;
+    }
+
+    function refreshChangelog() {
+        var items = [];
+        if (root.customReleaseNotes && root.customReleaseNotes.trim() !== "") {
+            items = parseChangelogText(root.customReleaseNotes, root.versionString);
+        }
+        if ((!items || items.length === 0) && changelogFileView.loaded && changelogFileView.text()) {
+            items = parseChangelogText(changelogFileView.text(), root.versionString);
+        }
+        if (!items || items.length === 0) {
+            // Graceful fallback
+            items = [
+                {
+                    "title": I18n.tr("Cải tiến và tối ưu hóa hiệu năng", "Performance improvements & stability"),
+                    "detail": I18n.tr("Cập nhật phiên bản mới nhất với các tính năng cải tiến và sửa lỗi hệ thống.", "Latest release with general improvements and bug fixes.")
+                }
+            ];
+        }
+        root.changelogItems = items;
+    }
+
+    onCustomReleaseNotesChanged: refreshChangelog()
+    onVersionStringChanged: refreshChangelog()
+    Component.onCompleted: refreshChangelog()
 
     function openModal(notes) {
         closeTimer.stop();
@@ -33,6 +161,7 @@ Item {
         } else {
             root.customReleaseNotes = "";
         }
+        root.refreshChangelog();
         root.isOpen = true;
     }
 
@@ -65,8 +194,8 @@ Item {
     // Modal Main Floating Card: LiquidGlass Resin Container (Planar Minimalist - Clean White Space)
     LiquidGlass {
         id: dialog
-        width: Math.min(460, parent.width - 32)
-        height: Math.min(550, parent.height - 48)
+        width: Math.min(480, parent.width - 32)
+        height: Math.min(560, parent.height - 48)
         anchors.centerIn: parent
         radius: 20
         displacement: 22.0
@@ -143,7 +272,7 @@ Item {
                         Text {
                             id: verTagTxt
                             anchors.centerIn: parent
-                            text: "v" + (root.versionString || "1.0.5")
+                            text: "v" + (root.versionString || "1.0.6")
                             font.family: Theme.fontFamily
                             font.pixelSize: 10
                             font.bold: true
@@ -190,7 +319,7 @@ Item {
             }
 
             // =================================================================
-            // Body: Planar List of Highlights (Clean whitespace, no dividers, no scrollbar)
+            // Body: Dynamic Planar List from CHANGELOG.md (Clean whitespace, no borders)
             // =================================================================
             Item {
                 Layout.fillWidth: true
@@ -202,149 +331,53 @@ Item {
                     contentHeight: contentCol.implicitHeight
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
+                    flickableDirection: Flickable.VerticalFlick
+                    ScrollBar.vertical: LiquidScrollBar {}
 
                     ColumnLayout {
                         id: contentCol
                         width: flick.width
-                        spacing: 12
+                        spacing: 14
 
-                        // Item 1: Romanization
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 3
+                        Repeater {
+                            model: root.changelogItems
+                            delegate: ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 3
 
-                            RowLayout {
-                                spacing: 8
+                                RowLayout {
+                                    spacing: 8
+                                    Layout.fillWidth: true
 
-                                Rectangle {
-                                    width: 6
-                                    height: 6
-                                    radius: 3
-                                    color: root.accentColor
+                                    Rectangle {
+                                        width: 6
+                                        height: 6
+                                        radius: 3
+                                        color: root.accentColor
+                                        Layout.alignment: Qt.AlignVCenter
+                                    }
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: modelData.title || ""
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 13
+                                        font.bold: true
+                                        color: Theme.textPrimary
+                                        wrapMode: Text.WordWrap
+                                    }
                                 }
 
                                 Text {
-                                    text: I18n.tr("Phiên âm lời bài hát Latinh (Romanization)", "Lyrics Romanization (Romaji, Romaja, Pinyin)")
+                                    Layout.fillWidth: true
+                                    text: modelData.detail || ""
                                     font.family: Theme.fontFamily
-                                    font.pixelSize: 13
-                                    font.bold: true
-                                    color: Theme.textPrimary
+                                    font.pixelSize: 11
+                                    color: Theme.textSecondary
+                                    wrapMode: Text.WordWrap
+                                    Layout.leftMargin: 14
+                                    visible: !!modelData.detail && modelData.detail.trim() !== ""
                                 }
-                            }
-
-                            Text {
-                                Layout.fillWidth: true
-                                text: I18n.tr("Tự động nhận diện và phiên âm Romaji (Nhật), Romaja (Hàn), Pinyin (Trung) cho toàn bộ bài hát; hiển thị dòng phát âm phụ thanh lịch dưới câu gốc trong Now Playing View và Desktop Lyrics.", "Automatic Latin-script pronunciation for Japanese, Korean, and Chinese lyrics without altering timings; renders an elegant secondary row in Now Playing and Desktop Lyrics.")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 11
-                                color: Theme.textSecondary
-                                wrapMode: Text.WordWrap
-                                Layout.leftMargin: 14
-                            }
-                        }
-
-                        // Item 2: Deep Obsidian PlayerBar
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 3
-
-                            RowLayout {
-                                spacing: 8
-
-                                Rectangle {
-                                    width: 6
-                                    height: 6
-                                    radius: 3
-                                    color: root.accentColor
-                                }
-
-                                Text {
-                                    text: I18n.tr("Kính lỏng PlayerBar Deep Obsidian", "Deep Obsidian Frosted PlayerBar")
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 13
-                                    font.bold: true
-                                    color: Theme.textPrimary
-                                }
-                            }
-
-                            Text {
-                                Layout.fillWidth: true
-                                text: I18n.tr("Bổ sung lớp đế sẫm màu chống lem chữ bên dưới khi cuộn danh sách bài hát; hiệu ứng khúc xạ quang học và phản xạ viền tinh tế, chuẩn xác theo ngôn ngữ thiết kế Dark Glass.", "Introduces a deep obsidian foundation eliminating background text bleed-through while scrolling; preserves pristine crystal edge refractions and chromatic rim salience.")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 11
-                                color: Theme.textSecondary
-                                wrapMode: Text.WordWrap
-                                Layout.leftMargin: 14
-                            }
-                        }
-
-                        // Item 3: MediaCoverSurface Unified Module
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 3
-
-                            RowLayout {
-                                spacing: 8
-
-                                Rectangle {
-                                    width: 6
-                                    height: 6
-                                    radius: 3
-                                    color: root.accentColor
-                                }
-
-                                Text {
-                                    text: I18n.tr("Hợp nhất Bề mặt Bìa & Sửa lỗi Ảnh Retina", "Unified MediaCoverSurface & HD Retina Art")
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 13
-                                    font.bold: true
-                                    color: Theme.textPrimary
-                                }
-                            }
-
-                            Text {
-                                Layout.fillWidth: true
-                                text: I18n.tr("Đóng gói bề mặt bìa MediaCoverSurface chuẩn Deep Module; tự động bo tròn 16px video canvas Apple Music / Spotify không lem 4 góc, và khắc phục triệt để lỗi không load ảnh bìa Retina.", "Encapsulated MediaCoverSurface deep module; perfectly clips Apple Music & Spotify video canvas within 16px rounded corners with zero VRAM leaks, and resolves HD Retina artwork loading.")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 11
-                                color: Theme.textSecondary
-                                wrapMode: Text.WordWrap
-                                Layout.leftMargin: 14
-                            }
-                        }
-
-                        // Item 4: Sleep Timer Controller
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 3
-
-                            RowLayout {
-                                spacing: 8
-
-                                Rectangle {
-                                    width: 6
-                                    height: 6
-                                    radius: 3
-                                    color: root.accentColor
-                                }
-
-                                Text {
-                                    text: I18n.tr("Bộ đếm Hẹn giờ ngủ Cosine Fade", "Smart Sleep Timer with Cosine Fade")
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 13
-                                    font.bold: true
-                                    color: Theme.textPrimary
-                                }
-                            }
-
-                            Text {
-                                Layout.fillWidth: true
-                                text: I18n.tr("Tách rời bộ điều khiển hẹn giờ ngủ SleepTimerController; hẹn giờ tắt nhạc linh hoạt từ 15 đến 60 phút hoặc khi hết bài, hạ âm lượng êm dịu 5s trước khi dừng.", "Encapsulated SleepTimerController deep module; flexible countdown options with smooth 5-second cosine volume fade before pausing.")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 11
-                                color: Theme.textSecondary
-                                wrapMode: Text.WordWrap
-                                Layout.leftMargin: 14
                             }
                         }
                     }

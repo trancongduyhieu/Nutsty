@@ -1,36 +1,41 @@
 # Changelog
 
-Định dạng theo [Keep a Changelog](https://keepachangelog.com/). Phiên bản theo `APP_VERSION` trong `backend/platform_compat.py`.
+Tất cả các tính năng mới và cải tiến của Nutsty được lưu trữ tại đây.
 
-## [1.0.6] - 2026-11-03
+## [1.0.6] - 2026-11-04
 
-### Thêm mới / Added
-- **Lời bài hát trên Desktop (Windows)**: Bật lại lyric nổi trên màn hình desktop cho Windows, có công tắc riêng trong Cài đặt. Trước đây bị ép tắt trên Windows.
-  *Desktop lyrics are available again on Windows with their own toggle in Settings.*
-- **Lời bài hát trên và trong Taskbar (Windows)**: Dải lyric karaoke theo âm tiết trên thanh tác vụ (vị trí "above" / "taskbar"), công tắc riêng tách khỏi Desktop lyrics.
-  *Syllable-level karaoke lyrics above and inside the Windows taskbar, with a separate toggle.*
-- **Bộ máy Lời bài hát Lướt Sóng 1-by-1 & Hào quang Gaussian (Apple Music / AMLL Physics)**: Nâng cấp toàn diện bộ máy hiển thị lời bài hát theo đúng chuẩn Apple Music:
-  - **Quét sáng từng ký tự (1-by-1 Character Sweep)**: Ánh sáng quét mượt từ trái sang phải qua từng chữ cái (alpha 0.38 sang 1.0) thay vì đổi màu giật cục cả từ.
-  - **Lướt sóng lăn tăn (Rolling Wave Lift)**: Ký tự được nhấc bổng -2.0px khi tia sáng chạm tới và giữ nguyên ở vị trí cao, tạo thành con sóng uốn lượn liên tục dọc câu hát.
-  - **Hào quang Gaussian MultiEffect Glow**: Ứng dụng bóng đổ quang học phần cứng `MultiEffect Shadow` mềm mại tỏa đều quanh thân chữ đang hát và 3 hạt ngọc đếm nhịp.
-  - **3 Hạt ngọc đếm nhịp không biến mất**: Dải 3 hạt ngọc đếm ngược khi kết thúc sẽ giữ nguyên vị trí ở độ mờ 0.35 như một câu hát đã qua, không bị co biến mất để lại khoảng trống.
-  *Comprehensive Apple Music / AMLL physics engine upgrade: left-to-right 1-by-1 character sweep, persistent rolling wave lift (-2.0px), hardware-accelerated Gaussian MultiEffect bloom glow, and persistent 3-dot interlude beads.*
-- `CHANGELOG.md` và bài học build Windows `.agents/rules/05-windows-build-and-runtime-lessons.md`.
+### Added
+- **Lời bài hát trên màn hình & thanh Taskbar**: Bật/tắt lời bài hát nổi tự do trên màn hình máy tính hoặc hiển thị chữ chạy ngay trên thanh tác vụ bên dưới màn hình Windows.
+- **Lời bài hát lướt sóng kiểu Apple Music**: Từng chữ phát sáng và nhấc nổi nhịp nhàng theo đúng giọng ca sĩ đang hát thay vì nhảy giật từng dòng.
+- **Chấm tròn đếm ngược dạo nhạc**: Khi bài hát có đoạn nhạc dạo đầu hoặc giữa bài, 3 dấu chấm sẽ phát sáng đếm ngược giúp bạn biết chính xác khi nào ca sĩ cất giọng.
 
-### Sửa lỗi / Fixed
-- Thu Nutsty về widget không còn chặn chuột trên desktop: widget Windows là cửa sổ 216x216, kéo thả và bấm đúp hoạt động; cửa sổ lyrics toàn màn hình chỉ nhận chuột trong khung chữ (`SetWindowRgn`).
-  *Minimising to the widget no longer blocks the desktop mouse; the widget is draggable and double-click opens the app.*
-- Taskbar lyrics không hiện vì `TaskbarLyrics.exe` mồ côi/treo: app kiểm tra cổng `9012`, dọn tiến trình treo một lần khi khởi động và không còn giết-bật lại tiến trình của chính nó.
-  *Fixed stale/hung companion process handling for taskbar lyrics.*
-- Exe build trong `dist\` chạy ở quyền Low Integrity (do nhãn thừa kế từ workspace sandbox) nên không ghi được `%LOCALAPPDATA%` và không mở được cổng `9012`. `build_exe.bat` nay tự đặt lại nhãn Medium sau khi đóng gói.
-  *`build_exe.bat` now resets the integrity label to Medium so the packaged app can write AppData and bind localhost:9012.*
-- Kẹt tiến trình chuyển bài (Next / Prev / Dislike) khi bài đang phát lệch khỏi hàng đợi: trong `components/playback_engine.js`, `playNext()` và `playPrev()` nay tự động chuyển sang bài đầu tiên của hàng đợi thay vì hủy lệnh khi `curIdx === -1`; nút Dislike lập tức dừng bài bị ghét và chuyển bài kế tiếp.
-  *Fixed playback freeze on Next, Prev, and Dislike when the playing track is not found in the active queue: `playNext` and `playPrev` now fallback to the queue's first track instead of silently aborting, and Dislike immediately advances playback.*
+### Fixed
+- **Chuyển bài mượt mà**: Bấm "Không thích" sẽ tự động bỏ qua và phát bài tiếp theo ngay lập tức, không còn bị khựng danh sách phát.
+- **Hoạt động ổn định trên cả Windows và Linux**: Sửa triệt để lỗi không mở được ứng dụng sau khi cập nhật, đảm bảo mở là nghe ngay trên mọi hệ thống.
 
-### Ghi chú / Notes
-- Linux (Niri / CachyOS): hành vi Desktop lyrics (layer-shell) giữ nguyên, các thay đổi Windows nằm sau nhánh `Qt.platform.os === "windows"` hoặc trong `launcher_win.py`.
-- Đã nâng toàn bộ phiên bản trong codebase (APP_VERSION, updater, SettingsModal, WhatsNewModal, README) lên 1.0.6.
-  *All codebase version references bumped to 1.0.6.*
+## [1.0.4.2] - 2026-10-30
 
-## [1.0.5]
-- Lyrics Romanization, Obsidian LiquidGlass & MediaCoverSurface.
+### Added
+- **Phiên âm lời bài hát tiếng Nhật, Hàn, Trung**: Tự động hiển thị chữ phiên âm Latin (Romaji, Romaja, Pinyin) bên dưới câu hát gốc giúp bạn dễ dàng hát theo bài hát yêu thích.
+- **Thanh phát nhạc nền kính tối màu**: Lớp nền sẫm màu chống lem chữ khi cuộn danh sách bài hát, giúp nhìn rõ tên bài hát và ca sĩ mà không bị rối mắt.
+- **Ảnh bìa và video bìa sắc nét**: Tự động tải ảnh bìa chất lượng cao và hiển thị video bìa chuyển động của bài hát từ Apple Music và Spotify.
+- **Hẹn giờ tắt nhạc êm dịu**: Tự động giảm dần âm lượng trước khi tắt nhạc để bạn đi vào giấc ngủ dễ chịu hơn.
+
+## [1.0.4.1] - 2026-10-24
+
+### Fixed
+- **Tiết kiệm pin và mát máy**: Tối ưu hóa xử lý đồ họa giúp máy tính chạy mát hơn, không bị nóng máy khi thu nhỏ cửa sổ.
+- **Nghe nhạc không gián đoạn**: Tăng tốc độ tải nhạc trực tuyến, nghe nhạc mượt mà ngay cả khi mạng yếu.
+- **Cửa sổ mini ổn định**: Bấm vào biểu tượng sóng âm trên widget góc màn hình để mở lại cửa sổ chính dễ dàng.
+
+## [1.0.4] - 2026-10-12
+
+### Added
+- **Chất lượng âm thanh cao cấp**: Thưởng thức âm thanh trong trẻo, chi tiết với chuẩn nhạc trực tuyến chất lượng cao.
+- **Tải trước bài hát**: Tự động nạp trước bài tiếp theo để chuyển bài nghe liền mạch không phải chờ đợi.
+
+## [1.0.3] - 2026-09-23
+
+### Added
+- **Chia sẻ bài hát trong Ghi chú**: Đính kèm bài hát bạn yêu thích vào ghi chú 24h để bạn bè cùng nghe và tương tác.
+- **Nghe nhạc cùng bạn bè mượt mà**: Khắc phục lỗi kết nối giúp bạn và bạn bè nghe chung một bài hát cùng lúc trên cả Windows và Linux.

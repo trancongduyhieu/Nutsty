@@ -12,6 +12,8 @@ added_datas = [
     ('shell.qml', '.'),
     ('bin', 'bin'),
 ]
+if os.path.exists('CHANGELOG.md'):
+    added_datas.append(('CHANGELOG.md', '.'))
 
 # Do not bundle local developer's library.json into Windows portable release
 
@@ -86,14 +88,6 @@ hidden_imports = [
     'platform_compat',
     'browser_login',
     'spotify_importer',
-    'catalog_engine',
-    'database',
-    'social_relay_core',
-    'song_enrichment',
-    'stream_resolver',
-    'tray_indicator',
-    'updater',
-    'ytmusic_auth',
     'websockets',
     'websockets.client',
     'websockets.exceptions',

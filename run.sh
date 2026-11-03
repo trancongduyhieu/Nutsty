@@ -7,7 +7,14 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CURRENT_COMMIT="$(git -C "$DIR" rev-parse HEAD 2>/dev/null || echo "unknown")"
 LAST_COMMIT="$(cat /tmp/nutsty_running_commit 2>/dev/null || echo "")"
 
-# Always restart auth_server.py so backend updates after git pull take effect immediately
+# Ensure required Python dependencies before starting backend or UI
+if ! python3 -c "import mutagen, ytmusicapi, syncedlyrics, pypinyin" >/dev/null 2>&1; then
+    echo "Installing missing Python dependencies (mutagen, ytmusicapi, syncedlyrics, pypinyin)..."
+    python3 -m pip install mutagen ytmusicapi syncedlyrics pypinyin --quiet || \
+    python3 -m pip install --break-system-packages --user mutagen ytmusicapi syncedlyrics pypinyin --quiet || true
+fi
+
+# Always restart auth_server.py so backend updates take effect immediately
 pkill -f "backend/auth_server.py" >/dev/null 2>&1 || true
 sleep 0.15
 python3 "$DIR/backend/auth_server.py" >/dev/null 2>&1 &
@@ -36,12 +43,6 @@ fi
 # Ensure background tray indicator is running
 if ! pgrep -f "backend/tray_indicator.py" >/dev/null 2>&1; then
     python3 "$DIR/backend/tray_indicator.py" >/dev/null 2>&1 &
-fi
-
-# Ensure required Python dependencies (mutagen)
-if ! python3 -c "import mutagen" >/dev/null 2>&1; then
-    echo "Installing missing dependency: mutagen..."
-    python3 -m pip install mutagen --quiet || true
 fi
 
 # Scan library if missing or requested

@@ -250,9 +250,9 @@ PanelWindow {
                 spacing: 10
 
                 AppIcon {
-                    source: "../assets/icons/audio-x-generic-symbolic.svg"
+                    source: "../assets/icons/media-optical-audio-symbolic.svg"
                     iconSize: 18
-                    color: Theme.accentColor
+                    color: Theme.accent
                     anchors.verticalCenter: parent.verticalCenter
                 }
 

@@ -28,8 +28,6 @@ PanelWindow {
 
     width: isWindows ? 216 : ((screen && screen.geometry) ? screen.geometry.width : Screen.width)
     height: isWindows ? 216 : ((screen && screen.geometry) ? screen.geometry.height : Screen.height)
-    x: isWindows ? Math.max(12, Math.min(root.widgetX, Screen.width - 216 - 12)) : 0
-    y: isWindows ? Math.max(12, Math.min(root.widgetY, Screen.height - 216 - 52)) : 0
 
     screen: Quickshell.screens[0]
     exclusionMode: ExclusionMode.Ignore
@@ -45,11 +43,18 @@ PanelWindow {
     }
 
     // Dynamic input mask: Only un-mask during active drag movement so single/double clicks are never cancelled by Win32 SetWindowRgn
-    mask: isWindows ? null : cardRegion
+    mask: isWindows ? null : (dragArea.drag.active ? null : cardRegion)
 
     Region {
         id: cardRegion
         item: widgetContainer
+    }
+
+    Component.onCompleted: {
+        if (root.isWindows) {
+            root["x"] = Math.max(12, Math.min(root.widgetX, Screen.width - 216 - 12));
+            root["y"] = Math.max(12, Math.min(root.widgetY, Screen.height - 216 - 52));
+        }
     }
 
     // =========================================================================
@@ -128,7 +133,7 @@ PanelWindow {
             function onWidgetXChanged() {
                 if (root.isWindows) {
                     if (!dragArea.isDraggingWindow) {
-                        root.x = Math.max(12, Math.min(root.widgetX, Screen.width - root.width - 12));
+                        root["x"] = Math.max(12, Math.min(root.widgetX, Screen.width - root.width - 12));
                     }
                 } else if (!dragArea.drag.active) {
                     widgetContainer.x = Math.max(12, Math.min(root.widgetX, (root.width > 240 ? root.width : 800) - widgetContainer.width - 12));
@@ -137,7 +142,7 @@ PanelWindow {
             function onWidgetYChanged() {
                 if (root.isWindows) {
                     if (!dragArea.isDraggingWindow) {
-                        root.y = Math.max(12, Math.min(root.widgetY, Screen.height - root.height - 52));
+                        root["y"] = Math.max(12, Math.min(root.widgetY, Screen.height - root.height - 52));
                     }
                 } else if (!dragArea.drag.active) {
                     widgetContainer.y = Math.max(12, Math.min(root.widgetY, (root.height > 260 ? root.height : 600) - widgetContainer.height - 52));
@@ -246,18 +251,22 @@ PanelWindow {
                 if (root.isWindows && isDraggingWindow && pressed) {
                     var dx = mouse.x - dragStartPos.x;
                     var dy = mouse.y - dragStartPos.y;
-                    var newX = Math.max(12, Math.min(Screen.width - root.width - 12, root.x + dx));
-                    var newY = Math.max(12, Math.min(Screen.height - root.height - 52, root.y + dy));
-                    root.x = newX;
-                    root.y = newY;
+                    var curX = (typeof root["x"] !== "undefined") ? Number(root["x"]) : 0;
+                    var curY = (typeof root["y"] !== "undefined") ? Number(root["y"]) : 0;
+                    var newX = Math.max(12, Math.min(Screen.width - root.width - 12, curX + dx));
+                    var newY = Math.max(12, Math.min(Screen.height - root.height - 52, curY + dy));
+                    root["x"] = newX;
+                    root["y"] = newY;
                 }
             }
 
             onReleased: {
                 if (root.isWindows) {
                     isDraggingWindow = false;
-                    root.widgetX = root.x;
-                    root.widgetY = root.y;
+                    var finalX = (typeof root["x"] !== "undefined") ? Number(root["x"]) : root.widgetX;
+                    var finalY = (typeof root["y"] !== "undefined") ? Number(root["y"]) : root.widgetY;
+                    root.widgetX = finalX;
+                    root.widgetY = finalY;
                     root.savePositionRequested(root.widgetX, root.widgetY);
                 } else {
                     root.widgetX = widgetContainer.x;

@@ -78,8 +78,8 @@ def check_for_updates(force=False, mock=False):
             "has_update": True,
             "current_version": current_ver,
             "latest_version": "v1.0.6",
-            "release_name": "Nutsty v1.0.6 (Desktop & Taskbar Lyrics, Apple Music 1-by-1 Wave Sweep & Interlude Beads)",
-            "changelog": "- Lời bài hát nổi trên Desktop và trong thanh Taskbar Windows với công tắc riêng\n- Bộ máy lời bài hát lướt sóng 1-by-1: Quét sáng từng ký tự, rolling wave lift nhấc bổng -2.0px và vầng hào quang Gaussian MultiEffect Glow\n- Dải 3 hạt ngọc đếm ngược dạo nhạc (Interlude Beads) chuẩn Apple Music / SimpMusic, giữ nguyên vị trí ở 0.35 opacity khi câu hát bắt đầu\n- Sửa lỗi kẹt tiến trình chuyển bài khi bài đang phát lệch khỏi hàng đợi và nút Dislike chuyển bài tức thì",
+            "release_name": "Nutsty v1.0.6 (Lời bài hát Taskbar & Màn hình, Lướt sóng Apple Music & Đếm ngược dạo nhạc)",
+            "changelog": "- Lời bài hát trên màn hình & thanh Taskbar: Bật/tắt lời bài hát nổi tự do trên màn hình máy tính hoặc hiển thị chữ chạy ngay trên thanh tác vụ bên dưới màn hình Windows.\n- Lời bài hát lướt sóng kiểu Apple Music: Từng chữ phát sáng và nhấc nổi nhịp nhàng theo đúng giọng ca sĩ đang hát thay vì nhảy giật từng dòng.\n- Chấm tròn đếm ngược dạo nhạc: Khi bài hát có đoạn nhạc dạo đầu hoặc giữa bài, 3 dấu chấm sẽ phát sáng đếm ngược giúp bạn biết chính xác khi nào ca sĩ cất giọng.\n- Chuyển bài mượt mà: Bấm Không thích sẽ tự động bỏ qua và phát bài tiếp theo ngay lập tức, không còn bị khựng danh sách phát.\n- Hoạt động ổn định trên cả Windows và Linux: Sửa triệt để lỗi không mở được ứng dụng sau khi cập nhật, đảm bảo mở là nghe ngay trên mọi hệ thống.",
             "release_url": "https://github.com/trancongduyhieu/Nutsty/releases",
             "download_url": "https://github.com/trancongduyhieu/Nutsty/releases/download/v1.0.6/Nutsty_Windows_Portable.zip",
             "checked_at": int(time.time())
@@ -191,10 +191,13 @@ def check_for_updates(force=False, mock=False):
         else:
             for a in assets:
                 name = a.get("name", "").lower()
-                if ".tar.gz" in name or ".zip" in name:
+                # Do NOT download Windows packages on Linux
+                if any(w in name for w in ["win", "windows", "portable", ".exe"]):
+                    continue
+                if "linux" in name or ".tar.gz" in name:
                     download_url = a.get("browser_download_url", "")
                     break
-        if not download_url and assets:
+        if not download_url and assets and pc.IS_WINDOWS:
             download_url = assets[0].get("browser_download_url", "")
 
     if not download_url:
