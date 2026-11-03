@@ -1607,10 +1607,10 @@ Rectangle {
                                     font.family: Theme.fontFamily
                                     font.pixelSize: modelData.isInterlude ? 34 : lyricRow.targetFontSize
                                     font.weight: Font.Bold
+                                    font.letterSpacing: modelData.isInterlude ? 6.0 : 0.0
                                     color: lyricRow.isCurrent ? "#ffffff" : "#d8dce8"
                                     wrapMode: Text.Wrap
                                     lineHeight: 1.28
-                                    letterSpacing: modelData.isInterlude ? 8 : 0
 
                                     Behavior on color {
                                         ColorAnimation { duration: 180 }

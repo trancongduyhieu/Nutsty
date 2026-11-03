@@ -220,12 +220,12 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: modelData.isInterlude ? 34 : 28
                 font.weight: Font.Bold
+                font.letterSpacing: modelData.isInterlude ? 6.0 : 0.0
                 color: lyricRow.isCurrent ? "#ffffff" : root.colPendingText
                 elide: Text.ElideRight
                 width: parent.width
                 style: Text.Outline
                 styleColor: root.colShadowAmb
-                letterSpacing: modelData.isInterlude ? 8 : 0
 
                 Behavior on color {
                     ColorAnimation { duration: 180 }
