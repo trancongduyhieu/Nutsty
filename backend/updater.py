@@ -77,11 +77,11 @@ def check_for_updates(force=False, mock=False):
         return {
             "has_update": True,
             "current_version": current_ver,
-            "latest_version": "v1.0.5",
-            "release_name": "Nutsty v1.0.5 (Lyrics Romanization, Obsidian LiquidGlass & MediaCoverSurface)",
-            "changelog": "- Tự động phiên âm lời bài hát Latinh (Romanization) cho nhạc Anime (Romaji), K-Pop (Romaja) và C-Pop (Pinyin)\n- Kính lỏng PlayerBar Deep Obsidian: Lớp nền sẫm màu chống lem chữ khi cuộn danh sách bài hát\n- Hợp nhất Bề mặt Bìa MediaCoverSurface: Bo tròn 16px video canvas Apple/Spotify, khắc phục triệt để lỗi không tải ảnh bìa Retina\n- Bộ điều khiển Hẹn giờ ngủ Deep Module SleepTimerController với đường cong Cosine Fade êm dịu\n- Giới thiệu Modal Có gì mới (What's New) tóm tắt tính năng phát hành",
-            "release_url": "https://github.com/trancongduyhieu/FrostifyLocal/releases",
-            "download_url": "https://github.com/trancongduyhieu/FrostifyLocal/releases/download/v1.0.5/Nutsty_Windows_Portable.zip",
+            "latest_version": "v1.0.6",
+            "release_name": "Nutsty v1.0.6 (Desktop & Taskbar Lyrics, Apple Music 1-by-1 Wave Sweep & Interlude Beads)",
+            "changelog": "- Lời bài hát nổi trên Desktop và trong thanh Taskbar Windows với công tắc riêng\n- Bộ máy lời bài hát lướt sóng 1-by-1: Quét sáng từng ký tự, rolling wave lift nhấc bổng -2.0px và vầng hào quang Gaussian MultiEffect Glow\n- Dải 3 hạt ngọc đếm ngược dạo nhạc (Interlude Beads) chuẩn Apple Music / SimpMusic, giữ nguyên vị trí ở 0.35 opacity khi câu hát bắt đầu\n- Sửa lỗi kẹt tiến trình chuyển bài khi bài đang phát lệch khỏi hàng đợi và nút Dislike chuyển bài tức thì",
+            "release_url": "https://github.com/trancongduyhieu/Nutsty/releases",
+            "download_url": "https://github.com/trancongduyhieu/Nutsty/releases/download/v1.0.6/Nutsty_Windows_Portable.zip",
             "checked_at": int(time.time())
         }
 

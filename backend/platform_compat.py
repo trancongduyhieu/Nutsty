@@ -175,8 +175,8 @@ def get_music_dir() -> str:
                 return m
     return os.path.expanduser("~/Music")
 
-APP_VERSION = "1.0.5"
-GITHUB_REPO = "trancongduyhieu/FrostifyLocal"
+APP_VERSION = "1.0.6"
+GITHUB_REPO = "trancongduyhieu/Nutsty"
 
 if IS_WINDOWS:
     import ctypes

@@ -29,7 +29,8 @@
 
 ### Ghi chú / Notes
 - Linux (Niri / CachyOS): hành vi Desktop lyrics (layer-shell) giữ nguyên, các thay đổi Windows nằm sau nhánh `Qt.platform.os === "windows"` hoặc trong `launcher_win.py`.
-- Chưa tăng số phiên bản trong mã (`APP_VERSION`, README, updater); sẽ tăng khi phát hành bản 1.0.6.
+- Đã nâng toàn bộ phiên bản trong codebase (APP_VERSION, updater, SettingsModal, WhatsNewModal, README) lên 1.0.6.
+  *All codebase version references bumped to 1.0.6.*
 
 ## [1.0.5]
 - Lyrics Romanization, Obsidian LiquidGlass & MediaCoverSurface.

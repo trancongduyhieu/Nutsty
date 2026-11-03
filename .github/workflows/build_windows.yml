@@ -54,6 +54,13 @@ jobs:
           7z e mpv.7z -o"bin\" mpv.exe d3dcompiler_43.dll -r -y
           if (Test-Path "bin\mpv.com") { Remove-Item "bin\mpv.com" -Force }
           Remove-Item "mpv.7z" -Force
+
+          Write-Host "Downloading TaskbarLyrics companion..."
+          Invoke-WebRequest -Uri "https://github.com/kamol1dn/spicy-taskbar/releases/download/v1.1.2/TaskbarLyrics.exe" -OutFile "bin\TaskbarLyrics.exe"
+          if (-not (Test-Path "bin\config.json")) {
+            '{"Port":9012,"LyricsEnabled":true,"Placement":"above","VPos":"bottom","Align":"center"}' | Out-File -FilePath "bin\config.json" -Encoding utf8
+          }
+
           Write-Host "Bin directory contents:"
           Get-ChildItem -Path bin
 
@@ -104,11 +111,11 @@ jobs:
 
             ---
             ### ✨ Có gì mới trong bản ${{ github.ref_name }}?
-            - **Phiên âm lời bài hát Latinh (Romanization)**: Hỗ trợ tự động Romaji (Nhật), Romaja (Hàn), Pinyin (Trung) đồng bộ từng câu cho nhạc Anime, K-Pop, C-Pop.
-            - **Kính lỏng PlayerBar Deep Obsidian**: Bổ sung lớp đế sẫm màu chống lem chữ khi cuộn danh sách bài hát; hiệu ứng khúc xạ quang học tinh tế.
-            - **Hợp nhất Bề mặt Bìa MediaCoverSurface**: Tự động bo tròn 16px video canvas Apple Music / Spotify không lem 4 góc, khắc phục triệt để lỗi không load ảnh bìa Retina.
-            - **Bộ đếm Hẹn giờ ngủ Deep Module**: SleepTimerController với đường cong hạ âm lượng Cosine Fade êm dịu 5s trước khi dừng.
-            - **Giao diện Điểm mới (What's New Modal)**: Tích hợp cửa sổ chào mừng và giới thiệu tính năng mới ngay trong ứng dụng và phần Cài đặt.
+            - **Lời bài hát trên Taskbar & Desktop Lyrics (Windows)**: Hiển thị lời bài hát karaoke quét âm tiết trực tiếp trên thanh tác vụ Windows (Spicy Taskbar companion) và hồi sinh lời bài hát nổi trên Desktop với 4 phong cách tùy biến.
+            - **Bộ máy Lời bài hát Lướt Sóng 1-by-1 (Apple Music / AMLL Physics)**: Quét sáng mượt mà từng ký tự từ trái sang phải, kết hợp độ lướt sóng nhấc bổng -2.0px giữ nguyên vị trí (Rolling Wave) và vầng phát quang Gaussian MultiEffect Glow mềm mại.
+            - **Dải 3 Hạt Ngọc Đếm Nhịp Dạo Nhạc (Interlude Beads `• • •`)**: Tự động nhận diện đoạn intro/solo nhạc cụ (>=3.5s) để đếm ngược 3... 2... 1... bừng sáng theo nhịp; khi ca sĩ cất giọng, dải hạt ngọc giữ nguyên vị trí ở độ mờ 0.35 trang nhã mà không bị biến mất để lại khoảng trống.
+            - **Khắc phục Bug Chuyển bài & Dislike**: Next, Prev và Dislike lập tức phản hồi và chuyển bài mượt mà kể cả khi bài đang phát bị lệch khỏi hàng đợi.
+            - **Sửa lỗi Nhãn Low Integrity**: Tự động reset nhãn quyền Medium Integrity sau khi đóng gói, đảm bảo ứng dụng ghi AppData và mở port 9012 ổn định 100%.
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
