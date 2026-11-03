@@ -9,8 +9,12 @@
   *Desktop lyrics are available again on Windows with their own toggle in Settings.*
 - **Lời bài hát trên và trong Taskbar (Windows)**: Dải lyric karaoke theo âm tiết trên thanh tác vụ (vị trí "above" / "taskbar"), công tắc riêng tách khỏi Desktop lyrics.
   *Syllable-level karaoke lyrics above and inside the Windows taskbar, with a separate toggle.*
-- **Hiệu ứng 3 Dấu Chấm Đếm Ngược Dạo Nhạc (Interlude Countdown Dots `• • •`)**: Lấy cảm hứng từ SimpMusic & Apple Music, khi bài hát có khúc dạo đầu hoặc đoạn nghỉ solo nhạc cụ giữa các câu hát ($\ge 3.5\text{s}$), hệ thống tự động chèn dải 3 hạt ngọc phát sáng đếm ngược 3... 2... 1... nhấp nháy chuyển màu theo `accentColor` trước khi câu hát tiếp theo xuất hiện. Hoạt động đồng bộ trên Tab Lời bài hát, Amberol player và Desktop lyrics.
-  *SimpMusic / Apple Music style interlude countdown dots (`• • •`): automatically displays 3 glowing countdown beads during instrumental intros or breaks ($\ge 3.5\text{s}$), synchronized across Now Playing lyrics, Amberol view, and Desktop lyrics.*
+- **Bộ máy Lời bài hát Lướt Sóng 1-by-1 & Hào quang Gaussian (Apple Music / AMLL Physics)**: Nâng cấp toàn diện bộ máy hiển thị lời bài hát theo đúng chuẩn Apple Music:
+  - **Quét sáng từng ký tự (1-by-1 Character Sweep)**: Ánh sáng quét mượt từ trái sang phải qua từng chữ cái (alpha 0.38 sang 1.0) thay vì đổi màu giật cục cả từ.
+  - **Lướt sóng lăn tăn (Rolling Wave Lift)**: Ký tự được nhấc bổng -2.0px khi tia sáng chạm tới và giữ nguyên ở vị trí cao, tạo thành con sóng uốn lượn liên tục dọc câu hát.
+  - **Hào quang Gaussian MultiEffect Glow**: Ứng dụng bóng đổ quang học phần cứng `MultiEffect Shadow` mềm mại tỏa đều quanh thân chữ đang hát và 3 hạt ngọc đếm nhịp.
+  - **3 Hạt ngọc đếm nhịp không biến mất**: Dải 3 hạt ngọc đếm ngược khi kết thúc sẽ giữ nguyên vị trí ở độ mờ 0.35 như một câu hát đã qua, không bị co biến mất để lại khoảng trống.
+  *Comprehensive Apple Music / AMLL physics engine upgrade: left-to-right 1-by-1 character sweep, persistent rolling wave lift (-2.0px), hardware-accelerated Gaussian MultiEffect bloom glow, and persistent 3-dot interlude beads.*
 - `CHANGELOG.md` và bài học build Windows `.agents/rules/05-windows-build-and-runtime-lessons.md`.
 
 ### Sửa lỗi / Fixed

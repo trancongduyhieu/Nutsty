@@ -182,13 +182,83 @@ Item {
             layer.enabled: false
 
 
+            // ── 0. SimpMusic / Apple Music Interlude Countdown Beads (• • •) ──
+            Row {
+                id: interludeBeadsRow
+                visible: !!(modelData && modelData.isInterlude)
+                spacing: 16
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                height: 28
+
+                Repeater {
+                    model: (modelData && modelData.words && modelData.words.length === 3) ? modelData.words : [
+                        { "text": "•", "start": (modelData ? modelData.endTime - 3.0 : 0.0), "end": (modelData ? modelData.endTime - 2.0 : 1.0) },
+                        { "text": "•", "start": (modelData ? modelData.endTime - 2.0 : 1.0), "end": (modelData ? modelData.endTime - 1.0 : 2.0) },
+                        { "text": "•", "start": (modelData ? modelData.endTime - 1.0 : 2.0), "end": (modelData ? modelData.endTime : 3.0) }
+                    ]
+
+                    delegate: Item {
+                        id: dotItem
+                        width: 18
+                        height: 18
+
+                        readonly property real dStart: modelData.start || 0.0
+                        readonly property real dEnd: modelData.end || 0.0
+                        readonly property real dDur: Math.max(0.1, dEnd - dStart)
+                        readonly property bool isPast: root.currentTime >= dEnd
+                        readonly property bool isSinging: root.currentTime >= dStart && root.currentTime < dEnd
+                        readonly property real dProg: isPast ? 1.0 : (isSinging ? Math.max(0.0, Math.min(1.0, (root.currentTime - dStart) / dDur)) : 0.0)
+
+                        property real liftProgress: (isSinging || isPast) ? 1.0 : 0.0
+                        Behavior on liftProgress {
+                            NumberAnimation {
+                                duration: 750
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: [0.4, 0.0, 0.2, 1.0]
+                            }
+                        }
+
+                        transform: Translate {
+                            y: -dotItem.liftProgress * 2.0
+                        }
+
+                        Rectangle {
+                            id: dotCore
+                            anchors.centerIn: parent
+                            width: 8
+                            height: 8
+                            radius: 4
+                            color: "#ffffff"
+                            opacity: {
+                                if (dotItem.isPast || dotItem.isSinging) return 1.0;
+                                return 0.38;
+                            }
+                            Behavior on opacity { NumberAnimation { duration: 160 } }
+                        }
+
+                        MultiEffect {
+                            source: dotCore
+                            anchors.fill: dotCore
+                            shadowEnabled: dotItem.isSinging
+                            shadowColor: "#ffffff"
+                            shadowBlur: 0.95
+                            shadowOpacity: dotItem.isSinging ? (0.92 * Math.sin(Math.PI * dotItem.dProg)) : 0.0
+                            shadowScale: 1.5
+                            shadowHorizontalOffset: 0
+                            shadowVerticalOffset: 0
+                            visible: shadowOpacity > 0.01
+                        }
+                    }
+                }
+            }
+
             // ── 1. Syllable Engine (AppleMusicWordFlow) ────────────────────────
             // Loads ONLY for genuine syllable lines (hasWords) around active line.
-            // Starts with words dim (#757a88, layer 1) and lights up word-by-word into white bloom (layer 2).
             Loader {
                 id: flowLoader
                 anchors.fill: parent
-                active: lyricRow.hasWords && (lyricRow.dist >= -1 && lyricRow.dist <= 1)
+                active: !interludeBeadsRow.visible && lyricRow.hasWords && (lyricRow.dist >= -1 && lyricRow.dist <= 1)
                 visible: active && (lyricRow.isCurrent || lyricRow.isHeldNoteActive)
 
                 sourceComponent: Component {
@@ -197,8 +267,7 @@ Item {
                         words: (modelData && modelData.words) ? modelData.words : []
                         currentTime: root.currentTime
                         isLineActive: lyricRow.isCurrent
-                        fontSize: modelData.isInterlude ? 34 : 28
-                        wordSpacing: modelData.isInterlude ? 16 : 8
+                        fontSize: 28
                         fontFamily: Theme.fontFamily
                         fontWeight: Font.Bold
                         accentColor: "#ffffff"
@@ -215,12 +284,11 @@ Item {
                 id: staticTxt
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.verticalCenterOffset: lyricRow.hasRomanized ? -9 : 0
-                visible: !flowLoader.visible
+                visible: !interludeBeadsRow.visible && !flowLoader.visible
                 text: (modelData && modelData.text) ? modelData.text : ""
                 font.family: Theme.fontFamily
-                font.pixelSize: modelData.isInterlude ? 34 : 28
+                font.pixelSize: 28
                 font.weight: Font.Bold
-                font.letterSpacing: modelData.isInterlude ? 6.0 : 0.0
                 color: lyricRow.isCurrent ? "#ffffff" : root.colPendingText
                 elide: Text.ElideRight
                 width: parent.width
