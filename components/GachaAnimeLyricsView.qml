@@ -176,61 +176,17 @@ Item {
         height: 68
 
         readonly property bool isCurrentInterlude: (root.currentLyricIndex >= 0 && root.activeLyrics && root.currentLyricIndex < root.activeLyrics.length && !!root.activeLyrics[root.currentLyricIndex].isInterlude)
-        readonly property var activeLineObj: (root.currentLyricIndex >= 0 && root.activeLyrics && root.currentLyricIndex < root.activeLyrics.length) ? root.activeLyrics[root.currentLyricIndex] : null
-
-        Row {
-            id: interludeDotsRow
-            visible: activeContainer.isCurrentInterlude
-            spacing: 16
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-            height: 48
-
-            Repeater {
-                model: (activeContainer.activeLineObj && activeContainer.activeLineObj.words && activeContainer.activeLineObj.words.length === 3) ? activeContainer.activeLineObj.words : 3
-
-                Rectangle {
-                    id: dotBall
-                    readonly property real dotStart: (typeof modelData === "object" && modelData.start !== undefined) ? modelData.start : 0
-                    readonly property real dotEnd: (typeof modelData === "object" && modelData.end !== undefined) ? modelData.end : 0
-                    readonly property bool isLit: root.currentTime >= dotStart
-                    readonly property bool isPulse: root.currentTime >= dotStart && root.currentTime < dotEnd
-
-                    width: 14
-                    height: 14
-                    radius: 7
-                    anchors.verticalCenter: parent.verticalCenter
-                    scale: isPulse ? 1.45 : (isLit ? 1.20 : 1.0)
-                    color: isLit ? root.colHighlight : Qt.rgba(255, 255, 255, 0.28)
-
-                    Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutBack } }
-                    Behavior on color { ColorAnimation { duration: 180 } }
-
-                    Rectangle {
-                        anchors.centerIn: parent
-                        width: parent.width + 16
-                        height: parent.height + 16
-                        radius: width / 2
-                        color: root.colHighlight
-                        opacity: dotBall.isPulse ? 0.50 : (dotBall.isLit ? 0.25 : 0.0)
-                        z: -1
-                        Behavior on opacity { NumberAnimation { duration: 180 } }
-                    }
-                }
-            }
-        }
 
         EnchantingSentence {
             id: activeSentence
-            visible: !activeContainer.isCurrentInterlude
             anchors.fill: parent
             text: root.activeLineText
             progress: root.lineProgress
             isActive: root.currentLyricIndex >= 0
             isDead: false
             fontFamily: root.magicFontFamily
-            fontSize: 35
-            colHighlight: root.colHighlight
+            fontSize: activeContainer.isCurrentInterlude ? 42 : 35
+            colHighlight: root.colActiveText
             colActiveText: root.colActiveText
             colDeadText: root.colDeadText
             colShadowDirectional: root.colShadowDir

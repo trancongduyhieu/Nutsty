@@ -1204,9 +1204,9 @@ def _insert_interlude_dots(lines):
                 "hasWords": True,
                 "isSynthetic": False,
                 "words": [
-                    {"text": "•", "start": round(cd_start, 3), "end": round(cd_start + dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": False},
-                    {"text": "•", "start": round(cd_start + dot_dur, 3), "end": round(cd_start + 2 * dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": False},
-                    {"text": "•", "start": round(cd_start + 2 * dot_dur, 3), "end": round(first_time, 3), "duration": round(dot_dur, 3), "isHeld": False},
+                    {"text": "•", "start": round(cd_start, 3), "end": round(cd_start + dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": True},
+                    {"text": "•", "start": round(cd_start + dot_dur, 3), "end": round(cd_start + 2 * dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": True},
+                    {"text": "•", "start": round(cd_start + 2 * dot_dur, 3), "end": round(first_time, 3), "duration": round(dot_dur, 3), "isHeld": True},
                 ],
                 "romanized": ""
             }
@@ -1246,9 +1246,9 @@ def _insert_interlude_dots(lines):
                     "hasWords": True,
                     "isSynthetic": False,
                     "words": [
-                        {"text": "•", "start": round(cd_start, 3), "end": round(cd_start + dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": False},
-                        {"text": "•", "start": round(cd_start + dot_dur, 3), "end": round(cd_start + 2 * dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": False},
-                        {"text": "•", "start": round(cd_start + 2 * dot_dur, 3), "end": round(next_time, 3), "duration": round(dot_dur, 3), "isHeld": False},
+                        {"text": "•", "start": round(cd_start, 3), "end": round(cd_start + dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": True},
+                        {"text": "•", "start": round(cd_start + dot_dur, 3), "end": round(cd_start + 2 * dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": True},
+                        {"text": "•", "start": round(cd_start + 2 * dot_dur, 3), "end": round(next_time, 3), "duration": round(dot_dur, 3), "isHeld": True},
                     ],
                     "romanized": ""
                 }

@@ -82,22 +82,22 @@ Item {
                     readonly property bool isApproaching: !isSinging && !isPast && (root.effectiveTime >= wStart - 0.12)
 
                     // ── Apple Music Wave Lift ─────────────────────────────────────────
-                    // -1.2px at sin-peak (mid-word), returns smoothly to 0px at end.
+                    // -1.2px (held: -2.0px) at sin-peak (mid-word), returns smoothly to 0px at end.
                     // Translate keeps the Flow positioner layout untouched (Footgun #1 safe).
                     // AMLL ref: float/index.ts → y = -0.05em on 28px = ~-1.4px
                     transform: Translate {
-                        y: -1.2 * Math.sin(Math.PI * wordVisual.wordProgress)
+                        y: (wordVisual.isHeld ? -2.0 : -1.2) * Math.sin(Math.PI * wordVisual.wordProgress)
                     }
 
                     // ── Micro Scale Breath ────────────────────────────────────────────
-                    // Peak: 1.010x (held notes: 1.013x) — luminance contrast carries perception,
+                    // Peak: 1.010x (held notes / dots: 1.025x) — luminance contrast carries perception,
                     // not geometric expansion. Keeps adjacent glyphs from being crowded.
                     // AMLL ref: emphasize/index.ts → 1 + 0.1 × amount, amount ≤ 0.1 → ≤1.01×
-                    scale: 1.0 + (wordVisual.isHeld ? 0.013 : 0.010) * Math.sin(Math.PI * wordVisual.wordProgress)
+                    scale: 1.0 + (wordVisual.isHeld ? 0.025 : 0.010) * Math.sin(Math.PI * wordVisual.wordProgress)
 
                     // ── 1. Phosphor Bloom Glow Layer ──────────────────────────────────
                     // White outline glow on the singing word — mimics AM's CSS text-shadow bloom.
-                    // opacity peaks at 0.50 mid-word and fades to 0 at endpoints → no pop.
+                    // opacity peaks mid-word and fades to 0 at endpoints → no pop.
                     // Native Text.Outline (zero extra GPU pass vs MultiEffect in Repeater).
                     Text {
                         id: bloomGlowTxt
@@ -108,9 +108,9 @@ Item {
                         font.weight: root.fontWeight
                         color: "#ffffff"
                         style: Text.Outline
-                        styleColor: Qt.rgba(1.0, 1.0, 1.0, 0.38)
+                        styleColor: Qt.rgba(1.0, 1.0, 1.0, wordVisual.isHeld ? 0.65 : 0.38)
                         opacity: wordVisual.isSinging
-                            ? (0.50 * Math.sin(Math.PI * wordVisual.wordProgress))
+                            ? ((wordVisual.isHeld ? 0.85 : 0.50) * Math.sin(Math.PI * wordVisual.wordProgress))
                             : 0.0
                         visible: opacity > 0.005
                     }

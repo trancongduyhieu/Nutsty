@@ -1794,7 +1794,7 @@ Item {
                                     // ONLY for lines with genuine syllable timestamps (hasWords=true AND NOT isSynthetic).
                                     Loader {
                                         id: appleMusicFlowLoader
-                                        active: !modelData.isInterlude && lyricRow.dist <= 1 && modelData.hasWords && !modelData.isSynthetic && modelData.words && modelData.words.length > 0
+                                        active: lyricRow.dist <= 1 && modelData.hasWords && !modelData.isSynthetic && modelData.words && modelData.words.length > 0
                                         visible: active && (lyricRow.isCurrent ||
                                                  (lyricRow.signedDist === -1 && appleMusicFlowLoader.item !== null && appleMusicFlowLoader.item.hasActiveHeldWord))
                                         anchors.left: parent.left
@@ -1803,50 +1803,9 @@ Item {
                                             AppleMusicWordFlow {
                                                 words: (modelData.hasWords && !modelData.isSynthetic && modelData.words) ? modelData.words : []
                                                 currentTime: root.currentTime
-                                                fontSize: 28
-                                            }
-                                        }
-                                    }
-
-                                    // SimpMusic / Apple Music Interlude Countdown Dots (• • •)
-                                    Row {
-                                        id: interludeDotsRow
-                                        visible: !!(modelData && modelData.isInterlude)
-                                        spacing: 14
-                                        anchors.left: parent.left
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        height: 36
-
-                                        Repeater {
-                                            model: (modelData && modelData.words && modelData.words.length === 3) ? modelData.words : 3
-
-                                            Rectangle {
-                                                id: dotBall
-                                                readonly property real dotStart: (typeof modelData === "object" && modelData.start !== undefined) ? modelData.start : 0
-                                                readonly property real dotEnd: (typeof modelData === "object" && modelData.end !== undefined) ? modelData.end : 0
-                                                readonly property bool isLit: root.currentTime >= dotStart
-                                                readonly property bool isPulse: root.currentTime >= dotStart && root.currentTime < dotEnd
-
-                                                width: 12
-                                                height: 12
-                                                radius: 6
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                scale: isPulse ? 1.40 : (isLit ? 1.18 : 1.0)
-                                                color: isLit ? root.accentColor : Qt.rgba(255, 255, 255, 0.28)
-
-                                                Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutBack } }
-                                                Behavior on color { ColorAnimation { duration: 180 } }
-
-                                                Rectangle {
-                                                    anchors.centerIn: parent
-                                                    width: parent.width + 12
-                                                    height: parent.height + 12
-                                                    radius: width / 2
-                                                    color: root.accentColor
-                                                    opacity: dotBall.isPulse ? 0.45 : (dotBall.isLit ? 0.20 : 0.0)
-                                                    z: -1
-                                                    Behavior on opacity { NumberAnimation { duration: 180 } }
-                                                }
+                                                fontSize: modelData.isInterlude ? 34 : 28
+                                                wordSpacing: modelData.isInterlude ? 16 : 8
+                                                accentColor: "#ffffff"
                                             }
                                         }
                                     }
@@ -1854,17 +1813,18 @@ Item {
                                     // Unified Static Typography: Used for plain LRC lines and inactive lines
                                     Text {
                                         id: staticLineTxt
-                                        visible: !interludeDotsRow.visible && !appleMusicFlowLoader.visible
+                                        visible: !appleMusicFlowLoader.visible
                                         anchors.left: parent.left
                                         anchors.right: parent.right
                                         textFormat: Text.PlainText
                                         text: modelData.text || ""
                                         font.family: Theme.fontFamily
-                                        font.pixelSize: lyricRow.targetFontSize
+                                        font.pixelSize: modelData.isInterlude ? 34 : lyricRow.targetFontSize
                                         font.weight: Font.Bold
                                         color: lyricRow.isCurrent ? "#ffffff" : "#c4c8d4"
                                         wrapMode: Text.Wrap
                                         lineHeight: 1.28
+                                        letterSpacing: modelData.isInterlude ? 8 : 0
 
                                         Behavior on color {
                                             ColorAnimation { duration: 180 }
