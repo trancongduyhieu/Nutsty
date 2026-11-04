@@ -454,15 +454,18 @@ class CloudRelayClient:
         if params:
             url += "?" + urllib.parse.urlencode(params)
 
-        # Priority 1: Use requests library with auto-retry and SSL tolerance
+        # Priority 1: Use persistent requests Session with HTTP Keep-Alive (avoids repeated TLS handshakes)
         try:
             import requests
-            headers = {
-                "Content-Type": "application/json",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 NutstyClient/1.0"
-            }
+            if not hasattr(self, "_http_session") or self._http_session is None:
+                self._http_session = requests.Session()
+                self._http_session.headers.update({
+                    "Content-Type": "application/json",
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 NutstyClient/1.0"
+                })
+            sess = self._http_session
             try:
-                r = requests.request(method, url, json=data, params=params, headers=headers, timeout=5.0)
+                r = sess.request(method, url, json=data, params=params, timeout=5.0)
                 if r.status_code == 401:
                     uid = (data or {}).get("user_id") or (params or {}).get("user_id") or (data or {}).get("from_user_id")
                     if uid:
@@ -477,7 +480,7 @@ class CloudRelayClient:
                     try:
                         import urllib3
                         urllib3.disable_warnings()
-                        r = requests.request(method, url, json=data, params=params, headers=headers, timeout=5.0, verify=False)
+                        r = sess.request(method, url, json=data, params=params, timeout=5.0, verify=False)
                         if r.status_code == 401:
                             uid = (data or {}).get("user_id") or (params or {}).get("user_id") or (data or {}).get("from_user_id")
                             if uid:

@@ -154,18 +154,17 @@ Item {
                     }
                 }
 
-                // Layer 2: True Hardware Gaussian MultiEffect Glow on Singing Word
-                MultiEffect {
-                    source: charRow
-                    anchors.fill: charRow
-                    shadowEnabled: wordRoot.isSinging
-                    shadowColor: "#ffffff"
-                    shadowBlur: 0.95
-                    shadowOpacity: wordRoot.isSinging ? (0.92 * wordRoot.flareGate * Math.sin(Math.PI * wordRoot.smoothProg)) : 0.0
-                    shadowHorizontalOffset: 0
-                    shadowVerticalOffset: 0
-                    shadowScale: 1.08
-                    visible: shadowOpacity > 0.01
+                // Layer 2: Fast Zero-Lag Phosphor Glow on Singing Word (replaces heavy Gaussian blur)
+                Text {
+                    anchors.centerIn: charRow
+                    text: wData.text || ""
+                    font.family: root.fontFamily
+                    font.pixelSize: root.fontSize
+                    font.weight: root.fontWeight
+                    color: Qt.rgba(1.0, 1.0, 1.0, 0.40 * wordRoot.flareGate * Math.sin(Math.PI * wordRoot.smoothProg))
+                    scale: 1.06
+                    visible: wordRoot.isSinging && wordRoot.flareGate > 0.05
+                    z: -1
                 }
             }
         }

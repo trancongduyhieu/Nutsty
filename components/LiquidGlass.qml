@@ -78,12 +78,22 @@ Item {
         }
     }
 
+    function refreshBackdrop() {
+        if (backdropCropSource && root.isEffectActive) backdropCropSource.scheduleUpdate();
+    }
+
+    onVisibleChanged: if (visible) Qt.callLater(refreshBackdrop)
+    onOpacityChanged: if (opacity > 0.01) Qt.callLater(refreshBackdrop)
+    onWidthChanged: if (visible) Qt.callLater(refreshBackdrop)
+    onHeightChanged: if (visible) Qt.callLater(refreshBackdrop)
+    Component.onCompleted: Qt.callLater(refreshBackdrop)
+
     ShaderEffectSource {
         id: backdropCropSource
         sourceItem: root.isEffectActive ? root.backgroundSourceItem : null
         sourceRect: Qt.rect(cropAnchorHelper.cropPos.x, cropAnchorHelper.cropPos.y, root.width, root.height)
         visible: false
-        live: root.isEffectActive
+        live: (root.interactive && root.isPressed)
         smooth: true
         recursive: false
         hideSource: false

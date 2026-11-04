@@ -1750,7 +1750,7 @@ Item {
                                                             radius: 1.2
                                                             color: root.accentColor
                                                             SequentialAnimation on height {
-                                                                running: root.visible && qRow.isCurrent && root.isPlaying
+                                                                running: root.visible && root.activeTab === "up_next" && qRow.isCurrent && root.isPlaying
                                                                 loops: Animation.Infinite
                                                                 NumberAnimation { from: 4; to: 14; duration: 320 + index * 120; easing.type: Easing.InOutQuad }
                                                                 NumberAnimation { from: 14; to: 4; duration: 320 + index * 120; easing.type: Easing.InOutQuad }
@@ -1978,17 +1978,15 @@ Item {
                                                     Behavior on opacity { NumberAnimation { duration: 160 } }
                                                 }
 
-                                                MultiEffect {
-                                                    source: dotCore
-                                                    anchors.fill: dotCore
-                                                    shadowEnabled: dotItem.isSinging
-                                                    shadowColor: "#ffffff"
-                                                    shadowBlur: 0.95
-                                                    shadowOpacity: dotItem.isSinging ? (0.92 * Math.sin(Math.PI * dotItem.dProg)) : 0.0
-                                                    shadowScale: 1.5
-                                                    shadowHorizontalOffset: 0
-                                                    shadowVerticalOffset: 0
-                                                    visible: shadowOpacity > 0.01
+                                                Rectangle {
+                                                    anchors.centerIn: dotCore
+                                                    width: dotCore.width + 6
+                                                    height: dotCore.height + 6
+                                                    radius: width / 2
+                                                    color: "transparent"
+                                                    border.color: Qt.rgba(1.0, 1.0, 1.0, dotItem.isSinging ? (0.60 * Math.sin(Math.PI * dotItem.dProg)) : 0.0)
+                                                    border.width: 1.5
+                                                    visible: dotItem.isSinging
                                                 }
                                             }
                                         }

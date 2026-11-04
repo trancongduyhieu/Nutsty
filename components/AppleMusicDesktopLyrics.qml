@@ -237,17 +237,15 @@ Item {
                             Behavior on opacity { NumberAnimation { duration: 160 } }
                         }
 
-                        MultiEffect {
-                            source: dotCore
-                            anchors.fill: dotCore
-                            shadowEnabled: dotItem.isSinging
-                            shadowColor: "#ffffff"
-                            shadowBlur: 0.95
-                            shadowOpacity: dotItem.isSinging ? (0.92 * Math.sin(Math.PI * dotItem.dProg)) : 0.0
-                            shadowScale: 1.5
-                            shadowHorizontalOffset: 0
-                            shadowVerticalOffset: 0
-                            visible: shadowOpacity > 0.01
+                        Rectangle {
+                            anchors.centerIn: dotCore
+                            width: dotCore.width + 6
+                            height: dotCore.height + 6
+                            radius: width / 2
+                            color: "transparent"
+                            border.color: Qt.rgba(1.0, 1.0, 1.0, dotItem.isSinging ? (0.60 * Math.sin(Math.PI * dotItem.dProg)) : 0.0)
+                            border.width: 1.5
+                            visible: dotItem.isSinging
                         }
                     }
                 }

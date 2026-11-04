@@ -333,9 +333,9 @@ Item {
 
     Timer {
         id: statusPollTimer
-        interval: 250
+        interval: 1000
         repeat: true
-        running: true
+        running: root.activeTasksCount > 0
         onTriggered: {
             statusFileView.reload();
             root.syncFromStatusFile();

@@ -1714,36 +1714,12 @@ Scope {
                     color: "#0a0b0e"
                 }
 
-                // 2. Desktop Wallpaper Atmosphere Wrapper (when paused / idle)
+                // 2. Desktop Wallpaper Atmosphere (Zero-Cost Bilinear Haze)
                 Item {
                     id: wallpaperAtmosphereWrapper
                     anchors.fill: parent
                     clip: true
-                    visible: false
-
-                    Image {
-                        id: wallpaperAtmosphereImg
-                        anchors.centerIn: parent
-                        width: parent.width * 1.15
-                        height: parent.height * 1.15
-                        source: win.formatFileUrl(win.currentWallpaperPath)
-                        sourceSize: Qt.size(480, 270)
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        cache: false
-                    }
-                }
-
-                MultiEffect {
-                    id: wallpaperAtmosphereEffect
-                    anchors.fill: parent
-                    source: wallpaperAtmosphereWrapper
                     visible: wallpaperAtmosphereImg.status === Image.Ready && opacity > 0.01
-                    blurEnabled: true
-                    blur: 1.0
-                    blurMax: 40
-                    saturation: 1.55
-                    brightness: -0.05
                     opacity: (win.currentTrack && win.isPlaying) ? 0.0 : 0.85
                     Behavior on opacity {
                         NumberAnimation {
@@ -1751,42 +1727,42 @@ Scope {
                             easing.type: Easing.InOutQuad
                         }
                     }
+
+                    Image {
+                        id: wallpaperAtmosphereImg
+                        anchors.fill: parent
+                        source: win.formatFileUrl(win.currentWallpaperPath)
+                        sourceSize: Qt.size(80, 45) // Ultra-fast hardware bilinear optical blur
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        smooth: true
+                        cache: true
+                    }
                 }
 
-                // 3. Song Artwork Atmosphere Wrapper (when playing music)
+                // 3. Song Artwork Atmosphere (Zero-Cost Bilinear Haze)
                 Item {
                     id: songAtmosphereWrapper
                     anchors.fill: parent
                     clip: true
-                    visible: false
-
-                    Image {
-                        id: songAtmosphereImg
-                        anchors.fill: parent
-                        source: win.getTrackCoverUrl(win.currentTrack)
-                        sourceSize: Qt.size(160, 160)
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        cache: false
-                    }
-                }
-
-                MultiEffect {
-                    id: songAtmosphereEffect
-                    anchors.fill: parent
-                    source: songAtmosphereWrapper
                     visible: songAtmosphereImg.status === Image.Ready && opacity > 0.01
-                    blurEnabled: true
-                    blur: 1.0
-                    blurMax: 40
-                    saturation: 1.65
-                    brightness: -0.05
                     opacity: (win.currentTrack && win.isPlaying) ? 0.85 : 0.0
                     Behavior on opacity {
                         NumberAnimation {
                             duration: 400
                             easing.type: Easing.InOutQuad
                         }
+                    }
+
+                    Image {
+                        id: songAtmosphereImg
+                        anchors.fill: parent
+                        source: win.getTrackCoverUrl(win.currentTrack)
+                        sourceSize: Qt.size(64, 64) // Ultra-fast hardware bilinear optical blur
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        smooth: true
+                        cache: true
                     }
                 }
             }
@@ -3763,7 +3739,7 @@ Scope {
 
     Timer {
         id: pollTimer
-        interval: win.isPlaying ? 250 : (win.isLoadingAudio ? 180 : 800)
+        interval: win.isPlaying ? 250 : (win.isLoadingAudio ? 180 : 3000)
         running: true
         repeat: true
         onTriggered: {
@@ -4386,7 +4362,7 @@ Scope {
     // =========================================================================
     DesktopLyricsWidget {
         id: desktopLyrics
-        visible: win.desktopLyricsEnabled
+        visible: win.desktopLyricsEnabled && win.currentTrack !== null
         activeLyrics: win.activeLyrics
         currentTime: win.currentTime
         isPlaying: win.isPlaying
