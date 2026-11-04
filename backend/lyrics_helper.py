@@ -939,6 +939,15 @@ def _has_synced(lyric_list):
     """Returns True if any line has a real timestamp (not all synthetic/unsynced)."""
     return lyric_list and any(item.get("time", 0) > 0 for item in lyric_list)
 
+def _tag_source(lines, source_name):
+    """Tag each lyric line with its provider source name."""
+    if not lines or not isinstance(lines, list):
+        return lines
+    for item in lines:
+        if isinstance(item, dict):
+            item["source"] = source_name
+    return lines
+
 def _get_lyrics_raw(title, artist=None, video_id=None, file_path=None, duration_sec=None):
     if not title:
         return []
@@ -948,6 +957,7 @@ def _get_lyrics_raw(title, artist=None, video_id=None, file_path=None, duration_
     # ──────────────────────────────────────────────────────────────────────
     db_lyrics = get_lyrics_from_local_db(title, artist, video_id)
     if _has_real_syllables(db_lyrics):
+        _tag_source(db_lyrics, "SimpMusic")
         return db_lyrics
 
     # ──────────────────────────────────────────────────────────────────────
@@ -959,8 +969,12 @@ def _get_lyrics_raw(title, artist=None, video_id=None, file_path=None, duration_
         if os.path.exists(local_lrc):
             try:
                 with open(local_lrc, "r", encoding="utf-8", errors="ignore") as f:
-                    res = parse_lrc(f.read())
+                    txt = f.read()
+                    m_src = re.search(r'\[(?:source|re):([^\]]+)\]', txt, re.IGNORECASE)
+                    src_tag = m_src.group(1).strip() if m_src else "Local File"
+                    res = parse_lrc(txt)
                     if res:
+                        _tag_source(res, src_tag)
                         return res
             except Exception:
                 pass
@@ -976,8 +990,14 @@ def _get_lyrics_raw(title, artist=None, video_id=None, file_path=None, duration_
         if os.path.exists(cp):
             try:
                 with open(cp, "r", encoding="utf-8", errors="ignore") as f:
-                    res = parse_lrc(f.read())
+                    content = f.read()
+                    m_src = re.search(r'\[(?:source|re):([^\]]+)\]', content, re.IGNORECASE)
+                    cached_source = m_src.group(1).strip() if m_src else ""
+                    res = parse_lrc(content)
                     if res:
+                        if not cached_source:
+                            cached_source = "Spotify" if (get_spotify_spdc() and _has_real_syllables(res)) else ("Apple Music" if _has_real_syllables(res) else "LRCLIB")
+                        _tag_source(res, cached_source)
                         # Prefer cache only if it has syllable data; otherwise
                         # still try upstream sources for better quality
                         if _has_real_syllables(res):
@@ -1009,7 +1029,8 @@ def _get_lyrics_raw(title, artist=None, video_id=None, file_path=None, duration_
         if vid:
             res = fetch_simpmusic_lyrics(vid)
             if res:
-                _save_lrc_cache_from_lines(res, title, artist)
+                _tag_source(res, "SimpMusic")
+                _save_lrc_cache_from_lines(res, title, artist, source="SimpMusic")
                 return res
         return None
 
@@ -1018,20 +1039,23 @@ def _get_lyrics_raw(title, artist=None, video_id=None, file_path=None, duration_
             return None
         res = fetch_spotify_lyrics(cleaned_title, artist, duration_sec)
         if res:
-            _save_lrc_cache_from_lines(res, title, artist)
+            _tag_source(res, "Spotify")
+            _save_lrc_cache_from_lines(res, title, artist, source="Spotify")
         return res
 
     def _run_betterlyrics():
         res = fetch_betterlyrics_ttml(cleaned_title, artist, duration_sec)
         if _has_real_syllables(res):
-            _save_ttml_as_lrc_cache(res, title, artist)
+            _tag_source(res, "Apple Music")
+            _save_ttml_as_lrc_cache(res, title, artist, source="Apple Music")
             return res
         return None
 
     def _run_lrclib():
         res = fetch_lrclib(cleaned_title, artist, duration_sec)
         if res:
-            _save_lrc_cache_from_lines(res, title, artist)
+            _tag_source(res, "LRCLIB")
+            _save_lrc_cache_from_lines(res, title, artist, source="LRCLIB")
             return res
         return None
 
@@ -1053,9 +1077,10 @@ def _get_lyrics_raw(title, artist=None, video_id=None, file_path=None, duration_
                     if lrc:
                         parsed = parse_lrc(lrc)
                         if parsed:
+                            _tag_source(parsed, "NetEase Music")
                             try:
                                 with open(get_cache_path(title, artist), "w", encoding="utf-8") as f:
-                                    f.write(lrc)
+                                    f.write("[source:NetEase Music]\n" + lrc)
                             except Exception:
                                 pass
                             return parsed
@@ -1188,6 +1213,11 @@ def _insert_interlude_dots(lines):
         return lines
 
     result = []
+    source_val = ""
+    for l in lines:
+        if isinstance(l, dict) and l.get("source"):
+            source_val = l["source"]
+            break
 
     # 1. Check Intro gap before first vocal line
     first_line = lines[0]
@@ -1208,7 +1238,8 @@ def _insert_interlude_dots(lines):
                     {"text": "•", "start": round(cd_start + dot_dur, 3), "end": round(cd_start + 2 * dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": True},
                     {"text": "•", "start": round(cd_start + 2 * dot_dur, 3), "end": round(first_time, 3), "duration": round(dot_dur, 3), "isHeld": True},
                 ],
-                "romanized": ""
+                "romanized": "",
+                "source": source_val
             }
             result.append(interlude_item)
 
@@ -1250,7 +1281,8 @@ def _insert_interlude_dots(lines):
                         {"text": "•", "start": round(cd_start + dot_dur, 3), "end": round(cd_start + 2 * dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": True},
                         {"text": "•", "start": round(cd_start + 2 * dot_dur, 3), "end": round(next_time, 3), "duration": round(dot_dur, 3), "isHeld": True},
                     ],
-                    "romanized": ""
+                    "romanized": "",
+                    "source": source_val
                 }
                 result.append(interlude_item)
 
@@ -1266,10 +1298,12 @@ def get_lyrics(title, artist=None, video_id=None, file_path=None, duration_sec=N
 # Cache write helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _save_ttml_as_lrc_cache(lines, title, artist):
+def _save_ttml_as_lrc_cache(lines, title, artist, source="Apple Music"):
     """Serialize TTML-parsed lines back to a basic LRC for local caching."""
     try:
         out = []
+        if source:
+            out.append(f"[source:{source}]")
         for ln in lines:
             mm = int(ln["time"] // 60)
             ss = ln["time"] % 60
@@ -1287,10 +1321,12 @@ def _save_ttml_as_lrc_cache(lines, title, artist):
     except Exception:
         pass
 
-def _save_lrc_cache_from_lines(lines, title, artist):
+def _save_lrc_cache_from_lines(lines, title, artist, source=""):
     """Save timestamped LRC from parsed line list (preserving rich sync if present)."""
     try:
         out = []
+        if source:
+            out.append(f"[source:{source}]")
         for ln in lines:
             mm = int(ln["time"] // 60)
             ss = ln["time"] % 60

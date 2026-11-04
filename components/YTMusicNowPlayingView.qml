@@ -27,6 +27,71 @@ Item {
     property bool lyricsRomanizationEnabled: (typeof win !== "undefined" && win && win.lyricsRomanizationEnabled !== undefined) ? win.lyricsRomanizationEnabled : true
     property bool hasLyrics: false
     property bool isLoadingLyrics: false
+    property var audioSpecs: null
+    property string lyricsSource: ""
+
+    readonly property bool isLyricsWordByWord: {
+        if (!root.activeLyrics || root.activeLyrics.length === 0) return false;
+        for (var i = 0; i < root.activeLyrics.length; ++i) {
+            var l = root.activeLyrics[i];
+            if (l && l.hasWords && !l.isSynthetic && l.words && l.words.length > 0 && !l.isInterlude) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function formatLyricSourceName(rawSrc) {
+        if (!rawSrc) return "";
+        var s = String(rawSrc).trim();
+        if (s.toLowerCase() === "local file" || s.toLowerCase() === "tập tin cục bộ") {
+            return I18n.tr("Tập tin cục bộ", "Local File");
+        }
+        if (s.toLowerCase() === "cache" || s.toLowerCase() === "bộ nhớ đệm") {
+            return I18n.tr("Bộ nhớ đệm", "Cached Lyrics");
+        }
+        return s;
+    }
+
+    readonly property string audioQualityText: {
+        if (!root.track) return "";
+        if (root.audioSpecs) {
+            var c = (root.audioSpecs.codec || "AAC").toUpperCase();
+            var b = root.audioSpecs.bitrate_str || "";
+            if (!b && root.audioSpecs.bitrate) b = root.audioSpecs.bitrate + " kbps";
+            if (c === "FLAC") {
+                return "FLAC • " + (root.audioSpecs.sample_rate_str || "Lossless");
+            }
+            if (b) return c + " • " + b;
+            return c;
+        }
+        if (root.track.path && (root.track.path.endsWith(".flac") || root.track.path.endsWith(".FLAC"))) return "FLAC • Lossless";
+        if (root.track.path && (root.track.path.endsWith(".mp3") || root.track.path.endsWith(".MP3"))) return "MP3 • 320 kbps";
+        return "AAC • 128 kbps";
+    }
+
+    readonly property string trackMetaSummary: {
+        if (!root.track) return "";
+        var parts = [];
+        if (root.audioQualityText && root.audioQualityText.trim() !== "") {
+            parts.push(root.audioQualityText.trim());
+        }
+        if (root.hasLyrics) {
+            var rawSrc = root.lyricsSource;
+            if (!rawSrc) {
+                rawSrc = root.isLyricsWordByWord ? "Spotify" : "LRCLIB";
+            }
+            var srcName = formatLyricSourceName(rawSrc);
+            if (srcName) {
+                if (root.isLyricsWordByWord) {
+                    parts.push(I18n.tr("Từng từ một được cung cấp bởi ", "Word-by-word lyrics provided by ") + srcName);
+                } else {
+                    parts.push(I18n.tr("Lời bài hát được cung cấp bởi ", "Lyrics provided by ") + srcName);
+                }
+            }
+        }
+        return parts.join(" • ");
+    }
 
     property var relatedData: null
     property bool isLoadingRelated: false
@@ -190,9 +255,11 @@ Item {
             }
         }
 
+        root.lyricsSource = "";
         fetchLyrics();
         fetchRelatedContent();
         fetchAnimatedArtwork();
+        delayedAudioSpecsTimer.restart();
 
         if (!isAlreadyInQueue) {
             // New seed track selected from outside the current queue (Home / Downloads / Search / New Album):
@@ -206,6 +273,9 @@ Item {
     }
 
     onVisibleChanged: {
+        if (visible) {
+            delayedAudioSpecsTimer.restart();
+        }
         if (visible && root.track && (!root.moodChips || root.moodChips.length === 0)) {
             fetchMoodChips();
         }
@@ -434,6 +504,14 @@ Item {
                         root.activeLyrics = parsed;
                         root.hasLyrics = true;
                         root.isLoadingLyrics = false;
+                        var src = "";
+                        for (var i = 0; i < parsed.length; ++i) {
+                            if (parsed[i].source) {
+                                src = parsed[i].source;
+                                break;
+                            }
+                        }
+                        root.lyricsSource = src;
                         Qt.callLater(function() { root.updateActiveLyric(true); });
                         if (root.activeTab !== "up_next" && root.activeTab !== "related") {
                             root.activeTab = "lyrics";
@@ -441,6 +519,7 @@ Item {
                     } else {
                         root.activeLyrics = [];
                         root.hasLyrics = false;
+                        root.lyricsSource = "";
                         root.isLoadingLyrics = false;
                         if (root.activeTab === "lyrics") {
                             root.activeTab = "up_next";
@@ -449,6 +528,7 @@ Item {
                 } catch (e) {
                     root.activeLyrics = [];
                     root.hasLyrics = false;
+                    root.lyricsSource = "";
                     root.isLoadingLyrics = false;
                     if (root.activeTab === "lyrics") {
                         root.activeTab = "up_next";
@@ -462,6 +542,40 @@ Item {
                 root.activeTab = "up_next";
             }
         }
+    }
+
+    function fetchAudioSpecs() {
+        audioSpecsProc.running = false;
+        var daemonPath = root.appDir + "/backend/player_daemon.py";
+        audioSpecsProc.command = [
+            "python3", "-u",
+            daemonPath,
+            "audio_specs"
+        ];
+        audioSpecsProc.running = true;
+    }
+
+    Process {
+        id: audioSpecsProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                if (!data || data.trim() === "") return;
+                try {
+                    var obj = JSON.parse(data);
+                    if (obj && typeof obj === "object") {
+                        root.audioSpecs = obj;
+                    }
+                } catch(e) {}
+            }
+        }
+    }
+
+    Timer {
+        id: delayedAudioSpecsTimer
+        interval: 800
+        repeat: false
+        onTriggered: fetchAudioSpecs()
     }
 
     Process {
@@ -1031,6 +1145,24 @@ Item {
                                 }
                             }
                         }
+                    }
+                }
+
+                // 3. Audio Quality & Lyrics Source Meta Row
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    visible: root.track !== null && metaSummaryText.text.length > 0
+
+                    Text {
+                        id: metaSummaryText
+                        Layout.fillWidth: true
+                        text: root.trackMetaSummary
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                        font.weight: Font.Medium
+                        color: Qt.rgba(1.0, 1.0, 1.0, 0.45)
+                        elide: Text.ElideRight
                     }
                 }
             }

@@ -646,6 +646,9 @@ function trackPlayback(win, trk, playbackTrackingProc) {
 function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileView) {
     try {
         var s = JSON.parse(data);
+        if (s.audio_specs && typeof s.audio_specs === "object") {
+            win.audioSpecs = s.audio_specs;
+        }
         var elapsed = Date.now() - win.trackChangeTimestamp;
 
         if (win.isLoadingAudio) {

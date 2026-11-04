@@ -45,6 +45,7 @@ Scope {
         }
 
         property var activeLyrics: (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) ? ytNowPlayingView.activeLyrics : []
+        property var audioSpecs: null
 
     readonly property string appDir: Quickshell.env("NUTSTY_APP_DIR") || (Quickshell.env("HOME") + "/Applications/FrostifyLocal")
 
@@ -2365,6 +2366,7 @@ Scope {
 
                     track: win.currentTrack
                     appDir: win.appDir
+                    audioSpecs: win.audioSpecs
                     animatedCoverEnabled: win.animatedCoverEnabled
                     canvasPreference: win.canvasPreference
                     currentTime: win.currentTime

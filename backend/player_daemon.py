@@ -44,8 +44,8 @@ CURRENT_TRACK_FILE = os.path.join(TEMP_DIR, f"nutsty_current_track{PROFILE_SUFFI
 MPV_TITLE = f"nutsty-audio{PROFILE_SUFFIX}"
 
 YTDL_FORMAT_MAP = {
-    "high_opus": "774/141/251/140/bestaudio/best",
-    "high_aac": "141/774/140/251/bestaudio/best",
+    "high_opus": "774/251/250/249/141/140/bestaudio/best",
+    "high_aac": "141/140/774/251/250/bestaudio/best",
     "medium": "251/140/bestaudio/best",
     "low": "250/ba[abr<=70]/bestaudio/best"
 }
@@ -318,13 +318,16 @@ def resolve_media_path(file_path, title="", artist="", force_fresh=False):
                             cached = v
                             break
                 if cached and (time.time() - cached.get("timestamp", 0)) < 1200:
-                    ua = cached.get("user_agent")
-                    if ua:
-                        try:
-                            send_mpv_cmd(["set_property", "user-agent", ua])
-                        except Exception:
-                            pass
-                    return cached.get("stream_url")
+                    if streaming_quality == "high_opus" and (str(cached.get("itag")) == "18" or "mp4a" in str(cached.get("codec", ""))):
+                        cached = None
+                    else:
+                        ua = cached.get("user_agent")
+                        if ua:
+                            try:
+                                send_mpv_cmd(["set_property", "user-agent", ua])
+                            except Exception:
+                                pass
+                        return cached.get("stream_url")
 
             # Resolve direct stream URL using authenticated format picker
             res = ytmusic_helper.resolve_stream_url(vid, streaming_quality, force_fresh=force_fresh)
@@ -516,7 +519,7 @@ def get_status_dict():
 
     has_file = bool((path or filename) and not idle and is_target_active) and (not is_loading or (time_pos is not None and time_pos > 0))
 
-    return {
+    st = {
         "is_playing": (pause is False) and has_file,
         "is_paused": (pause is True) and bool((path or filename) and not idle and is_target_active),
         "time_pos": round(time_pos, 1) if (has_file and is_target_active) else 0.0,
@@ -524,6 +527,33 @@ def get_status_dict():
         "filename": (filename or path) if (has_file and is_target_active) else "",
         "volume": vol,
         "is_loading": is_loading
+    }
+    if has_file:
+        st["audio_specs"] = get_audio_specs_dict()
+    return st
+
+def get_audio_specs_dict():
+    codec = get_mpv_property("audio-codec-name") or ""
+    bitrate = get_mpv_property("audio-bitrate") or 0
+    params = get_mpv_property("audio-params") or {}
+
+    sample_rate = params.get("samplerate", 0) if isinstance(params, dict) else 0
+    channels = params.get("channel-count", 2) if isinstance(params, dict) else 2
+    channel_str = "Stereo (2ch)" if channels == 2 else (f"{channels}ch" if channels else "Stereo")
+
+    bitrate_kbps = round(bitrate / 1000) if bitrate > 1000 else int(bitrate)
+    if bitrate_kbps == 0:
+        bitrate_kbps = 192 if codec in ["opus", "aac"] else (320 if codec == "mp3" else 192)
+
+    samplerate_str = f"{sample_rate / 1000:.1f} kHz" if sample_rate > 0 else "48.0 kHz"
+
+    return {
+        "codec": (codec or "aac").upper(),
+        "bitrate": bitrate_kbps,
+        "bitrate_str": f"{bitrate_kbps} kbps" if bitrate_kbps > 0 else "192 kbps",
+        "sample_rate": sample_rate or 48000,
+        "sample_rate_str": samplerate_str,
+        "channels": channel_str
     }
 
 def get_status_json():
@@ -783,28 +813,8 @@ def execute_command(args):
 
     elif action == "audio_specs":
         ensure_mpv()
-        codec = get_mpv_property("audio-codec-name") or ""
-        bitrate = get_mpv_property("audio-bitrate") or 0
-        params = get_mpv_property("audio-params") or {}
-
-        sample_rate = params.get("samplerate", 0)
-        channels = params.get("channel-count", 2)
-        channel_str = "Stereo (2ch)" if channels == 2 else (f"{channels}ch" if channels else "Stereo")
-
-        bitrate_kbps = round(bitrate / 1000) if bitrate > 1000 else int(bitrate)
-        if bitrate_kbps == 0:
-            bitrate_kbps = 192 if codec in ["opus", "aac"] else (320 if codec == "mp3" else 192)
-
-        samplerate_str = f"{sample_rate / 1000:.1f} kHz" if sample_rate > 0 else "48.0 kHz"
-
-        specs = {
-            "codec": (codec or "aac").upper(),
-            "bitrate": bitrate_kbps,
-            "bitrate_str": f"{bitrate_kbps} kbps" if bitrate_kbps > 0 else "192 kbps",
-            "sample_rate": sample_rate or 48000,
-            "sample_rate_str": samplerate_str,
-            "channels": channel_str
-        }
+        specs = get_audio_specs_dict()
+        print(json.dumps(specs))
     elif action == "set_streaming_quality" and len(args) > 1:
         ensure_mpv()
         qual = args[1]

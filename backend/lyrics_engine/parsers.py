@@ -68,6 +68,9 @@ def parse_lrc(lrc_text: str) -> List[Dict[str, Any]]:
     results = []
     time_regex = re.compile(r'\[(\d{1,2}):(\d{1,2}(?:\.\d+)?)\]')
 
+    source_match = re.search(r'\[(?:source|re):([^\]]+)\]', lrc_text, re.IGNORECASE)
+    lrc_source = source_match.group(1).strip() if source_match else None
+
     for line in lrc_text.splitlines():
         line = line.strip()
         if not line:
@@ -87,14 +90,17 @@ def parse_lrc(lrc_text: str) -> List[Dict[str, Any]]:
             mins, secs = int(m.group(1)), float(m.group(2))
             total_sec = round(mins * 60.0 + secs, 3)
             end_sec = max((w["end"] for w in syllable_words), default=None)
-            results.append({
+            item = {
                 "time": total_sec,
                 "endTime": end_sec if end_sec is not None else round(total_sec + 4.5, 3),
                 "text": clean_text,
                 "hasWords": bool(syllable_words),
                 "isSynthetic": not bool(syllable_words),
                 "words": syllable_words,
-            })
+            }
+            if lrc_source:
+                item["source"] = lrc_source
+            results.append(item)
     results.sort(key=lambda x: x["time"])
 
     # Fill in endTime for lines without syllable timestamps

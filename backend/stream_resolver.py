@@ -38,8 +38,8 @@ LOCAL_YT_MAPPINGS_FILE = os.path.join(pc.get_cache_dir(), "local_yt_mappings.jso
 PENDING_HISTORY_FILE = os.path.join(pc.get_cache_dir(), f"pending_history{PROFILE_SUFFIX}.json")
 
 QUALITY_ITAG_PRIORITIES = {
-    "high_opus": [774, 141, 251, 140, 250, 18],
-    "high_aac": [141, 774, 140, 251, 250, 18],
+    "high_opus": [774, 251, 250, 249, 141, 140, 18],
+    "high_aac": [141, 140, 774, 251, 250, 18],
     "medium": [251, 140, 250, 141, 774, 18],
     "low": [250, 249, 139, 251, 140, 141, 774, 18]
 }
@@ -155,9 +155,13 @@ def resolve_stream_url(video_id, quality=None, force_fresh=False):
                 cached = legacy
 
         if cached and (now - cached.get("timestamp", 0)) < STREAM_CACHE_TTL_SECONDS:
-            with _STREAM_CACHE_LOCK:
-                _MEMORY_STREAM_CACHE[cache_key] = cached
-            return cached
+            # If user wanted high_opus but cached entry is legacy fallback itag 18 / mp4a, ignore stale cache
+            if quality == "high_opus" and (str(cached.get("itag")) == "18" or "mp4a" in str(cached.get("codec", ""))):
+                cached = None
+            else:
+                with _STREAM_CACHE_LOCK:
+                    _MEMORY_STREAM_CACHE[cache_key] = cached
+                return cached
     else:
         cache = load_json(STREAM_CACHE_FILE, {})
 
@@ -168,18 +172,21 @@ def resolve_stream_url(video_id, quality=None, force_fresh=False):
         url = f"https://www.youtube.com/watch?v={video_id}"
         attempts = []
 
-        # Attempt 1: Android Music client (highest reliability for YTMusic 251 Opus / 140 AAC)
-        attempts.append({
+        # Attempt 1: Modern TV / Web Embedded client with optional cookies (extracts clean 251 Opus / 140 AAC)
+        opt1 = {
             "quiet": True,
             "no_warnings": True,
             "skip_download": True,
             "check_formats": False,
             "noplaylist": True,
             "socket_timeout": 8,
-            "extractor_args": {"youtube": {"player_client": ["android_music", "android"]}}
-        })
+            "extractor_args": {"youtube": {"player_client": ["tv", "web_embedded"]}}
+        }
+        if cookie_file and os.path.exists(cookie_file):
+            opt1["cookiefile"] = cookie_file
+        attempts.append(opt1)
 
-        # Attempt 2: User cookie file if Google Account session exists
+        # Attempt 2: User cookie file with mweb / web_embedded client
         if cookie_file and os.path.exists(cookie_file):
             attempts.append({
                 "quiet": True,
@@ -189,7 +196,7 @@ def resolve_stream_url(video_id, quality=None, force_fresh=False):
                 "noplaylist": True,
                 "socket_timeout": 8,
                 "cookiefile": cookie_file,
-                "extractor_args": {"youtube": {"player_client": ["android", "mweb"]}}
+                "extractor_args": {"youtube": {"player_client": ["mweb", "web_embedded"]}}
             })
 
         # Attempt 3: Standard resilient web client extraction
