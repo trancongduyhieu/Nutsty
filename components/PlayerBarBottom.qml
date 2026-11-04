@@ -38,7 +38,10 @@ Item {
     property string resolvedSquareImage: ""
     property bool squareFailed: false
     onResolvedSquareImageChanged: squareFailed = false
-    onCurrentTrackChanged: squareFailed = false
+    onCurrentTrackChanged: {
+        squareFailed = false;
+        Qt.callLater(refreshBackdrop);
+    }
 
     property bool isLiked: false
     property bool isVolumePopupOpen: false
@@ -161,7 +164,6 @@ Item {
         if (backdropCropSource) backdropCropSource.scheduleUpdate();
     }
 
-    onCurrentTrackChanged: Qt.callLater(refreshBackdrop)
     onWidthChanged: Qt.callLater(refreshBackdrop)
     onHeightChanged: Qt.callLater(refreshBackdrop)
     onXChanged: Qt.callLater(refreshBackdrop)
