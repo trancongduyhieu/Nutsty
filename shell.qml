@@ -991,7 +991,7 @@ Scope {
 
     Timer {
         id: socialEventsFastTimer
-        interval: win.isCoListeningActive ? 800 : (win.isUserActiveBoost ? 1000 : 10000)
+        interval: win.isCoListeningActive ? 800 : (win.isUserActiveBoost ? 5000 : 15000)
         repeat: true
         running: true
         triggeredOnStart: true
@@ -1002,7 +1002,7 @@ Scope {
 
     Timer {
         id: friendsNotesTimer
-        interval: win.isCoListeningActive ? 2000 : 10000
+        interval: win.isCoListeningActive ? 2000 : 20000
         repeat: true
         running: true
         triggeredOnStart: true
@@ -1014,7 +1014,7 @@ Scope {
 
     Timer {
         id: friendsSyncTimer
-        interval: win.isCoListeningActive ? 4000 : 15000
+        interval: win.isCoListeningActive ? 4000 : 30000
         repeat: true
         running: true
         triggeredOnStart: true
@@ -1662,7 +1662,7 @@ Scope {
             acceptedButtons: Qt.NoButton
             onPositionChanged: win.triggerUserActiveBoost()
         }
-        layer.enabled: !(win.maximized || win.fullscreen)
+        layer.enabled: false
         layer.smooth: true
         layer.effect: MultiEffect {
             maskEnabled: true

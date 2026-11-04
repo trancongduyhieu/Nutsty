@@ -385,9 +385,23 @@ def extract_account_details_from_client(yt, headers=None):
 
     return info
 
+_AUTH_STATUS_CACHE = None
+_AUTH_STATUS_CACHE_TS = 0.0
+
+def invalidate_auth_status_cache():
+    global _AUTH_STATUS_CACHE, _AUTH_STATUS_CACHE_TS
+    _AUTH_STATUS_CACHE = None
+    _AUTH_STATUS_CACHE_TS = 0.0
+
 def get_auth_status():
+    global _AUTH_STATUS_CACHE, _AUTH_STATUS_CACHE_TS
     if not os.path.exists(AUTH_FILE):
         return {"logged_in": False, "name": "", "thumb": "", "email": ""}
+    
+    now = time.time()
+    if _AUTH_STATUS_CACHE is not None and (now - _AUTH_STATUS_CACHE_TS < 60.0):
+        return _AUTH_STATUS_CACHE
+
     user_cache_file = os.path.join(os.path.dirname(AUTH_FILE), f"nutsty_user_cache{PROFILE_SUFFIX}.json")
     
     cached_info = {}
@@ -463,7 +477,10 @@ def get_auth_status():
             except Exception:
                 pass
 
-        return {"logged_in": True, "name": name, "thumb": thumb, "email": email}
+        res = {"logged_in": True, "name": name, "thumb": thumb, "email": email}
+        _AUTH_STATUS_CACHE = res
+        _AUTH_STATUS_CACHE_TS = time.time()
+        return res
     except Exception as e:
         # Fallback 1: Return cached profile if available
         if cached_info and cached_info.get("name") and cached_info.get("name") != "Google User":
@@ -471,12 +488,15 @@ def get_auth_status():
             c_thumb = cached_info.get("avatar") or ""
             if "ui-avatars.com" in c_thumb:
                 c_thumb = ""
-            return {
+            res = {
                 "logged_in": True,
                 "name": c_name,
                 "thumb": c_thumb,
                 "email": cached_info.get("email") or ""
             }
+            _AUTH_STATUS_CACHE = res
+            _AUTH_STATUS_CACHE_TS = time.time()
+            return res
 
         # Fallback 2: Direct profile lookup from AUTH_FILE cookies
         try:
@@ -490,7 +510,10 @@ def get_auth_status():
                 fb_thumb = dp.get("thumb") or (cached_info.get("avatar") if cached_info else "") or ""
                 if "ui-avatars.com" in fb_thumb:
                     fb_thumb = ""
-                return {"logged_in": True, "name": fb_name, "thumb": fb_thumb, "email": fb_email}
+                res = {"logged_in": True, "name": fb_name, "thumb": fb_thumb, "email": fb_email}
+                _AUTH_STATUS_CACHE = res
+                _AUTH_STATUS_CACHE_TS = time.time()
+                return res
         except Exception:
             pass
 
@@ -738,6 +761,7 @@ def save_auth(raw_text, profile_hint=None):
             except Exception as cie:
                 sys.stderr.write(f"[ytmusic_auth] ensure_cloud_identity error: {cie}\n")
 
+        invalidate_auth_status_cache()
         try:
             with open(AUTH_CHANGED_FILE, "w") as f:
                 f.write(str(time.time()))

@@ -16,94 +16,49 @@ import ctypes
 from ctypes import wintypes
 from pathlib import Path
 
-def _detect_hypervisor_vm():
+def _detect_virtualbox_gpu() -> bool:
     """
-    Multi-tiered detection for VirtualBox and other hypervisors.
-    In VirtualBox, Direct3D 11 backend causes VBoxWddm.sys memory exhaustion
-    and BugCheck 0x10E (VIDEO_MEMORY_MANAGEMENT_INTERNAL). Falling back to
-    OpenGL (Mesa Gallium3D VBoxGL.dll) prevents VM crashes.
+    Detect if Oracle VirtualBox is the ACTIVE display adapter attached to desktop.
+    VirtualBox WDDM driver has BugCheck 0x10E crash under Qt D3D11 MultiEffect and requires OpenGL.
+    Bare metal (Intel/NVIDIA/AMD) and QEMU/KVM/VMware must use Direct3D 11 to avoid 50%+ CPU Software OpenGL.
     """
     if sys.platform != "win32":
         return False
     try:
-        import winreg
-
-        reg_access = winreg.KEY_READ | getattr(winreg, "KEY_WOW64_64KEY", 0)
-
-        # Tier 1: Check Kernel Miniport Driver Services
-        # (VBoxWddm, VBoxGuest, VBoxMouse, VBoxVideo, VBoxSF in SYSTEM\CurrentControlSet\Services)
-        vbox_services = ("VBoxWddm", "VBoxGuest", "VBoxMouse", "VBoxVideo", "VBoxSF")
-        for svc in vbox_services:
-            try:
-                k = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, f"SYSTEM\\CurrentControlSet\\Services\\{svc}", 0, reg_access)
-                winreg.CloseKey(k)
-                return True
-            except OSError:
-                pass
-
-        # Tier 2: Enumerate display adapter subkeys under
-        # SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}
-        # (strictly filter for numeric subkeys sub.isdigit() to prevent Access Denied on Properties)
-        display_class_path = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"
-        try:
-            class_key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, display_class_path, 0, reg_access)
-            idx = 0
-            while True:
-                try:
-                    sub_name = winreg.EnumKey(class_key, idx)
-                    idx += 1
-                except OSError:
-                    break
-                if not sub_name.isdigit():
-                    continue
-                try:
-                    sub_key = winreg.OpenKey(class_key, sub_name, 0, reg_access)
-                    for val_name in ("DriverDesc", "ProviderName"):
-                        try:
-                            val, _ = winreg.QueryValueEx(sub_key, val_name)
-                            val_lower = str(val).lower()
-                            if any(target in val_lower for target in ("virtualbox", "innotek", "oracle", "vbox")):
-                                winreg.CloseKey(sub_key)
-                                winreg.CloseKey(class_key)
-                                return True
-                        except OSError:
-                            pass
-                    winreg.CloseKey(sub_key)
-                except OSError:
-                    pass
-            winreg.CloseKey(class_key)
-        except OSError:
-            pass
-
-        # Tier 3: Check BIOS strings
-        # (SystemManufacturer, SystemProductName, BaseBoardManufacturer, etc. in HARDWARE\DESCRIPTION\System\BIOS)
-        try:
-            bios_key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\BIOS", 0, reg_access)
-            bios_targets = ("virtualbox", "innotek", "oracle", "vbox", "qemu", "kvm", "vmware")
-            bios_fields = ("SystemManufacturer", "SystemProductName", "BaseBoardManufacturer", "BaseBoardProduct", "BIOSVendor", "BIOSVersion", "SystemFamily")
-            for val_name in bios_fields:
-                try:
-                    val, _ = winreg.QueryValueEx(bios_key, val_name)
-                    val_lower = str(val).lower()
-                    if any(target in val_lower for target in bios_targets):
-                        winreg.CloseKey(bios_key)
-                        return True
-                except OSError:
-                    pass
-            winreg.CloseKey(bios_key)
-        except OSError:
-            pass
-
+        import ctypes
+        from ctypes import wintypes
+        class DISPLAY_DEVICEW(ctypes.Structure):
+            _fields_ = [
+                ('cb', wintypes.DWORD),
+                ('DeviceName', wintypes.WCHAR * 32),
+                ('DeviceString', wintypes.WCHAR * 128),
+                ('StateFlags', wintypes.DWORD),
+                ('DeviceID', wintypes.WCHAR * 128),
+                ('DeviceKey', wintypes.WCHAR * 128)
+            ]
+        user32 = ctypes.windll.user32
+        i = 0
+        while True:
+            dd = DISPLAY_DEVICEW()
+            dd.cb = ctypes.sizeof(dd)
+            if not user32.EnumDisplayDevicesW(None, i, ctypes.byref(dd), 0):
+                break
+            i += 1
+            if dd.StateFlags & 0x1:  # DISPLAY_DEVICE_ATTACHED_TO_DESKTOP
+                s = dd.DeviceString.lower()
+                did = dd.DeviceID.lower()
+                if "virtualbox" in s or "vbox" in s or "innotek" in s or "ven_80ee" in did:
+                    return True
     except Exception:
         pass
     return False
 
 
 # Select RHI graphics backend:
-# Direct3D 11 backend enables Windows DirectComposition for 100% per-pixel alpha window border transparency on bare metal.
-# Hypervisors (VirtualBox) crash under D3D11 MultiEffect blur and require OpenGL (Mesa Gallium3D VBoxGL.dll).
+# Direct3D 11 backend enables Windows DirectComposition and fast hardware/WARP rasterization.
+# Only active VirtualBox WDDM adapter falls back to OpenGL.
 if sys.platform == "win32" and not os.environ.get("QSG_RHI_BACKEND", "").strip():
-    if _detect_hypervisor_vm():
+    if _detect_virtualbox_gpu():
         os.environ["QSG_RHI_BACKEND"] = "opengl"
     else:
         os.environ["QSG_RHI_BACKEND"] = "d3d11"
@@ -933,8 +888,8 @@ class NutstyBridge(QObject):
                         user32.SetWindowLongW.restype = wintypes.LONG
                         user32.SetWindowLongW(hwnd, GWL_EXSTYLE, target_ex)
 
-                # Skip DWM frame extension inside VirtualBox / Hypervisors to prevent VBoxDxVk SEGV
-                if not _detect_hypervisor_vm():
+                # Skip DWM frame extension inside VirtualBox to prevent VBoxDxVk SEGV
+                if not _detect_virtualbox_gpu():
                     try:
                         class MARGINS(ctypes.Structure):
                             _fields_ = [

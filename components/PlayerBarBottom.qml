@@ -157,12 +157,23 @@ Item {
         }
     }
 
+    function refreshBackdrop() {
+        if (backdropCropSource) backdropCropSource.scheduleUpdate();
+    }
+
+    onCurrentTrackChanged: Qt.callLater(refreshBackdrop)
+    onWidthChanged: Qt.callLater(refreshBackdrop)
+    onHeightChanged: Qt.callLater(refreshBackdrop)
+    onXChanged: Qt.callLater(refreshBackdrop)
+    onYChanged: Qt.callLater(refreshBackdrop)
+    Component.onCompleted: Qt.callLater(refreshBackdrop)
+
     ShaderEffectSource {
         id: backdropCropSource
         sourceItem: root.backgroundSourceItem
         sourceRect: Qt.rect(cropAnchorHelper.cropPos.x, cropAnchorHelper.cropPos.y, root.width, root.height)
         visible: false
-        live: true
+        live: root.isBarHeld
         smooth: true
     }
 

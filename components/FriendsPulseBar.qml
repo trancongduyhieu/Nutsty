@@ -221,6 +221,7 @@ Item {
                     || (root.myLatestNote && root.myLatestNote.accent_color)
                     || (userNowPlayingObj && typeof userNowPlayingObj === "object" && userNowPlayingObj.accent_color)
                     || (typeof win !== "undefined" && win.currentTrack && win.songAccentColor && win.songAccentColor !== win.wallpaperAccentColor))
+                readonly property bool isPlayingThisTrack: hasTrack && (typeof win !== "undefined" && win.isPlaying && win.currentTrack && win.isSameTrack(win.currentTrack, effectiveTrack))
                 readonly property color effectiveUserNoteAccent: hasCustomUserAccent ? userSongAccent : root.accentColor
 
                 width: 80
@@ -314,7 +315,7 @@ Item {
                                     color: userNoteItem.effectiveUserNoteAccent
                                     anchors.bottom: parent.bottom
                                     SequentialAnimation on height {
-                                        running: userNoteItem.hasTrack
+                                        running: userNoteItem.isPlayingThisTrack
                                         loops: Animation.Infinite
                                         NumberAnimation { to: 8; duration: 340; easing.type: Easing.InOutQuad }
                                         NumberAnimation { to: 3; duration: 340; easing.type: Easing.InOutQuad }
@@ -325,7 +326,7 @@ Item {
                                     color: userNoteItem.effectiveUserNoteAccent
                                     anchors.bottom: parent.bottom
                                     SequentialAnimation on height {
-                                        running: userNoteItem.hasTrack
+                                        running: userNoteItem.isPlayingThisTrack
                                         loops: Animation.Infinite
                                         NumberAnimation { to: 3.5; duration: 260; easing.type: Easing.InOutQuad }
                                         NumberAnimation { to: 8; duration: 260; easing.type: Easing.InOutQuad }
@@ -336,7 +337,7 @@ Item {
                                     color: userNoteItem.effectiveUserNoteAccent
                                     anchors.bottom: parent.bottom
                                     SequentialAnimation on height {
-                                        running: userNoteItem.hasTrack
+                                        running: userNoteItem.isPlayingThisTrack
                                         loops: Animation.Infinite
                                         NumberAnimation { to: 7.5; duration: 400; easing.type: Easing.InOutQuad }
                                         NumberAnimation { to: 2.5; duration: 400; easing.type: Easing.InOutQuad }
@@ -465,6 +466,7 @@ Item {
                     property bool hasFriendTrack: friendTrackStr.length > 0
                     property bool hasAnyNote: friendNoteStr.length > 0 || hasFriendTrack
                     property bool isFriendTrackOnly: hasFriendTrack && friendNoteStr.length === 0
+                    readonly property bool isPlayingThisTrack: hasFriendTrack && (typeof win !== "undefined" && win.isPlaying && win.currentTrack && win.isSameTrack(win.currentTrack, friendTrackObj))
 
                     readonly property color friendSongAccent: {
                         if (friendTrackObj && friendTrackObj.accent_color && String(friendTrackObj.accent_color).trim() !== "") {
@@ -573,7 +575,7 @@ Item {
                                     color: friendDelegateItem.effectiveFriendNoteAccent
                                     anchors.bottom: parent.bottom
                                     SequentialAnimation on height {
-                                        running: friendDelegateItem.hasFriendTrack
+                                        running: friendDelegateItem.isPlayingThisTrack
                                         loops: Animation.Infinite
                                         NumberAnimation { to: 8; duration: 340; easing.type: Easing.InOutQuad }
                                         NumberAnimation { to: 3; duration: 340; easing.type: Easing.InOutQuad }
@@ -584,7 +586,7 @@ Item {
                                     color: friendDelegateItem.effectiveFriendNoteAccent
                                     anchors.bottom: parent.bottom
                                     SequentialAnimation on height {
-                                        running: friendDelegateItem.hasFriendTrack
+                                        running: friendDelegateItem.isPlayingThisTrack
                                         loops: Animation.Infinite
                                         NumberAnimation { to: 3.5; duration: 260; easing.type: Easing.InOutQuad }
                                         NumberAnimation { to: 8; duration: 260; easing.type: Easing.InOutQuad }
@@ -595,7 +597,7 @@ Item {
                                     color: friendDelegateItem.effectiveFriendNoteAccent
                                     anchors.bottom: parent.bottom
                                     SequentialAnimation on height {
-                                        running: friendDelegateItem.hasFriendTrack
+                                        running: friendDelegateItem.isPlayingThisTrack
                                         loops: Animation.Infinite
                                         NumberAnimation { to: 7.5; duration: 400; easing.type: Easing.InOutQuad }
                                         NumberAnimation { to: 2.5; duration: 400; easing.type: Easing.InOutQuad }
