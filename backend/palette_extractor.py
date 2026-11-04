@@ -330,9 +330,12 @@ def main():
     out_file.write_text(json.dumps(result, indent=2), encoding="utf-8")
 
     # Always ensure ~/.config/noctalia/nutsty_palette.json is updated on all platforms for QML FileView
-    noctalia_out = Path.home() / ".config" / "noctalia" / "nutsty_palette.json"
-    noctalia_out.parent.mkdir(parents=True, exist_ok=True)
-    noctalia_out.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    try:
+        noctalia_out = Path.home() / ".config" / "noctalia" / "nutsty_palette.json"
+        noctalia_out.parent.mkdir(parents=True, exist_ok=True)
+        noctalia_out.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    except Exception:
+        pass
 
     if not pc.IS_WINDOWS:
         legacy_out = Path.home() / ".config" / "noctalia" / "frostify_palette.json"

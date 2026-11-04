@@ -12,6 +12,7 @@ import re
 import hashlib
 import urllib.request
 import sqlite3
+import threading
 
 try:
     from . import platform_compat as pc
@@ -246,13 +247,34 @@ def load_json(filepath, default=None):
             return default if default is not None else {}
     return default if default is not None else {}
 
-def save_json(filepath, data):
+_SAVE_JSON_LOCK = threading.Lock()
+
+def save_json(filepath, data, indent=2):
     try:
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         if hasattr(data, "items") and not isinstance(data, dict):
             data = dict(data.items())
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        with _SAVE_JSON_LOCK:
+            temp_path = f"{filepath}.{os.getpid()}.{threading.get_ident()}.tmp"
+            try:
+                with open(temp_path, "w", encoding="utf-8") as f:
+                    if indent is not None:
+                        json.dump(data, f, ensure_ascii=False, indent=indent)
+                    else:
+                        json.dump(data, f, ensure_ascii=False, separators=(',', ':'))
+                os.replace(temp_path, filepath)
+            except Exception:
+                # Direct in-place fallback on Windows if atomic replace is locked/denied
+                with open(filepath, "w", encoding="utf-8") as f:
+                    if indent is not None:
+                        json.dump(data, f, ensure_ascii=False, indent=indent)
+                    else:
+                        json.dump(data, f, ensure_ascii=False, separators=(',', ':'))
+                if os.path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                    except Exception:
+                        pass
     except Exception as e:
         sys.stderr.write(f"[save_json error {filepath}]: {e}\n")
 

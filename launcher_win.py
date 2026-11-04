@@ -559,10 +559,15 @@ class TaskbarLyricsService:
                     cfg = {}
             for k, v in kwargs.items():
                 cfg[k] = v
-            tmp_path = self.config_path + ".tmp"
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                json.dump(cfg, f, indent=2)
-            os.replace(tmp_path, self.config_path)
+            try:
+                tmp_path = self.config_path + ".tmp"
+                with open(tmp_path, "w", encoding="utf-8") as f:
+                    json.dump(cfg, f, indent=2)
+                os.replace(tmp_path, self.config_path)
+            except Exception:
+                # Direct in-place overwrite if atomic replace is denied on Windows
+                with open(self.config_path, "w", encoding="utf-8") as f:
+                    json.dump(cfg, f, indent=2)
         except Exception as e:
             sys.stderr.write(f"TaskbarLyrics update_config error: {e}\n")
 

@@ -2978,6 +2978,8 @@ Scope {
         }
     }
 
+    property real lastSettingsSaveTime: 0
+
     Timer {
         id: delayedSettingsRead
         interval: 100
@@ -2993,6 +2995,7 @@ Scope {
         path: Quickshell.env("HOME") + "/.config/noctalia/nutsty_settings" + (Quickshell.env("NUTSTY_PROFILE") ? ("_" + Quickshell.env("NUTSTY_PROFILE").toLowerCase()) : "") + ".json"
         watchChanges: true
         onFileChanged: {
+            if (Date.now() - win.lastSettingsSaveTime < 1500) return;
             reload();
             delayedSettingsRead.restart();
         }
@@ -3166,6 +3169,7 @@ Scope {
     }
 
     function saveSettings() {
+        win.lastSettingsSaveTime = Date.now();
         var data = JSON.stringify({
             isShuffle: win.isShuffle,
             isRepeat: win.isRepeat,

@@ -11,6 +11,7 @@ import time
 import re
 import hashlib
 import urllib.request
+import threading
 
 try:
     from . import platform_compat as pc
@@ -99,15 +100,46 @@ def get_cached_artist_avatar(artist_name):
     return load_artist_avatars().get(norm, "")
 
 
+_ONLINE_TRACKS_MEM_CACHE = None
+_ONLINE_TRACKS_LOCK = threading.Lock()
+_ONLINE_TRACKS_DIRTY = False
+_LAST_TRACKS_FLUSH_TIME = 0.0
+
+def _get_online_tracks_dict():
+    global _ONLINE_TRACKS_MEM_CACHE
+    if _ONLINE_TRACKS_MEM_CACHE is None:
+        with _ONLINE_TRACKS_LOCK:
+            if _ONLINE_TRACKS_MEM_CACHE is None:
+                _ONLINE_TRACKS_MEM_CACHE = load_json(ONLINE_TRACKS_FILE, {})
+    return _ONLINE_TRACKS_MEM_CACHE
+
 def cache_online_tracks(tracks):
+    global _ONLINE_TRACKS_DIRTY, _LAST_TRACKS_FLUSH_TIME
+    if not tracks:
+        return
     try:
-        data = load_json(ONLINE_TRACKS_FILE, {})
-        for t in tracks:
-            vid = t.get("videoId")
-            if vid:
-                data[vid] = t
-                data[t.get("path")] = t
-        save_json(ONLINE_TRACKS_FILE, data)
+        data = _get_online_tracks_dict()
+        with _ONLINE_TRACKS_LOCK:
+            changed = False
+            for t in tracks:
+                if not isinstance(t, dict):
+                    continue
+                vid = t.get("videoId")
+                if vid and vid not in data:
+                    data[vid] = t
+                    changed = True
+                p = t.get("path")
+                if p and p not in data:
+                    data[p] = t
+                    changed = True
+            if changed:
+                _ONLINE_TRACKS_DIRTY = True
+            
+            now = time.time()
+            if _ONLINE_TRACKS_DIRTY and (now - _LAST_TRACKS_FLUSH_TIME > 3.0):
+                _LAST_TRACKS_FLUSH_TIME = now
+                _ONLINE_TRACKS_DIRTY = False
+                save_json(ONLINE_TRACKS_FILE, data, indent=None)
     except Exception:
         pass
 
