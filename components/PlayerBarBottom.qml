@@ -1,17 +1,19 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Effects
+import QtQuick.Shapes
 import "."
 
 Item {
     id: root
-    implicitWidth: 600
-    implicitHeight: 66
-    height: 66
+    implicitWidth: isCoListeningActive ? 850 : 790
+    implicitHeight: 60
+    height: 60
 
-    property real radius: 16
+    property real radius: 30
     property Item backgroundSourceItem: null
     property var currentTrack: null
+    property var audioSpecs: null
     property bool isPlaying: false
     property real currentTime: 0.0
     property real totalDuration: 1.0
@@ -38,6 +40,15 @@ Item {
     onResolvedSquareImageChanged: squareFailed = false
     onCurrentTrackChanged: squareFailed = false
 
+    property bool isLiked: false
+    property bool isVolumePopupOpen: false
+    property bool isVolumeSliding: false
+    property bool isMousePressed: false
+    readonly property bool isBarHeld: barPointer.active || isMousePressed
+    property real spotlightX: width / 2
+    property real spotlightY: height / 2
+    property real holdIntensity: isBarHeld ? 1.0 : 0.0
+
     signal playPauseClicked()
     signal nextClicked()
     signal prevClicked()
@@ -48,7 +59,7 @@ Item {
     signal openDetailsRequested()
     signal queueClicked()
     signal openArtistRequested(string artistName, string channelId)
-    signal sleepTimerClicked()
+    signal closeClicked()
     signal exitListeningAlongRequested()
     signal openCoListenersRequested(real targetX, real targetY)
     signal sendChatMessageRequested(string messageText)
@@ -57,168 +68,429 @@ Item {
         if (!sec || sec < 0) return "0:00";
         var m = Math.floor(sec / 60);
         var s = Math.floor(sec % 60);
-        return m + ":" + (s < 10 ? "0" : "") + s;
+        return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
     }
 
-    // Deep Obsidian Frosted Foundation: Pure 1.0.4.2 dark obsidian (blocks all wallpaper color pollution)
-    Rectangle {
+    Behavior on holdIntensity {
+        NumberAnimation {
+            duration: root.isBarHeld ? 160 : 320
+            easing.type: root.isBarHeld ? Easing.OutQuad : Easing.OutCubic
+        }
+    }
+
+    // SimpMusic pressedScale: 1.04f with spring dampingRatio: 0.5, stiffness: 300
+    scale: isBarHeld ? 1.04 : 1.0
+    Behavior on scale {
+        NumberAnimation {
+            duration: root.isBarHeld ? 180 : 320
+            easing.type: root.isBarHeld ? Easing.OutCubic : Easing.OutBack
+            easing.overshoot: 1.10
+        }
+    }
+
+    // Pointer Tracking (Follows cursor coordinates continuously while held)
+    PointHandler {
+        id: barPointer
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen | PointerDevice.Stylus
+        cursorShape: Qt.ArrowCursor
+        onActiveChanged: {
+            if (active) {
+                root.spotlightX = point.position.x;
+                root.spotlightY = point.position.y;
+            }
+        }
+        onPointChanged: {
+            if (active) {
+                root.spotlightX = Math.max(0, Math.min(root.width, point.position.x));
+                root.spotlightY = Math.max(0, Math.min(root.height, point.position.y));
+            }
+        }
+    }
+
+    // Background Drag MouseArea
+    MouseArea {
+        id: backgroundDragArea
         anchors.fill: parent
-        radius: root.radius
-        color: Qt.rgba(0.05, 0.06, 0.09, 0.88)
+        z: 1
+        acceptedButtons: Qt.LeftButton
+        onPressed: mouse => {
+            root.isMousePressed = true;
+            root.spotlightX = mouse.x;
+            root.spotlightY = mouse.y;
+        }
+        onPositionChanged: mouse => {
+            if (pressed) {
+                root.spotlightX = Math.max(0, Math.min(root.width, mouse.x));
+                root.spotlightY = Math.max(0, Math.min(root.height, mouse.y));
+            }
+        }
+        onReleased: root.isMousePressed = false
+        onCanceled: root.isMousePressed = false
+    }
+
+    // =========================================================================
+    // Capsule Mask (Pure Pill shape: radius = height / 2 = 30px)
+    // =========================================================================
+    Item {
+        id: capsuleMask
+        anchors.fill: parent
+        visible: false
+        layer.enabled: true
+        Rectangle {
+            anchors.fill: parent
+            radius: root.radius
+            color: "#ffffff"
+        }
+    }
+
+    // =========================================================================
+    // 1. LIQUID GLASS BACKDROP BLUR (SimpMusic / MultiEffect Hardware Blur)
+    // Dynamically crops the exact area behind playerbar and runs 48px GPU Gaussian Blur!
+    // Dissolves any background text or image into a silky, illegible haze!
+    // =========================================================================
+    Item {
+        id: cropAnchorHelper
+        property point cropPos: {
+            if (!root.backgroundSourceItem) return Qt.point(root.x, root.y);
+            var _dep = root.x + root.y + root.width + root.height + (root.parent ? (root.parent.width + root.parent.height) : 0);
+            return root.mapToItem(root.backgroundSourceItem, 0, 0);
+        }
+    }
+
+    ShaderEffectSource {
+        id: backdropCropSource
+        sourceItem: root.backgroundSourceItem
+        sourceRect: Qt.rect(cropAnchorHelper.cropPos.x, cropAnchorHelper.cropPos.y, root.width, root.height)
+        visible: false
+        live: true
+        smooth: true
+    }
+
+    MultiEffect {
+        anchors.fill: parent
+        source: backdropCropSource
+        blurEnabled: true
+        blur: 1.0
+        blurMax: 48
+        saturation: 1.55
+        brightness: -0.05
+        maskEnabled: true
+        maskSource: capsuleMask
+        autoPaddingEnabled: false
+        visible: root.backgroundSourceItem !== null
         z: 1
     }
 
-    // Liquid Glass Capsule Container (Apple Squircle & Snell Refraction with Dynamic Chromatic Rim)
-    LiquidGlass {
-        id: glassDock
+    // Adaptive Dark Scrim (SimpMusic: 48% dark overlay so white text & controls pop with 100% contrast!)
+    Rectangle {
         anchors.fill: parent
         radius: root.radius
-        displacement: (typeof win !== "undefined" && win.liquidGlassDisplacement !== undefined) ? win.liquidGlassDisplacement : 30.0
-        aberration: (typeof win !== "undefined" && win.liquidGlassAberration !== undefined) ? win.liquidGlassAberration : 0.065
-        bevelWidth: (typeof win !== "undefined" && win.liquidGlassBevelWidth !== undefined) ? win.liquidGlassBevelWidth : 21.0
-        blurRadius: (typeof win !== "undefined" && win.liquidGlassBlur !== undefined) ? win.liquidGlassBlur : 0.5
-        colorBleed: (typeof win !== "undefined" && win.liquidGlassColorBleed !== undefined) ? win.liquidGlassColorBleed : 0.94
-        tintColor: Qt.rgba(0.08, 0.10, 0.14, 0.28)
-        Behavior on tintColor { ColorAnimation { duration: 400; easing.type: Easing.InOutQuad } }
-        backgroundSourceItem: root.backgroundSourceItem
-        isFlowActive: root.isPlaying && root.currentTrack !== null
+        color: Qt.rgba(0.08, 0.09, 0.12, 0.48)
+        border.color: root.isBarHeld ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40) : Qt.rgba(1, 1, 1, 0.18)
+        border.width: 1
+        Behavior on border.color { ColorAnimation { duration: 200 } }
         z: 2
+    }
 
-        // =====================================================================
-        // 1. LEFT SECTION (Mini cover + Track title & artist)
-        // =====================================================================
-        RowLayout {
-            id: leftSection
-            anchors.left: parent.left
-            anchors.leftMargin: 16
-            anchors.right: centerSection.left
-            anchors.rightMargin: 10
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.verticalCenterOffset: -2
-            spacing: 10
+    // =========================================================================
+    // 2. INTERACTIVE RADIAL SPOTLIGHT (SimpMusic LiquidGlassContainer radial gradient + blur)
+    // STRICTLY DORMANT (0.0) ON HOVER — EXCITED ONLY ON HOLD!
+    // Diffuse, soft ambient phosphor glow without harsh center disc!
+    // =========================================================================
+    Item {
+        id: spotlightLayer
+        anchors.fill: parent
+        visible: root.holdIntensity > 0.001
+        z: 3
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            maskEnabled: true
+            maskSource: capsuleMask
+            autoPaddingEnabled: false
+        }
 
-            // Mini Cover Artwork (38x38)
-            Item {
-                Layout.preferredWidth: 38
-                Layout.preferredHeight: 38
+        Item {
+            id: spotlightGlow
+            width: 320
+            height: 320
+            x: root.spotlightX - width / 2
+            y: root.spotlightY - height / 2
+            opacity: root.holdIntensity
 
-                RoundedImage {
-                    id: miniCover
-                    anchors.fill: parent
-                    radius: 8
-                    source: {
-                        if (root.resolvedSquareImage !== "" && !root.squareFailed) {
-                            var r = root.resolvedSquareImage;
-                            return (r.startsWith("/") && !r.startsWith("file://")) ? ("file://" + r) : r;
-                        }
-                        if (!root.currentTrack) return "";
-                        var s = root.currentTrack.image || root.currentTrack.artUrl || root.currentTrack.cover || root.currentTrack.thumbnail || "";
-                        if (!s && root.currentTrack.videoId) {
-                            s = "https://i.ytimg.com/vi/" + root.currentTrack.videoId + "/hqdefault.jpg";
-                        }
-                        if (s.indexOf("i.ytimg.com") !== -1) s = s.split("?")[0];
-                        return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
-                    }
-                    fillMode: Image.PreserveAspectCrop
-                    autoCropBlackBars: true
-                    sourceSize: Qt.size(80, 80)
-                    fallbackIcon: "../assets/icons/folder-music-symbolic.svg"
-                    fallbackIconSize: 18
-                    onStatusChanged: {
-                        if (status === Image.Error && root.resolvedSquareImage !== "" && !root.squareFailed) {
-                            root.squareFailed = true;
-                        }
-                    }
-                }
-
-                // 1px Hairline Border
-                Rectangle {
-                    anchors.fill: parent
-                    radius: 8
-                    color: "transparent"
-                    border.color: miniCoverMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.40) : Qt.rgba(1.0, 1.0, 1.0, 0.16)
-                    border.width: 1
-                    z: 1
-                    Behavior on border.color { ColorAnimation { duration: 120 } }
-                }
-
-                MouseArea {
-                    id: miniCoverMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.openDetailsRequested()
-                }
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                blurEnabled: true
+                blur: 0.95
+                blurMax: 48
             }
 
-            // Track Title and Artist (with Ping-Pong Loop & Matching Colors)
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 1
+            Shape {
+                anchors.fill: parent
+                ShapePath {
+                    strokeColor: "transparent"
+                    fillGradient: RadialGradient {
+                        centerX: 160; centerY: 160; centerRadius: 160
+                        focalX: 160; focalY: 160; focalRadius: 0
+                        GradientStop { position: 0.00; color: Qt.rgba(1.0, 1.0, 1.0, 0.24) }
+                        GradientStop { position: 0.25; color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) }
+                        GradientStop { position: 0.60; color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.06) }
+                        GradientStop { position: 0.85; color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.015) }
+                        GradientStop { position: 1.00; color: "transparent" }
+                    }
+                    startX: 0; startY: 0
+                    PathRectangle { x: 0; y: 0; width: 320; height: 320 }
+                }
+            }
+        }
+    }
 
-                // Title Container with Ping-Pong Marquee Loop
+    // Capsule Rim Hairline
+    Rectangle {
+        anchors.fill: parent
+        radius: root.radius
+        color: "transparent"
+        border.width: 1
+        border.color: root.isBarHeld ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40) : Qt.rgba(1, 1, 1, 0.12)
+        Behavior on border.color { ColorAnimation { duration: 200 } }
+        z: 4
+    }
+
+    // =========================================================================
+    // 3. THREE-SECTION CONTENT ROW: [LEFT: 200px] | [DIV1: 29px] | [CENTER: 300px] | [DIV2: 29px] | [RIGHT]
+    // =========================================================================
+    Row {
+        anchors.fill: parent
+        anchors.leftMargin: 16
+        anchors.rightMargin: 16
+        spacing: 0
+        z: 5
+
+        // ---------------------------------------------------------------------
+        // SECTION 1: LEFT (PlayerControlLayout - Fixed 200px width, SpaceEvenly)
+        // ---------------------------------------------------------------------
+        Item {
+            id: leftSectionBox
+            width: 200
+            height: root.height
+
+            Row {
+                anchors.fill: parent
+                spacing: 0
+
+                // 1. Shuffle (White icon, 20px, NOT accent color!)
                 Item {
-                    id: titleContainer
-                    Layout.fillWidth: true
-                    implicitHeight: titleText.implicitHeight
-                    clip: true
+                    width: 40; height: parent.height
+                    HoverHandler { id: shufH }
+                    AppIcon {
+                        anchors.centerIn: parent
+                        source: "../assets/icons/media-playlist-shuffle-symbolic.svg"
+                        iconSize: 20
+                        color: shufH.hovered ? "#ffffff" : (root.isShuffle ? "#ffffff" : "#b3b3b3")
+                    }
+                    Rectangle {
+                        width: 3; height: 3; radius: 1.5
+                        color: "#ffffff"
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: 8
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        visible: root.isShuffle
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.toggleShuffle()
+                    }
+                }
 
-                    Text {
-                        id: titleText
-                        text: root.currentTrack ? (root.currentTrack.title || root.currentTrack.name || "Nutsty Track") : "Nutsty Desktop"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 13
-                        font.bold: true
-                        color: titleH.hovered ? "#ffffff" : Theme.textPrimary
-                        x: 0
+                // 2. Previous (22px)
+                Item {
+                    width: 40; height: parent.height
+                    HoverHandler { id: prevH }
+                    AppIcon {
+                        anchors.centerIn: parent
+                        source: "../assets/icons/media-skip-backward-symbolic.svg"
+                        iconSize: 22
+                        color: prevH.hovered ? "#ffffff" : "#b3b3b3"
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.prevClicked()
+                    }
+                }
 
-                        readonly property real overflowDist: Math.max(0, implicitWidth - titleContainer.width)
-                        readonly property bool needsScroll: titleContainer.width > 0 && overflowDist > 6
+                // 3. Play / Pause (Bare glyph ▶ / ⏸ — NO solid circle, SimpMusic plainPlayPause = true!)
+                Item {
+                    width: 40; height: parent.height
+                    HoverHandler { id: playH }
+                    AppIcon {
+                        anchors.centerIn: parent
+                        source: root.isPlaying ? "../assets/icons/media-playback-pause-symbolic.svg" : "../assets/icons/media-playback-start-symbolic.svg"
+                        iconSize: 26
+                        color: playH.hovered ? "#ffffff" : "#f1f5f9"
+                    }
+                    scale: playH.hovered ? 1.08 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 120 } }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.playPauseClicked()
+                    }
+                }
 
-                        SequentialAnimation {
-                            id: titleAnim
-                            running: titleText.needsScroll
-                            loops: Animation.Infinite
+                // 4. Next (22px)
+                Item {
+                    width: 40; height: parent.height
+                    HoverHandler { id: nextH }
+                    AppIcon {
+                        anchors.centerIn: parent
+                        source: "../assets/icons/media-skip-forward-symbolic.svg"
+                        iconSize: 22
+                        color: nextH.hovered ? "#ffffff" : "#b3b3b3"
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.nextClicked()
+                    }
+                }
 
-                            PauseAnimation { duration: 1800 }
-                            NumberAnimation {
-                                target: titleText
-                                property: "x"
-                                to: -titleText.overflowDist
-                                duration: Math.max(1200, titleText.overflowDist * 28)
-                                easing.type: Easing.InOutQuad
+                // 5. Repeat (White icon, 20px, 40px width away from divider!)
+                Item {
+                    width: 40; height: parent.height
+                    HoverHandler { id: repH }
+                    AppIcon {
+                        anchors.centerIn: parent
+                        source: "../assets/icons/media-playlist-repeat-symbolic.svg"
+                        iconSize: 20
+                        color: repH.hovered ? "#ffffff" : (root.isRepeat ? "#ffffff" : "#b3b3b3")
+                    }
+                    Rectangle {
+                        width: 3; height: 3; radius: 1.5
+                        color: "#ffffff"
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: 8
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        visible: root.isRepeat
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.toggleRepeat()
+                    }
+                }
+            }
+        }
+
+        // --- Vertical Divider 1 (height: 28dp, padding: 14dp each side = 29px) ---
+        Item {
+            width: 29
+            height: root.height
+            Rectangle {
+                anchors.centerIn: parent
+                width: 1
+                height: 28
+                color: Qt.rgba(1, 1, 1, 0.20)
+            }
+        }
+
+        // ---------------------------------------------------------------------
+        // SECTION 2: CENTER (Fixed 300px width: Artwork + Title/Artist + Scrubber)
+        // ---------------------------------------------------------------------
+        Item {
+            id: centerSectionBox
+            width: 300
+            height: root.height
+
+            readonly property bool showScrubber: centerHover.hovered || root.isScrubbingProgress
+            property real infoAlpha: showScrubber ? 0.0 : 1.0
+            Behavior on infoAlpha { NumberAnimation { duration: 200; easing.type: Easing.InOutQuad } }
+
+            HoverHandler { id: centerHover }
+
+            // --- State A: Artwork (32x32, bo 6dp) + Track Title & Artist (Rest State) ---
+            RowLayout {
+                anchors.fill: parent
+                anchors.bottomMargin: 10
+                spacing: 10
+                opacity: centerSectionBox.infoAlpha
+                visible: opacity > 0.01
+
+                // Thumbnail Artwork (32x32, radius 6px)
+                Item {
+                    Layout.preferredWidth: 32
+                    Layout.preferredHeight: 32
+
+                    RoundedImage {
+                        id: miniCover
+                        anchors.fill: parent
+                        radius: 6
+                        source: {
+                            if (root.resolvedSquareImage !== "" && !root.squareFailed) {
+                                var r = root.resolvedSquareImage;
+                                return (r.startsWith("/") && !r.startsWith("file://")) ? ("file://" + r) : r;
                             }
-                            PauseAnimation { duration: 1800 }
-                            NumberAnimation {
-                                target: titleText
-                                property: "x"
-                                to: 0
-                                duration: Math.max(1200, titleText.overflowDist * 28)
-                                easing.type: Easing.InOutQuad
+                            if (!root.currentTrack) return "";
+                            var s = root.currentTrack.image || root.currentTrack.artUrl || root.currentTrack.cover || root.currentTrack.thumbnail || "";
+                            if (!s && root.currentTrack.videoId) {
+                                s = "https://i.ytimg.com/vi/" + root.currentTrack.videoId + "/hqdefault.jpg";
+                            }
+                            if (s.indexOf("i.ytimg.com") !== -1) s = s.split("?")[0];
+                            return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
+                        }
+                        fillMode: Image.PreserveAspectCrop
+                        autoCropBlackBars: true
+                        sourceSize: Qt.size(64, 64)
+                        fallbackIcon: "../assets/icons/folder-music-symbolic.svg"
+                        fallbackIconSize: 16
+                        onStatusChanged: {
+                            if (status === Image.Error && root.resolvedSquareImage !== "" && !root.squareFailed) {
+                                root.squareFailed = true;
                             }
                         }
+                    }
 
-                        onNeedsScrollChanged: if (!needsScroll) x = 0
-                        onTextChanged: x = 0
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 6
+                        color: "transparent"
+                        border.color: miniCoverMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.40) : Qt.rgba(1.0, 1.0, 1.0, 0.18)
+                        border.width: 1
+                    }
 
-                        HoverHandler { id: titleH }
+                    MouseArea {
+                        id: miniCoverMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.openDetailsRequested()
+                    }
+                }
+
+                // Metadata Text
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 1
+                    Layout.alignment: Qt.AlignVCenter
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: root.currentTrack ? (root.currentTrack.title || root.currentTrack.name || "Nutsty Track") : "Nutsty Desktop"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                        font.bold: true
+                        color: "#ffffff"
+                        elide: Text.ElideRight
+
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
                             onClicked: root.openDetailsRequested()
                         }
                     }
-                }
-
-                // Artist Container with Ping-Pong Marquee Loop & Matching Color
-                Item {
-                    id: artistContainer
-                    Layout.fillWidth: true
-                    implicitHeight: artistLabel.implicitHeight
-                    clip: true
 
                     Text {
-                        id: artistLabel
+                        Layout.fillWidth: true
                         text: {
                             if (!root.currentTrack) return I18n.tr("Sẵn sàng phát", "Ready to play");
                             var raw = String(root.currentTrack.artist || "").trim();
@@ -227,256 +499,267 @@ Item {
                         }
                         font.family: Theme.fontFamily
                         font.pixelSize: 11
-                        // User explicitly requested: "tên nghệ sĩ cùng màu với tên bài hát"
-                        color: (root.currentTrack && artistMouse.containsMouse) ? root.accentColor : Theme.textPrimary
-                        x: 0
-
-                        readonly property real overflowDist: Math.max(0, implicitWidth - artistContainer.width)
-                        readonly property bool needsScroll: artistContainer.width > 0 && overflowDist > 6
-
-                        SequentialAnimation {
-                            id: artistAnim
-                            running: artistLabel.needsScroll
-                            loops: Animation.Infinite
-
-                            PauseAnimation { duration: 2000 }
-                            NumberAnimation {
-                                target: artistLabel
-                                property: "x"
-                                to: -artistLabel.overflowDist
-                                duration: Math.max(1200, artistLabel.overflowDist * 28)
-                                easing.type: Easing.InOutQuad
-                            }
-                            PauseAnimation { duration: 2000 }
-                            NumberAnimation {
-                                target: artistLabel
-                                property: "x"
-                                to: 0
-                                duration: Math.max(1200, artistLabel.overflowDist * 28)
-                                easing.type: Easing.InOutQuad
-                            }
-                        }
-
-                        onNeedsScrollChanged: if (!needsScroll) x = 0
-                        onTextChanged: x = 0
+                        color: Qt.rgba(1, 1, 1, 0.70)
+                        elide: Text.ElideRight
 
                         MouseArea {
-                            id: artistMouse
                             anchors.fill: parent
-                            hoverEnabled: true
                             cursorShape: root.currentTrack ? Qt.PointingHandCursor : Qt.ArrowCursor
                             onClicked: {
                                 if (root.currentTrack && root.currentTrack.artist) {
-                                    root.openArtistRequested(artistLabel.text, root.currentTrack.channelId || "");
+                                    root.openArtistRequested(parent.text, root.currentTrack.channelId || "");
                                 }
                             }
                         }
                     }
                 }
             }
-        }
 
-        // =====================================================================
-        // 2. CENTER SECTION (Playback Controls)
-        // =====================================================================
-        Row {
-            id: centerSection
-            anchors.centerIn: parent
-            anchors.verticalCenterOffset: -2
-            spacing: 8
+            // --- State B: Scrubber Timestamps & Quality Text (SimpMusic Clean Typography - NO PILL!) ---
+            RowLayout {
+                anchors.fill: parent
+                anchors.bottomMargin: 10
+                opacity: 1.0 - centerSectionBox.infoAlpha
+                visible: opacity > 0.01
 
-            // --- Shuffle Button ---
+                // Elapsed Time (Left)
+                Text {
+                    text: root.fmtTime(root.isScrubbingProgress ? root.scrubTime : root.currentTime)
+                    font.family: "Segoe UI, Inter, monospace"
+                    font.pixelSize: 11
+                    color: Qt.rgba(1, 1, 1, 0.70)
+                }
+
+                // Audio Quality Line (Center: Clean Headphones Icon + Text, NO PILL BOX!)
+                Row {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.fillWidth: true
+                    spacing: 4
+                    Layout.leftMargin: 8
+                    Layout.rightMargin: 8
+
+                    Item { Layout.fillWidth: true }
+
+                    AppIcon {
+                        anchors.verticalCenter: parent.verticalCenter
+                        source: "../assets/icons/media-optical-audio-symbolic.svg"
+                        iconSize: 13
+                        color: Qt.rgba(1, 1, 1, 0.45)
+                    }
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: {
+                            if (root.audioSpecs && (root.audioSpecs.bitrate_str || root.audioSpecs.bitrate)) {
+                                return (root.audioSpecs.codec || "AAC") + " • " + (root.audioSpecs.bitrate_str || (root.audioSpecs.bitrate + " kbps"));
+                            }
+                            return "192 kbps • 48 kHz";
+                        }
+                        font.family: "Segoe UI, Inter, sans-serif"
+                        font.pixelSize: 11
+                        color: Qt.rgba(1, 1, 1, 0.45)
+                    }
+
+                    Item { Layout.fillWidth: true }
+                }
+
+                // Remaining Signed Time (Right: "-mm:ss")
+                Text {
+                    text: "−" + root.fmtTime(Math.max(0, root.totalDuration - (root.isScrubbingProgress ? root.scrubTime : root.currentTime)))
+                    font.family: "Segoe UI, Inter, monospace"
+                    font.pixelSize: 11
+                    color: Qt.rgba(1, 1, 1, 0.70)
+                }
+            }
+
+            // --- CapsuleProgress (Bottom of 300px Center Section - 2dp expands to 4dp) ---
             Item {
-                width: 28; height: 28
-                anchors.verticalCenter: parent.verticalCenter
-                HoverHandler { id: shufHover }
+                id: miniProgressBar
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 6
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: 16
 
-                AppIcon {
-                    anchors.centerIn: parent
-                    source: "../assets/icons/media-playlist-shuffle-symbolic.svg"
-                    iconSize: 15
-                    color: root.isShuffle ? root.accentColor : (shufHover.hovered ? "#ffffff" : "#b3b3b3")
+                property real progressFraction: {
+                    if (root.isScrubbingProgress) {
+                        return root.totalDuration > 0 ? (root.scrubTime / root.totalDuration) : 0.0;
+                    }
+                    return (root.totalDuration > 0) ? Math.min(1.0, Math.max(0.0, root.currentTime / root.totalDuration)) : 0.0;
                 }
 
                 Rectangle {
-                    width: 3; height: 3; radius: 1.5
-                    color: root.accentColor
-                    anchors.bottom: parent.bottom
-                    anchors.bottomMargin: 1
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    visible: root.isShuffle
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.toggleShuffle()
-                }
-            }
-
-            // --- Prev Button ---
-            Item {
-                width: 30; height: 30
-                anchors.verticalCenter: parent.verticalCenter
-                opacity: root.currentTrack ? 1.0 : 0.4
-                Behavior on opacity { NumberAnimation { duration: 150 } }
-                HoverHandler { id: prevHover; enabled: !!root.currentTrack }
-
-                AppIcon {
-                    anchors.centerIn: parent
-                    source: "../assets/icons/media-skip-backward-symbolic.svg"
-                    iconSize: 17
-                    color: prevHover.hovered ? "#ffffff" : "#b3b3b3"
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: !!root.currentTrack
-                    cursorShape: root.currentTrack ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: root.prevClicked()
-                }
-            }
-
-            // --- Play / Pause Button (Dynamic Keo 502 Accent Circle) ---
-            Rectangle {
-                id: playPauseBtn
-                width: 36
-                height: 36
-                radius: 18
-                anchors.verticalCenter: parent.verticalCenter
-                opacity: root.currentTrack ? 1.0 : 0.65
-                Behavior on opacity { NumberAnimation { duration: 150 } }
-
-                readonly property bool isLightAccent: (root.accentColor.r * 0.299 + root.accentColor.g * 0.587 + root.accentColor.b * 0.114) > 0.55
-                readonly property color contrastColor: isLightAccent ? "#0c0d10" : "#ffffff"
-
-                color: (playHover.hovered && root.currentTrack) ? Qt.lighter(root.accentColor, 1.15) : root.accentColor
-                scale: (playHover.hovered && root.currentTrack) ? 1.06 : 1.0
-                Behavior on scale { NumberAnimation { duration: 100 } }
-                Behavior on color { ColorAnimation { duration: 250 } }
-                HoverHandler { id: playHover; enabled: !!root.currentTrack }
-
-                // Playback Glow Ring
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: -2
-                    radius: parent.radius + 2
-                    color: "transparent"
-                    border.width: 1.5
-                    border.color: root.isPlaying ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45) : "transparent"
-                    visible: root.isPlaying && !!root.currentTrack
-                    Behavior on border.color { ColorAnimation { duration: 250 } }
-                }
-
-                CircularSpinner {
-                    anchors.centerIn: parent
-                    size: 18
-                    strokeWidth: 2.2
-                    color: playPauseBtn.contrastColor
-                    visible: root.isLoadingAudio
-                }
-
-                AppIcon {
-                    anchors.centerIn: parent
-                    anchors.horizontalCenterOffset: (!root.isPlaying && !root.isLoadingAudio) ? 1.5 : 0
-                    source: root.isPlaying ? "../assets/icons/media-playback-pause-symbolic.svg" : "../assets/icons/media-playback-start-symbolic.svg"
-                    iconSize: 17
-                    color: playPauseBtn.contrastColor
-                    visible: !root.isLoadingAudio
-                    Behavior on color { ColorAnimation { duration: 200 } }
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: !!root.currentTrack
-                    cursorShape: root.currentTrack ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: root.playPauseClicked()
-                }
-            }
-
-            // --- Next Button ---
-            Item {
-                width: 30; height: 30
-                anchors.verticalCenter: parent.verticalCenter
-                opacity: root.currentTrack ? 1.0 : 0.4
-                Behavior on opacity { NumberAnimation { duration: 150 } }
-                HoverHandler { id: nextHover; enabled: !!root.currentTrack }
-
-                AppIcon {
-                    anchors.centerIn: parent
-                    source: "../assets/icons/media-skip-forward-symbolic.svg"
-                    iconSize: 17
-                    color: nextHover.hovered ? "#ffffff" : "#b3b3b3"
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: !!root.currentTrack
-                    cursorShape: root.currentTrack ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: root.nextClicked()
-                }
-            }
-
-            // --- Repeat Button ---
-            Item {
-                width: 28; height: 28
-                anchors.verticalCenter: parent.verticalCenter
-                HoverHandler { id: repHover }
-
-                AppIcon {
-                    anchors.centerIn: parent
-                    source: "../assets/icons/media-playlist-repeat-symbolic.svg"
-                    iconSize: 15
-                    color: root.isRepeat ? root.accentColor : (repHover.hovered ? "#ffffff" : "#b3b3b3")
-                }
-
-                Rectangle {
-                    width: 3; height: 3; radius: 1.5
-                    color: root.accentColor
-                    anchors.bottom: parent.bottom
-                    anchors.bottomMargin: 1
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    visible: root.isRepeat
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.toggleRepeat()
-                }
-            }
-        }
-
-        // =====================================================================
-        // 3. RIGHT SECTION (Queue, Volume - Zero MIC, Minimalist Clean)
-        // =====================================================================
-        Row {
-            id: rightSection
-            anchors.right: parent.right
-            anchors.rightMargin: 16
-            anchors.left: centerSection.right
-            anchors.leftMargin: 10
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.verticalCenterOffset: -2
-            spacing: 8
-            layoutDirection: Qt.RightToLeft
-
-            // Volume Section (Slider + Speaker Icon)
-            Row {
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 6
-                layoutDirection: Qt.LeftToRight
-
-                Item {
-                    width: 26; height: 26
                     anchors.verticalCenter: parent.verticalCenter
-                    HoverHandler { id: volIconH }
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    height: centerSectionBox.showScrubber ? 4 : 2
+                    radius: height / 2
+                    color: Qt.rgba(1, 1, 1, 0.20)
+                    Behavior on height { NumberAnimation { duration: 120 } }
+
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: Math.max(0, parent.width * miniProgressBar.progressFraction)
+                        radius: parent.radius
+                        color: "#ffffff"
+                    }
+
+                    // Progress Thumb Dot (SimpMusic thumb indicator on hover/scrub)
+                    Rectangle {
+                        width: 7; height: 7; radius: 3.5
+                        color: "#ffffff"
+                        anchors.verticalCenter: parent.verticalCenter
+                        x: Math.max(0, Math.min(parent.width - width, parent.width * miniProgressBar.progressFraction - width / 2))
+                        visible: centerSectionBox.showScrubber && miniProgressBar.progressFraction > 0.005
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    enabled: !!root.currentTrack && root.totalDuration > 0
+
+                    function updateSeek(mx) {
+                        var f = Math.max(0.0, Math.min(1.0, mx / width));
+                        root.scrubTime = f * root.totalDuration;
+                    }
+
+                    onPressed: mouse => {
+                        root.isScrubbingProgress = true;
+                        updateSeek(mouse.x);
+                    }
+                    onPositionChanged: mouse => {
+                        if (root.isScrubbingProgress) updateSeek(mouse.x);
+                    }
+                    onReleased: {
+                        if (root.isScrubbingProgress) {
+                            root.seekRequested(root.scrubTime);
+                            root.isScrubbingProgress = false;
+                        }
+                    }
+                    onCanceled: root.isScrubbingProgress = false
+                }
+            }
+        }
+
+        // --- Vertical Divider 2 (height: 28dp, padding: 14dp each side = 29px) ---
+        Item {
+            width: 29
+            height: root.height
+            Rectangle {
+                anchors.centerIn: parent
+                width: 1
+                height: 28
+                color: Qt.rgba(1, 1, 1, 0.20)
+            }
+        }
+
+        // ---------------------------------------------------------------------
+        // SECTION 3: RIGHT (Action Cluster: Like, Queue, Lyrics, Volume, Close)
+        // ---------------------------------------------------------------------
+        Item {
+            id: rightSectionBox
+            width: 200
+            height: root.height
+
+            Row {
+                anchors.fill: parent
+                spacing: 0
+
+                // 1. Like / Heart (Heart outline when unliked, vibrant RED #ef4444 when liked!)
+                Item {
+                    id: likeButtonContainer
+                    width: 40; height: parent.height
+
+                    HoverHandler { id: likeH }
+                    AppIcon {
+                        anchors.centerIn: parent
+                        source: root.isLiked ? "../assets/icons/emblem-favorite-symbolic.svg" : "../assets/icons/favorite-border-symbolic.svg"
+                        iconSize: 20
+                        color: root.isLiked ? "#ef4444" : (likeH.hovered ? "#ffffff" : "#b3b3b3")
+                    }
+                    scale: root.isLiked ? 1.12 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 150 } }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (typeof win !== "undefined" && win.toggleLikeCurrentTrack) {
+                                win.toggleLikeCurrentTrack();
+                            }
+                        }
+                    }
+                }
+
+                // 2. Up Next / Queue (SimpIcons.QueueMusic: opens Now Playing Up Next tab!)
+                Item {
+                    width: 40; height: parent.height
+                    HoverHandler { id: qH }
+                    AppIcon {
+                        anchors.centerIn: parent
+                        source: "../assets/icons/queue-music-symbolic.svg"
+                        iconSize: 20
+                        color: (qH.hovered || (root.isNowPlayingOpen && typeof ytNowPlayingView !== "undefined" && ytNowPlayingView && ytNowPlayingView.activeTab === "up_next")) ? "#ffffff" : "#b3b3b3"
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.queueClicked()
+                    }
+                }
+
+                // 3. Fullscreen Lyrics / Now Playing (Nút bên cạnh cái loa ở bên trái!)
+                Item {
+                    width: 40; height: parent.height
+                    HoverHandler { id: lyricsNowPlayingH }
+                    AppIcon {
+                        anchors.centerIn: parent
+                        source: "../assets/icons/window-restore-symbolic.svg"
+                        iconSize: 18
+                        color: (lyricsNowPlayingH.hovered || (root.isNowPlayingOpen && typeof ytNowPlayingView !== "undefined" && ytNowPlayingView && ytNowPlayingView.activeTab === "lyrics")) ? "#ffffff" : "#b3b3b3"
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.openDetailsRequested()
+                    }
+                }
+
+                // 4. Volume Button (Speaker Icon - click toggles Mute; hover/click opens Vertical Popup)
+                Item {
+                    id: volumeButtonAnchor
+                    width: 40; height: parent.height
+                    z: 50
+
+                    // Invisible hit-bridge spanning from icon all the way up through the popup
+                    Item {
+                        anchors.bottom: parent.bottom
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: 56
+                        height: 250
+                        z: -1
+
+                        HoverHandler {
+                            id: volumeBridgeHover
+                            onHoveredChanged: {
+                                if (hovered) {
+                                    volDismissTimer.stop();
+                                    root.isVolumePopupOpen = true;
+                                } else if (!root.isVolumeSliding && !volPopupMouse.containsMouse) {
+                                    volDismissTimer.restart();
+                                }
+                            }
+                        }
+                    }
 
                     AppIcon {
                         anchors.centerIn: parent
                         source: root.volume === 0 ? "../assets/icons/audio-volume-muted-symbolic.svg" : "../assets/icons/audio-volume-high-symbolic.svg"
-                        iconSize: 16
-                        color: volIconH.hovered ? "#ffffff" : "#b3b3b3"
+                        iconSize: 20
+                        color: (volumeBridgeHover.hovered || root.isVolumePopupOpen) ? "#ffffff" : "#b3b3b3"
                     }
 
                     MouseArea {
@@ -490,512 +773,281 @@ Item {
                                 root.reqVolumeChange(root.prevVolume > 0 ? root.prevVolume : 100);
                             }
                         }
+                        onWheel: wheel => {
+                            var step = wheel.angleDelta.y > 0 ? 5 : -5;
+                            root.reqVolumeChange(Math.max(0, Math.min(100, root.volume + step)));
+                        }
                     }
-                }
 
-                // Volume Bar
-                Item {
-                    id: volSlider
-                    width: root.isCoListeningActive ? 42 : 52
-                    height: 18
-                    anchors.verticalCenter: parent.verticalCenter
-
+                    // =========================================================
+                    // VERTICAL VOLUME POPUP (SimpMusic Style - 48px x 180px Capsule)
+                    // =========================================================
                     Rectangle {
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        height: volMouse.containsMouse || root.isScrubbingVolume ? 4 : 2.5
-                        radius: height / 2
-                        color: Qt.rgba(1, 1, 1, 0.20)
-                        Behavior on height { NumberAnimation { duration: 120 } }
-
-                        Rectangle {
-                            anchors.left: parent.left
-                            anchors.top: parent.top
-                            anchors.bottom: parent.bottom
-                            width: Math.max(0, parent.width * (root.volume / 100.0))
-                            radius: parent.radius
-                            color: volMouse.containsMouse || root.isScrubbingVolume ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.85)
-                            Behavior on color { ColorAnimation { duration: 150 } }
-                        }
-
-                        Rectangle {
-                            width: 7; height: 7; radius: 3.5
-                            color: root.accentColor
-                            border.color: "#ffffff"
-                            border.width: 1
-                            anchors.verticalCenter: parent.verticalCenter
-                            x: Math.min(parent.width - width, Math.max(0, parent.width * (root.volume / 100.0) - width / 2))
-                            opacity: volMouse.containsMouse || root.isScrubbingVolume ? 1.0 : 0.0
-                            Behavior on opacity { NumberAnimation { duration: 120 } }
-                        }
-                    }
-
-                    MouseArea {
-                        id: volMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-
-                        function updateVolPos(mouseX) {
-                            var frac = Math.max(0.0, Math.min(1.0, mouseX / width));
-                            var newVol = Math.round(frac * 100);
-                            if (newVol !== root.volume) {
-                                root.reqVolumeChange(newVol);
-                            }
-                        }
-
-                        onPressed: mouse => {
-                            root.isScrubbingVolume = true;
-                            updateVolPos(mouse.x);
-                        }
-                        onPositionChanged: mouse => {
-                            if (root.isScrubbingVolume) updateVolPos(mouse.x);
-                        }
-                        onReleased: mouse => {
-                            if (root.isScrubbingVolume) {
-                                updateVolPos(mouse.x);
-                                root.isScrubbingVolume = false;
-                            }
-                        }
-                        onCanceled: root.isScrubbingVolume = false
-                    }
-                }
-            }
-
-            // Sleep Timer Button [ 🌙 ]
-            Item {
-                width: 28; height: 28
-                anchors.verticalCenter: parent.verticalCenter
-                HoverHandler { id: sleepH }
-
-                AppIcon {
-                    anchors.centerIn: parent
-                    source: "../assets/icons/sleep-timer-symbolic.svg"
-                    iconSize: 15
-                    color: root.isSleepTimerActive ? root.accentColor : (sleepH.hovered ? "#ffffff" : "#b3b3b3")
-                }
-
-                // Glowing indicator dot when active
-                Rectangle {
-                    width: 3; height: 3; radius: 1.5
-                    color: root.accentColor
-                    anchors.bottom: parent.bottom
-                    anchors.bottomMargin: 1
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    visible: root.isSleepTimerActive
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.sleepTimerClicked()
-                }
-            }
-
-            // Now Playing Expand / Collapse Chevron Button [ ∨ / ∧ ] (YouTube Music Style)
-            Item {
-                width: 28; height: 28
-                anchors.verticalCenter: parent.verticalCenter
-                HoverHandler { id: chevronH }
-
-                AppIcon {
-                    anchors.centerIn: parent
-                    source: "../assets/icons/go-previous-symbolic.svg"
-                    iconSize: 14
-                    rotation: root.isNowPlayingOpen ? -90 : 90
-                    Behavior on rotation { NumberAnimation { duration: 160; easing.type: Easing.OutQuad } }
-                    color: root.isNowPlayingOpen ? root.accentColor : (chevronH.hovered ? "#ffffff" : "#b3b3b3")
-                }
-
-                Rectangle {
-                    width: 3; height: 3; radius: 1.5
-                    color: root.accentColor
-                    anchors.bottom: parent.bottom
-                    anchors.bottomMargin: 1
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    visible: root.isNowPlayingOpen
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.openDetailsRequested()
-                }
-            }
-
-            // --- Co-Listening Section (Listener: Host Avatar + [✕] | Host: Overlapping Avatars + Live Pulse | Mini Chat Button) ---
-            Row {
-                id: coListenRow
-                visible: root.isCoListeningActive
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 6
-                layoutDirection: Qt.LeftToRight
-
-                // Mini Chat Button [ 💬 ]
-                Rectangle {
-                    width: 24
-                    height: 24
-                    radius: 12
-                    anchors.verticalCenter: parent.verticalCenter
-                    color: root.isChatInputOpen ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25) : (chatBtnHover.hovered ? Qt.rgba(1, 1, 1, 0.12) : "transparent")
-                    border.color: root.isChatInputOpen ? root.accentColor : (chatBtnHover.hovered ? Qt.rgba(1, 1, 1, 0.20) : "transparent")
-                    border.width: 1
-
-                    HoverHandler { id: chatBtnHover }
-
-                    AppIcon {
-                        anchors.centerIn: parent
-                        source: "../assets/icons/chat-message-new-symbolic.svg"
-                        iconSize: 12
-                        color: root.isChatInputOpen ? root.accentColor : (chatBtnHover.hovered ? "#ffffff" : "#b3b3b3")
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            root.isChatInputOpen = !root.isChatInputOpen;
-                            if (root.isChatInputOpen) chatTextInput.forceActiveFocus();
-                        }
-                    }
-                }
-
-                // 1. Phía Listener: 1 Host Avatar tròn 24px + Chấm xanh Live Pulse + Nút icon [✕] nhỏ gọn 18px Muted Rose
-                Row {
-                    id: listenerPill
-                    visible: root.listeningAlongFriend !== null && root.listeningAlongFriend !== undefined
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: 5
-
-                    Item {
-                        width: 24
-                        height: 24
-                        anchors.verticalCenter: parent.verticalCenter
-
-                        RoundedImage {
-                            anchors.fill: parent
-                            radius: 12
-                            borderColor: root.accentColor
-                            borderWidth: 1.5
-                            source: root.listeningAlongFriend ? (root.listeningAlongFriend.avatar_url || root.listeningAlongFriend.avatar || "") : ""
-                            fallbackIcon: "../assets/icons/preferences-system-symbolic.svg"
-                            placeholderColor: "#27272a"
-                        }
-                    }
-
-                    // Leave Button [✕] nhỏ gọn 18px Muted Rose
-                    Rectangle {
-                        width: 18
-                        height: 18
-                        radius: 9
-                        anchors.verticalCenter: parent.verticalCenter
-                        color: exitMouse.containsMouse ? Qt.rgba(244/255, 63/255, 94/255, 0.30) : Qt.rgba(244/255, 63/255, 94/255, 0.16)
-                        border.color: Qt.rgba(244/255, 63/255, 94/255, 0.40)
+                        id: verticalVolPopup
+                        anchors.bottom: parent.top
+                        anchors.bottomMargin: 8
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: 48
+                        height: 180
+                        radius: 14
+                        color: Qt.rgba(0.10, 0.11, 0.15, 0.96)
                         border.width: 1
+                        border.color: Qt.rgba(1, 1, 1, 0.20)
+                        z: 100
 
-                        AppIcon {
-                            anchors.centerIn: parent
-                            source: "../assets/icons/window-close-symbolic.svg"
-                            iconSize: 8
-                            color: "#fda4af"
+                        opacity: root.isVolumePopupOpen ? 1.0 : 0.0
+                        visible: opacity > 0.01
+                        scale: root.isVolumePopupOpen ? 1.0 : 0.92
+                        transformOrigin: Item.Bottom
+                        Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutQuad } }
+                        Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+
+                        Timer {
+                            id: volDismissTimer
+                            interval: 700
+                            repeat: false
+                            onTriggered: {
+                                if (!root.isVolumeSliding && !volumeBridgeHover.hovered && !volPopupMouse.containsMouse) {
+                                    root.isVolumePopupOpen = false;
+                                }
+                            }
                         }
 
+                        // Full-surface interactive touch & drag area for 1-click volume tuning!
                         MouseArea {
-                            id: exitMouse
+                            id: volPopupMouse
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.exitListeningAlongRequested()
+                            preventStealing: true
+
+                            function updateFromMouseY(my) {
+                                var topY = 32.0;
+                                var botY = 146.0;
+                                var clamped = Math.max(topY, Math.min(botY, my));
+                                var frac = 1.0 - ((clamped - topY) / (botY - topY));
+                                var newVol = Math.round(Math.max(0, Math.min(100, frac * 100)));
+                                root.reqVolumeChange(newVol);
+                            }
+
+                            onPressed: mouse => {
+                                root.isVolumeSliding = true;
+                                volDismissTimer.stop();
+                                updateFromMouseY(mouse.y);
+                            }
+                            onPositionChanged: mouse => {
+                                if (pressed || root.isVolumeSliding) {
+                                    volDismissTimer.stop();
+                                    updateFromMouseY(mouse.y);
+                                }
+                            }
+                            onReleased: {
+                                root.isVolumeSliding = false;
+                                if (!containsMouse && !volumeBridgeHover.hovered) volDismissTimer.restart();
+                            }
+                            onCanceled: {
+                                root.isVolumeSliding = false;
+                                if (!containsMouse && !volumeBridgeHover.hovered) volDismissTimer.restart();
+                            }
+                            onWheel: wheel => {
+                                var step = wheel.angleDelta.y > 0 ? 5 : -5;
+                                root.reqVolumeChange(Math.max(0, Math.min(100, root.volume + step)));
+                            }
+                        }
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.topMargin: 10
+                            anchors.bottomMargin: 10
+                            spacing: 8
+
+                            // 1. Percentage Text (Top)
+                            Text {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: Math.round(root.volume)
+                                font.family: "Segoe UI, Inter, monospace"
+                                font.pixelSize: 11
+                                font.bold: true
+                                color: Qt.rgba(1, 1, 1, 0.85)
+                            }
+
+                            // 2. Vertical Slider Track (Middle)
+                            Item {
+                                id: verticalVolSliderBox
+                                Layout.alignment: Qt.AlignHCenter
+                                Layout.fillHeight: true
+                                width: 40
+
+                                Rectangle {
+                                    id: trackBg
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    anchors.top: parent.top
+                                    anchors.bottom: parent.bottom
+                                    width: 4
+                                    radius: 2
+                                    color: Qt.rgba(1, 1, 1, 0.25)
+
+                                    // Filled from bottom to top
+                                    Rectangle {
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        anchors.bottom: parent.bottom
+                                        width: 4
+                                        height: parent.height * (root.volume / 100.0)
+                                        radius: 2
+                                        color: "#ffffff"
+                                    }
+
+                                    // White Tactile Knob Dot (Shows current volume level clearly)
+                                    Rectangle {
+                                        width: 10; height: 10; radius: 5
+                                        color: "#ffffff"
+                                        border.color: Qt.rgba(0, 0, 0, 0.35)
+                                        border.width: 1
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        y: Math.max(0, Math.min(trackBg.height - height, trackBg.height * (1.0 - root.volume / 100.0) - height / 2))
+                                    }
+                                }
+                            }
+
+                            // 3. Mini Speaker Icon (Bottom)
+                            AppIcon {
+                                Layout.alignment: Qt.AlignHCenter
+                                source: root.volume === 0 ? "../assets/icons/audio-volume-muted-symbolic.svg" : "../assets/icons/audio-volume-high-symbolic.svg"
+                                iconSize: 15
+                                color: Qt.rgba(1, 1, 1, 0.70)
+                            }
                         }
                     }
                 }
 
-                // 2. Phía Host: Cụm Overlapping Avatars tròn 24px xếp chồng so le (-8px offset) + Chấm Live Pulse
+                // 5. Close Button [ ✕ ] (SimpMusic Close: clears current track & returns to empty playerbar)
                 Item {
-                    id: hostAvatarsCluster
-                    visible: !root.listeningAlongFriend && root.activeCoListenersDetails && root.activeCoListenersDetails.length > 0
-                    anchors.verticalCenter: parent.verticalCenter
-                    property int count: root.activeCoListenersDetails ? root.activeCoListenersDetails.length : 0
-                    width: count <= 1 ? 24 : (count === 2 ? 40 : 58)
-                    height: 24
-
-                    // Avatar 1
-                    RoundedImage {
-                        x: 0
-                        width: 24; height: 24; radius: 12
-                        borderColor: root.accentColor
-                        borderWidth: 1.5
-                        source: (hostAvatarsCluster.count > 0 && root.activeCoListenersDetails[0]) ? (root.activeCoListenersDetails[0].avatar || "") : ""
-                        fallbackIcon: "../assets/icons/preferences-system-symbolic.svg"
-                        placeholderColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
-                        visible: hostAvatarsCluster.count > 0
+                    width: 40; height: parent.height
+                    HoverHandler { id: closeH }
+                    AppIcon {
+                        anchors.centerIn: parent
+                        source: "../assets/icons/window-close-symbolic.svg"
+                        iconSize: 18
+                        color: closeH.hovered ? "#ff5252" : "#b3b3b3"
                     }
-
-                    // Avatar 2 (Overlapping with -8px offset -> x = 16)
-                    RoundedImage {
-                        x: 16
-                        width: 24; height: 24; radius: 12
-                        borderColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.85)
-                        borderWidth: 1.5
-                        source: (hostAvatarsCluster.count > 1 && root.activeCoListenersDetails[1]) ? (root.activeCoListenersDetails[1].avatar || "") : ""
-                        fallbackIcon: "../assets/icons/preferences-system-symbolic.svg"
-                        placeholderColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
-                        visible: hostAvatarsCluster.count > 1
-                    }
-
-                    // Badge +N (if count > 2)
-                    Rectangle {
-                        x: 34
-                        width: 22; height: 22; radius: 11
-                        anchors.verticalCenter: parent.verticalCenter
-                        color: Qt.rgba(root.accentColor.r * 0.3, root.accentColor.g * 0.3, root.accentColor.b * 0.3, 0.90)
-                        border.color: root.accentColor
-                        border.width: 1.5
-                        visible: hostAvatarsCluster.count > 2
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "+" + (hostAvatarsCluster.count - 2)
-                            color: "#ffffff"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 9
-                            font.weight: Font.Bold
-                        }
-                    }
-
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            var pt = hostAvatarsCluster.mapToItem(null, hostAvatarsCluster.width / 2, 0);
-                            root.openCoListenersRequested(pt.x, pt.y);
-                        }
+                        onClicked: root.closeClicked()
                     }
                 }
             }
         }
+    }
 
-        // =====================================================================
-        // Floating Chat Input Capsule (Danmaku Messenger Bar)
-        // =====================================================================
-        Rectangle {
-            id: chatInputCapsule
-            visible: root.isChatInputOpen && root.isCoListeningActive
-            anchors.bottom: parent.top
-            anchors.bottomMargin: 8
-            anchors.right: parent.right
-            anchors.rightMargin: 16
-            width: 260
-            height: 36
-            radius: 18
-            color: Qt.rgba(0.08, 0.08, 0.10, 0.95)
-            border.color: root.accentColor
-            border.width: 1
-            z: 100
+    // =========================================================================
+    // Floating Chat Input Capsule (Danmaku Messenger Bar)
+    // =========================================================================
+    Rectangle {
+        id: chatInputCapsule
+        visible: root.isChatInputOpen && root.isCoListeningActive
+        anchors.bottom: parent.top
+        anchors.bottomMargin: 8
+        anchors.right: parent.right
+        anchors.rightMargin: 16
+        width: 260
+        height: 36
+        radius: 18
+        color: Qt.rgba(0.08, 0.08, 0.10, 0.95)
+        border.color: root.accentColor
+        border.width: 1
+        z: 100
 
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 12
-                anchors.rightMargin: 8
-                spacing: 6
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 12
+            anchors.rightMargin: 8
+            spacing: 6
 
-                AppIcon {
-                    source: "../assets/icons/chat-message-new-symbolic.svg"
-                    iconSize: 13
-                    color: root.accentColor
+            AppIcon {
+                source: "../assets/icons/chat-message-new-symbolic.svg"
+                iconSize: 13
+                color: root.accentColor
+            }
+
+            TextInput {
+                id: chatTextInput
+                Layout.fillWidth: true
+                font.family: Theme.fontFamily
+                font.pixelSize: 11
+                color: "#ffffff"
+                clip: true
+                selectByMouse: true
+
+                Text {
+                    anchors.fill: parent
+                    text: I18n.tr("Nhập tin nhắn bay...", "Send flying message...")
+                    color: "#71717a"
+                    font: parent.font
+                    visible: !parent.text && !parent.activeFocus
                 }
 
-                TextInput {
-                    id: chatTextInput
-                    Layout.fillWidth: true
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 11
-                    color: "#ffffff"
-                    clip: true
-                    selectByMouse: true
-
-                    Text {
-                        anchors.fill: parent
-                        text: I18n.tr("Nhập tin nhắn bay...", "Send flying message...")
-                        color: "#71717a"
-                        font: parent.font
-                        visible: !parent.text && !parent.activeFocus
-                    }
-
-                    onAccepted: {
-                        if (text.trim() !== "") {
-                            root.sendChatMessageRequested(text.trim());
-                            text = "";
-                            root.isChatInputOpen = false;
-                        }
-                    }
-
-                    Keys.onEscapePressed: {
+                onAccepted: {
+                    if (text.trim() !== "") {
+                        root.sendChatMessageRequested(text.trim());
+                        text = "";
                         root.isChatInputOpen = false;
                     }
                 }
 
-                // Send button
-                Rectangle {
-                    Layout.preferredWidth: 22
-                    Layout.preferredHeight: 22
-                    radius: 11
-                    color: sendHover.hovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
+                Keys.onEscapePressed: {
+                    root.isChatInputOpen = false;
+                }
+            }
 
-                    HoverHandler { id: sendHover }
+            // Send button
+            Rectangle {
+                Layout.preferredWidth: 22
+                Layout.preferredHeight: 22
+                radius: 11
+                color: sendHover.hovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
 
-                    AppIcon {
-                        anchors.centerIn: parent
-                        source: "../assets/icons/media-playback-start-symbolic.svg"
-                        iconSize: 9
-                        color: root.accentColor
-                    }
+                HoverHandler { id: sendHover }
 
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (chatTextInput.text.trim() !== "") {
-                                root.sendChatMessageRequested(chatTextInput.text.trim());
-                                chatTextInput.text = "";
-                                root.isChatInputOpen = false;
-                            }
+                AppIcon {
+                    anchors.centerIn: parent
+                    source: "../assets/icons/media-playback-start-symbolic.svg"
+                    iconSize: 9
+                    color: root.accentColor
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        if (chatTextInput.text.trim() !== "") {
+                            root.sendChatMessageRequested(chatTextInput.text.trim());
+                            chatTextInput.text = "";
+                            root.isChatInputOpen = false;
                         }
                     }
                 }
-
-                // Close button
-                Rectangle {
-                    Layout.preferredWidth: 18
-                    Layout.preferredHeight: 18
-                    radius: 9
-                    color: "transparent"
-
-                    AppIcon {
-                        anchors.centerIn: parent
-                        source: "../assets/icons/window-close-symbolic.svg"
-                        iconSize: 8
-                        color: "#a1a1aa"
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.isChatInputOpen = false
-                    }
-                }
-            }
-        }
-
-        // =====================================================================
-        // 4. SLIM PROGRESS BAR AT BOTTOM EDGE (Emerald Green, Scrubbing & Time Tooltip)
-        // =====================================================================
-        Item {
-            id: progressBarContainer
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 2
-            anchors.left: parent.left
-            anchors.leftMargin: 24
-            anchors.right: parent.right
-            anchors.rightMargin: 24
-            height: 10
-            z: 20
-
-            property real progressFraction: {
-                if (root.isScrubbingProgress) {
-                    return root.totalDuration > 0 ? (root.scrubTime / root.totalDuration) : 0.0;
-                }
-                return (root.totalDuration > 0) ? Math.min(1.0, Math.max(0.0, root.currentTime / root.totalDuration)) : 0.0;
             }
 
-            // Time Tooltip Bubble (Visible on Hover / Scrubbing)
+            // Close button
             Rectangle {
-                anchors.bottom: parent.top
-                anchors.bottomMargin: 4
-                x: Math.min(parent.width - width, Math.max(0, parent.width * progressBarContainer.progressFraction - width / 2))
-                width: timeLabelText.implicitWidth + 12
-                height: 18
+                Layout.preferredWidth: 18
+                Layout.preferredHeight: 18
                 radius: 9
-                color: Qt.rgba(0.08, 0.09, 0.12, 0.88)
-                border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.22)
-                visible: progressMouse.containsMouse || root.isScrubbingProgress
-                opacity: visible ? 1.0 : 0.0
-                Behavior on opacity { NumberAnimation { duration: 120 } }
-
-                Text {
-                    id: timeLabelText
-                    anchors.centerIn: parent
-                    text: root.fmtTime(root.isScrubbingProgress ? root.scrubTime : root.currentTime) + " / " + root.fmtTime(root.totalDuration)
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 10
-                    font.weight: Font.Medium
-                    color: "#ffffff"
-                }
-            }
-
-            Rectangle {
-                id: progressBg
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.left: parent.left
-                anchors.right: parent.right
-                height: progressMouse.containsMouse || root.isScrubbingProgress ? 3.5 : 2.0
-                radius: height / 2
                 color: "transparent"
-                Behavior on height { NumberAnimation { duration: 120 } }
 
-                // Dynamic Accent Elapsed Fill
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.top: parent.top
-                    anchors.bottom: parent.bottom
-                    width: Math.max(0, parent.width * progressBarContainer.progressFraction)
-                    radius: parent.radius
-                    color: root.accentColor
-                    Behavior on color { ColorAnimation { duration: 250 } }
+                AppIcon {
+                    anchors.centerIn: parent
+                    source: "../assets/icons/window-close-symbolic.svg"
+                    iconSize: 8
+                    color: "#a1a1aa"
                 }
 
-                // Scrub Handle Dot
-                Rectangle {
-                    width: 7; height: 7; radius: 3.5
-                    color: root.accentColor
-                    border.color: "#ffffff"
-                    border.width: 1
-                    anchors.verticalCenter: parent.verticalCenter
-                    x: Math.min(parent.width - width, Math.max(0, parent.width * progressBarContainer.progressFraction - width / 2))
-                    opacity: progressMouse.containsMouse || root.isScrubbingProgress ? 1.0 : 0.0
-                    Behavior on opacity { NumberAnimation { duration: 120 } }
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.isChatInputOpen = false
                 }
-            }
-
-            MouseArea {
-                id: progressMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                enabled: !!root.currentTrack && root.totalDuration > 0
-
-                function updateScrubPos(mouseX) {
-                    var frac = Math.max(0.0, Math.min(1.0, mouseX / width));
-                    root.scrubTime = frac * root.totalDuration;
-                }
-
-                onPressed: mouse => {
-                    root.isScrubbingProgress = true;
-                    updateScrubPos(mouse.x);
-                }
-                onPositionChanged: mouse => {
-                    if (root.isScrubbingProgress) updateScrubPos(mouse.x);
-                }
-                onReleased: mouse => {
-                    if (root.isScrubbingProgress) {
-                        updateScrubPos(mouse.x);
-                        root.seekRequested(root.scrubTime);
-                        root.isScrubbingProgress = false;
-                    }
-                }
-                onCanceled: root.isScrubbingProgress = false
             }
         }
     }

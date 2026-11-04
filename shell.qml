@@ -2422,14 +2422,16 @@ Scope {
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 16
             anchors.horizontalCenter: parent.horizontalCenter
-            width: Math.min(win.isCoListeningActive ? 670 : 600, parent.width - 48)
+            width: Math.min(win.isCoListeningActive ? 850 : 790, parent.width - 32)
             Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
-            height: 66
+            height: 60
             z: 50
             backgroundSourceItem: masterAppSurface
 
             currentTrack: win.currentTrack
+            audioSpecs: win.audioSpecs
             resolvedSquareImage: win.currentResolvedCover
+            isLiked: (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView && ytNowPlayingView.currentLikeStatus === "LIKE")
             isPlaying: win.isPlaying
             isLoadingAudio: win.isLoadingAudio
             currentTime: win.currentTime
@@ -2450,10 +2452,16 @@ Scope {
             onNextClicked: win.playNext()
             onPrevClicked: win.playPrev()
             onOpenDetailsRequested: {
-                win.isNowPlayingOpen = !win.isNowPlayingOpen;
+                win.isNowPlayingOpen = true;
+                if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) {
+                    ytNowPlayingView.activeTab = "lyrics";
+                }
             }
             onQueueClicked: {
-                win.isNowPlayingOpen = !win.isNowPlayingOpen;
+                win.isNowPlayingOpen = true;
+                if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) {
+                    ytNowPlayingView.activeTab = "up_next";
+                }
             }
             onToggleShuffle: {
                 win.isShuffle = !win.isShuffle;
@@ -2468,16 +2476,21 @@ Scope {
             }
             onSeekRequested: sec => win.seekAudio(sec)
             onReqVolumeChange: vol => win.setVolume(vol)
+            onCloseClicked: {
+                win.isPlaying = false;
+                win.currentTrack = null;
+                win.currentTime = 0.0;
+                win.totalDuration = 0.0;
+                win.isNowPlayingOpen = false;
+                if (typeof __NutstyBridge !== "undefined" && __NutstyBridge.stopImmediate) {
+                    __NutstyBridge.stopImmediate();
+                } else {
+                    Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "stop"]);
+                }
+            }
             onExitListeningAlongRequested: win.exitListeningAlong()
             onOpenCoListenersRequested: (tx, ty) => coListenersPopover.openAt(win.activeCoListenersDetails, tx, ty)
             onSendChatMessageRequested: text => win.sendChatMessage(text)
-            onSleepTimerClicked: {
-                if (sleepTimerPopover.isOpen) {
-                    sleepTimerPopover.close();
-                } else {
-                    sleepTimerPopover.open();
-                }
-            }
         }
 
         // Google Account / Cloud Settings Modal

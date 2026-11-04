@@ -172,8 +172,19 @@ def resolve_stream_url(video_id, quality=None, force_fresh=False):
         url = f"https://www.youtube.com/watch?v={video_id}"
         attempts = []
 
-        # Attempt 1: Modern TV / Web Embedded client with optional cookies (extracts clean 251 Opus / 140 AAC)
-        opt1 = {
+        # Attempt 1: Android client (Highest resilience against bot detection on YouTube Music)
+        attempts.append({
+            "quiet": True,
+            "no_warnings": True,
+            "skip_download": True,
+            "check_formats": False,
+            "noplaylist": True,
+            "socket_timeout": 8,
+            "extractor_args": {"youtube": {"player_client": ["android", "web"]}}
+        })
+
+        # Attempt 2: Modern TV / Web Embedded client with optional cookies (extracts clean 251 Opus / 140 AAC)
+        opt2 = {
             "quiet": True,
             "no_warnings": True,
             "skip_download": True,
@@ -183,10 +194,10 @@ def resolve_stream_url(video_id, quality=None, force_fresh=False):
             "extractor_args": {"youtube": {"player_client": ["tv", "web_embedded"]}}
         }
         if cookie_file and os.path.exists(cookie_file):
-            opt1["cookiefile"] = cookie_file
-        attempts.append(opt1)
+            opt2["cookiefile"] = cookie_file
+        attempts.append(opt2)
 
-        # Attempt 2: User cookie file with mweb / web_embedded client
+        # Attempt 3: User cookie file with mweb / web_embedded client
         if cookie_file and os.path.exists(cookie_file):
             attempts.append({
                 "quiet": True,
@@ -199,7 +210,7 @@ def resolve_stream_url(video_id, quality=None, force_fresh=False):
                 "extractor_args": {"youtube": {"player_client": ["mweb", "web_embedded"]}}
             })
 
-        # Attempt 3: Standard resilient web client extraction
+        # Attempt 4: Standard resilient web client extraction
         attempts.append({
             "quiet": True,
             "no_warnings": True,
@@ -209,7 +220,7 @@ def resolve_stream_url(video_id, quality=None, force_fresh=False):
             "socket_timeout": 8,
         })
 
-        # Attempt 4: Resilient iOS / mobile web client fallback
+        # Attempt 5: Resilient iOS / mobile web client fallback
         attempts.append({
             "quiet": True,
             "no_warnings": True,
