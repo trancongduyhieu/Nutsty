@@ -76,7 +76,7 @@ Scope {
     property string authAccountThumb: ""
     property string authAccountEmail: ""
     property bool syncHistoryToGoogle: true
-    property bool desktopLyricsEnabled: Qt.platform.os !== "windows"
+    property bool desktopLyricsEnabled: true
     property bool taskbarLyricsEnabled: Qt.platform.os === "windows"
     property string taskbarLyricsPlacement: "above" // "above" | "taskbar"
     property string taskbarLyricsAlign: "center"      // "center" | "left" | "right"
@@ -2556,7 +2556,6 @@ Scope {
                 win.saveSettings();
             }
             onToggleDesktopLyricsRequested: enabled => {
-                if (Qt.platform.os === "windows") return;
                 win.desktopLyricsEnabled = enabled;
                 win.saveSettings();
             }
@@ -3083,7 +3082,7 @@ Scope {
             }
             if (obj.widgetX !== undefined) win.widgetX = Number(obj.widgetX);
             if (obj.widgetY !== undefined) win.widgetY = Number(obj.widgetY);
-            win.desktopLyricsEnabled = (Qt.platform.os === "windows") ? false : (obj.desktopLyricsEnabled !== undefined ? !!obj.desktopLyricsEnabled : true);
+            if (obj.desktopLyricsEnabled !== undefined) win.desktopLyricsEnabled = !!obj.desktopLyricsEnabled;
             if (obj.taskbarLyricsEnabled !== undefined) win.taskbarLyricsEnabled = !!obj.taskbarLyricsEnabled;
             if (obj.taskbarLyricsPlacement !== undefined && typeof obj.taskbarLyricsPlacement === "string") win.taskbarLyricsPlacement = obj.taskbarLyricsPlacement;
             if (obj.taskbarLyricsAlign !== undefined && typeof obj.taskbarLyricsAlign === "string") win.taskbarLyricsAlign = obj.taskbarLyricsAlign;
@@ -4368,12 +4367,12 @@ Scope {
     // =========================================================================
     DesktopLyricsWidget {
         id: desktopLyrics
-        visible: Qt.platform.os !== "windows" && win.desktopLyricsEnabled
+        visible: win.desktopLyricsEnabled
         activeLyrics: win.activeLyrics
         currentTime: win.currentTime
         isPlaying: win.isPlaying
         currentTrack: win.currentTrack
-        enabled: Qt.platform.os !== "windows" && win.desktopLyricsEnabled
+        enabled: win.desktopLyricsEnabled
         lyricsRomanizationEnabled: win.lyricsRomanizationEnabled
         lyricsPreset: win.desktopLyricsPreset
         customX: win.desktopLyricsCustomX

@@ -24,6 +24,13 @@ PanelWindow {
     signal openFullAppRequested()
     signal savePositionRequested(real newX, real newY)
 
+    readonly property bool isWindows: Qt.platform.os === "windows"
+
+    width: isWindows ? 216 : ((screen && screen.geometry) ? screen.geometry.width : Screen.width)
+    height: isWindows ? 216 : ((screen && screen.geometry) ? screen.geometry.height : Screen.height)
+    x: isWindows ? Math.max(12, Math.min(root.widgetX, Screen.width - 216 - 12)) : 0
+    y: isWindows ? Math.max(12, Math.min(root.widgetY, Screen.height - 216 - 52)) : 0
+
     screen: Quickshell.screens[0]
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Bottom
@@ -31,14 +38,14 @@ PanelWindow {
     color: "transparent"
 
     anchors {
-        top: true
-        bottom: true
-        left: true
-        right: true
+        top: !isWindows
+        bottom: !isWindows
+        left: !isWindows
+        right: !isWindows
     }
 
     // Dynamic input mask: Only un-mask during active drag movement so single/double clicks are never cancelled by Win32 SetWindowRgn
-    mask: cardRegion
+    mask: isWindows ? null : cardRegion
 
     Region {
         id: cardRegion
@@ -111,20 +118,28 @@ PanelWindow {
     // =========================================================================
     Item {
         id: widgetContainer
-        x: Math.max(12, Math.min(root.widgetX, (root.width > 240 ? root.width : 800) - width - 12))
-        y: Math.max(12, Math.min(root.widgetY, (root.height > 260 ? root.height : 600) - height - 52))
+        x: root.isWindows ? 0 : Math.max(12, Math.min(root.widgetX, (root.width > 240 ? root.width : 800) - width - 12))
+        y: root.isWindows ? 0 : Math.max(12, Math.min(root.widgetY, (root.height > 260 ? root.height : 600) - height - 52))
         width: 216
         height: 216
 
         Connections {
             target: root
             function onWidgetXChanged() {
-                if (!dragArea.drag.active) {
+                if (root.isWindows) {
+                    if (!dragArea.isDraggingWindow) {
+                        root.x = Math.max(12, Math.min(root.widgetX, Screen.width - root.width - 12));
+                    }
+                } else if (!dragArea.drag.active) {
                     widgetContainer.x = Math.max(12, Math.min(root.widgetX, (root.width > 240 ? root.width : 800) - widgetContainer.width - 12));
                 }
             }
             function onWidgetYChanged() {
-                if (!dragArea.drag.active) {
+                if (root.isWindows) {
+                    if (!dragArea.isDraggingWindow) {
+                        root.y = Math.max(12, Math.min(root.widgetY, Screen.height - root.height - 52));
+                    }
+                } else if (!dragArea.drag.active) {
                     widgetContainer.y = Math.max(12, Math.min(root.widgetY, (root.height > 260 ? root.height : 600) - widgetContainer.height - 52));
                 }
             }
@@ -209,18 +224,46 @@ PanelWindow {
         MouseArea {
             id: dragArea
             anchors.fill: parent
-            drag.target: widgetContainer
+            drag.target: root.isWindows ? null : widgetContainer
             drag.axis: Drag.XAndYAxis
             drag.minimumX: 10
             drag.minimumY: 10
             drag.maximumX: (root.screen ? root.screen.width : 1920) - widgetContainer.width - 10
             drag.maximumY: (root.screen ? root.screen.height : 1080) - widgetContainer.height - 10
-            cursorShape: drag.active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+            cursorShape: (drag.active || (root.isWindows && pressed)) ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+
+            property point dragStartPos: Qt.point(0, 0)
+            property bool isDraggingWindow: false
+
+            onPressed: mouse => {
+                if (root.isWindows) {
+                    dragStartPos = Qt.point(mouse.x, mouse.y);
+                    isDraggingWindow = true;
+                }
+            }
+
+            onPositionChanged: mouse => {
+                if (root.isWindows && isDraggingWindow && pressed) {
+                    var dx = mouse.x - dragStartPos.x;
+                    var dy = mouse.y - dragStartPos.y;
+                    var newX = Math.max(12, Math.min(Screen.width - root.width - 12, root.x + dx));
+                    var newY = Math.max(12, Math.min(Screen.height - root.height - 52, root.y + dy));
+                    root.x = newX;
+                    root.y = newY;
+                }
+            }
 
             onReleased: {
-                root.widgetX = widgetContainer.x;
-                root.widgetY = widgetContainer.y;
-                root.savePositionRequested(root.widgetX, root.widgetY);
+                if (root.isWindows) {
+                    isDraggingWindow = false;
+                    root.widgetX = root.x;
+                    root.widgetY = root.y;
+                    root.savePositionRequested(root.widgetX, root.widgetY);
+                } else {
+                    root.widgetX = widgetContainer.x;
+                    root.widgetY = widgetContainer.y;
+                    root.savePositionRequested(root.widgetX, root.widgetY);
+                }
             }
 
             onDoubleClicked: {

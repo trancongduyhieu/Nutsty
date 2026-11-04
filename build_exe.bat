@@ -33,6 +33,13 @@ echo.
 echo [2/2] Packaging Nutsty.exe using nutsty.spec...
 pyinstaller --noconfirm --clean nutsty.spec
 
+:: Reset the Windows mandatory integrity label on the output to Medium.
+:: A sandboxed/AI-managed workspace can stamp a Low label that new files inherit; a Low-integrity
+:: Nutsty.exe / TaskbarLyrics.exe cannot write %%LOCALAPPDATA%% or bind localhost:9012 (silent failure).
+if exist "dist\Nutsty" (
+    icacls "dist\Nutsty" /setintegritylevel "(OI)(CI)M" /T /C >nul 2>nul
+)
+
 echo.
 if exist "dist\Nutsty\Nutsty.exe" (
     echo ====================================================

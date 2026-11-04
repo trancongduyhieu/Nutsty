@@ -2329,7 +2329,7 @@ Rectangle {
                 spacing: 12
                 visible: root.currentTab === 1
 
-                // Master Switch: Desktop / Taskbar Lyrics (Frameless Row, Toggle Pinned to Right)
+                // Master Switch: Desktop Lyrics (Frameless Row, Toggle Pinned to Right)
                 Item {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 46
@@ -2342,9 +2342,7 @@ Rectangle {
                         spacing: 2
 
                         Text {
-                            text: (Qt.platform.os === "windows")
-                                ? I18n.tr("Hiển thị lời bài hát trên Taskbar", "Taskbar Lyrics Display")
-                                : I18n.tr("Hiển thị lời bài hát trên Desktop", "Desktop Lyrics Display")
+                            text: I18n.tr("Hiển thị lời bài hát trên Desktop", "Desktop Lyrics Display")
                             font.family: Theme.fontFamily
                             font.pixelSize: 14
                             font.bold: true
@@ -2352,9 +2350,7 @@ Rectangle {
                         }
 
                         Text {
-                            text: (Qt.platform.os === "windows")
-                                ? I18n.tr("Hiển thị lời bài hát karaoke quét âm tiết trên thanh tác vụ Windows (Spicy Taskbar)", "Display syllable karaoke lyrics directly on the Windows taskbar (Spicy Taskbar style)")
-                                : I18n.tr("Hiển thị lời bài hát nổi trực tiếp trên hình nền Wayland", "Display floating lyrics directly on Wayland desktop wallpaper")
+                            text: I18n.tr("Hiển thị lời bài hát nổi trực tiếp trên màn hình", "Display floating lyrics directly on desktop wallpaper")
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             color: Theme.textSecondary
@@ -2370,8 +2366,7 @@ Rectangle {
                         height: 24
                         radius: 12
                         opacity: 1.0
-                        readonly property bool isLyricsOn: (Qt.platform.os === "windows") ? root.taskbarLyricsEnabled : root.desktopLyricsEnabled
-                        color: isLyricsOn ? root.accentColor : Qt.rgba(255, 255, 255, 0.14)
+                        color: root.desktopLyricsEnabled ? root.accentColor : Qt.rgba(255, 255, 255, 0.14)
                         Behavior on color { ColorAnimation { duration: 150 } }
 
                         Rectangle {
@@ -2380,7 +2375,7 @@ Rectangle {
                             radius: 9
                             color: "#ffffff"
                             anchors.verticalCenter: parent.verticalCenter
-                            x: toggleDesktopLyrics.isLyricsOn ? parent.width - width - 3 : 3
+                            x: root.desktopLyricsEnabled ? parent.width - width - 3 : 3
                             Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
                         }
 
@@ -2390,11 +2385,70 @@ Rectangle {
                             enabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                if (Qt.platform.os === "windows") {
-                                    root.toggleTaskbarLyricsRequested(!root.taskbarLyricsEnabled);
-                                } else {
-                                    root.toggleDesktopLyricsRequested(!root.desktopLyricsEnabled);
-                                }
+                                root.toggleDesktopLyricsRequested(!root.desktopLyricsEnabled);
+                            }
+                        }
+                    }
+                }
+
+                // Windows Taskbar Lyrics Switch (Spicy Taskbar)
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 46
+                    visible: Qt.platform.os === "windows"
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: toggleTaskbarLyrics.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            text: I18n.tr("Hiển thị lời bài hát trên Taskbar", "Taskbar Lyrics Display")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 14
+                            font.bold: true
+                            color: Theme.textPrimary
+                        }
+
+                        Text {
+                            text: I18n.tr("Hiển thị lời bài hát karaoke quét âm tiết trên thanh tác vụ Windows (Spicy Taskbar)", "Display syllable karaoke lyrics directly on the Windows taskbar (Spicy Taskbar style)")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                        }
+                    }
+
+                    // Toggle Switch Pill (Pinned to Right)
+                    Rectangle {
+                        id: toggleTaskbarLyrics
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 44
+                        height: 24
+                        radius: 12
+                        opacity: 1.0
+                        color: root.taskbarLyricsEnabled ? root.accentColor : Qt.rgba(255, 255, 255, 0.14)
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        Rectangle {
+                            width: 18
+                            height: 18
+                            radius: 9
+                            color: "#ffffff"
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: root.taskbarLyricsEnabled ? parent.width - width - 3 : 3
+                            Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            preventStealing: false
+                            enabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                root.toggleTaskbarLyricsRequested(!root.taskbarLyricsEnabled);
                             }
                         }
                     }
@@ -3070,7 +3124,6 @@ Rectangle {
                     font.bold: true
                     color: Theme.textMuted
                     Layout.topMargin: 2
-                    visible: Qt.platform.os !== "windows"
                 }
 
                 // -------------------------------------------------------------
@@ -3079,7 +3132,6 @@ Rectangle {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 52
-                    visible: Qt.platform.os !== "windows"
                     radius: 8
                     color: p1Hover.hovered ? Qt.rgba(255, 255, 255, 0.05) : "transparent"
                     Behavior on color { ColorAnimation { duration: 120 } }
@@ -3167,7 +3219,6 @@ Rectangle {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 52
-                    visible: Qt.platform.os !== "windows"
                     radius: 8
                     color: p2Hover.hovered ? Qt.rgba(255, 255, 255, 0.05) : "transparent"
                     Behavior on color { ColorAnimation { duration: 120 } }
@@ -3278,7 +3329,6 @@ Rectangle {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 52
-                    visible: Qt.platform.os !== "windows"
                     radius: 8
                     color: p3Hover.hovered ? Qt.rgba(255, 255, 255, 0.05) : "transparent"
                     Behavior on color { ColorAnimation { duration: 120 } }
@@ -3380,7 +3430,6 @@ Rectangle {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 52
-                    visible: Qt.platform.os !== "windows"
                     radius: 8
                     color: p4Hover.hovered ? Qt.rgba(255, 255, 255, 0.05) : "transparent"
                     Behavior on color { ColorAnimation { duration: 120 } }
@@ -3467,7 +3516,6 @@ Rectangle {
                 Item {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 38
-                    visible: Qt.platform.os !== "windows"
 
                     Column {
                         anchors.left: parent.left

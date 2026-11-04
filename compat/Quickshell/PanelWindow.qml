@@ -7,7 +7,7 @@ Window {
     readonly property bool isDesktopBottomPanel: true
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus | Qt.Tool | Qt.WindowStaysOnBottomHint
     color: "transparent"
-    visible: Qt.platform.os !== "windows"
+    visible: false
 
     width: (screen && screen.geometry) ? screen.geometry.width : Screen.width
     height: (screen && screen.geometry) ? screen.geometry.height : Screen.height
@@ -37,22 +37,22 @@ Window {
 
     onMaskChanged: updateMask()
     onVisibleChanged: {
-        if (visible && Qt.platform.os !== "windows") {
+        if (visible) {
             root.show();
             root.lower();
-            if (typeof __NutstyBridge !== "undefined") {
+            if (typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.pinWindowToDesktopBottom === "function") {
                 __NutstyBridge.pinWindowToDesktopBottom(root);
             }
             updateMask();
             Qt.callLater(updateMask);
         } else {
-            if (typeof __NutstyBridge !== "undefined") {
+            if (typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.clearWindowMask === "function") {
                 __NutstyBridge.clearWindowMask(root);
             }
         }
     }
     onActiveChanged: {
-        if (active && visible && typeof __NutstyBridge !== "undefined") {
+        if (active && visible && typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.pinWindowToDesktopBottom === "function") {
             __NutstyBridge.pinWindowToDesktopBottom(root);
         }
     }
@@ -69,14 +69,14 @@ Window {
     Component.onCompleted: {
         updateMask();
         Qt.callLater(updateMask);
-        if (visible && Qt.platform.os !== "windows") {
+        if (visible) {
             root.show();
             root.lower();
-            if (typeof __NutstyBridge !== "undefined") {
+            if (typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.pinWindowToDesktopBottom === "function") {
                 __NutstyBridge.pinWindowToDesktopBottom(root);
             }
         } else {
-            if (typeof __NutstyBridge !== "undefined") {
+            if (typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.clearWindowMask === "function") {
                 __NutstyBridge.clearWindowMask(root);
             }
         }

@@ -335,17 +335,27 @@ class NativeHitTestFilter(QAbstractNativeEventFilter):
                     with self._lock:
                         if target_hwnd in self._panel_hwnds or target_hwnd in self._masks:
                             rect = self._masks.get(target_hwnd)
+                            user32 = ctypes.windll.user32
                             if not rect:
+                                rc = wintypes.RECT()
+                                if hasattr(user32, "GetWindowRect") and user32.GetWindowRect(target_hwnd, ctypes.byref(rc)):
+                                    if 0 < (rc.right - rc.left) <= 300 and 0 < (rc.bottom - rc.top) <= 300:
+                                        return False, 0
                                 return True, -1  # HTTRANSPARENT: clicks pass through to desktop
                             pt = wintypes.POINT()
                             pt.x = ctypes.c_short(msg.lParam & 0xFFFF).value
                             pt.y = ctypes.c_short((msg.lParam >> 16) & 0xFFFF).value
                             user32 = ctypes.windll.user32
-                            user32.ScreenToClient(target_hwnd, ctypes.byref(pt))
+                            if hasattr(user32, "ScreenToClient"):
+                                user32.ScreenToClient.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
+                                user32.ScreenToClient.restype = wintypes.BOOL
+                                user32.ScreenToClient(target_hwnd, ctypes.byref(pt))
 
                             # Handle Windows High-DPI scaling (physical pixels -> DIP logical pixels)
                             dpr = 1.0
                             if hasattr(user32, "GetDpiForWindow"):
+                                user32.GetDpiForWindow.argtypes = [wintypes.HWND]
+                                user32.GetDpiForWindow.restype = wintypes.UINT
                                 dpi = user32.GetDpiForWindow(target_hwnd)
                                 if dpi > 0:
                                     dpr = dpi / 96.0
@@ -506,10 +516,33 @@ class TaskbarLyricsService:
                 pass
             self.proc = None
 
+    @staticmethod
+    def _is_port_open(port=9012):
+        import socket
+        try:
+            # "localhost" resolves to every loopback address (IPv4 and IPv6), matching the companion bridge binding
+            with socket.create_connection(("localhost", port), timeout=0.5):
+                return True
+        except (OSError, ConnectionRefusedError):
+            return False
+
     def ensure_process(self):
         try:
+            if self._is_port_open(9012):
+                return
+            # Never kill or respawn a companion that this app started and that is still alive:
+            # the .NET process needs time to open its port, and the reconnect loop calls this every 2s.
+            if self.proc is not None and self.proc.poll() is None:
+                return
+            now = time.time()
+            if now - getattr(self, "_last_spawn_ts", 0.0) < 30.0:
+                return
+            self._last_spawn_ts = now
             check = subprocess.run(["tasklist", "/FI", "IMAGENAME eq TaskbarLyrics.exe"], capture_output=True, text=True, timeout=3)
-            if "TaskbarLyrics.exe" not in check.stdout:
+            if "TaskbarLyrics.exe" in check.stdout:
+                subprocess.run(["taskkill", "/F", "/IM", "TaskbarLyrics.exe"], capture_output=True, timeout=3)
+                time.sleep(0.3)
+            if os.path.exists(self.exe_path):
                 self.proc = subprocess.Popen([self.exe_path], cwd=self.bin_dir, **pc.get_daemon_popen_kwargs())
                 self.started_by_us = True
         except Exception as e:
@@ -716,6 +749,7 @@ class TaskbarLyricsService:
         self._send_lock = asyncio.Lock()
         while not self._stop_event.is_set():
             try:
+                self.ensure_process()
                 async with websockets.connect(uri) as ws:
                     self._ws = ws
                     self._last_lyrics_key = None
@@ -766,7 +800,7 @@ class TaskbarLyricsService:
                                 await self._safe_send(resp)
                         except Exception as e:
                             sys.stderr.write(f"TaskbarLyrics msg handler error: {e}\n")
-            except Exception:
+            except Exception as e:
                 self._ws = None
                 await asyncio.sleep(2.0)
 
@@ -1066,7 +1100,38 @@ class NutstyBridge(QObject):
         try:
             if win_obj and hasattr(win_obj, "winId"):
                 hwnd = int(win_obj.winId())
-                native_filter.set_mask(hwnd, x, y, w, h)
+                is_compact = False
+                try:
+                    if hasattr(win_obj, "width") and hasattr(win_obj, "height"):
+                        if 0 < win_obj.width() <= 300 and 0 < win_obj.height() <= 300:
+                            is_compact = True
+                except Exception:
+                    pass
+
+                if not is_compact:
+                    native_filter.set_mask(hwnd, x, y, w, h)
+                    if pc.IS_WINDOWS and hwnd > 0:
+                        import ctypes
+                        from ctypes import wintypes
+                        user32 = ctypes.windll.user32
+                        gdi32 = ctypes.windll.gdi32
+                        if w <= 0 or h <= 0 or x < -50 or y < -50:
+                            hrgn = gdi32.CreateRectRgn(0, 0, 0, 0)
+                            user32.SetWindowRgn(hwnd, hrgn, True)
+                        else:
+                            dpr = 1.0
+                            if hasattr(user32, "GetDpiForWindow"):
+                                user32.GetDpiForWindow.argtypes = [wintypes.HWND]
+                                user32.GetDpiForWindow.restype = wintypes.UINT
+                                dpi = user32.GetDpiForWindow(hwnd)
+                                if dpi > 0:
+                                    dpr = dpi / 96.0
+                            px = int(round(x * dpr))
+                            py = int(round(y * dpr))
+                            pw = int(round(w * dpr))
+                            ph = int(round(h * dpr))
+                            hrgn = gdi32.CreateRectRgn(px, py, px + pw, py + ph)
+                            user32.SetWindowRgn(hwnd, hrgn, True)
         except Exception as e:
             sys.stderr.write(f"setWindowMaskRect error: {e}\n")
 
@@ -1075,7 +1140,22 @@ class NutstyBridge(QObject):
         try:
             if win_obj and hasattr(win_obj, "winId"):
                 hwnd = int(win_obj.winId())
-                native_filter.clear_mask(hwnd)
+                is_compact = False
+                try:
+                    if hasattr(win_obj, "width") and hasattr(win_obj, "height"):
+                        if 0 < win_obj.width() <= 300 and 0 < win_obj.height() <= 300:
+                            is_compact = True
+                except Exception:
+                    pass
+
+                if not is_compact:
+                    native_filter.clear_mask(hwnd)
+                    if pc.IS_WINDOWS and hwnd > 0:
+                        import ctypes
+                        user32 = ctypes.windll.user32
+                        gdi32 = ctypes.windll.gdi32
+                        hrgn = gdi32.CreateRectRgn(0, 0, 0, 0)
+                        user32.SetWindowRgn(hwnd, hrgn, True)
         except Exception as e:
             sys.stderr.write(f"clearWindowMask error: {e}\n")
 
@@ -1087,22 +1167,22 @@ class NutstyBridge(QObject):
                 return
             if hasattr(win_obj, "lower"):
                 win_obj.lower()
-            if pc.IS_WINDOWS and (win_obj.property("objectName") == "bottomPanel" or getattr(win_obj, "isDesktopBottomPanel", False) or bool(win_obj.property("isDesktopBottomPanel"))):
-                try:
-                    if hasattr(win_obj, "hide"):
-                        win_obj.hide()
-                    if hasattr(win_obj, "setVisible"):
-                        win_obj.setVisible(False)
-                except Exception:
-                    pass
-                return
 
             if pc.IS_WINDOWS and hasattr(win_obj, "winId"):
                 import ctypes
                 from ctypes import wintypes
                 hwnd = int(win_obj.winId())
                 if hwnd > 0:
-                    native_filter.register_panel_hwnd(hwnd)
+                    is_compact_widget = False
+                    try:
+                        if hasattr(win_obj, "width") and hasattr(win_obj, "height"):
+                            if 0 < win_obj.width() <= 300 and 0 < win_obj.height() <= 300:
+                                is_compact_widget = True
+                    except Exception:
+                        pass
+
+                    if not is_compact_widget:
+                        native_filter.register_panel_hwnd(hwnd)
                     user32 = ctypes.windll.user32
                     GWL_EXSTYLE = -20
                     WS_EX_NOACTIVATE = 0x08000000
@@ -1811,13 +1891,7 @@ def main():
                 w.show()
             return
         elif _is_bottom_panel(w):
-            if "desktoplyrics" in w.metaObject().className().lower():
-                try:
-                    w.hide()
-                except Exception:
-                    pass
-                return
-            elif bool(w.property("visible")):
+            if bool(w.property("visible")):
                 w.show()
                 bridge.pinWindowToDesktopBottom(w)
         else:
