@@ -2,6 +2,16 @@
 
 Tất cả các tính năng mới và cải tiến của Nutsty được lưu trữ tại đây.
 
+## [1.0.7] - 2026-11-04
+
+### Added
+- **Hiển thị chất lượng nhạc & nguồn lời bài hát**: Biết chính xác chất lượng âm thanh đang nghe (Opus, AAC, FLAC Lossless) cùng nguồn cung cấp lời bài hát (Spotify, Apple Music, LRCLIB) ngay dưới tên ca sĩ.
+- **Lời bài hát chạy từng từ một**: Phân biệt và ghi chú rõ ràng những bài hát có hỗ trợ nhấc chữ phát sáng theo từng từ khớp với giọng hát ca sĩ.
+
+### Fixed
+- **Chuẩn hóa chất lượng phát trực tuyến**: Sửa lỗi tự động chuyển về định dạng thông thường khi đã chọn chất lượng cao Opus trong Cài đặt, đảm bảo bạn luôn được thưởng thức âm thanh chi tiết và sống động nhất.
+- **Bộ nhớ đệm lời bài hát thông minh**: Ghi nhớ chính xác nguồn lời bài hát đã lưu về máy để phát tức thì ở các lần nghe sau mà không cần tải lại.
+
 ## [1.0.6] - 2026-11-04
 
 ### Added
