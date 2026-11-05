@@ -2,6 +2,19 @@
 
 Tất cả các tính năng mới và cải tiến của Nutsty được lưu trữ tại đây.
 
+## [1.0.8] - 2026-11-06
+
+### Added
+- **Phát nhạc siêu tốc tức thì**: Nghe nhạc trực tuyến ngay trong tích tắc chưa đầy 1 giây, loại bỏ hoàn toàn cảm giác chờ đợi khi chọn bài mới.
+- **Phát lại không cần mạng & không độ trễ**: Bài hát đã nghe sẽ được lưu trữ thông minh vào bộ nhớ đệm ổ cứng, bấm nghe lại là cất tiếng ngay lập tức (0 giây) kể cả khi mất kết nối mạng.
+- **Hệ thống đa nguồn lời bài hát song song**: Tự động tìm kiếm đồng thời qua nhiều kho lời bài hát lớn hàng đầu (Apple Music, YouTube Music, LRCLIB, KuGou...) để chọn ra phiên bản lời chuẩn xác nhất với đúng ngôn ngữ gốc của bài hát.
+- **Hát song ca phân vai ca sĩ nam và nữ**: Tự động nhận diện giọng ca sĩ chính và ca sĩ song ca để chia lời hát sang hai bên trái - phải trực quan, kèm các đoạn ré phụ âm và đối đáp sinh động.
+- **Tùy chọn 9 nguồn lời bài hát linh hoạt**: Trong phần Cài đặt, bạn có thể tự do chọn nguồn lời bài hát yêu thích như Apple Music, SimpMusic, KuGou, Spotify hay phụ đề YouTube chính thức.
+
+### Fixed
+- **Loại bỏ triệt để lời dịch sai lệch**: Hệ thống chấm điểm thông minh tự động ngăn chặn các bản dịch máy tiếng Trung bị gán nhầm vào bài hát tiếng Việt, Âu Mỹ hoặc tiếng Nhật.
+- **Sửa lỗi tự chuyển nguồn lời bài hát**: Khắc phục tình trạng chọn nguồn Apple Music nhưng bị nhảy nhầm về nguồn khác, đảm bảo luôn nhận đúng lời bài hát chất lượng cao nhất.
+
 ## [1.0.7] - 2026-11-04
 
 ### Added
