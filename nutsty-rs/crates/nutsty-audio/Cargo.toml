@@ -1,0 +1,18 @@
+[package]
+name = "nutsty-audio"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+nutsty-core = { path = "../nutsty-core" }
+cpal.workspace = true
+symphonia.workspace = true
+rtrb.workspace = true
+crossbeam-channel.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+smol_str.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

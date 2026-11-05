@@ -45,6 +45,14 @@ if ! pgrep -f "backend/tray_indicator.py" >/dev/null 2>&1; then
     python3 "$DIR/backend/tray_indicator.py" >/dev/null 2>&1 &
 fi
 
+# Ensure high-performance Rust native bridge is ready
+if [ ! -f "$DIR/bin/nutsty-bridge" ] && [ -d "$DIR/nutsty-rs" ]; then
+    echo "Building high-performance Nutsty Rust bridge..."
+    (cd "$DIR/nutsty-rs" && cargo build --release --bin nutsty-bridge)
+    cp "$DIR/nutsty-rs/target/release/nutsty-bridge" "$DIR/bin/nutsty-bridge"
+    chmod +x "$DIR/bin/nutsty-bridge"
+fi
+
 # Scan library if missing or requested
 if [ ! -f "$DIR/library.json" ] || [ "$1" == "--rescan" ]; then
     echo "Scanning music library..."

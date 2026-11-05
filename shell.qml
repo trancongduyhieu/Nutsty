@@ -32,7 +32,7 @@ Scope {
                     if (typeof desktopMusicWidget.hide === "function") desktopMusicWidget.hide();
                 }
                 if (!statusProcess.running) {
-                    statusProcess.command = ["python3", win.appDir + "/backend/player_daemon.py", "status"];
+                    statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
                     statusProcess.running = true;
                 }
                 Qt.callLater(function() { if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) ytNowPlayingView.updateActiveLyric(true); });
@@ -1616,7 +1616,7 @@ Scope {
 
     Component.onDestruction: {
         win.sendOfflineSignal();
-        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
+        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
     }
 
     // Concentric Window Corner Mask: R_outer = 24px (R_inner = 16px + 8px margin)
@@ -3279,7 +3279,7 @@ Scope {
             // Queue remains empty until user explicitly clicks a track, album or playlist.
 
             if (!statusProcess.running) {
-                statusProcess.command = ["python3", win.appDir + "/backend/player_daemon.py", "status"];
+                statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
                 statusProcess.running = true;
             }
             win.refreshLocalAlbums();
@@ -3764,7 +3764,7 @@ Scope {
         repeat: true
         onTriggered: {
             if (!statusProcess.running) {
-                statusProcess.command = ["python3", win.appDir + "/backend/player_daemon.py", "status"];
+                statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
                 statusProcess.running = true;
             }
         }
@@ -4025,7 +4025,7 @@ Scope {
         function openWindow() {
             win.visible = true;
             if (!statusProcess.running) {
-                statusProcess.command = ["python3", win.appDir + "/backend/player_daemon.py", "status"];
+                statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
                 statusProcess.running = true;
             }
             Qt.callLater(function() { if (ytNowPlayingView) ytNowPlayingView.updateActiveLyric(true); });
@@ -4037,7 +4037,7 @@ Scope {
             win.visible = !win.visible;
             if (win.visible) {
                 if (!statusProcess.running) {
-                    statusProcess.command = ["python3", win.appDir + "/backend/player_daemon.py", "status"];
+                    statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
                     statusProcess.running = true;
                 }
                 Qt.callLater(function() { if (ytNowPlayingView) ytNowPlayingView.updateActiveLyric(true); });

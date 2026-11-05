@@ -120,7 +120,7 @@ function playOnlineTrack(win, trk, startRadio, radioProc, prewarmTimer, pollTime
     if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.stopImmediate) {
         __NutstyBridge.stopImmediate();
     } else {
-        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
+        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
     }
     win.trackChangeTimestamp = Date.now();
     win.postLoadGraceTimestamp = Date.now();
@@ -220,7 +220,7 @@ function playTrack(win, trk, pollTimer) {
     if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.stopImmediate) {
         __NutstyBridge.stopImmediate();
     } else {
-        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
+        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
     }
     win.trackChangeTimestamp = Date.now();
     win.postLoadGraceTimestamp = Date.now();
@@ -275,7 +275,7 @@ function togglePlay(win, pollTimer) {
         win.isLoadingAudio = false;
         win.isPlaying = false;
         win.lastSyncTimestamp = 0;
-        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
+        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
         if (pollTimer) pollTimer.restart();
         win.syncNowPlaying(true);
         return;
@@ -295,7 +295,7 @@ function togglePlay(win, pollTimer) {
         win.isPlaying = false;
         win.isLoadingAudio = false;
         win.lastSyncTimestamp = 0;
-        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
+        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
     }
 
     win.lastLocalActionTimestamp = Date.now();
@@ -330,7 +330,7 @@ function playNext(win) {
         win.sleepTimerMode = "";
         win.sleepTimerRemainingSeconds = 0;
         win.isPlaying = false;
-        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
+        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
         return;
     }
     if (!win.currentTrack || !win.currentTracks || win.currentTracks.length === 0) return;
@@ -385,7 +385,7 @@ function seekLocalOnly(win, sec) {
     win.currentTime = sec;
     win.lastSyncTime = sec;
     win.lastSyncTimestamp = Date.now();
-    Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "seek", String(sec)]);
+    Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "seek", String(sec)]);
 }
 
 function seekAudio(win, sec) {
@@ -397,7 +397,7 @@ function seekAudio(win, sec) {
     win.currentTime = sec;
     win.lastSyncTime = sec;
     win.lastSyncTimestamp = Date.now();
-    Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "seek", String(sec)]);
+    Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "seek", String(sec)]);
     win.syncNowPlaying(true);
     if (!win.isSyncingFromFriend) {
         if (win.listeningAlongFriend && win.guestCanControlHost) {
@@ -416,7 +416,7 @@ function seekAudio(win, sec) {
 
 function setVolume(win, vol) {
     win.volume = vol;
-    Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "volume", String(vol)]);
+    Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "volume", String(vol)]);
 }
 
 function startSleepTimer(win, seconds, mode) {
@@ -435,7 +435,7 @@ function cancelSleepTimer(win) {
     win.sleepTimerFadeTriggered = false;
     win.sleepTimerRemainingSeconds = 0;
     win.sleepTimerMode = "";
-    Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "cancel_fade"]);
+    Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "cancel_fade"]);
 }
 
 function rateSong(win, vid, rating) {
@@ -477,7 +477,7 @@ function handleDislikedTrack(win, trk) {
     } else {
         win.isPlaying = false;
         win.currentTrack = null;
-        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
+        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
     }
 }
 
@@ -560,7 +560,7 @@ function deleteLocalTrack(win, trk) {
             win.isPlaying = false;
             win.currentTrack = null;
             win.currentTime = 0.0;
-            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "stop"]);
+            Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "stop"]);
         }
     }
 
@@ -592,7 +592,7 @@ function batchDeleteTracks(win, paths) {
             win.isPlaying = false;
             win.currentTrack = null;
             win.currentTime = 0.0;
-            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "stop"]);
+            Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "stop"]);
         }
     }
 
@@ -688,7 +688,7 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
                 win.isPlaying = true;
             } else if (s.is_paused) {
                 if (Date.now() - win.postLoadGraceTimestamp < 2500) {
-                    Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume"]);
+                    Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "resume"]);
                 } else {
                     win.isPlaying = false;
                     win.lastSyncTimestamp = 0;
@@ -750,7 +750,7 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
                 win.sleepTimerMode = "";
                 win.sleepTimerRemainingSeconds = 0;
                 win.isPlaying = false;
-                Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
+                Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
             } else if (win.isRepeat) {
                 win.seekAudio(0.0);
             } else {
