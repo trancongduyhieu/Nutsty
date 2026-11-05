@@ -756,9 +756,7 @@ Item {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            // Instant optimistic local toggle
-                            root.isLiked = !root.isLiked;
-                            if (root.isLiked) {
+                            if (!root.isLiked) {
                                 burstAnim.restart();
                                 heartBounceAnim.restart();
                             }
@@ -864,7 +862,7 @@ Item {
 
                         Timer {
                             id: volDismissTimer
-                            interval: 450 // 450ms graceful hold delay (matching SimpMusic delay(400))
+                            interval: 650 // 650ms generous hold delay so pointer never loses popup
                             repeat: false
                             onTriggered: {
                                 if (!root.isVolumeSliding && !volBtnHover.hovered && !volPopupMouse.containsMouse) {
@@ -880,6 +878,14 @@ Item {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             preventStealing: true
+
+                            onContainsMouseChanged: {
+                                if (containsMouse) {
+                                    volDismissTimer.stop();
+                                } else if (!root.isVolumeSliding && !volBtnHover.hovered) {
+                                    volDismissTimer.restart();
+                                }
+                            }
 
                             function updateFromMouseY(my) {
                                 var topY = 28.0;

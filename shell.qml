@@ -2416,19 +2416,6 @@ Scope {
     }
     }
 
-        // Backdrop to catch clicks outside Volume popup and prevent click-through to cards below
-        MouseArea {
-            id: volumeDismissBackdrop
-            anchors.fill: parent
-            z: 49
-            visible: bottomPlayer.isVolumePopupOpen
-            cursorShape: Qt.ArrowCursor
-            preventStealing: true
-            onPressed: {
-                bottomPlayer.isVolumePopupOpen = false;
-            }
-        }
-
         // 2. Floating Liquid Glass Player Bar (Centered Glass Capsule Dock)
         PlayerBarBottom {
             id: bottomPlayer
@@ -3452,17 +3439,25 @@ Scope {
         var useMap = map || win.likedSongsMap;
         if (!useMap) return false;
         var vid = trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
-        if (!vid) {
-            var title = (trk.title || trk.name || "").trim().toLowerCase();
-            var artist = (trk.artist || "").trim().toLowerCase();
-            if (title) {
-                var key = "title_" + title + "_" + artist;
-                if (useMap[key]) return true;
+        var clean = vid ? String(vid).replace("ytdl://", "").replace("yt_", "") : "";
+        if (clean && useMap[clean]) return true;
+
+        var title = (trk.title || trk.name || "").trim().toLowerCase();
+        var artist = (trk.artist || "").trim().toLowerCase();
+        if (title) {
+            var key = "title_" + title + "_" + artist;
+            if (useMap[key]) return true;
+            var keys = Object.keys(useMap);
+            for (var i = 0; i < keys.length; i++) {
+                var s = useMap[keys[i]];
+                if (s && s.title && s.title.trim().toLowerCase() === title) {
+                    if (!artist || !s.artist || s.artist.trim().toLowerCase() === artist) {
+                        return true;
+                    }
+                }
             }
-            return false;
         }
-        var clean = String(vid).replace("ytdl://", "").replace("yt_", "");
-        return !!useMap[clean];
+        return false;
     }
 
     function toggleLikeCurrentTrack() {
@@ -3470,16 +3465,35 @@ Scope {
         var trk = win.currentTrack;
         var vid = trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
         var cleanVid = vid ? String(vid).replace("ytdl://", "").replace("yt_", "") : "";
-        var title = trk.title || trk.name || "";
-        var artist = trk.artist || "";
-        var key = cleanVid ? cleanVid : ("title_" + title.trim().toLowerCase() + "_" + artist.trim().toLowerCase());
+        var title = (trk.title || trk.name || "").trim();
+        var artist = (trk.artist || "").trim();
+        var key = cleanVid ? cleanVid : ("title_" + title.toLowerCase() + "_" + artist.toLowerCase());
 
         var isCurrentlyLiked = win.isTrackLiked(trk, win.likedSongsMap);
-        var newRating = isCurrentlyLiked ? "INDIFFERENT" : "LIKE";
-
-        // Optimistic local update
         var updated = Object.assign({}, win.likedSongsMap || {});
-        if (newRating === "LIKE") {
+
+        if (isCurrentlyLiked) {
+            // UNLIKE: Xoá khỏi map
+            if (cleanVid && updated[cleanVid]) delete updated[cleanVid];
+            if (updated[key]) delete updated[key];
+            var allKeys = Object.keys(updated);
+            for (var i = 0; i < allKeys.length; i++) {
+                var item = updated[allKeys[i]];
+                if (item && item.title && item.title.trim().toLowerCase() === title.toLowerCase()) {
+                    delete updated[allKeys[i]];
+                }
+            }
+            win.likedSongsMap = updated;
+            win.showToast(I18n.tr("Đã xóa khỏi bài hát yêu thích", "Removed from favorite songs"));
+            if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) {
+                ytNowPlayingView.currentLikeStatus = "INDIFFERENT";
+            }
+            Quickshell.execDetached([
+                "python3", win.appDir + "/backend/ytmusic_helper.py",
+                "rate_song", cleanVid || key, "INDIFFERENT", title, artist
+            ]);
+        } else {
+            // LIKE: Thêm vào map
             updated[key] = {
                 videoId: cleanVid,
                 title: title,
@@ -3489,21 +3503,16 @@ Scope {
                 duration: trk.duration || trk.durationMs || 0,
                 timestamp: Math.floor(Date.now() / 1000)
             };
+            win.likedSongsMap = updated;
             win.showToast(I18n.tr("Đã thêm vào bài hát yêu thích", "Added to favorite songs"));
-        } else {
-            delete updated[key];
-            win.showToast(I18n.tr("Đã xóa khỏi bài hát yêu thích", "Removed from favorite songs"));
+            if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) {
+                ytNowPlayingView.currentLikeStatus = "LIKE";
+            }
+            Quickshell.execDetached([
+                "python3", win.appDir + "/backend/ytmusic_helper.py",
+                "rate_song", cleanVid || key, "LIKE", title, artist
+            ]);
         }
-        win.likedSongsMap = updated;
-
-        if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) {
-            ytNowPlayingView.currentLikeStatus = newRating;
-        }
-
-        Quickshell.execDetached([
-            "python3", win.appDir + "/backend/ytmusic_helper.py",
-            "rate_song", cleanVid || key, newRating, title, artist
-        ]);
     }
 
     function handleDislikedTrack(trk) {
