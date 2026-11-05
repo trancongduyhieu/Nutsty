@@ -132,39 +132,49 @@ Item {
         visible: false
     }
 
-    // 5. Hardware-accelerated Concentric Image Loader (MultiEffect masked)
-    Image {
-        id: img
+    // 5. Hardware-accelerated Concentric Image Loader (MultiEffect masked on container)
+    // Container guarantees that zoom transformations (autoCropBlackBars) NEVER overflow the outer bounds!
+    Item {
+        id: imageMaskContainer
         anchors.fill: parent
-        source: root.effectiveSource
-        fillMode: root.fillMode
-        sourceSize: {
-            if (root.sourceSize.width > 0 && root.sourceSize.height > 0) {
-                return root.sourceSize;
-            }
-            var w = root.width > 0 ? root.width : root.implicitWidth;
-            var h = root.height > 0 ? root.height : root.implicitHeight;
-            return Qt.size(Math.max(16, Math.round(w * 2)), Math.max(16, Math.round(h * 2)));
-        }
-        asynchronous: root.asynchronous
-        cache: root.cache
-        smooth: true
-        mipmap: true
-        scale: root.effectiveZoom
-        transformOrigin: Item.Center
-        visible: status === Image.Ready
+        visible: img.status === Image.Ready
+        clip: true
 
-        layer.enabled: root.radius > 0 && status === Image.Ready
+        layer.enabled: root.radius > 0 && img.status === Image.Ready
         layer.effect: MultiEffect {
             maskEnabled: true
             maskSource: maskRect
+            autoPaddingEnabled: false
         }
 
-        onStatusChanged: {
-            if (status === Image.Error) {
-                var srcStr = String(root.source);
-                if (srcStr.indexOf("maxresdefault.jpg") !== -1 && !root.highResFallbackActive) {
-                    root.highResFallbackActive = true;
+        Image {
+            id: img
+            anchors.fill: parent
+            source: root.effectiveSource
+            fillMode: root.fillMode
+            sourceSize: {
+                if (root.sourceSize.width > 0 && root.sourceSize.height > 0) {
+                    return root.sourceSize;
+                }
+                var w = root.width > 0 ? root.width : root.implicitWidth;
+                var h = root.height > 0 ? root.height : root.implicitHeight;
+                var zoom = root.effectiveZoom;
+                return Qt.size(Math.max(16, Math.round(w * 2 * zoom)), Math.max(16, Math.round(h * 2 * zoom)));
+            }
+            asynchronous: root.asynchronous
+            cache: root.cache
+            smooth: true
+            mipmap: true
+            scale: root.effectiveZoom
+            transformOrigin: Item.Center
+            visible: status === Image.Ready
+
+            onStatusChanged: {
+                if (status === Image.Error) {
+                    var srcStr = String(root.source);
+                    if (srcStr.indexOf("maxresdefault.jpg") !== -1 && !root.highResFallbackActive) {
+                        root.highResFallbackActive = true;
+                    }
                 }
             }
         }
