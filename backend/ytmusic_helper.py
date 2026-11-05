@@ -38,9 +38,10 @@ try:
     )
     from .stream_resolver import (
         STREAM_CACHE_FILE, LOCAL_YT_MAPPINGS_FILE, PENDING_HISTORY_FILE,
-        QUALITY_ITAG_PRIORITIES,
+        QUALITY_ITAG_PRIORITIES, AUDIO_CACHE_DIR,
         resolve_stream_url, resolve_video_id_for_track, send_playback_tracking,
-        get_cached_stream_url, put_cached_stream_url, invalidate_cached_stream_url
+        get_cached_stream_url, put_cached_stream_url, invalidate_cached_stream_url,
+        resolve_visionos_stream, find_audio_disk_cache, cache_audio_stream_async
     )
     from .song_enrichment import (
         SQUARE_COVERS_CACHE_FILE,
@@ -74,9 +75,10 @@ except (ImportError, ValueError):
     )
     from stream_resolver import (
         STREAM_CACHE_FILE, LOCAL_YT_MAPPINGS_FILE, PENDING_HISTORY_FILE,
-        QUALITY_ITAG_PRIORITIES,
+        QUALITY_ITAG_PRIORITIES, AUDIO_CACHE_DIR,
         resolve_stream_url, resolve_video_id_for_track, send_playback_tracking,
-        get_cached_stream_url, put_cached_stream_url, invalidate_cached_stream_url
+        get_cached_stream_url, put_cached_stream_url, invalidate_cached_stream_url,
+        resolve_visionos_stream, find_audio_disk_cache, cache_audio_stream_async
     )
     from song_enrichment import (
         SQUARE_COVERS_CACHE_FILE,

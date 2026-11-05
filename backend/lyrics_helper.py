@@ -1116,43 +1116,26 @@ def _get_lyrics_raw(title, artist=None, video_id=None, file_path=None, duration_
             res = fn()
             if res:
                 return res
-    else:  # 'auto' default: Pass 1 (Syllables) -> Pass 2 (Line sync)
-        # Pass 1: True syllable-level word highlights
-        # If user has Spotify cookie configured, check Spotify syllable-level first!
-        sp_res = None
-        if get_spotify_spdc():
-            sp_res = _run_spotify()
-            if sp_res and _has_real_syllables(sp_res):
-                return sp_res
+    else:  # 'auto' default: High-Speed Parallel Multi-Source Resolution with pickBest grading
+        try:
+            try:
+                from .multi_lyrics_resolver import resolve_lyrics_parallel
+            except (ImportError, ValueError):
+                from multi_lyrics_resolver import resolve_lyrics_parallel
 
-        # 1a. BetterLyrics (Apple Music TTML word-level)
-        bl_res = _run_betterlyrics()
-        if bl_res and _has_real_syllables(bl_res):
-            return bl_res
+            parallel_res = resolve_lyrics_parallel(cleaned_title, artist, video_id, duration_sec)
+            if parallel_res:
+                src = parallel_res[0].get("source", "MultiSource")
+                _save_lrc_cache_from_lines(parallel_res, title, artist, source=src)
+                return parallel_res
+        except Exception as pe:
+            sys.stderr.write(f"[multi_lyrics_resolver error]: {pe}\n")
 
-        # 1b. SimpMusic API (video_id available or resolved - rich syllable timestamps)
-        simp_res = _run_simpmusic()
-        if simp_res and _has_real_syllables(simp_res):
-            return simp_res
-
-        # Pass 2: Line-synced Fallback (if no provider had real syllables)
-        if sp_res and (_has_synced(sp_res) or sp_res):
-            return sp_res
-        if not sp_res and get_spotify_spdc():
-            sp_res = _run_spotify()
-            if sp_res and (_has_synced(sp_res) or sp_res):
-                return sp_res
-
-        if simp_res and (_has_synced(simp_res) or simp_res):
-            return simp_res
-
-        lrc_res = _run_lrclib()
-        if lrc_res:
-            return lrc_res
-
-        ne_res = _run_netease()
-        if ne_res:
-            return ne_res
+        # Fallback sequential if parallel encountered unexpected error
+        for fn in [_run_simpmusic, _run_spotify, _run_betterlyrics, _run_lrclib, _run_netease]:
+            res = fn()
+            if res:
+                return res
 
     # Return plain cache if we have it
     if cached_plain:

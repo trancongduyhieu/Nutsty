@@ -133,6 +133,8 @@ def ensure_mpv():
             "--force-window=no",
             ipc_arg,
             "--cache=yes",
+            f"--cache-dir={safe_cache_dir}",
+            "--cache-on-disk=yes",
             "--demuxer-max-bytes=64M",
             "--demuxer-max-back-bytes=32M",
             "--demuxer-readahead-secs=60",
@@ -239,9 +241,30 @@ def get_mpv_property(prop):
     return res.get("data")
 
 def find_local_downloaded_file(vid="", title="", artist=""):
-    """Check download_state.json and library.json for an already downloaded local audio file (0ms latency)."""
+    """Check audio_cache, download_state.json, and library.json for an already downloaded local audio file (0ms latency)."""
     if vid and vid.startswith("yt_"):
         vid = vid[3:]
+
+    # 0. Priority 0: Check SSD Disk Audio Cache (~/.cache/nutsty/audio_cache/<vid>.opus) -> 0ms local SSD playback!
+    if vid:
+        try:
+            try:
+                from .stream_resolver import find_audio_disk_cache
+            except (ImportError, ValueError):
+                from stream_resolver import find_audio_disk_cache
+            cached_disk = find_audio_disk_cache(vid)
+            if cached_disk and os.path.exists(cached_disk):
+                return cached_disk
+        except Exception:
+            try:
+                import ytmusic_helper
+                if hasattr(ytmusic_helper, "find_audio_disk_cache"):
+                    cached_disk = ytmusic_helper.find_audio_disk_cache(vid)
+                    if cached_disk and os.path.exists(cached_disk):
+                        return cached_disk
+            except Exception:
+                pass
+
     # 1. Check download_state.json
     state_candidates = [
         os.path.expanduser("~/.config/noctalia/download_state.json"),
