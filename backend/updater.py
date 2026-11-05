@@ -77,11 +77,11 @@ def check_for_updates(force=False, mock=False):
         return {
             "has_update": True,
             "current_version": current_ver,
-            "latest_version": "v1.0.6",
-            "release_name": "Nutsty v1.0.6 (Lời bài hát Taskbar & Màn hình, Lướt sóng Apple Music & Đếm ngược dạo nhạc)",
-            "changelog": "- Lời bài hát trên màn hình & thanh Taskbar: Bật/tắt lời bài hát nổi tự do trên màn hình máy tính hoặc hiển thị chữ chạy ngay trên thanh tác vụ bên dưới màn hình Windows.\n- Lời bài hát lướt sóng kiểu Apple Music: Từng chữ phát sáng và nhấc nổi nhịp nhàng theo đúng giọng ca sĩ đang hát thay vì nhảy giật từng dòng.\n- Chấm tròn đếm ngược dạo nhạc: Khi bài hát có đoạn nhạc dạo đầu hoặc giữa bài, 3 dấu chấm sẽ phát sáng đếm ngược giúp bạn biết chính xác khi nào ca sĩ cất giọng.\n- Chuyển bài mượt mà: Bấm Không thích sẽ tự động bỏ qua và phát bài tiếp theo ngay lập tức, không còn bị khựng danh sách phát.\n- Hoạt động ổn định trên cả Windows và Linux: Sửa triệt để lỗi không mở được ứng dụng sau khi cập nhật, đảm bảo mở là nghe ngay trên mọi hệ thống.",
+            "latest_version": "v1.0.7",
+            "release_name": "Nutsty v1.0.7 (Kính lỏng SimpMusic, Quầng sáng nam châm & Âm lượng dọc)",
+            "changelog": "- Thanh phát nhạc kính lỏng viên nhộng: Thiết kế thanh điều khiển nổi dạng viên nhộng trong suốt hiện đại, làm mờ êm ái hình ảnh bên dưới giúp tên bài hát và ca sĩ luôn nổi bật, dễ nhìn.\n- Quầng sáng tỏa lan khi giữ chuột: Khi bạn nhấn giữ vào thanh phát nhạc, thanh sẽ phóng to nhẹ nhàng và tỏa ra vầng sáng nam châm mềm mại bám theo con trỏ chuột.\n- Thanh trượt âm lượng dạng dọc: Bấm vào biểu tượng loa để mở thanh điều chỉnh âm lượng dọc nhỏ gọn, hỗ trợ bấm chọn mức âm lượng tức thì hoặc lăn con lăn chuột cực kỳ thuận tiện.\n- Hàng đợi bài hát tiếp theo: Bấm biểu tượng danh sách cạnh nút Thích để mở nhanh danh sách các bài hát chuẩn bị phát.\n- Nút Thích và Đóng tiện lợi: Trái tim đổi sang màu đỏ rực rỡ khi bạn yêu thích bài hát; nút [✕] giúp dừng phát và làm gọn thanh phát nhạc khi cần.",
             "release_url": "https://github.com/trancongduyhieu/Nutsty/releases",
-            "download_url": "https://github.com/trancongduyhieu/Nutsty/releases/download/v1.0.6/Nutsty_Windows_Portable.zip",
+            "download_url": "https://github.com/trancongduyhieu/Nutsty/releases/download/v1.0.7/Nutsty_Windows_Portable.zip",
             "checked_at": int(time.time())
         }
 

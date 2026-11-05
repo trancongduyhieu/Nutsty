@@ -226,8 +226,8 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                 "action": "open_settings",
                 "tab": tab,
                 "mock_update": mock_upd,
-                "current_version": "1.0.6",
-                "latest_version": "v1.0.6",
+                "current_version": "1.0.7",
+                "latest_version": "v1.0.7",
                 "release_url": "https://github.com/trancongduyhieu/Nutsty/releases"
             }
             try:

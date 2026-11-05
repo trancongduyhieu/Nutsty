@@ -433,8 +433,8 @@ def request_open_settings(tab: int = 0, mock_update: bool = False):
                                     child.setProperty("visible", True)
                                     if mock_update:
                                         child.setProperty("hasAppUpdate", True)
-                                        child.setProperty("latestVersion", "v1.0.6")
-                                        child.setProperty("appVersion", "1.0.6")
+                                        child.setProperty("latestVersion", "v1.0.7")
+                                        child.setProperty("appVersion", "1.0.7")
                                         child.setProperty("updateUrl", "https://github.com/trancongduyhieu/Nutsty/releases")
                     sys.stderr.write(f"request_open_settings: found_modal={found_modal}\n")
                 except Exception as e:
