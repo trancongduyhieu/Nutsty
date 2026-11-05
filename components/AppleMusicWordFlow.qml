@@ -37,13 +37,16 @@ Item {
         return false;
     }
 
+    property bool isAnsweringVoice: false
+
     implicitWidth: parent ? parent.width : 300
     implicitHeight: wordsFlow.implicitHeight + 8
 
     Flow {
         id: wordsFlow
         y: 4
-        width: root.width
+        x: root.isAnsweringVoice ? Math.max(0, root.width - implicitWidth) : 0
+        width: root.isAnsweringVoice ? implicitWidth : root.width
         spacing: root.wordSpacing
 
         Repeater {

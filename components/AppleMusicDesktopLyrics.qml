@@ -253,6 +253,9 @@ Item {
                 }
             }
 
+            readonly property bool isAnsweringVoice: !!(modelData && modelData.agent && modelData.agent !== "v1")
+            readonly property bool isBackgroundVocal: !!(modelData && modelData.isBackground)
+
             // ── 1. Syllable Engine (AppleMusicWordFlow) ────────────────────────
             // Loads ONLY for genuine syllable lines (hasWords) around active line.
             Loader {
@@ -267,6 +270,7 @@ Item {
                         words: (modelData && modelData.words) ? modelData.words : []
                         currentTime: root.currentTime
                         isLineActive: lyricRow.isCurrent
+                        isAnsweringVoice: lyricRow.isAnsweringVoice
                         fontSize: 28
                         fontFamily: Theme.fontFamily
                         fontWeight: Font.Bold
@@ -289,9 +293,11 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: 28
                 font.weight: Font.Bold
+                font.italic: lyricRow.isBackgroundVocal
                 color: lyricRow.isCurrent ? "#ffffff" : root.colPendingText
                 elide: Text.ElideRight
                 width: parent.width
+                horizontalAlignment: lyricRow.isAnsweringVoice ? Text.AlignRight : Text.AlignLeft
                 style: Text.Outline
                 styleColor: root.colShadowAmb
 
@@ -315,6 +321,7 @@ Item {
                 font.italic: true
                 color: lyricRow.isCurrent ? Qt.rgba(255, 255, 255, 0.85) : root.colPendingText
                 elide: Text.ElideRight
+                horizontalAlignment: lyricRow.isAnsweringVoice ? Text.AlignRight : Text.AlignLeft
                 style: Text.Outline
                 styleColor: root.colShadowAmb
 

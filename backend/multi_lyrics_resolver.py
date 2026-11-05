@@ -20,6 +20,7 @@ import base64
 import urllib.request
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 from typing import List, Dict, Any, Optional
 
 backend_dir = os.path.dirname(os.path.abspath(__file__))
@@ -168,6 +169,85 @@ class LyricsCandidate:
 # ──────────────────────────────────────────────────────────────────────────────
 # INDIVIDUAL PROVIDER FETCHERS
 # ──────────────────────────────────────────────────────────────────────────────
+
+def fetch_youlyplus_candidate(title: str, artist: str = "") -> Optional[LyricsCandidate]:
+    """
+    Fetch studio word-level karaoke from YouLyPlus API (Mochy-Music source).
+    Uses https://lyricsplus.binimum.org/v2/lyrics/get without duration to avoid timeout.
+    """
+    clean_t = clean_search_title(title)
+    clean_a = clean_search_title(artist) if artist else ""
+    params = {"title": clean_t}
+    if clean_a:
+        params["artist"] = clean_a
+
+    endpoints = [
+        "https://lyricsplus.binimum.org/v2/lyrics/get",
+        "https://lyricsplus.prjktla.my.id/v2/lyrics/get"
+    ]
+    for ep in endpoints:
+        try:
+            url = f"{ep}?{urllib.parse.urlencode(params)}"
+            req = urllib.request.Request(url, headers={
+                "User-Agent": "Mochy (+https://github.com/realidkroo/Mochy-Music)",
+                "Accept": "application/json"
+            })
+            with urllib.request.urlopen(req, timeout=2.5) as resp:
+                data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+            items = data.get("lyrics", [])
+            if not items:
+                continue
+
+            lines = []
+            has_voice = False
+            voices = set()
+            for item in items:
+                t_ms = item.get("time", 0)
+                mins = (t_ms // 1000) // 60
+                secs = (t_ms // 1000) % 60
+                ms = t_ms % 1000
+                stamp = f"[{mins:02d}:{secs:02d}.{ms:03d}]"
+                singer = item.get("element", {}).get("singer", "")
+                if singer:
+                    has_voice = True
+                    voices.add(singer)
+                    marker = f"{{agent:{singer}}}"
+                else:
+                    marker = ""
+
+                syls = item.get("syllabus", [])
+                if syls:
+                    w_str = ""
+                    for s in syls:
+                        sm = (s.get("time", 0) // 1000) // 60
+                        ss = (s.get("time", 0) // 1000) % 60
+                        sms = s.get("time", 0) % 1000
+                        stxt = s.get("text", "")
+                        w_str += f"<{sm:02d}:{ss:02d}.{sms:03d}>{stxt}"
+                    lines.append(f"{stamp}{marker}{w_str.strip()}")
+                else:
+                    txt = item.get("text", "")
+                    lines.append(f"{stamp}{marker}{txt}")
+
+            raw = "\n".join(lines)
+            if not raw.strip():
+                continue
+
+            sync = detect_sync_kind(raw)
+            scr = dominant_script(raw)
+            has_duet = len(voices) > 1
+
+            return LyricsCandidate(
+                provider="YouLyPlus",
+                raw_lyrics=raw,
+                sync_kind=sync,
+                script=scr,
+                has_voice_tags=has_voice,
+                has_duet=has_duet
+            )
+        except Exception:
+            continue
+    return None
 
 def fetch_simpmusic_candidate(video_id: str, title: str, artist: str, duration_sec: Optional[float] = None) -> Optional[LyricsCandidate]:
     """Fetch lyrics from SimpMusic API (richSync word-level & synced)."""
@@ -455,27 +535,65 @@ def fetch_youtube_captions_candidate(video_id: str) -> Optional[LyricsCandidate]
 # PARALLEL QUERY ORCHESTRATOR
 # ──────────────────────────────────────────────────────────────────────────────
 
-def fetch_all_candidates_parallel(title: str, artist: str = "", video_id: str = "", duration_sec: Optional[float] = None) -> List[LyricsCandidate]:
-    """Run all enabled providers concurrently in a thread pool (bounded to ~3.0s)."""
+_MEMORY_LYRICS_CACHE = {}
+_MEMORY_CACHE_LOCK = threading.Lock()
+LYRICS_CACHE_TTL = 900.0  # 15 minutes in memory
+
+def fetch_all_candidates_parallel(
+    title: str,
+    artist: str = "",
+    video_id: str = "",
+    duration_sec: Optional[float] = None,
+    preferred_provider: str = "auto"
+) -> List[LyricsCandidate]:
+    """Run all enabled providers concurrently with fast early-settle optimization."""
     candidates: List[LyricsCandidate] = []
     thunks = [
+        ("YouLyPlus", lambda: fetch_youlyplus_candidate(title, artist)),
         ("SimpMusic", lambda: fetch_simpmusic_candidate(video_id, title, artist, duration_sec)),
-        ("LRCLIB", lambda: fetch_lrclib_candidate(title, artist, duration_sec)),
         ("BetterLyrics", lambda: fetch_betterlyrics_candidate(title, artist, duration_sec)),
+        ("LRCLIB", lambda: fetch_lrclib_candidate(title, artist, duration_sec)),
         ("KuGou", lambda: fetch_kugou_candidate(title, artist, duration_sec)),
         ("NetEase", lambda: fetch_netease_candidate(title, artist, duration_sec)),
         ("Spotify", lambda: fetch_spotify_candidate(title, artist, duration_sec)),
     ]
 
-    with ThreadPoolExecutor(max_workers=6, thread_name_prefix="nutsty_lyr") as pool:
+    pref_lower = (preferred_provider or "auto").strip().lower()
+    if pref_lower and pref_lower != "auto":
+        target_name = {
+            "youlyplus": "YouLyPlus",
+            "simpmusic": "SimpMusic",
+            "betterlyrics": "BetterLyrics",
+            "lrclib": "LRCLIB",
+            "kugou": "KuGou",
+            "netease": "NetEase",
+            "spotify": "Spotify",
+            "youtube": "YouTube"
+        }.get(pref_lower)
+        if target_name:
+            thunks.sort(key=lambda x: 0 if x[0] == target_name else 1)
+
+    with ThreadPoolExecutor(max_workers=7, thread_name_prefix="nutsty_lyr") as pool:
         futures = {pool.submit(fn): name for name, fn in thunks}
-        for fut in as_completed(futures):
+        has_top_tier_word = False
+        settle_deadline = None
+
+        for fut in as_completed(futures, timeout=DEFAULT_TIMEOUT):
             try:
                 res = fut.result()
                 if res and res.raw_lyrics:
                     candidates.append(res)
+                    # Fast-path early settle: If a studio word-level candidate arrived,
+                    # don't wait for remaining slow network timeouts!
+                    if res.sync_kind == SyncKind.WORD and res.provider in ("YouLyPlus", "SimpMusic", "BetterLyrics", "Spotify"):
+                        has_top_tier_word = True
+                        if settle_deadline is None:
+                            settle_deadline = time.time() + 0.25
             except Exception:
                 pass
+
+            if has_top_tier_word and settle_deadline and time.time() >= settle_deadline:
+                break
 
     # If all primary providers returned nothing, try YouTube captions fallback
     if not candidates and video_id:
@@ -489,7 +607,13 @@ def fetch_all_candidates_parallel(title: str, artist: str = "", video_id: str = 
 # GRADING & PICK_BEST ALGORITHM (Ported from Mochy-Music LyricsHelper.kt)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def grade_candidate(candidate: LyricsCandidate, track_info: Dict[str, Any], reference_script: str, majority_script: Optional[str] = None) -> float:
+def grade_candidate(
+    candidate: LyricsCandidate,
+    track_info: Dict[str, Any],
+    reference_script: str,
+    majority_script: Optional[str] = None,
+    preferred_provider: str = "auto"
+) -> float:
     """
     Score a candidate based on:
     1. Script match (original language vs translation)
@@ -580,19 +704,31 @@ def grade_candidate(candidate: LyricsCandidate, track_info: Dict[str, Any], refe
 
     # 5. Provider Weight Tie-Breaker
     provider_weight = {
-        "BetterLyrics": 6,
-        "SimpMusic": 5,
+        "YouLyPlus": 8,
+        "BetterLyrics": 7,
+        "SimpMusic": 6,
+        "Spotify": 5,
         "LRCLIB": 4,
         "KuGou": 3,
         "NetEase": 2,
-        "Spotify": 7,
         "YouTube": 1
     }.get(candidate.provider, 0)
 
-    total_score = script_score + sync_score + duet_score + dur_score + provider_weight
+    # 6. User Manual Preference Bonus (+150 points)
+    user_pref_bonus = 0
+    pref_clean = (preferred_provider or "").strip().lower()
+    if pref_clean and pref_clean != "auto":
+        if candidate.provider.lower() == pref_clean or (pref_clean == "betterlyrics" and candidate.provider == "BetterLyrics"):
+            user_pref_bonus = 150
+
+    total_score = script_score + sync_score + duet_score + dur_score + provider_weight + user_pref_bonus
     return total_score
 
-def pick_best_candidate(candidates: List[LyricsCandidate], track_info: Dict[str, Any]) -> Optional[LyricsCandidate]:
+def pick_best_candidate(
+    candidates: List[LyricsCandidate],
+    track_info: Dict[str, Any],
+    preferred_provider: str = "auto"
+) -> Optional[LyricsCandidate]:
     """Pick the best candidate using Mochy-Music grading principles."""
     if not candidates:
         return None
@@ -621,7 +757,7 @@ def pick_best_candidate(candidates: List[LyricsCandidate], track_info: Dict[str,
 
     # Grade each candidate
     for cand in candidates:
-        cand.score = grade_candidate(cand, track_info, reference_script, majority_script)
+        cand.score = grade_candidate(cand, track_info, reference_script, majority_script, preferred_provider)
 
     # Filter out candidates with severe penalties (e.g. negative scores from wrong language)
     valid_candidates = [c for c in candidates if c.score > 0]
@@ -680,14 +816,23 @@ def resolve_lyrics_parallel(
     artist: Optional[str] = None,
     video_id: Optional[str] = None,
     duration_sec: Optional[float] = None,
-    file_path: Optional[str] = None
+    file_path: Optional[str] = None,
+    preferred_provider: str = "auto"
 ) -> List[Dict[str, Any]]:
     """
-    Main entry point: Queries all providers in parallel, grades candidates,
-    picks the best, and returns Nutsty-compatible parsed lyrics list.
+    Main entry point: Queries all providers in parallel with fast early-settle,
+    grades candidates via pickBest, caches results, and returns Nutsty-compatible lines.
     """
     if not title:
         return []
+
+    cache_key = f"{title}_{artist or ''}_{preferred_provider or 'auto'}".lower().strip()
+    now = time.time()
+    with _MEMORY_CACHE_LOCK:
+        if cache_key in _MEMORY_LYRICS_CACHE:
+            entry = _MEMORY_LYRICS_CACHE[cache_key]
+            if now - entry.get("timestamp", 0) < LYRICS_CACHE_TTL:
+                return entry.get("lines", [])
 
     track_info = {
         "title": title,
@@ -700,17 +845,22 @@ def resolve_lyrics_parallel(
         title=title,
         artist=artist or "",
         video_id=video_id or "",
-        duration_sec=duration_sec
+        duration_sec=duration_sec,
+        preferred_provider=preferred_provider
     )
 
     if not candidates:
         return []
 
-    best = pick_best_candidate(candidates, track_info)
+    best = pick_best_candidate(candidates, track_info, preferred_provider=preferred_provider)
     if not best:
         return []
 
-    return candidate_to_nutsty_lines(best)
+    lines = candidate_to_nutsty_lines(best)
+    if lines:
+        with _MEMORY_CACHE_LOCK:
+            _MEMORY_LYRICS_CACHE[cache_key] = {"lines": lines, "timestamp": now}
+    return lines
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

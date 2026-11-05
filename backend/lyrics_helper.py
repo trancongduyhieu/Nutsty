@@ -1043,13 +1043,31 @@ def _get_lyrics_raw(title, artist=None, video_id=None, file_path=None, duration_
             _save_lrc_cache_from_lines(res, title, artist, source="Spotify")
         return res
 
+    def _run_youlyplus():
+        try:
+            try:
+                from .multi_lyrics_resolver import fetch_youlyplus_candidate, candidate_to_nutsty_lines
+            except (ImportError, ValueError):
+                from multi_lyrics_resolver import fetch_youlyplus_candidate, candidate_to_nutsty_lines
+            cand = fetch_youlyplus_candidate(cleaned_title, artist)
+            if cand:
+                lines = candidate_to_nutsty_lines(cand)
+                if lines:
+                    _tag_source(lines, "Apple Music (YouLyPlus)")
+                    _save_lrc_cache_from_lines(lines, title, artist, source="Apple Music (YouLyPlus)")
+                    return lines
+        except Exception as e:
+            sys.stderr.write(f"[_run_youlyplus error]: {e}\n")
+        return None
+
     def _run_betterlyrics():
         res = fetch_betterlyrics_ttml(cleaned_title, artist, duration_sec)
         if _has_real_syllables(res):
             _tag_source(res, "Apple Music")
             _save_ttml_as_lrc_cache(res, title, artist, source="Apple Music")
             return res
-        return None
+        # Seamless fallback to live Apple Music qApple provider via YouLyPlus
+        return _run_youlyplus()
 
     def _run_lrclib():
         res = fetch_lrclib(cleaned_title, artist, duration_sec)
@@ -1090,52 +1108,28 @@ def _get_lyrics_raw(title, artist=None, video_id=None, file_path=None, duration_
             sys.stderr.write("[syncedlyrics not installed]\n")
         return None
 
-    if pref == "spotify":
-        sp_res = _run_spotify()
-        if sp_res:
-            return sp_res
-        for fn in [_run_betterlyrics, _run_simpmusic, _run_lrclib, _run_netease]:
-            res = fn()
-            if res:
-                return res
-    elif pref == "betterlyrics":
-        bl_res = _run_betterlyrics()
-        if bl_res:
-            return bl_res
-        for fn in [_run_simpmusic, _run_spotify, _run_lrclib, _run_netease]:
-            res = fn()
-            if res:
-                return res
-    elif pref == "lrclib":
-        for fn in [_run_lrclib, _run_simpmusic, _run_spotify, _run_betterlyrics, _run_netease]:
-            res = fn()
-            if res:
-                return res
-    elif pref == "netease":
-        for fn in [_run_netease, _run_simpmusic, _run_spotify, _run_betterlyrics, _run_lrclib]:
-            res = fn()
-            if res:
-                return res
-    else:  # 'auto' default: High-Speed Parallel Multi-Source Resolution with pickBest grading
+    # ──────────────────────────────────────────────────────────────────────
+    # PARALLEL RESOLUTION WITH PREFERRED PROVIDER BIAS
+    # ──────────────────────────────────────────────────────────────────────
+    try:
         try:
-            try:
-                from .multi_lyrics_resolver import resolve_lyrics_parallel
-            except (ImportError, ValueError):
-                from multi_lyrics_resolver import resolve_lyrics_parallel
+            from .multi_lyrics_resolver import resolve_lyrics_parallel
+        except (ImportError, ValueError):
+            from multi_lyrics_resolver import resolve_lyrics_parallel
 
-            parallel_res = resolve_lyrics_parallel(cleaned_title, artist, video_id, duration_sec)
-            if parallel_res:
-                src = parallel_res[0].get("source", "MultiSource")
-                _save_lrc_cache_from_lines(parallel_res, title, artist, source=src)
-                return parallel_res
-        except Exception as pe:
-            sys.stderr.write(f"[multi_lyrics_resolver error]: {pe}\n")
+        parallel_res = resolve_lyrics_parallel(cleaned_title, artist, video_id, duration_sec, preferred_provider=pref)
+        if parallel_res:
+            src = parallel_res[0].get("source", "MultiSource")
+            _save_lrc_cache_from_lines(parallel_res, title, artist, source=src)
+            return parallel_res
+    except Exception as pe:
+        sys.stderr.write(f"[multi_lyrics_resolver error]: {pe}\n")
 
-        # Fallback sequential if parallel encountered unexpected error
-        for fn in [_run_simpmusic, _run_spotify, _run_betterlyrics, _run_lrclib, _run_netease]:
-            res = fn()
-            if res:
-                return res
+    # Fallback sequential if parallel encountered unexpected error
+    for fn in [_run_simpmusic, _run_spotify, _run_betterlyrics, _run_lrclib, _run_netease]:
+        res = fn()
+        if res:
+            return res
 
     # Return plain cache if we have it
     if cached_plain:
@@ -1290,14 +1284,17 @@ def _save_ttml_as_lrc_cache(lines, title, artist, source="Apple Music"):
         for ln in lines:
             mm = int(ln["time"] // 60)
             ss = ln["time"] % 60
+            agent_tag = f"{{agent:{ln['agent']}}}" if ln.get("agent") else ""
+            bg_tag = "{bg}" if ln.get("isBackground") else ""
+            prefix = f"{agent_tag}{bg_tag}"
             if ln.get("words"):
                 word_tags = "".join(
                     f"<{int(w['start']//60):02d}:{w['start']%60:05.2f}>{w['text']} "
                     for w in ln["words"]
                 ).rstrip()
-                out.append(f"[{mm:02d}:{ss:05.2f}]{word_tags}")
+                out.append(f"[{mm:02d}:{ss:05.2f}]{prefix}{word_tags}")
             else:
-                out.append(f"[{mm:02d}:{ss:05.2f}]{ln['text']}")
+                out.append(f"[{mm:02d}:{ss:05.2f}]{prefix}{ln['text']}")
         path = get_cache_path(title, artist)
         with open(path, "w", encoding="utf-8") as f:
             f.write("\n".join(out))
@@ -1313,14 +1310,17 @@ def _save_lrc_cache_from_lines(lines, title, artist, source=""):
         for ln in lines:
             mm = int(ln["time"] // 60)
             ss = ln["time"] % 60
+            agent_tag = f"{{agent:{ln['agent']}}}" if ln.get("agent") else ""
+            bg_tag = "{bg}" if ln.get("isBackground") else ""
+            prefix = f"{agent_tag}{bg_tag}"
             if ln.get("words"):
                 word_tags = "".join(
                     f"<{int(w['start']//60):02d}:{w['start']%60:05.2f}>{w['text']} "
                     for w in ln["words"]
                 ).rstrip()
-                out.append(f"[{mm:02d}:{ss:05.2f}]{word_tags}")
+                out.append(f"[{mm:02d}:{ss:05.2f}]{prefix}{word_tags}")
             else:
-                out.append(f"[{mm:02d}:{ss:05.2f}]{ln['text']}")
+                out.append(f"[{mm:02d}:{ss:05.2f}]{prefix}{ln['text']}")
         path = get_cache_path(title, artist)
         with open(path, "w", encoding="utf-8") as f:
             f.write("\n".join(out))

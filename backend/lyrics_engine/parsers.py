@@ -82,6 +82,16 @@ def parse_lrc(lrc_text: str) -> List[Dict[str, Any]]:
             continue
         last_match = matches[-1]
         raw_text = line[last_match.end():].strip()
+        agent = None
+        is_bg = False
+        m_agent = re.search(r'\{agent:([^}]+)\}', raw_text)
+        if m_agent:
+            agent = m_agent.group(1).strip()
+            raw_text = re.sub(r'\{agent:[^}]+\}', '', raw_text).strip()
+        if "{bg}" in raw_text:
+            is_bg = True
+            raw_text = raw_text.replace("{bg}", "").strip()
+
         clean_text = strip_rich_sync_tags(raw_text)
         if not clean_text or clean_text in ("♪", "♫", "🎵"):
             continue
@@ -98,6 +108,10 @@ def parse_lrc(lrc_text: str) -> List[Dict[str, Any]]:
                 "isSynthetic": not bool(syllable_words),
                 "words": syllable_words,
             }
+            if agent:
+                item["agent"] = agent
+            if is_bg:
+                item["isBackground"] = True
             if lrc_source:
                 item["source"] = lrc_source
             results.append(item)
