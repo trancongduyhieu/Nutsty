@@ -20,6 +20,8 @@ if os.path.exists('CHANGELOG.md'):
 try:
     from PyInstaller.utils.hooks import collect_data_files, collect_submodules
     added_datas += collect_data_files('ytmusicapi')
+    added_datas += collect_data_files('pykakasi')
+    added_datas += collect_data_files('pypinyin')
 except Exception:
     pass
 
@@ -88,6 +90,10 @@ hidden_imports = [
     'platform_compat',
     'browser_login',
     'spotify_importer',
+    'romanizer',
+    'pypinyin',
+    'pykakasi',
+    'jaconv',
     'websockets',
     'websockets.client',
     'websockets.exceptions',
@@ -100,6 +106,8 @@ hidden_imports = [
 try:
     hidden_imports += collect_submodules('ytmusicapi')
     hidden_imports += collect_submodules('syncedlyrics')
+    hidden_imports += collect_submodules('pykakasi')
+    hidden_imports += collect_submodules('pypinyin')
 except Exception:
     pass
 
