@@ -253,7 +253,7 @@ def get_song_details(video_id):
 
     return details
 
-def rate_song_action(video_id, rating, title="", artist=""):
+def rate_song_action(video_id, rating, title="", artist="", image="", duration="", path=""):
     clean_vid = str(video_id).strip().replace("ytdl://", "").replace("yt_", "")
     upper_rating = str(rating).upper().strip()
     if upper_rating not in ("LIKE", "DISLIKE", "INDIFFERENT"):
@@ -261,13 +261,13 @@ def rate_song_action(video_id, rating, title="", artist=""):
 
     if upper_rating == "DISLIKE":
         add_disliked_song(clean_vid, title, artist)
-        remove_liked_song(clean_vid)
+        remove_liked_song(clean_vid, title, artist)
     elif upper_rating == "LIKE":
         remove_disliked_song(clean_vid)
-        add_liked_song(clean_vid, title, artist)
+        add_liked_song(clean_vid, title, artist, image, duration, path)
     elif upper_rating == "INDIFFERENT":
         remove_disliked_song(clean_vid)
-        remove_liked_song(clean_vid)
+        remove_liked_song(clean_vid, title, artist)
 
     res = {"success": True, "videoId": clean_vid, "rating": upper_rating}
     try:

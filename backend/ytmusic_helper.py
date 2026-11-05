@@ -126,7 +126,10 @@ def execute_command(args):
         rating = args[2]
         title = args[3] if len(args) > 3 else ""
         artist = args[4] if len(args) > 4 else ""
-        res = rate_song_action(vid, rating, title, artist)
+        image = args[5] if len(args) > 5 else ""
+        duration = args[6] if len(args) > 6 else ""
+        path = args[7] if len(args) > 7 else ""
+        res = rate_song_action(vid, rating, title, artist, image, duration, path)
         print(json.dumps(res, ensure_ascii=False))
 
     elif cmd == "disliked_list":

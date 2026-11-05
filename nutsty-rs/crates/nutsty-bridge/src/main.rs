@@ -186,6 +186,22 @@ fn read_playback_state() -> Option<PlaybackState> {
     serde_json::from_reader(file).ok()
 }
 
+fn update_playback_state_playing(current_path: &str) {
+    let path = get_state_file_path();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(0.0);
+    let payload = json!({
+        "state": "playing",
+        "path": current_path,
+        "timestamp": now
+    });
+    if let Ok(content) = serde_json::to_string(&payload) {
+        let _ = std::fs::write(path, content);
+    }
+}
+
 fn handle_status() {
     let batch = fetch_mpv_status_batch();
     if batch.is_none() {
@@ -212,7 +228,29 @@ fn handle_status() {
     let idle = map.get("idle-active").and_then(|v| v.as_bool()).unwrap_or(true);
 
     let state_file = read_playback_state();
-    let is_loading = state_file.as_ref().map(|s| s.state == "loading").unwrap_or(false);
+    let raw_loading = state_file.as_ref().map(|s| s.state == "loading").unwrap_or(false);
+
+    let is_loading = if raw_loading {
+        if (!idle && (time_pos > 0.2 || duration > 0.0)) || (!path.is_empty() && !idle && !pause) {
+            update_playback_state_playing(&path);
+            false
+        } else if let Some(ref sf) = state_file {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs_f64())
+                .unwrap_or(0.0);
+            if sf.timestamp > 0.0 && (now - sf.timestamp) > 5.0 {
+                update_playback_state_playing(&path);
+                false
+            } else {
+                true
+            }
+        } else {
+            false
+        }
+    } else {
+        false
+    };
 
     let has_file = (!path.is_empty() || !filename.is_empty()) && !idle && (!is_loading || time_pos > 0.0);
 

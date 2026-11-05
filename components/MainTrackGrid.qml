@@ -117,16 +117,30 @@ Rectangle {
         return 0;
     }
 
+    function getTrackTime(t) {
+        if (!t) return 0;
+        return t.mtime || t.timestamp || t.dateAdded || t.addedAt || t.time || 0;
+    }
+
     readonly property var sortedTracks: {
         if (!root.tracks || root.tracks.length === 0) return [];
         var list = root.tracks.slice();
         if (sortBy === "recent") {
-            if (isDownloadsView) {
-                list.sort((a, b) => (b.mtime || 0) - (a.mtime || 0));
-            }
+            list.sort((a, b) => {
+                var ta = getTrackTime(a);
+                var tb = getTrackTime(b);
+                if (ta !== tb) return tb - ta;
+                return 0;
+            });
         } else if (sortBy === "oldest") {
-            if (isDownloadsView) {
-                list.sort((a, b) => (a.mtime || 0) - (b.mtime || 0));
+            var anyTime = list.some(t => getTrackTime(t) > 0);
+            if (anyTime) {
+                list.sort((a, b) => {
+                    var ta = getTrackTime(a);
+                    var tb = getTrackTime(b);
+                    if (ta !== tb) return ta - tb;
+                    return 0;
+                });
             } else {
                 list.reverse();
             }
@@ -1554,9 +1568,9 @@ Rectangle {
                                           : (dlRowMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.18) : Qt.rgba(1.0, 1.0, 1.0, 0.06))
                             border.width: 1
 
-                            readonly property bool isCurrentTrack: !!(root.currentTrack && modelData && (root.currentTrack.path === modelData.path || (modelData.videoId && root.currentTrack.videoId === modelData.videoId)))
+                            readonly property bool isCurrentTrack: !!(root.currentTrack && modelData && (root.currentTrack.path === modelData.path || (modelData.videoId && root.currentTrack.videoId === modelData.videoId) || (modelData.videoId && root.currentTrack.path && root.currentTrack.path.indexOf(modelData.videoId) !== -1)))
                             readonly property bool isCurrentPlaying: isCurrentTrack && root.isPlaying
-                            readonly property bool isCurrentLoading: isCurrentTrack && root.isLoadingAudio
+                            readonly property bool isCurrentLoading: isCurrentTrack && root.isLoadingAudio && !root.isPlaying
                             readonly property bool isSelected: !!(modelData && modelData.path && root.selectedTrackPaths.indexOf(modelData.path) !== -1)
 
                             Behavior on color { ColorAnimation { duration: 100 } }
@@ -1688,9 +1702,13 @@ Rectangle {
                                         anchors.fill: parent
                                         radius: 6
                                         source: {
-                                            if (!modelData || !modelData.image) return "";
-                                            var s = modelData.image;
-                                            return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
+                                            if (!modelData) return "";
+                                            var img = modelData.image || modelData.cover || modelData.artUrl || "";
+                                            if (!img && modelData.videoId) {
+                                                img = "https://i.ytimg.com/vi/" + modelData.videoId + "/hqdefault.jpg";
+                                            }
+                                            if (!img) return "";
+                                            return (img.startsWith("/") && !img.startsWith("file://")) ? ("file://" + img) : img;
                                         }
                                         fillMode: Image.PreserveAspectCrop
                                         autoCropBlackBars: true

@@ -14,6 +14,10 @@ Tất cả các tính năng mới và cải tiến của Nutsty được lưu tr
 - **Lời bài hát chạy từng từ một**: Phân biệt và ghi chú rõ ràng những bài hát có hỗ trợ nhấc chữ phát sáng theo từng từ khớp với giọng hát ca sĩ.
 
 ### Fixed
+- **Nút Thích 1 chạm dứt khoát**: Bấm một lần là gắn tim và thêm ngay bài hát vào thư viện yêu thích, bấm lại là huỷ thích tức thì mà không bị giật ngược trạng thái.
+- **Phát ngẫu nhiên trong Thư viện & Danh sách phát**: Bấm "Phát ngẫu nhiên" xáo trộn ngay danh sách bài hát đang xem và phát ngẫu nhiên ở thanh phát nhạc bên dưới, không còn bị phóng to che kín màn hình.
+- **Sắp xếp bài hát Cũ nhất & Mới nhất chuẩn xác**: Bộ lọc sắp xếp hoạt động chính xác cho cả bài hát yêu thích lẫn bài hát tải về, giúp bạn dễ dàng tìm lại bài hát mới thêm hoặc bài hát nghe đầu tiên.
+- **Bảng âm lượng tối giản & biểu tượng loa sắc nét**: Bảng âm lượng dạng viên nhộng tối giản không còn viền màu bao quanh; biểu tượng loa hiển thị đầy đủ các vòng sóng âm tròn trịa, không bị cắt mép.
 - **Nghe nhạc trực tuyến liền mạch**: Khắc phục lỗi bài hát bị đứng không phát ra tiếng khi nghe từ YouTube Music, đảm bảo nhạc luôn cất tiếng ngay lập tức.
 - **Thanh tiến trình bài hát chính xác**: Đường tiến trình bài hát chạy sáng mượt mà theo đúng thời gian phát thực tế kèm chấm tròn kéo tua trực quan.
 - **Chuẩn hóa chất lượng phát trực tuyến**: Sửa lỗi tự động chuyển về định dạng thông thường khi đã chọn chất lượng cao Opus trong Cài đặt, đảm bảo bạn luôn được thưởng thức âm thanh chi tiết và sống động nhất.

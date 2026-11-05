@@ -131,7 +131,7 @@ function playOnlineTrack(win, trk, startRadio, radioProc, prewarmTimer, pollTime
     win.isLoadingAudio = !hasLocalFile;
     win.totalDuration = 0.0;
     win.isPlaying = true;
-    if (win.currentView !== "search") {
+    if (win.currentView !== "search" && win.currentView !== "library") {
         win.showAmberolDetails = true;
     } else {
         win.showAmberolDetails = false;
@@ -603,7 +603,14 @@ function batchDeleteTracks(win, paths) {
 }
 
 function shufflePlayBrowsing(win) {
-    var sourceTracks = (win.browsingTracks && win.browsingTracks.length > 0) ? win.browsingTracks : win.allTracks;
+    var sourceTracks = [];
+    if (win.currentView === "library") {
+        sourceTracks = (win.likedTracksList && win.likedTracksList.length > 0) ? win.likedTracksList : (win.allTracks || []);
+    } else if (win.browsingTracks && win.browsingTracks.length > 0) {
+        sourceTracks = win.browsingTracks;
+    } else {
+        sourceTracks = win.allTracks || [];
+    }
     if (!sourceTracks || sourceTracks.length === 0) return;
     var shuffled = sourceTracks.slice();
     for (var i = shuffled.length - 1; i > 0; i--) {
@@ -613,6 +620,7 @@ function shufflePlayBrowsing(win) {
         shuffled[j] = temp;
     }
     win.currentTracks = shuffled;
+    win.isShuffle = true;
     if (win.currentView === "playlist") {
         win.playingPlaylistId = win.activePlaylistId;
         win.playingSourceTitle = win.mainSectionTitle;
@@ -679,12 +687,13 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
                 }
             }
         } else {
-            if (s.is_loading) {
+            if (s.is_loading && !s.is_playing && (!s.time_pos || s.time_pos <= 0.3)) {
                 win.isLoadingAudio = true;
                 win.trackChangeTimestamp = Date.now();
                 return;
             }
             if (s.is_playing) {
+                win.isLoadingAudio = false;
                 win.isPlaying = true;
             } else if (s.is_paused) {
                 if (Date.now() - win.postLoadGraceTimestamp < 2500) {

@@ -82,27 +82,78 @@ def load_liked_songs():
 def save_liked_songs(data):
     save_json(LIKED_SONGS_FILE, data)
 
-def add_liked_song(video_id, title="", artist=""):
+def add_liked_song(video_id, title="", artist="", image="", duration="", path=""):
     clean_vid = str(video_id).strip().replace("ytdl://", "").replace("yt_", "")
-    if not clean_vid:
+    clean_title = title.strip() if title else ""
+    clean_artist = artist.strip() if artist else ""
+    if not clean_vid and not clean_title:
         return False
     data = load_liked_songs()
-    data[clean_vid] = {
+
+    # Xoá bản ghi cũ nếu trùng title + artist để tránh duplicate
+    if clean_title:
+        lower_t = clean_title.lower()
+        lower_a = clean_artist.lower()
+        keys_to_del = []
+        for k, v in data.items():
+            if isinstance(v, dict):
+                vt = str(v.get("title") or v.get("name") or "").strip().lower()
+                va = str(v.get("artist") or "").strip().lower()
+                if vt == lower_t:
+                    if not lower_a or not va or va == lower_a:
+                        keys_to_del.append(k)
+        for k in keys_to_del:
+            if k in data:
+                del data[k]
+
+    key = clean_vid if clean_vid else f"title_{clean_title.lower()}_{clean_artist.lower()}"
+    img = image.strip() if image else ""
+    if not img and clean_vid:
+        img = f"https://i.ytimg.com/vi/{clean_vid}/hqdefault.jpg"
+    pth = path.strip() if path else ""
+    if not pth and clean_vid:
+        pth = f"ytdl://{clean_vid}"
+
+    data[key] = {
         "videoId": clean_vid,
-        "title": title,
-        "artist": artist,
+        "title": clean_title,
+        "name": clean_title,
+        "artist": clean_artist,
+        "image": img,
+        "cover": img,
+        "artUrl": img,
+        "path": pth,
+        "duration": duration,
         "timestamp": int(time.time())
     }
     save_liked_songs(data)
     return True
 
-def remove_liked_song(video_id):
+def remove_liked_song(video_id, title="", artist=""):
     clean_vid = str(video_id).strip().replace("ytdl://", "").replace("yt_", "")
-    if not clean_vid:
-        return False
     data = load_liked_songs()
-    if clean_vid in data:
+    changed = False
+    if clean_vid and clean_vid in data:
         del data[clean_vid]
+        changed = True
+
+    clean_title = title.strip().lower() if title else ""
+    clean_artist = artist.strip().lower() if artist else ""
+    if clean_title:
+        keys_to_del = []
+        for k, v in data.items():
+            if isinstance(v, dict):
+                vt = str(v.get("title") or v.get("name") or "").strip().lower()
+                va = str(v.get("artist") or "").strip().lower()
+                if vt == clean_title:
+                    if not clean_artist or not va or va == clean_artist:
+                        keys_to_del.append(k)
+        for k in keys_to_del:
+            if k in data:
+                del data[k]
+                changed = True
+
+    if changed:
         save_liked_songs(data)
     return True
 
