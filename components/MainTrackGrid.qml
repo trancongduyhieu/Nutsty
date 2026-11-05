@@ -324,7 +324,7 @@ Rectangle {
                             text: {
                                 if (!root.isDownloadsView) return root.sectionTitle;
                                 if (root.downloadsSubTab === "playlists") return I18n.tr("Danh sách phát cá nhân của bạn", "Your Personal Playlists");
-                                if (root.downloadsSubTab === "favorites") return I18n.tr("Danh sách phát yêu thích", "Favorite Playlists");
+                                if (root.downloadsSubTab === "favorites") return I18n.tr("Bài hát yêu thích", "Favorite Songs");
                                 return I18n.tr("Tải xuống", "Downloads");
                             }
                             font.family: Theme.fontFamily
@@ -493,7 +493,7 @@ Rectangle {
                 // Unified Toolbar: Play All, Shuffle Play, Sort Options
                 RowLayout {
                     Layout.fillWidth: true
-                    visible: (root.isDownloadsView && root.downloadsSubTab === "tracks" && root.albumMetadata === null) || (root.isPlaylistView && root.sortedTracks && root.sortedTracks.length > 0)
+                    visible: (root.isDownloadsView && (root.downloadsSubTab === "tracks" || root.downloadsSubTab === "favorites") && root.albumMetadata === null && root.sortedTracks && root.sortedTracks.length > 0) || (root.isPlaylistView && root.sortedTracks && root.sortedTracks.length > 0)
                     spacing: 12
 
                     // Primary Play All Button (Emerald Green Solid)
@@ -1529,12 +1529,12 @@ Rectangle {
 
 
                 // =============================================================
-                // SimpMusic Clean Horizontal List View for Downloads
+                // SimpMusic Clean Horizontal List View for Downloads & Favorites
                 // =============================================================
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 4
-                    visible: !root.isLoading && root.isDownloadsView && root.downloadsSubTab === "tracks" && root.albumMetadata === null
+                    visible: !root.isLoading && root.isDownloadsView && (root.downloadsSubTab === "tracks" || root.downloadsSubTab === "favorites") && root.albumMetadata === null && root.sortedTracks && root.sortedTracks.length > 0
 
                     Repeater {
                         model: root.sortedTracks
@@ -1817,7 +1817,7 @@ Rectangle {
         }
     }
 
-    // Empty state overlay for Favorite Playlists (Dead-Center Optical Alignment)
+    // Empty state overlay for Favorite Songs & Playlists (Dead-Center Optical Alignment)
     Item {
         id: favEmptyOverlay
         anchors.top: parent.top
@@ -1826,7 +1826,7 @@ Rectangle {
         anchors.bottomMargin: 100
         anchors.left: parent.left
         anchors.right: parent.right
-        visible: root.isDownloadsView && root.downloadsSubTab === "favorites" && (!root.favoritePlaylists || root.favoritePlaylists.length === 0) && root.albumMetadata === null
+        visible: root.isDownloadsView && root.downloadsSubTab === "favorites" && (!root.sortedTracks || root.sortedTracks.length === 0) && (!root.favoritePlaylists || root.favoritePlaylists.length === 0) && root.albumMetadata === null
         z: 10
 
         ColumnLayout {
@@ -1853,7 +1853,7 @@ Rectangle {
 
             Text {
                 Layout.alignment: Qt.AlignHCenter
-                text: I18n.tr("Chưa có danh sách phát yêu thích", "No favorite playlists yet")
+                text: I18n.tr("Chưa có bài hát yêu thích", "No favorite songs yet")
                 font.family: Theme.fontFamily
                 font.pixelSize: 18
                 font.bold: true
@@ -1862,7 +1862,7 @@ Rectangle {
 
             Text {
                 Layout.alignment: Qt.AlignHCenter
-                text: I18n.tr("Khám phá các danh sách phát trực tuyến và nhấn biểu tượng Yêu thích để lưu lại.", "Explore online playlists and tap the Favorite icon to save them here.")
+                text: I18n.tr("Nhấn biểu tượng Trái tim trên thanh phát nhạc để lưu các bài hát bạn yêu thích vào đây.", "Click the Heart icon on the player bar to save your favorite songs here.")
                 font.family: Theme.fontFamily
                 font.pixelSize: 13
                 color: Theme.textSecondary

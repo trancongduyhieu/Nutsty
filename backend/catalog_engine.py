@@ -37,6 +37,7 @@ DISLIKED_SONGS_FILE = os.path.join(pc.get_config_dir(), f"nutsty_disliked_songs{
 ARTIST_AVATARS_FILE = os.path.join(pc.get_cache_dir(), "artist_avatars.json")
 
 DISLIKED_SONGS_FILE = os.path.join(pc.get_config_dir(), f"nutsty_disliked_songs{PROFILE_SUFFIX}.json")
+LIKED_SONGS_FILE = os.path.join(pc.get_config_dir(), f"nutsty_liked_songs{PROFILE_SUFFIX}.json")
 
 def load_disliked_songs():
     return load_json(DISLIKED_SONGS_FILE, {})
@@ -73,6 +74,43 @@ def is_song_disliked(video_id):
         return False
     clean_vid = str(video_id).strip().replace("ytdl://", "").replace("yt_", "")
     data = load_disliked_songs()
+    return clean_vid in data
+
+def load_liked_songs():
+    return load_json(LIKED_SONGS_FILE, {})
+
+def save_liked_songs(data):
+    save_json(LIKED_SONGS_FILE, data)
+
+def add_liked_song(video_id, title="", artist=""):
+    clean_vid = str(video_id).strip().replace("ytdl://", "").replace("yt_", "")
+    if not clean_vid:
+        return False
+    data = load_liked_songs()
+    data[clean_vid] = {
+        "videoId": clean_vid,
+        "title": title,
+        "artist": artist,
+        "timestamp": int(time.time())
+    }
+    save_liked_songs(data)
+    return True
+
+def remove_liked_song(video_id):
+    clean_vid = str(video_id).strip().replace("ytdl://", "").replace("yt_", "")
+    if not clean_vid:
+        return False
+    data = load_liked_songs()
+    if clean_vid in data:
+        del data[clean_vid]
+        save_liked_songs(data)
+    return True
+
+def is_song_liked(video_id):
+    if not video_id:
+        return False
+    clean_vid = str(video_id).strip().replace("ytdl://", "").replace("yt_", "")
+    data = load_liked_songs()
     return clean_vid in data
 
 ARTIST_AVATARS_FILE = os.path.join(pc.get_cache_dir(), "artist_avatars.json")

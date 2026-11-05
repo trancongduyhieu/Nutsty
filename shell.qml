@@ -2116,7 +2116,7 @@ Scope {
                             id: mainGrid
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            tracks: (win.currentView === "library" && mainGrid.downloadsSubTab === "tracks") ? win.allTracks : win.browsingTracks
+                            tracks: (win.currentView === "library") ? (mainGrid.downloadsSubTab === "favorites" ? win.likedTracksList : (mainGrid.downloadsSubTab === "tracks" ? win.allTracks : win.browsingTracks)) : win.browsingTracks
                             currentTrack: win.currentTrack
                             isPlaying: win.isPlaying
                             isLoadingAudio: win.isLoadingAudio
@@ -2431,7 +2431,7 @@ Scope {
             currentTrack: win.currentTrack
             audioSpecs: win.audioSpecs
             resolvedSquareImage: win.currentResolvedCover
-            isLiked: (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView && ytNowPlayingView.currentLikeStatus === "LIKE")
+            isLiked: win.isTrackLiked(win.currentTrack)
             isPlaying: win.isPlaying
             isLoadingAudio: win.isLoadingAudio
             currentTime: win.currentTime
@@ -2448,6 +2448,8 @@ Scope {
             listeningAlongFriend: win.listeningAlongFriend
             activeCoListenersDetails: win.activeCoListenersDetails
 
+            onOpenVolumePopoverRequested: volumePopover.toggle()
+            onToggleLikeClicked: win.toggleLikeCurrentTrack()
             onPlayPauseClicked: win.togglePlay()
             onNextClicked: win.playNext()
             onPrevClicked: win.playPrev()
@@ -2812,6 +2814,13 @@ Scope {
             onCancelTimerRequested: () => {
                 win.cancelSleepTimer();
             }
+        }
+
+        VolumePopover {
+            id: volumePopover
+            targetAnchorItem: bottomPlayer.volumeButtonAnchorItem
+            volume: win.volume
+            onVolumeChangeRequested: vol => win.setVolume(vol)
         }
 
         WhatsNewModal {
@@ -3266,6 +3275,42 @@ Scope {
         watchChanges: false
     }
 
+    property var likedSongsMap: ({})
+    readonly property var likedTracksList: {
+        var list = [];
+        if (win.likedSongsMap) {
+            var keys = Object.keys(win.likedSongsMap);
+            for (var i = 0; i < keys.length; i++) {
+                var item = win.likedSongsMap[keys[i]];
+                if (item) list.push(item);
+            }
+        }
+        return list;
+    }
+    FileView {
+        id: likedSongsFileView
+        path: Quickshell.env("HOME") + "/.config/noctalia/nutsty_liked_songs" + (Quickshell.env("NUTSTY_PROFILE") ? ("_" + Quickshell.env("NUTSTY_PROFILE").toLowerCase()) : "") + ".json"
+        watchChanges: true
+        onFileChanged: {
+            reload();
+            parseLikedSongs();
+        }
+        onLoadedChanged: {
+            if (loaded) parseLikedSongs();
+        }
+        Component.onCompleted: {
+            if (loaded) parseLikedSongs();
+        }
+
+        function parseLikedSongs() {
+            var raw = text();
+            if (!raw || raw.trim() === "") return;
+            try {
+                win.likedSongsMap = JSON.parse(raw);
+            } catch(e) {}
+        }
+    }
+
     // Library Data Loader
     LibraryLoader {
         id: libLoader
@@ -3393,6 +3438,60 @@ Scope {
 
     function rateSong(vid, rating) {
         return PlaybackEngine.rateSong(win, vid, rating);
+    }
+
+    function isTrackLiked(trk) {
+        if (!trk) return false;
+        var vid = trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
+        if (!vid) {
+            var title = (trk.title || trk.name || "").trim().toLowerCase();
+            var artist = (trk.artist || "").trim().toLowerCase();
+            if (title) {
+                var key = "title_" + title + "_" + artist;
+                if (win.likedSongsMap && win.likedSongsMap[key]) return true;
+            }
+            return false;
+        }
+        var clean = String(vid).replace("ytdl://", "").replace("yt_", "");
+        return !!(win.likedSongsMap && win.likedSongsMap[clean]);
+    }
+
+    function toggleLikeCurrentTrack() {
+        if (!win.currentTrack) return;
+        var trk = win.currentTrack;
+        var vid = trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
+        var cleanVid = vid ? String(vid).replace("ytdl://", "").replace("yt_", "") : "";
+        var title = trk.title || trk.name || "";
+        var artist = trk.artist || "";
+        var key = cleanVid ? cleanVid : ("title_" + title.trim().toLowerCase() + "_" + artist.trim().toLowerCase());
+
+        var isCurrentlyLiked = win.isTrackLiked(trk);
+        var newRating = isCurrentlyLiked ? "INDIFFERENT" : "LIKE";
+
+        // Optimistic local update
+        var updated = Object.assign({}, win.likedSongsMap || {});
+        if (newRating === "LIKE") {
+            updated[key] = {
+                videoId: cleanVid,
+                title: title,
+                artist: artist,
+                timestamp: Math.floor(Date.now() / 1000)
+            };
+            win.showToast(I18n.tr("Đã thêm vào bài hát yêu thích", "Added to favorite songs"));
+        } else {
+            delete updated[key];
+            win.showToast(I18n.tr("Đã xóa khỏi bài hát yêu thích", "Removed from favorite songs"));
+        }
+        win.likedSongsMap = updated;
+
+        if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) {
+            ytNowPlayingView.currentLikeStatus = newRating;
+        }
+
+        Quickshell.execDetached([
+            "python3", win.appDir + "/backend/ytmusic_helper.py",
+            "rate_song", cleanVid || key, newRating, title, artist
+        ]);
     }
 
     function handleDislikedTrack(trk) {
@@ -3859,11 +3958,15 @@ Scope {
         function testPreviewPlaylistModalTrack(index: int) { frostifyIpc.testPreviewPlaylistModalTrack(index); }
         function testAddPlaylistModalTrack(index: int) { frostifyIpc.testAddPlaylistModalTrack(index); }
         function closePlaylistSearchModal() { frostifyIpc.closePlaylistSearchModal(); }
+        function toggleLike() { frostifyIpc.toggleLike(); }
+        function toggleVolumePopup() { frostifyIpc.toggleVolumePopup(); }
     }
 
     IpcHandler {
         id: frostifyIpc
         target: "frostify"
+        function toggleLike() { win.toggleLikeCurrentTrack(); }
+        function toggleVolumePopup() { bottomPlayer.isVolumePopupOpen = !bottomPlayer.isVolumePopupOpen; }
         function openWhatsNew() {
             whatsNewModal.openModal(win.updateReleaseNotes);
         }

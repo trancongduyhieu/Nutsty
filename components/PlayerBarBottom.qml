@@ -63,6 +63,10 @@ Item {
     signal exitListeningAlongRequested()
     signal openCoListenersRequested(real targetX, real targetY)
     signal sendChatMessageRequested(string messageText)
+    signal toggleLikeClicked()
+    signal openVolumePopoverRequested()
+
+    property alias volumeButtonAnchorItem: volumeButtonAnchor
 
     function fmtTime(sec) {
         if (!sec || sec < 0) return "0:00";
@@ -669,27 +673,94 @@ Item {
                 anchors.fill: parent
                 spacing: 0
 
-                // 1. Like / Heart (Heart outline when unliked, vibrant RED #ef4444 when liked!)
+                // 1. Like / Heart (Heart outline when unliked, vibrant Rose Pink #f43f5e when liked + Fireworks Pop)
                 Item {
                     id: likeButtonContainer
                     width: 40; height: parent.height
 
                     HoverHandler { id: likeH }
-                    AppIcon {
+
+                    // Fireworks Confetti Particles + Halo Ring
+                    Item {
+                        id: heartFireworks
                         anchors.centerIn: parent
-                        source: root.isLiked ? "../assets/icons/emblem-favorite-symbolic.svg" : "../assets/icons/favorite-border-symbolic.svg"
-                        iconSize: 20
-                        color: root.isLiked ? "#ef4444" : (likeH.hovered ? "#ffffff" : "#b3b3b3")
+                        width: 0; height: 0
+                        property real burstProgress: 0.0
+                        visible: burstProgress > 0.001
+
+                        NumberAnimation {
+                            id: burstAnim
+                            target: heartFireworks
+                            property: "burstProgress"
+                            from: 0.0
+                            to: 1.0
+                            duration: 480
+                            easing.type: Easing.OutQuad
+                        }
+
+                        // Expanding Halo Ripple
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: Math.round(36 * heartFireworks.burstProgress)
+                            height: width
+                            radius: width / 2
+                            color: "transparent"
+                            border.color: "#f43f5e"
+                            border.width: Math.max(0.5, 2.0 * (1.0 - heartFireworks.burstProgress))
+                            opacity: Math.max(0.0, 0.85 - heartFireworks.burstProgress * 0.9)
+                        }
+
+                        // 8 Radiating Confetti Particles
+                        Repeater {
+                            model: 8
+                            delegate: Rectangle {
+                                required property int index
+                                readonly property real angle: index * (Math.PI / 4)
+                                readonly property real dist: 28 * heartFireworks.burstProgress
+                                x: Math.cos(angle) * dist - width / 2
+                                y: Math.sin(angle) * dist - height / 2
+                                width: Math.max(1, Math.round((index % 2 === 0 ? 4.5 : 3.0) * (1.0 - heartFireworks.burstProgress * 0.45)))
+                                height: width
+                                radius: width / 2
+                                color: ["#f43f5e", "#fb7185", "#f59e0b", "#facc15", "#c084fc", "#e879f9", "#38bdf8", "#ffffff"][index % 8]
+                                opacity: Math.max(0.0, 1.0 - heartFireworks.burstProgress * 1.15)
+                            }
+                        }
                     }
-                    scale: root.isLiked ? 1.12 : 1.0
-                    Behavior on scale { NumberAnimation { duration: 150 } }
+
+                    SequentialAnimation {
+                        id: heartBounceAnim
+                        NumberAnimation { target: heartIconWrapper; property: "scale"; to: 1.45; duration: 110; easing.type: Easing.OutBack }
+                        NumberAnimation { target: heartIconWrapper; property: "scale"; to: 0.82; duration: 90; easing.type: Easing.InOutQuad }
+                        NumberAnimation { target: heartIconWrapper; property: "scale"; to: 1.18; duration: 80; easing.type: Easing.OutQuad }
+                        NumberAnimation { target: heartIconWrapper; property: "scale"; to: 1.0; duration: 70; easing.type: Easing.InOutQuad }
+                    }
+
+                    Item {
+                        id: heartIconWrapper
+                        anchors.fill: parent
+                        scale: 1.0
+                        transformOrigin: Item.Center
+
+                        AppIcon {
+                            id: heartIcon
+                            anchors.centerIn: parent
+                            source: root.isLiked ? "../assets/icons/emblem-favorite-symbolic.svg" : "../assets/icons/favorite-border-symbolic.svg"
+                            iconSize: 20
+                            color: root.isLiked ? "#f43f5e" : (likeH.hovered ? "#ffffff" : "#b3b3b3")
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                        }
+                    }
+
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            if (typeof win !== "undefined" && win.toggleLikeCurrentTrack) {
-                                win.toggleLikeCurrentTrack();
+                            if (!root.isLiked) {
+                                burstAnim.restart();
+                                heartBounceAnim.restart();
                             }
+                            root.toggleLikeClicked();
                         }
                     }
                 }
@@ -728,194 +799,30 @@ Item {
                     }
                 }
 
-                // 4. Volume Button (Speaker Icon - click toggles Mute; hover/click opens Vertical Popup)
+                // 4. Volume Button (Speaker Icon - click requests Volume Popover toggle)
                 Item {
                     id: volumeButtonAnchor
                     width: 40; height: parent.height
                     z: 50
 
-                    // Invisible hit-bridge spanning from icon all the way up through the popup
-                    Item {
-                        anchors.bottom: parent.bottom
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        width: 56
-                        height: 250
-                        z: -1
-
-                        HoverHandler {
-                            id: volumeBridgeHover
-                            onHoveredChanged: {
-                                if (hovered) {
-                                    volDismissTimer.stop();
-                                    root.isVolumePopupOpen = true;
-                                } else if (!root.isVolumeSliding && !volPopupMouse.containsMouse) {
-                                    volDismissTimer.restart();
-                                }
-                            }
-                        }
-                    }
+                    HoverHandler { id: volBtnHover }
 
                     AppIcon {
                         anchors.centerIn: parent
                         source: root.volume === 0 ? "../assets/icons/audio-volume-muted-symbolic.svg" : "../assets/icons/audio-volume-high-symbolic.svg"
                         iconSize: 20
-                        color: (volumeBridgeHover.hovered || root.isVolumePopupOpen) ? "#ffffff" : "#b3b3b3"
+                        color: (volBtnHover.hovered || root.isVolumePopupOpen) ? "#ffffff" : "#b3b3b3"
                     }
 
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            if (root.volume > 0) {
-                                root.prevVolume = root.volume;
-                                root.reqVolumeChange(0);
-                            } else {
-                                root.reqVolumeChange(root.prevVolume > 0 ? root.prevVolume : 100);
-                            }
+                            root.openVolumePopoverRequested();
                         }
                         onWheel: wheel => {
                             var step = wheel.angleDelta.y > 0 ? 5 : -5;
                             root.reqVolumeChange(Math.max(0, Math.min(100, root.volume + step)));
-                        }
-                    }
-
-                    // =========================================================
-                    // VERTICAL VOLUME POPUP (SimpMusic Style - 48px x 180px Capsule)
-                    // =========================================================
-                    Rectangle {
-                        id: verticalVolPopup
-                        anchors.bottom: parent.top
-                        anchors.bottomMargin: 8
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        width: 48
-                        height: 180
-                        radius: 14
-                        color: Qt.rgba(0.10, 0.11, 0.15, 0.96)
-                        border.width: 1
-                        border.color: Qt.rgba(1, 1, 1, 0.20)
-                        z: 100
-
-                        opacity: root.isVolumePopupOpen ? 1.0 : 0.0
-                        visible: opacity > 0.01
-                        scale: root.isVolumePopupOpen ? 1.0 : 0.92
-                        transformOrigin: Item.Bottom
-                        Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutQuad } }
-                        Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-
-                        Timer {
-                            id: volDismissTimer
-                            interval: 700
-                            repeat: false
-                            onTriggered: {
-                                if (!root.isVolumeSliding && !volumeBridgeHover.hovered && !volPopupMouse.containsMouse) {
-                                    root.isVolumePopupOpen = false;
-                                }
-                            }
-                        }
-
-                        // Full-surface interactive touch & drag area for 1-click volume tuning!
-                        MouseArea {
-                            id: volPopupMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            preventStealing: true
-
-                            function updateFromMouseY(my) {
-                                var topY = 32.0;
-                                var botY = 146.0;
-                                var clamped = Math.max(topY, Math.min(botY, my));
-                                var frac = 1.0 - ((clamped - topY) / (botY - topY));
-                                var newVol = Math.round(Math.max(0, Math.min(100, frac * 100)));
-                                root.reqVolumeChange(newVol);
-                            }
-
-                            onPressed: mouse => {
-                                root.isVolumeSliding = true;
-                                volDismissTimer.stop();
-                                updateFromMouseY(mouse.y);
-                            }
-                            onPositionChanged: mouse => {
-                                if (pressed || root.isVolumeSliding) {
-                                    volDismissTimer.stop();
-                                    updateFromMouseY(mouse.y);
-                                }
-                            }
-                            onReleased: {
-                                root.isVolumeSliding = false;
-                                if (!containsMouse && !volumeBridgeHover.hovered) volDismissTimer.restart();
-                            }
-                            onCanceled: {
-                                root.isVolumeSliding = false;
-                                if (!containsMouse && !volumeBridgeHover.hovered) volDismissTimer.restart();
-                            }
-                            onWheel: wheel => {
-                                var step = wheel.angleDelta.y > 0 ? 5 : -5;
-                                root.reqVolumeChange(Math.max(0, Math.min(100, root.volume + step)));
-                            }
-                        }
-
-                        ColumnLayout {
-                            anchors.fill: parent
-                            anchors.topMargin: 10
-                            anchors.bottomMargin: 10
-                            spacing: 8
-
-                            // 1. Percentage Text (Top)
-                            Text {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: Math.round(root.volume)
-                                font.family: "Segoe UI, Inter, monospace"
-                                font.pixelSize: 11
-                                font.bold: true
-                                color: Qt.rgba(1, 1, 1, 0.85)
-                            }
-
-                            // 2. Vertical Slider Track (Middle)
-                            Item {
-                                id: verticalVolSliderBox
-                                Layout.alignment: Qt.AlignHCenter
-                                Layout.fillHeight: true
-                                width: 40
-
-                                Rectangle {
-                                    id: trackBg
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    anchors.top: parent.top
-                                    anchors.bottom: parent.bottom
-                                    width: 4
-                                    radius: 2
-                                    color: Qt.rgba(1, 1, 1, 0.25)
-
-                                    // Filled from bottom to top
-                                    Rectangle {
-                                        anchors.horizontalCenter: parent.horizontalCenter
-                                        anchors.bottom: parent.bottom
-                                        width: 4
-                                        height: parent.height * (root.volume / 100.0)
-                                        radius: 2
-                                        color: "#ffffff"
-                                    }
-
-                                    // White Tactile Knob Dot (Shows current volume level clearly)
-                                    Rectangle {
-                                        width: 10; height: 10; radius: 5
-                                        color: "#ffffff"
-                                        border.color: Qt.rgba(0, 0, 0, 0.35)
-                                        border.width: 1
-                                        anchors.horizontalCenter: parent.horizontalCenter
-                                        y: Math.max(0, Math.min(trackBg.height - height, trackBg.height * (1.0 - root.volume / 100.0) - height / 2))
-                                    }
-                                }
-                            }
-
-                            // 3. Mini Speaker Icon (Bottom)
-                            AppIcon {
-                                Layout.alignment: Qt.AlignHCenter
-                                source: root.volume === 0 ? "../assets/icons/audio-volume-muted-symbolic.svg" : "../assets/icons/audio-volume-high-symbolic.svg"
-                                iconSize: 15
-                                color: Qt.rgba(1, 1, 1, 0.70)
-                            }
                         }
                     }
                 }

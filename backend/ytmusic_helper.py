@@ -27,6 +27,7 @@ try:
         HOME_CACHE_FILE, ONLINE_TRACKS_FILE, MOOD_CACHE_DIR, MOOD_CATS_FILE,
         DISLIKED_SONGS_FILE, ARTIST_AVATARS_FILE,
         load_disliked_songs, save_disliked_songs, add_disliked_song, remove_disliked_song, is_song_disliked,
+        load_liked_songs, save_liked_songs, add_liked_song, remove_liked_song, is_song_liked,
         load_artist_avatars, save_artist_avatars, cache_artist_avatar, get_cached_artist_avatar,
         cache_online_tracks, clean_artist_name, clean_thumbnail_url, normalize_track,
         get_recent_seed_track, get_mood_categories_live, get_creator_color, classify_section,
@@ -62,6 +63,7 @@ except (ImportError, ValueError):
         HOME_CACHE_FILE, ONLINE_TRACKS_FILE, MOOD_CACHE_DIR, MOOD_CATS_FILE,
         DISLIKED_SONGS_FILE, ARTIST_AVATARS_FILE,
         load_disliked_songs, save_disliked_songs, add_disliked_song, remove_disliked_song, is_song_disliked,
+        load_liked_songs, save_liked_songs, add_liked_song, remove_liked_song, is_song_liked,
         load_artist_avatars, save_artist_avatars, cache_artist_avatar, get_cached_artist_avatar,
         cache_online_tracks, clean_artist_name, clean_thumbnail_url, normalize_track,
         get_recent_seed_track, get_mood_categories_live, get_creator_color, classify_section,
@@ -122,11 +124,16 @@ def execute_command(args):
     elif cmd == "rate_song" and len(args) > 2:
         vid = args[1]
         rating = args[2]
-        res = rate_song_action(vid, rating)
+        title = args[3] if len(args) > 3 else ""
+        artist = args[4] if len(args) > 4 else ""
+        res = rate_song_action(vid, rating, title, artist)
         print(json.dumps(res, ensure_ascii=False))
 
     elif cmd == "disliked_list":
         print(json.dumps(load_disliked_songs(), ensure_ascii=False))
+
+    elif cmd == "liked_list":
+        print(json.dumps(load_liked_songs(), ensure_ascii=False))
 
     elif cmd == "home":
         res = get_personalized_home()
