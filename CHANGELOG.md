@@ -2,7 +2,7 @@
 
 Tất cả các tính năng mới và cải tiến của Nutsty được lưu trữ tại đây.
 
-## [1.0.8] - 2026-11-06
+## [1.0.7] - 2026-11-04
 
 ### Added
 - **Phát nhạc siêu tốc tức thì**: Nghe nhạc trực tuyến ngay trong tích tắc chưa đầy 1 giây, loại bỏ hoàn toàn cảm giác chờ đợi khi chọn bài mới.
@@ -10,14 +10,6 @@ Tất cả các tính năng mới và cải tiến của Nutsty được lưu tr
 - **Hệ thống đa nguồn lời bài hát song song**: Tự động tìm kiếm đồng thời qua nhiều kho lời bài hát lớn hàng đầu (Apple Music, YouTube Music, LRCLIB, KuGou...) để chọn ra phiên bản lời chuẩn xác nhất với đúng ngôn ngữ gốc của bài hát.
 - **Hát song ca phân vai ca sĩ nam và nữ**: Tự động nhận diện giọng ca sĩ chính và ca sĩ song ca để chia lời hát sang hai bên trái - phải trực quan, kèm các đoạn ré phụ âm và đối đáp sinh động.
 - **Tùy chọn 9 nguồn lời bài hát linh hoạt**: Trong phần Cài đặt, bạn có thể tự do chọn nguồn lời bài hát yêu thích như Apple Music, SimpMusic, KuGou, Spotify hay phụ đề YouTube chính thức.
-
-### Fixed
-- **Loại bỏ triệt để lời dịch sai lệch**: Hệ thống chấm điểm thông minh tự động ngăn chặn các bản dịch máy tiếng Trung bị gán nhầm vào bài hát tiếng Việt, Âu Mỹ hoặc tiếng Nhật.
-- **Sửa lỗi tự chuyển nguồn lời bài hát**: Khắc phục tình trạng chọn nguồn Apple Music nhưng bị nhảy nhầm về nguồn khác, đảm bảo luôn nhận đúng lời bài hát chất lượng cao nhất.
-
-## [1.0.7] - 2026-11-04
-
-### Added
 - **Thanh phát nhạc kính lỏng viên nhộng**: Thiết kế thanh điều khiển nổi dạng viên nhộng trong suốt hiện đại, làm mờ êm ái hình ảnh bên dưới giúp tên bài hát và ca sĩ luôn nổi bật, dễ nhìn.
 - **Quầng sáng tỏa lan khi giữ chuột**: Khi bạn nhấn giữ vào thanh phát nhạc, thanh sẽ phóng to nhẹ nhàng và tỏa ra vầng sáng nam châm mềm mại bám theo con trỏ chuột.
 - **Thanh trượt âm lượng dạng dọc**: Bấm vào biểu tượng loa để mở thanh điều chỉnh âm lượng dọc nhỏ gọn, hỗ trợ bấm chọn mức âm lượng tức thì hoặc lăn con lăn chuột cực kỳ thuận tiện.
@@ -27,6 +19,8 @@ Tất cả các tính năng mới và cải tiến của Nutsty được lưu tr
 - **Lời bài hát chạy từng từ một**: Phân biệt và ghi chú rõ ràng những bài hát có hỗ trợ nhấc chữ phát sáng theo từng từ khớp với giọng hát ca sĩ.
 
 ### Fixed
+- **Loại bỏ triệt để lời dịch sai lệch**: Hệ thống chấm điểm thông minh tự động ngăn chặn các bản dịch máy tiếng Trung bị gán nhầm vào bài hát tiếng Việt, Âu Mỹ hoặc tiếng Nhật.
+- **Sửa lỗi tự chuyển nguồn lời bài hát**: Khắc phục tình trạng chọn nguồn Apple Music nhưng bị nhảy nhầm về nguồn khác, đảm bảo luôn nhận đúng lời bài hát chất lượng cao nhất.
 - **Nút Thích 1 chạm dứt khoát**: Bấm một lần là gắn tim và thêm ngay bài hát vào thư viện yêu thích, bấm lại là huỷ thích tức thì mà không bị giật ngược trạng thái.
 - **Phát ngẫu nhiên trong Thư viện & Danh sách phát**: Bấm "Phát ngẫu nhiên" xáo trộn ngay danh sách bài hát đang xem và phát ngẫu nhiên ở thanh phát nhạc bên dưới, không còn bị phóng to che kín màn hình.
 - **Sắp xếp bài hát Cũ nhất & Mới nhất chuẩn xác**: Bộ lọc sắp xếp hoạt động chính xác cho cả bài hát yêu thích lẫn bài hát tải về, giúp bạn dễ dàng tìm lại bài hát mới thêm hoặc bài hát nghe đầu tiên.
