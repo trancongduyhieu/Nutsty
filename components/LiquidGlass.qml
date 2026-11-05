@@ -6,90 +6,117 @@ Item {
     id: root
 
     // =========================================================================
-    // Properties & Configuration (SimpMusic Liquid Glass Formula)
+    // Properties & Configuration (PlayerBar Liquid Glass Optical Pipeline)
     // =========================================================================
     property Item backgroundSourceItem: null
     property real radius: 16
+    property color tintColor: Qt.rgba(0.08, 0.09, 0.12, 0.48)
+    property color borderColor: Qt.rgba(1, 1, 1, 0.18)
+    property bool interactive: false
+    property bool isPressed: false
+
+    // Backward compatibility properties (preserved to avoid breaking callers)
     property real displacement: 30.0
     property real aberration: 0.065
     property real bevelWidth: 21.0
     property real blurRadius: 0.5
     property real colorBleed: 0.94
-    property color tintColor: Qt.rgba(0.12, 0.14, 0.18, 0.45)
-    property bool interactive: false
     property real extraDependency: 0.0
+    property bool isFlowActive: false
+    property real flowProgress: isFlowActive ? 1.0 : 0.0
+    property real time: 0.0
 
     default property alias contentData: contentContainer.data
 
     implicitWidth: 160
     implicitHeight: 48
 
-    property bool isFlowActive: false
-    property real flowProgress: isFlowActive ? 1.0 : 0.0
-    Behavior on flowProgress { NumberAnimation { duration: 950; easing.type: Easing.InOutQuad } }
+    // Strictly active ONLY when visible with positive opacity and dimension
+    // ZERO idle GPU cost when popover or modal is hidden!
+    readonly property bool isEffectActive: root.visible && root.opacity > 0.01 && root.width > 0 && root.height > 0 && root.backgroundSourceItem !== null
 
-    readonly property bool isEffectActive: root.visible && root.opacity > 0.01 && root.width > 0 && root.height > 0
-
-    property real time: 0.0
-    Timer {
-        interval: 100 // Gentle 10 FPS ambient wave flow (prevents continuous 60 FPS shader redrawing)
-        running: root.isEffectActive && root.isFlowActive
-        repeat: true
-        onTriggered: root.time += 0.08
+    // Subtle elastic scale feedback when interactive
+    scale: (root.interactive && root.isPressed) ? 1.02 : 1.0
+    Behavior on scale {
+        NumberAnimation {
+            duration: root.isPressed ? 140 : 260
+            easing.type: root.isPressed ? Easing.OutQuad : Easing.OutBack
+            easing.overshoot: 1.10
+        }
     }
 
-    // Coordinate mapping to track where this glass sits inside backgroundSourceItem
-    readonly property point globalOffset: {
-        if (!backgroundSourceItem || !root.isEffectActive) return Qt.point(0, 0);
-        var _dep = root.x + root.y + root.width + root.height + (root.parent ? (root.parent.x + root.parent.y) : 0);
-        return root.mapToItem(backgroundSourceItem, 0, 0);
+    PointHandler {
+        id: interactivePointer
+        enabled: root.interactive
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
+        onActiveChanged: root.isPressed = active
     }
 
-    // Capture the background item as a GPU texture with linear filtering
-    ShaderEffectSource {
-        id: bgSource
-        sourceItem: root.isEffectActive ? root.backgroundSourceItem : null
-        recursive: false
-        live: root.isEffectActive
-        hideSource: false
-        visible: false
-        smooth: true
-        mipmap: false
-    }
-
-    // Hardware-accelerated GLSL Liquid Glass Refraction Shader with 9-Tap Frosted Blur
-    ShaderEffect {
-        id: glassShader
+    // Concentric Mask (Concentric bo góc đồng tâm)
+    Item {
+        id: capsuleMask
         anchors.fill: parent
-
-        property variant source: bgSource
-        property real u_blur: root.blurRadius
-        property vector2d u_resolution: Qt.vector2d(root.width, root.height)
-        property real u_radius: root.radius
-        property real u_displacement: root.displacement
-        property real u_aberration: root.aberration
-        property real u_bevelWidth: root.bevelWidth
-        property real u_colorBleed: root.colorBleed
-        property real u_time: root.time
-        property real u_flowActive: root.flowProgress
-        property real _pad: 0.0
-        property vector2d u_sourceSize: Qt.vector2d(
-            root.backgroundSourceItem ? Math.max(1, root.backgroundSourceItem.width) : 1,
-            root.backgroundSourceItem ? Math.max(1, root.backgroundSourceItem.height) : 1
-        )
-        property vector2d u_sourceOffset: Qt.vector2d(root.globalOffset.x, root.globalOffset.y)
-        property color u_tint: root.tintColor
-
-        fragmentShader: Qt.resolvedUrl("../assets/shaders/liquid_glass.frag.qsb")
-        visible: root.isEffectActive && root.backgroundSourceItem !== null
+        visible: false
+        layer.enabled: true
+        Rectangle {
+            anchors.fill: parent
+            radius: root.radius
+            color: "#ffffff"
+        }
     }
 
-    // Fallback when no backgroundSourceItem is provided
+    // =========================================================================
+    // 1. LIQUID GLASS BACKDROP BLUR (PlayerBar Hardware MultiEffect Blur)
+    // Tightly crops the exact area behind component and runs 48px GPU Gaussian Blur!
+    // =========================================================================
+    Item {
+        id: cropAnchorHelper
+        property point cropPos: {
+            if (!root.backgroundSourceItem || !root.isEffectActive) return Qt.point(root.x, root.y);
+            var _dep = root.x + root.y + root.width + root.height + (root.parent ? (root.parent.width + root.parent.height) : 0);
+            return root.mapToItem(root.backgroundSourceItem, 0, 0);
+        }
+    }
+
+    ShaderEffectSource {
+        id: backdropCropSource
+        sourceItem: root.isEffectActive ? root.backgroundSourceItem : null
+        sourceRect: Qt.rect(cropAnchorHelper.cropPos.x, cropAnchorHelper.cropPos.y, root.width, root.height)
+        visible: false
+        live: root.isEffectActive
+        smooth: true
+        recursive: false
+        hideSource: false
+    }
+
+    MultiEffect {
+        anchors.fill: parent
+        source: backdropCropSource
+        blurEnabled: true
+        blur: 1.0
+        blurMax: 48
+        saturation: 1.55
+        brightness: -0.05
+        maskEnabled: true
+        maskSource: capsuleMask
+        autoPaddingEnabled: false
+        visible: root.isEffectActive
+        z: 1
+    }
+
+    // =========================================================================
+    // 2. ADAPTIVE DARK SCRIM & 1PX CONCENTRIC HAIRLINE BORDER
+    // 48% dark overlay keeps high contrast without turning into an opaque block
+    // =========================================================================
     Rectangle {
+        id: scrimRect
         anchors.fill: parent
         radius: root.radius
-        visible: root.backgroundSourceItem === null
         color: root.tintColor
+        border.color: root.borderColor
+        border.width: 1
+        Behavior on border.color { ColorAnimation { duration: 200 } }
+        z: 2
     }
 
     // Content container (text, icons, buttons inside the glass)
