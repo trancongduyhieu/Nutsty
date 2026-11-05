@@ -59,7 +59,6 @@ TrackCard 1.0 TrackCard.qml
 TrackContextMenu 1.0 TrackContextMenu.qml
 TrackRow 1.0 TrackRow.qml
 UserNoteDetailModal 1.0 UserNoteDetailModal.qml
-VolumePopover 1.0 VolumePopover.qml
 WhatsNewModal 1.0 WhatsNewModal.qml
 WindowsTaskbarLyrics 1.0 WindowsTaskbarLyrics.qml
 YTMusicNowPlayingView 1.0 YTMusicNowPlayingView.qml

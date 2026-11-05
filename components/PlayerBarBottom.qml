@@ -756,7 +756,9 @@ Item {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            if (!root.isLiked) {
+                            // Instant optimistic local toggle
+                            root.isLiked = !root.isLiked;
+                            if (root.isLiked) {
                                 burstAnim.restart();
                                 heartBounceAnim.restart();
                             }
@@ -799,13 +801,23 @@ Item {
                     }
                 }
 
-                // 4. Volume Button (Speaker Icon - click requests Volume Popover toggle)
+                // 4. Volume Button (Speaker Icon - click or hover opens Vertical Volume Popup, SimpMusic style)
                 Item {
                     id: volumeButtonAnchor
                     width: 40; height: parent.height
                     z: 50
 
-                    HoverHandler { id: volBtnHover }
+                    HoverHandler {
+                        id: volBtnHover
+                        onHoveredChanged: {
+                            if (hovered) {
+                                volDismissTimer.stop();
+                                root.isVolumePopupOpen = true;
+                            } else if (!root.isVolumeSliding && !volPopupMouse.containsMouse) {
+                                volDismissTimer.restart();
+                            }
+                        }
+                    }
 
                     AppIcon {
                         anchors.centerIn: parent
@@ -818,11 +830,171 @@ Item {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            root.openVolumePopoverRequested();
+                            root.isVolumePopupOpen = !root.isVolumePopupOpen;
+                            if (root.isVolumePopupOpen) volDismissTimer.stop();
                         }
                         onWheel: wheel => {
                             var step = wheel.angleDelta.y > 0 ? 5 : -5;
                             root.reqVolumeChange(Math.max(0, Math.min(100, root.volume + step)));
+                        }
+                    }
+
+                    // =========================================================
+                    // VERTICAL VOLUME POPUP (SimpMusic Style - 48px x 180px Capsule)
+                    // =========================================================
+                    Rectangle {
+                        id: verticalVolPopup
+                        anchors.bottom: parent.top
+                        anchors.bottomMargin: 8
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: 48
+                        height: 180
+                        radius: 14
+                        color: Qt.rgba(0.10, 0.11, 0.15, 0.96)
+                        border.width: 1
+                        border.color: Qt.rgba(1, 1, 1, 0.20)
+                        z: 100
+
+                        opacity: root.isVolumePopupOpen ? 1.0 : 0.0
+                        visible: opacity > 0.01
+                        scale: root.isVolumePopupOpen ? 1.0 : 0.92
+                        transformOrigin: Item.Bottom
+                        Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutQuad } }
+                        Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+
+                        Timer {
+                            id: volDismissTimer
+                            interval: 450 // 450ms graceful hold delay (matching SimpMusic delay(400))
+                            repeat: false
+                            onTriggered: {
+                                if (!root.isVolumeSliding && !volBtnHover.hovered && !volPopupMouse.containsMouse) {
+                                    root.isVolumePopupOpen = false;
+                                }
+                            }
+                        }
+
+                        // Touch & Drag MouseArea for 1-click volume tuning
+                        MouseArea {
+                            id: volPopupMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            preventStealing: true
+
+                            function updateFromMouseY(my) {
+                                var topY = 28.0;
+                                var botY = 146.0;
+                                var clamped = Math.max(topY, Math.min(botY, my));
+                                var frac = 1.0 - ((clamped - topY) / (botY - topY));
+                                var newVol = Math.round(Math.max(0, Math.min(100, frac * 100)));
+                                root.reqVolumeChange(newVol);
+                            }
+
+                            onPressed: mouse => {
+                                root.isVolumeSliding = true;
+                                volDismissTimer.stop();
+                                updateFromMouseY(mouse.y);
+                            }
+                            onPositionChanged: mouse => {
+                                if (pressed || root.isVolumeSliding) {
+                                    volDismissTimer.stop();
+                                    updateFromMouseY(mouse.y);
+                                }
+                            }
+                            onReleased: {
+                                root.isVolumeSliding = false;
+                                if (!containsMouse && !volBtnHover.hovered) volDismissTimer.restart();
+                            }
+                            onCanceled: {
+                                root.isVolumeSliding = false;
+                                if (!containsMouse && !volBtnHover.hovered) volDismissTimer.restart();
+                            }
+                            onWheel: wheel => {
+                                var step = wheel.angleDelta.y > 0 ? 5 : -5;
+                                root.reqVolumeChange(Math.max(0, Math.min(100, root.volume + step)));
+                            }
+                        }
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.topMargin: 10
+                            anchors.bottomMargin: 10
+                            spacing: 8
+
+                            // 1. Percentage Text (Top)
+                            Text {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: Math.round(root.volume)
+                                font.family: "Segoe UI, Inter, monospace"
+                                font.pixelSize: 11
+                                font.bold: true
+                                color: Qt.rgba(1, 1, 1, 0.85)
+                            }
+
+                            // 2. Vertical Slider Track (Middle)
+                            Item {
+                                id: verticalVolSliderBox
+                                Layout.alignment: Qt.AlignHCenter
+                                Layout.fillHeight: true
+                                width: 40
+
+                                Rectangle {
+                                    id: trackBg
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    anchors.top: parent.top
+                                    anchors.bottom: parent.bottom
+                                    width: 4
+                                    radius: 2
+                                    color: Qt.rgba(1, 1, 1, 0.25)
+
+                                    // Filled from bottom to top
+                                    Rectangle {
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        anchors.bottom: parent.bottom
+                                        width: 4
+                                        height: parent.height * (root.volume / 100.0)
+                                        radius: 2
+                                        color: "#ffffff"
+                                    }
+
+                                    // White Tactile Knob Dot (Shows current volume level clearly)
+                                    Rectangle {
+                                        width: 10; height: 10; radius: 5
+                                        color: "#ffffff"
+                                        border.color: Qt.rgba(0, 0, 0, 0.35)
+                                        border.width: 1
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        y: Math.max(0, Math.min(trackBg.height - height, trackBg.height * (1.0 - root.volume / 100.0) - height / 2))
+                                    }
+                                }
+                            }
+
+                            // 3. Mini Speaker Icon (Bottom) - Click to Mute / Unmute
+                            Item {
+                                Layout.alignment: Qt.AlignHCenter
+                                width: 24; height: 24
+                                z: 10
+
+                                AppIcon {
+                                    anchors.centerIn: parent
+                                    source: root.volume === 0 ? "../assets/icons/audio-volume-muted-symbolic.svg" : "../assets/icons/audio-volume-high-symbolic.svg"
+                                    iconSize: 15
+                                    color: root.volume === 0 ? "#ff5252" : Qt.rgba(1, 1, 1, 0.70)
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (root.volume > 0) {
+                                            root.prevVolume = root.volume;
+                                            root.reqVolumeChange(0);
+                                        } else {
+                                            root.reqVolumeChange(root.prevVolume > 0 ? root.prevVolume : 100);
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

@@ -2416,6 +2416,19 @@ Scope {
     }
     }
 
+        // Backdrop to catch clicks outside Volume popup and prevent click-through to cards below
+        MouseArea {
+            id: volumeDismissBackdrop
+            anchors.fill: parent
+            z: 49
+            visible: bottomPlayer.isVolumePopupOpen
+            cursorShape: Qt.ArrowCursor
+            preventStealing: true
+            onPressed: {
+                bottomPlayer.isVolumePopupOpen = false;
+            }
+        }
+
         // 2. Floating Liquid Glass Player Bar (Centered Glass Capsule Dock)
         PlayerBarBottom {
             id: bottomPlayer
@@ -2431,7 +2444,7 @@ Scope {
             currentTrack: win.currentTrack
             audioSpecs: win.audioSpecs
             resolvedSquareImage: win.currentResolvedCover
-            isLiked: win.isTrackLiked(win.currentTrack)
+            isLiked: win.isCurrentTrackLiked
             isPlaying: win.isPlaying
             isLoadingAudio: win.isLoadingAudio
             currentTime: win.currentTime
@@ -2448,7 +2461,6 @@ Scope {
             listeningAlongFriend: win.listeningAlongFriend
             activeCoListenersDetails: win.activeCoListenersDetails
 
-            onOpenVolumePopoverRequested: volumePopover.toggle()
             onToggleLikeClicked: win.toggleLikeCurrentTrack()
             onPlayPauseClicked: win.togglePlay()
             onNextClicked: win.playNext()
@@ -2814,13 +2826,6 @@ Scope {
             onCancelTimerRequested: () => {
                 win.cancelSleepTimer();
             }
-        }
-
-        VolumePopover {
-            id: volumePopover
-            targetAnchorItem: bottomPlayer.volumeButtonAnchorItem
-            volume: win.volume
-            onVolumeChangeRequested: vol => win.setVolume(vol)
         }
 
         WhatsNewModal {
@@ -3440,20 +3445,24 @@ Scope {
         return PlaybackEngine.rateSong(win, vid, rating);
     }
 
-    function isTrackLiked(trk) {
+    readonly property bool isCurrentTrackLiked: isTrackLiked(win.currentTrack, win.likedSongsMap)
+
+    function isTrackLiked(trk, map) {
         if (!trk) return false;
+        var useMap = map || win.likedSongsMap;
+        if (!useMap) return false;
         var vid = trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
         if (!vid) {
             var title = (trk.title || trk.name || "").trim().toLowerCase();
             var artist = (trk.artist || "").trim().toLowerCase();
             if (title) {
                 var key = "title_" + title + "_" + artist;
-                if (win.likedSongsMap && win.likedSongsMap[key]) return true;
+                if (useMap[key]) return true;
             }
             return false;
         }
         var clean = String(vid).replace("ytdl://", "").replace("yt_", "");
-        return !!(win.likedSongsMap && win.likedSongsMap[clean]);
+        return !!useMap[clean];
     }
 
     function toggleLikeCurrentTrack() {
@@ -3465,7 +3474,7 @@ Scope {
         var artist = trk.artist || "";
         var key = cleanVid ? cleanVid : ("title_" + title.trim().toLowerCase() + "_" + artist.trim().toLowerCase());
 
-        var isCurrentlyLiked = win.isTrackLiked(trk);
+        var isCurrentlyLiked = win.isTrackLiked(trk, win.likedSongsMap);
         var newRating = isCurrentlyLiked ? "INDIFFERENT" : "LIKE";
 
         // Optimistic local update
@@ -3475,6 +3484,9 @@ Scope {
                 videoId: cleanVid,
                 title: title,
                 artist: artist,
+                image: trk.image || trk.cover || trk.thumbnail || "",
+                path: trk.path || (cleanVid ? ("ytdl://" + cleanVid) : ""),
+                duration: trk.duration || trk.durationMs || 0,
                 timestamp: Math.floor(Date.now() / 1000)
             };
             win.showToast(I18n.tr("Đã thêm vào bài hát yêu thích", "Added to favorite songs"));
