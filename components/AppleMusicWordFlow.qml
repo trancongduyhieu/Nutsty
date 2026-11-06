@@ -38,137 +38,206 @@ Item {
     }
 
     property bool isAnsweringVoice: false
+    property bool isEnsembleVoice: false
 
-    implicitWidth: parent ? parent.width : 300
-    implicitHeight: wordsFlow.implicitHeight + 8
+    TextMetrics {
+        id: wordMetrics
+        font.family: root.fontFamily
+        font.pixelSize: root.fontSize
+        font.weight: root.fontWeight
+    }
 
-    Flow {
-        id: wordsFlow
+    readonly property real maxLineWidth: parent ? Math.max(100, parent.width * 0.82) : 450
+
+    // Partition words into lines that match the staticText wrap limit (parent.width * 0.82)
+    // Ensures individual rows are properly right-aligned, centered, or left-aligned
+    property var partitionedLines: []
+
+    function updatePartition() {
+        var ws = root.effectiveWords;
+        if (!ws || ws.length === 0) {
+            partitionedLines = [];
+            return;
+        }
+        var limit = root.maxLineWidth;
+        var lines = [];
+        var curLine = [];
+        var curWidth = 0;
+        for (var i = 0; i < ws.length; i++) {
+            var w = ws[i];
+            wordMetrics.text = w.text || "";
+            var wW = wordMetrics.width;
+            var prevHadSpace = (curLine.length > 0) ? (curLine[curLine.length - 1].hasSpace !== false) : true;
+            var gap = (curLine.length > 0 && prevHadSpace) ? root.wordSpacing : 0;
+            var canBreak = (curLine.length > 0 && prevHadSpace);
+            if (canBreak && (curWidth + gap + wW > limit)) {
+                lines.push(curLine);
+                curLine = [w];
+                curWidth = wW;
+            } else {
+                curLine.push(w);
+                curWidth += gap + wW;
+            }
+        }
+        if (curLine.length > 0) lines.push(curLine);
+        partitionedLines = lines;
+    }
+
+    onEffectiveWordsChanged: updatePartition()
+    onMaxLineWidthChanged: updatePartition()
+    Component.onCompleted: updatePartition()
+
+    implicitWidth: parent ? parent.width : 400
+    implicitHeight: wordsColumn.implicitHeight + 8
+
+    Column {
+        id: wordsColumn
         y: 4
-        x: root.isAnsweringVoice ? Math.max(0, root.width - implicitWidth) : 0
-        width: root.isAnsweringVoice ? implicitWidth : root.width
-        spacing: root.wordSpacing
+        anchors.left: parent ? parent.left : undefined
+        anchors.right: parent ? parent.right : undefined
+        spacing: 6
 
         Repeater {
-            model: root.effectiveWords
+            model: root.partitionedLines
 
             delegate: Item {
-                id: wordRoot
-                readonly property var wData: modelData
-                readonly property real wStart: wData.start || 0.0
-                readonly property real wEnd: wData.end || 0.0
-                readonly property real wDur: Math.max(0.05, wData.duration || (wEnd - wStart))
-                readonly property bool isHeld: !!wData.isHeld || (wDur >= 0.85)
-                readonly property bool isPast: root.effectiveTime >= wEnd
-                readonly property bool isSinging: root.effectiveTime >= wStart && root.effectiveTime < wEnd
-                readonly property real wordProgress: Math.max(0.0, Math.min(1.0, (root.effectiveTime - wStart) / wDur))
-
-                // C1 continuous smooth progress
-                property real smoothProg: 0.0
-                Behavior on smoothProg {
-                    SmoothedAnimation { duration: 120; reversingMode: SmoothedAnimation.Immediate }
-                }
-                onWordProgressChanged: smoothProg = wordProgress
-
-                property real flareGate: isSinging ? 1.0 : 0.0
-                Behavior on flareGate {
-                    NumberAnimation {
-                        duration: wordRoot.isSinging ? 400 : 1800
-                        easing.type: Easing.Linear
-                    }
-                }
-
-                function cubicBezier(p0, p1, p2, p3, t) {
-                    var u = 1 - t;
-                    return 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t;
-                }
-
-                function empEasing(x) {
-                    if (x < 0.5) return cubicBezier(0.0, 0.3, 0.25, 1.0, x * 2.0);
-                    return 1.0 - cubicBezier(0.0, 0.5, 0.6, 1.0, (x - 0.5) * 2.0);
-                }
-
-                readonly property real yCurve: isSinging ? (isHeld ? empEasing(smoothProg) : Math.sin(Math.PI * smoothProg)) : 0.0
-                readonly property real waveScale: 1.0 + (isHeld ? 0.045 : 0.010) * yCurve
-
-                implicitWidth: charRow.implicitWidth
-                implicitHeight: charRow.implicitHeight
+                id: lineContainer
+                width: parent.width
+                implicitHeight: lineWordsRow.implicitHeight
 
                 Row {
-                    id: charRow
+                    id: lineWordsRow
                     spacing: 0
+                    anchors.right: root.isAnsweringVoice ? parent.right : undefined
+                    anchors.left: (!root.isAnsweringVoice && !root.isEnsembleVoice) ? parent.left : undefined
+                    anchors.horizontalCenter: root.isEnsembleVoice ? parent.horizontalCenter : undefined
 
                     Repeater {
-                        model: (wData.text || "").split("")
+                        id: lineWordsRepeater
+                        model: modelData
 
                         delegate: Item {
-                            id: charItem
-                            readonly property string ch: modelData
-                            readonly property int charIndex: index
-                            readonly property int charCount: Math.max(1, (wData.text || "").length)
+                            id: wordRoot
+                            readonly property var wData: modelData
+                            readonly property bool isLastInLine: index === (lineWordsRepeater.count - 1)
+                            readonly property real wStart: wData.start || 0.0
+                            readonly property real wEnd: wData.end || 0.0
+                            readonly property real wDur: Math.max(0.05, wData.duration || (wEnd - wStart))
+                            readonly property bool isHeld: !!wData.isHeld || (wDur >= 0.85)
+                            readonly property bool isPast: root.effectiveTime >= wEnd
+                            readonly property bool isSinging: root.effectiveTime >= wStart && root.effectiveTime < wEnd
+                            readonly property real wordProgress: Math.max(0.0, Math.min(1.0, (root.effectiveTime - wStart) / wDur))
 
-                            readonly property real charFrom: charIndex / charCount
-                            readonly property real charTo: (charIndex + 1) / charCount
-                            readonly property real charCenter: (charFrom + charTo) / 2.0
+                            // C1 continuous smooth progress
+                            property real smoothProg: 0.0
+                            Behavior on smoothProg {
+                                SmoothedAnimation { duration: 120; reversingMode: SmoothedAnimation.Immediate }
+                            }
+                            onWordProgressChanged: smoothProg = wordProgress
 
-                            readonly property real charProgress: wordRoot.isPast ? 1.0 :
-                                (wordRoot.isSinging ? Math.max(0.0, Math.min(1.0, (wordRoot.smoothProg - charFrom) / Math.max(0.001, charTo - charFrom))) : 0.0)
-
-                            // Apple Wave Lift: Rises by -2.0px when light touches, and STAYS LIFTED!
-                            property real liftProgress: (charProgress > 0.0 || wordRoot.isPast) ? 1.0 : 0.0
-                            Behavior on liftProgress {
+                            property real flareGate: isSinging ? 1.0 : 0.0
+                            Behavior on flareGate {
                                 NumberAnimation {
-                                    duration: 750
-                                    easing.type: Easing.BezierSpline
-                                    easing.bezierCurve: [0.4, 0.0, 0.2, 1.0]
+                                    duration: wordRoot.isSinging ? 400 : 1800
+                                    easing.type: Easing.Linear
                                 }
                             }
 
-                            width: charText.implicitWidth
-                            height: charText.implicitHeight
+                            function cubicBezier(p0, p1, p2, p3, t) {
+                                var u = 1 - t;
+                                return 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t;
+                            }
 
-                            transform: [
-                                Translate { y: -liftProgress * 2.0 },
-                                Scale {
-                                    xScale: wordRoot.waveScale
-                                    yScale: wordRoot.waveScale
-                                    origin.x: charItem.width / 2
-                                    origin.y: charItem.height / 2
-                                }
-                            ]
+                            function empEasing(x) {
+                                if (x < 0.5) return cubicBezier(0.0, 0.3, 0.25, 1.0, x * 2.0);
+                                return 1.0 - cubicBezier(0.0, 0.5, 0.6, 1.0, (x - 0.5) * 2.0);
+                            }
 
-                            // Typographic Sweep: 0.38 alpha (unsung) -> 1.0 pure white (sung)
-                            Text {
-                                id: charText
-                                anchors.centerIn: parent
-                                text: ch
-                                font.family: root.fontFamily
-                                font.pixelSize: root.fontSize
-                                font.weight: root.fontWeight
-                                color: {
-                                    if (wordRoot.isPast || charItem.charProgress >= 1.0) return "#ffffff";
-                                    if (charItem.charProgress <= 0.0) return Qt.rgba(1.0, 1.0, 1.0, 0.38);
-                                    var p = charItem.charProgress;
-                                    var alpha = 0.38 + (1.0 - 0.38) * p;
-                                    return Qt.rgba(1.0, 1.0, 1.0, alpha);
+                            readonly property real yCurve: isSinging ? (isHeld ? empEasing(smoothProg) : Math.sin(Math.PI * smoothProg)) : 0.0
+                            readonly property real waveScale: 1.0 + (isHeld ? 0.045 : 0.010) * yCurve
+
+                            implicitWidth: charRow.implicitWidth + ((isLastInLine || (wData && wData.hasSpace === false)) ? 0 : root.wordSpacing)
+                            implicitHeight: charRow.implicitHeight
+
+                            Row {
+                                id: charRow
+                                anchors.left: parent.left
+                                spacing: 0
+
+                                Repeater {
+                                    model: (wData.text || "").split("")
+
+                                    delegate: Item {
+                                        id: charItem
+                                        readonly property string ch: modelData
+                                        readonly property int charIndex: index
+                                        readonly property int charCount: Math.max(1, (wData.text || "").length)
+
+                                        readonly property real charFrom: charIndex / charCount
+                                        readonly property real charTo: (charIndex + 1) / charCount
+                                        readonly property real charCenter: (charFrom + charTo) / 2.0
+
+                                        readonly property real charProgress: wordRoot.isPast ? 1.0 :
+                                            (wordRoot.isSinging ? Math.max(0.0, Math.min(1.0, (wordRoot.smoothProg - charFrom) / Math.max(0.001, charTo - charFrom))) : 0.0)
+
+                                        // Apple Wave Lift: Rises by -2.0px when light touches, and STAYS LIFTED!
+                                        property real liftProgress: (charProgress > 0.0 || wordRoot.isPast) ? 1.0 : 0.0
+                                        Behavior on liftProgress {
+                                            NumberAnimation {
+                                                duration: 750
+                                                easing.type: Easing.BezierSpline
+                                                easing.bezierCurve: [0.4, 0.0, 0.2, 1.0]
+                                            }
+                                        }
+
+                                        width: charText.implicitWidth
+                                        height: charText.implicitHeight
+
+                                        transform: [
+                                            Translate { y: -liftProgress * 2.0 },
+                                            Scale {
+                                                xScale: wordRoot.waveScale
+                                                yScale: wordRoot.waveScale
+                                                origin.x: charItem.width / 2
+                                                origin.y: charItem.height / 2
+                                            }
+                                        ]
+
+                                        // Typographic Sweep: 0.38 alpha (unsung) -> 1.0 pure white (sung)
+                                        Text {
+                                            id: charText
+                                            anchors.centerIn: parent
+                                            text: ch
+                                            font.family: root.fontFamily
+                                            font.pixelSize: root.fontSize
+                                            font.weight: root.fontWeight
+                                            color: {
+                                                if (wordRoot.isPast || charItem.charProgress >= 1.0) return "#ffffff";
+                                                if (charItem.charProgress <= 0.0) return Qt.rgba(1.0, 1.0, 1.0, 0.38);
+                                                var p = charItem.charProgress;
+                                                var alpha = 0.38 + (1.0 - 0.38) * p;
+                                                return Qt.rgba(1.0, 1.0, 1.0, alpha);
+                                            }
+                                        }
+                                    }
                                 }
+                            }
+
+                            // Layer 2: True Hardware Gaussian MultiEffect Glow on Singing Word
+                            MultiEffect {
+                                source: charRow
+                                anchors.fill: charRow
+                                shadowEnabled: wordRoot.isSinging
+                                shadowColor: "#ffffff"
+                                shadowBlur: 0.95
+                                shadowOpacity: wordRoot.isSinging ? (0.92 * wordRoot.flareGate * Math.sin(Math.PI * wordRoot.smoothProg)) : 0.0
+                                shadowHorizontalOffset: 0
+                                shadowVerticalOffset: 0
+                                shadowScale: 1.08
+                                visible: shadowOpacity > 0.01
                             }
                         }
                     }
-                }
-
-                // Layer 2: True Hardware Gaussian MultiEffect Glow on Singing Word
-                MultiEffect {
-                    source: charRow
-                    anchors.fill: charRow
-                    shadowEnabled: wordRoot.isSinging
-                    shadowColor: "#ffffff"
-                    shadowBlur: 0.95
-                    shadowOpacity: wordRoot.isSinging ? (0.92 * wordRoot.flareGate * Math.sin(Math.PI * wordRoot.smoothProg)) : 0.0
-                    shadowHorizontalOffset: 0
-                    shadowVerticalOffset: 0
-                    shadowScale: 1.08
-                    visible: shadowOpacity > 0.01
                 }
             }
         }

@@ -134,8 +134,34 @@ def clean_search_title(title: str) -> str:
     t = title
     t = re.sub(r'[\(\[\{【].*?(?:official|audio|mv|video|lyrics|lyric|visualizer|remix|hd|hq|4k|ver|version|performance|live).*?[\)\]\}】]', '', t, flags=re.IGNORECASE)
     t = re.sub(r'\s*[-|]\s*(?:official|audio|mv|video|lyrics|visualizer).*$', '', t, flags=re.IGNORECASE)
-    t = re.sub(r'[\(\[](?:feat\.|ft\.).*?[\)\]]', '', t, flags=re.IGNORECASE)
+    t = re.sub(r'[\(\[](?:feat\.|ft\.|feat|ft|cùng với|with).*?[\)\]]', '', t, flags=re.IGNORECASE)
     return t.strip()
+
+def normalize_artist_for_search(artist: str) -> List[str]:
+    """
+    Generate normalized artist search variations.
+    Handles YouTube Music localized strings like 'Lady Gaga và Bruno Mars' -> 'Lady Gaga & Bruno Mars'.
+    """
+    if not artist:
+        return [""]
+    variants = []
+    # 1. Replace Vietnamese ' và ' with ' & '
+    v_va = re.sub(r'\s+và\s+', ' & ', artist, flags=re.IGNORECASE).strip()
+    if v_va and v_va not in variants:
+        variants.append(v_va)
+    # 2. Original artist
+    clean_orig = artist.strip()
+    if clean_orig and clean_orig not in variants:
+        variants.append(clean_orig)
+    # 3. Replace ' and ' with ' & '
+    v_and = re.sub(r'\s+and\s+', ' & ', artist, flags=re.IGNORECASE).strip()
+    if v_and and v_and not in variants:
+        variants.append(v_and)
+    # 4. Primary artist only (before &, và, ,, ft., feat.)
+    primary = re.split(r'\s*(?:&|và|and|,|\bft\.?|\bfeat\.?)\s*', artist, flags=re.IGNORECASE)[0].strip()
+    if primary and primary not in variants:
+        variants.append(primary)
+    return variants or [""]
 
 # ──────────────────────────────────────────────────────────────────────────────
 # LYRICS CANDIDATE DATA STRUCTURE
@@ -176,77 +202,84 @@ def fetch_youlyplus_candidate(title: str, artist: str = "") -> Optional[LyricsCa
     Uses https://lyricsplus.binimum.org/v2/lyrics/get without duration to avoid timeout.
     """
     clean_t = clean_search_title(title)
-    clean_a = clean_search_title(artist) if artist else ""
-    params = {"title": clean_t}
-    if clean_a:
-        params["artist"] = clean_a
+    artist_variants = normalize_artist_for_search(artist) if artist else [""]
 
     endpoints = [
         "https://lyricsplus.binimum.org/v2/lyrics/get",
         "https://lyricsplus.prjktla.my.id/v2/lyrics/get"
     ]
-    for ep in endpoints:
-        try:
-            url = f"{ep}?{urllib.parse.urlencode(params)}"
-            req = urllib.request.Request(url, headers={
-                "User-Agent": "Mochy (+https://github.com/realidkroo/Mochy-Music)",
-                "Accept": "application/json"
-            })
-            with urllib.request.urlopen(req, timeout=2.5) as resp:
-                data = json.loads(resp.read().decode("utf-8", errors="ignore"))
-            items = data.get("lyrics", [])
-            if not items:
+    for clean_a in artist_variants:
+        params = {"title": clean_t}
+        if clean_a:
+            params["artist"] = clean_a
+
+        for ep in endpoints:
+            try:
+                url = f"{ep}?{urllib.parse.urlencode(params)}"
+                req = urllib.request.Request(url, headers={
+                    "User-Agent": "Mochy (+https://github.com/realidkroo/Mochy-Music)",
+                    "Accept": "application/json"
+                })
+                with urllib.request.urlopen(req, timeout=2.5) as resp:
+                    data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+                items = data.get("lyrics", [])
+                if not items:
+                    continue
+
+                lines = []
+                has_voice = False
+                voices = set()
+                for item in items:
+                    t_ms = item.get("time", 0)
+                    mins = (t_ms // 1000) // 60
+                    secs = (t_ms // 1000) % 60
+                    ms = t_ms % 1000
+                    stamp = f"[{mins:02d}:{secs:02d}.{ms:03d}]"
+                    singer = item.get("element", {}).get("singer", "")
+                    if singer:
+                        has_voice = True
+                        voices.add(singer)
+                        marker = f"{{agent:{singer}}}"
+                    else:
+                        marker = ""
+
+                    syls = item.get("syllabus", [])
+                    if syls:
+                        w_str = ""
+                        spaced_by_api = any(s.get("text", "").endswith(" ") for s in syls[:-1])
+                        for idx, s in enumerate(syls):
+                            sm = (s.get("time", 0) // 1000) // 60
+                            ss = (s.get("time", 0) // 1000) % 60
+                            sms = s.get("time", 0) % 1000
+                            stxt = s.get("text", "")
+                            if not spaced_by_api and idx < len(syls) - 1 and not stxt.endswith(" "):
+                                stxt += " "
+                            w_str += f"<{sm:02d}:{ss:02d}.{sms:03d}>{stxt}"
+                        lines.append(f"{stamp}{marker}{w_str.strip()}")
+                    else:
+                        txt = item.get("text", "")
+                        lines.append(f"{stamp}{marker}{txt}")
+
+                raw = "\n".join(lines)
+                if not raw.strip():
+                    continue
+
+                sync_kind = detect_sync_kind(raw)
+                dom_script = dominant_script(raw)
+                has_duet = len(voices) > 1
+
+                return LyricsCandidate(
+                    provider="YouLyPlus",
+                    raw_lyrics=raw,
+                    sync_kind=sync_kind,
+                    script=dom_script,
+                    duration_sec=None,
+                    has_voice_tags=has_voice,
+                    has_duet=has_duet,
+                    is_ttml=False
+                )
+            except Exception:
                 continue
-
-            lines = []
-            has_voice = False
-            voices = set()
-            for item in items:
-                t_ms = item.get("time", 0)
-                mins = (t_ms // 1000) // 60
-                secs = (t_ms // 1000) % 60
-                ms = t_ms % 1000
-                stamp = f"[{mins:02d}:{secs:02d}.{ms:03d}]"
-                singer = item.get("element", {}).get("singer", "")
-                if singer:
-                    has_voice = True
-                    voices.add(singer)
-                    marker = f"{{agent:{singer}}}"
-                else:
-                    marker = ""
-
-                syls = item.get("syllabus", [])
-                if syls:
-                    w_str = ""
-                    for s in syls:
-                        sm = (s.get("time", 0) // 1000) // 60
-                        ss = (s.get("time", 0) // 1000) % 60
-                        sms = s.get("time", 0) % 1000
-                        stxt = s.get("text", "")
-                        w_str += f"<{sm:02d}:{ss:02d}.{sms:03d}>{stxt}"
-                    lines.append(f"{stamp}{marker}{w_str.strip()}")
-                else:
-                    txt = item.get("text", "")
-                    lines.append(f"{stamp}{marker}{txt}")
-
-            raw = "\n".join(lines)
-            if not raw.strip():
-                continue
-
-            sync = detect_sync_kind(raw)
-            scr = dominant_script(raw)
-            has_duet = len(voices) > 1
-
-            return LyricsCandidate(
-                provider="YouLyPlus",
-                raw_lyrics=raw,
-                sync_kind=sync,
-                script=scr,
-                has_voice_tags=has_voice,
-                has_duet=has_duet
-            )
-        except Exception:
-            continue
     return None
 
 def fetch_simpmusic_candidate(video_id: str, title: str, artist: str, duration_sec: Optional[float] = None) -> Optional[LyricsCandidate]:
@@ -490,7 +523,8 @@ def fetch_spotify_candidate(title: str, artist: str, duration_sec: Optional[floa
                 for w in item.get("words", []):
                     wm = int(w["start"] // 60)
                     ws = w["start"] % 60
-                    w_str += f"<{wm:02d}:{ws:05.2f}>{w['text']} "
+                    sp_char = " " if w.get("hasSpace", True) else ""
+                    w_str += f"<{wm:02d}:{ws:05.2f}>{w['text']}{sp_char}"
                 lines_txt.append(f"[{m:02d}:{s:05.2f}]{w_str.strip() or item.get('text', '')}")
             raw = "\n".join(lines_txt)
             sync = detect_sync_kind(raw)

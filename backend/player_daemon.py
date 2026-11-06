@@ -133,7 +133,7 @@ def ensure_mpv():
             "--force-window=no",
             ipc_arg,
             "--cache=yes",
-            f"--cache-dir={safe_cache_dir}",
+            f"--demuxer-cache-dir={safe_cache_dir}",
             "--cache-on-disk=yes",
             "--demuxer-max-bytes=64M",
             "--demuxer-max-back-bytes=32M",

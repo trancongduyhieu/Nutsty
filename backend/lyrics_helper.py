@@ -402,21 +402,23 @@ def parse_ttml(ttml_str):
         if spans:
             words = []
             for sp_begin, sp_end, sp_text in spans:
-                sp_text = html.unescape(sp_text.strip())
-                if not sp_text:
+                has_space = sp_text.endswith(" ") or sp_text.endswith("\t")
+                clean_sp = html.unescape(sp_text.strip())
+                if not clean_sp:
                     continue
                 start = round(_parse_ttml_time(sp_begin), 3)
                 end   = round(_parse_ttml_time(sp_end), 3)
                 dur   = max(0.08, round(end - start, 3))
                 words.append({
-                    "text": sp_text,
+                    "text": clean_sp,
                     "start": start,
                     "end": end,
                     "duration": dur,
+                    "hasSpace": has_space,
                     "isHeld": dur >= 0.85,
                 })
             if words:
-                plain = clean_vocal_markers(" ".join(w["text"] for w in words))
+                plain = clean_vocal_markers("".join(w["text"] + (" " if w.get("hasSpace", True) else "") for w in words).strip())
                 results.append({
                     "time": line_start,
                     "endTime": line_end,
@@ -952,13 +954,18 @@ def _get_lyrics_raw(title, artist=None, video_id=None, file_path=None, duration_
     if not title:
         return []
 
+    pref = get_lyrics_source_preference()
+
     # ──────────────────────────────────────────────────────────────────────
     # TẦNG 0: Local SQLite (SimpMusic DB — rich syllable)
+    # ONLY load from SimpMusic DB if pref is 'auto' or 'simpmusic'.
+    # If user selected another provider (e.g. youlyplus, betterlyrics, spotify), bypass DB!
     # ──────────────────────────────────────────────────────────────────────
-    db_lyrics = get_lyrics_from_local_db(title, artist, video_id)
-    if _has_real_syllables(db_lyrics):
-        _tag_source(db_lyrics, "SimpMusic")
-        return db_lyrics
+    if pref in ("auto", "simpmusic"):
+        db_lyrics = get_lyrics_from_local_db(title, artist, video_id)
+        if _has_real_syllables(db_lyrics):
+            _tag_source(db_lyrics, "SimpMusic")
+            return db_lyrics
 
     # ──────────────────────────────────────────────────────────────────────
     # TẦNG 1: Local .lrc file next to audio
@@ -995,6 +1002,29 @@ def _get_lyrics_raw(title, artist=None, video_id=None, file_path=None, duration_
                     cached_source = m_src.group(1).strip() if m_src else ""
                     res = parse_lrc(content)
                     if res:
+                        # If user explicitly preferred a specific source, don't serve a mismatched cache!
+                        if pref != "auto":
+                            c_lower = cached_source.lower()
+                            is_matching = False
+                            if pref == "youlyplus" and ("youlyplus" in c_lower or "apple music" in c_lower):
+                                is_matching = True
+                            elif pref == "simpmusic" and "simpmusic" in c_lower:
+                                is_matching = True
+                            elif pref == "betterlyrics" and ("betterlyrics" in c_lower or "apple music" in c_lower):
+                                is_matching = True
+                            elif pref == "spotify" and "spotify" in c_lower:
+                                is_matching = True
+                            elif pref == "lrclib" and "lrclib" in c_lower:
+                                is_matching = True
+                            elif pref == "kugou" and "kugou" in c_lower:
+                                is_matching = True
+                            elif pref == "netease" and "netease" in c_lower:
+                                is_matching = True
+                            elif pref == "youtube" and "youtube" in c_lower:
+                                is_matching = True
+                            if not is_matching:
+                                continue
+
                         if not cached_source:
                             cached_source = "Spotify" if (get_spotify_spdc() and _has_real_syllables(res)) else ("Apple Music" if _has_real_syllables(res) else "LRCLIB")
                         _tag_source(res, cached_source)
@@ -1111,6 +1141,11 @@ def _get_lyrics_raw(title, artist=None, video_id=None, file_path=None, duration_
     # ──────────────────────────────────────────────────────────────────────
     # PARALLEL RESOLUTION WITH PREFERRED PROVIDER BIAS
     # ──────────────────────────────────────────────────────────────────────
+    if pref == "youlyplus":
+        yl = _run_youlyplus()
+        if yl:
+            return yl
+
     try:
         try:
             from .multi_lyrics_resolver import resolve_lyrics_parallel
@@ -1126,7 +1161,8 @@ def _get_lyrics_raw(title, artist=None, video_id=None, file_path=None, duration_
         sys.stderr.write(f"[multi_lyrics_resolver error]: {pe}\n")
 
     # Fallback sequential if parallel encountered unexpected error
-    for fn in [_run_simpmusic, _run_spotify, _run_betterlyrics, _run_lrclib, _run_netease]:
+    fallback_fns = [_run_youlyplus, _run_betterlyrics, _run_simpmusic, _run_spotify, _run_lrclib, _run_netease]
+    for fn in fallback_fns:
         res = fn()
         if res:
             return res
@@ -1289,7 +1325,7 @@ def _save_ttml_as_lrc_cache(lines, title, artist, source="Apple Music"):
             prefix = f"{agent_tag}{bg_tag}"
             if ln.get("words"):
                 word_tags = "".join(
-                    f"<{int(w['start']//60):02d}:{w['start']%60:05.2f}>{w['text']} "
+                    f"<{int(w['start']//60):02d}:{w['start']%60:05.2f}>{w['text']}{' ' if w.get('hasSpace', True) else ''}"
                     for w in ln["words"]
                 ).rstrip()
                 out.append(f"[{mm:02d}:{ss:05.2f}]{prefix}{word_tags}")
@@ -1315,7 +1351,7 @@ def _save_lrc_cache_from_lines(lines, title, artist, source=""):
             prefix = f"{agent_tag}{bg_tag}"
             if ln.get("words"):
                 word_tags = "".join(
-                    f"<{int(w['start']//60):02d}:{w['start']%60:05.2f}>{w['text']} "
+                    f"<{int(w['start']//60):02d}:{w['start']%60:05.2f}>{w['text']}{' ' if w.get('hasSpace', True) else ''}"
                     for w in ln["words"]
                 ).rstrip()
                 out.append(f"[{mm:02d}:{ss:05.2f}]{prefix}{word_tags}")

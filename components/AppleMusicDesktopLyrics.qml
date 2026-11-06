@@ -253,8 +253,9 @@ Item {
                 }
             }
 
-            readonly property bool isAnsweringVoice: !!(modelData && modelData.agent && modelData.agent !== "v1")
             readonly property bool isBackgroundVocal: !!(modelData && modelData.isBackground)
+            readonly property bool isEnsembleVoice: !!(modelData && (modelData.agent === "v1000" || modelData.isBackground))
+            readonly property bool isAnsweringVoice: !!(modelData && !isEnsembleVoice && modelData.agent && modelData.agent !== "v1")
 
             // ── 1. Syllable Engine (AppleMusicWordFlow) ────────────────────────
             // Loads ONLY for genuine syllable lines (hasWords) around active line.
@@ -271,6 +272,7 @@ Item {
                         currentTime: root.currentTime
                         isLineActive: lyricRow.isCurrent
                         isAnsweringVoice: lyricRow.isAnsweringVoice
+                        isEnsembleVoice: lyricRow.isEnsembleVoice
                         fontSize: 28
                         fontFamily: Theme.fontFamily
                         fontWeight: Font.Bold
@@ -297,7 +299,7 @@ Item {
                 color: lyricRow.isCurrent ? "#ffffff" : root.colPendingText
                 elide: Text.ElideRight
                 width: parent.width
-                horizontalAlignment: lyricRow.isAnsweringVoice ? Text.AlignRight : Text.AlignLeft
+                horizontalAlignment: lyricRow.isAnsweringVoice ? Text.AlignRight : (lyricRow.isEnsembleVoice ? Text.AlignHCenter : Text.AlignLeft)
                 style: Text.Outline
                 styleColor: root.colShadowAmb
 
@@ -321,7 +323,7 @@ Item {
                 font.italic: true
                 color: lyricRow.isCurrent ? Qt.rgba(255, 255, 255, 0.85) : root.colPendingText
                 elide: Text.ElideRight
-                horizontalAlignment: lyricRow.isAnsweringVoice ? Text.AlignRight : Text.AlignLeft
+                horizontalAlignment: lyricRow.isAnsweringVoice ? Text.AlignRight : (lyricRow.isEnsembleVoice ? Text.AlignHCenter : Text.AlignLeft)
                 style: Text.Outline
                 styleColor: root.colShadowAmb
 

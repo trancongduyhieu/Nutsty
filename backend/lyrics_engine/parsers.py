@@ -21,7 +21,10 @@ def clean_vocal_markers(text: str) -> str:
 def strip_rich_sync_tags(text: str) -> str:
     if not text:
         return ""
-    t = re.sub(r'<[0-9:.]+>', ' ', text)
+    # Removing tags directly preserves spaces between words without creating artificial spaces between syllables:
+    # e.g. <00:27.124>real<00:27.522>i<00:28.572>zed -> realized
+    # e.g. <00:01.00>Hello <00:02.00>world -> Hello world
+    t = re.sub(r'<[0-9:.]+>', '', text)
     t = html.unescape(t)
     t = re.sub(r'\s+', ' ', t).strip()
     return clean_vocal_markers(t)
@@ -31,7 +34,7 @@ def parse_rich_sync_words(line_str: str, default_start: float = 0.0) -> List[Dic
     """Parse <mm:ss.xx> word timestamps embedded in a LRC line."""
     if not line_str or "<" not in line_str or ">" not in line_str:
         return []
-    pattern = re.compile(r'<(\d{1,2}):(\d{1,2}(?:\.\d+)?)>\s*([^<]*)')
+    pattern = re.compile(r'<(\d{1,2}):(\d{1,2}(?:\.\d+)?)>([^<]*)')
     matches = list(pattern.finditer(line_str))
     if not matches:
         return []
@@ -39,7 +42,9 @@ def parse_rich_sync_words(line_str: str, default_start: float = 0.0) -> List[Dic
     for i, m in enumerate(matches):
         mins, secs = int(m.group(1)), float(m.group(2))
         start_t = round(mins * 60.0 + secs, 3)
-        txt = clean_vocal_markers(html.unescape(m.group(3).strip()))
+        raw_val = m.group(3)
+        has_space = raw_val.endswith(" ") or raw_val.endswith("\t")
+        txt = clean_vocal_markers(html.unescape(raw_val.strip()))
         if not txt:
             continue
         if i + 1 < len(matches):
@@ -53,6 +58,7 @@ def parse_rich_sync_words(line_str: str, default_start: float = 0.0) -> List[Dic
             "start": start_t,
             "end": end_t,
             "duration": dur,
+            "hasSpace": has_space,
             "isHeld": dur >= 0.85,
         })
     return words
@@ -162,7 +168,9 @@ def parse_ttml_body(ttml_text: str) -> List[Dict[str, Any]]:
         for sm in spans:
             wb = parse_ttml_time(sm.group(1))
             we = parse_ttml_time(sm.group(2))
-            raw_wtxt = clean_vocal_markers(html.unescape(sm.group(3)).strip())
+            raw_span = sm.group(3)
+            has_space = raw_span.endswith(" ") or raw_span.endswith("\t")
+            raw_wtxt = clean_vocal_markers(html.unescape(raw_span).strip())
             if not raw_wtxt:
                 continue
             dur = max(0.08, round(we - wb, 3))
@@ -171,6 +179,7 @@ def parse_ttml_body(ttml_text: str) -> List[Dict[str, Any]]:
                 "start": round(wb, 3),
                 "end": round(we, 3),
                 "duration": dur,
+                "hasSpace": has_space,
                 "isHeld": dur >= 0.85,
             })
 

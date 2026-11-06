@@ -1856,13 +1856,13 @@ Item {
                         highlightRangeMode: ListView.NoHighlightRange
                         model: root.activeLyrics
 
-                        // AMLL-style smooth scroll: BezierSpline on contentY (snappy 340ms)
+                        // 1:1 Mochy-Music smooth recenter scroll: 950ms with LyricsSmoothRecenterEasing [0.42, 0, 0.16, 1]
                         Behavior on contentY {
                             enabled: !lyricsView.moving && !lyricsView.dragging && !lyricsView.flicking
                             NumberAnimation {
-                                duration: 340
+                                duration: 950
                                 easing.type: Easing.BezierSpline
-                                easing.bezierCurve: [0.4, 0.0, 0.2, 1.0, 1.0, 1.0]
+                                easing.bezierCurve: [0.42, 0.0, 0.16, 1.0, 1.0, 1.0]
                             }
                         }
 
@@ -1892,17 +1892,33 @@ Item {
 
                             readonly property bool isPlainLine: !modelData.hasWords || modelData.isSynthetic || !modelData.words || modelData.words.length === 0
                             readonly property real targetBlur: (isCurrent || lyricsView.isUserScrolling || isHovered) ? 0.0 : (dist === 1 ? 0.20 : (dist === 2 ? 0.42 : (dist === 3 ? 0.65 : 0.85)))
-                            readonly property real targetOpacity: isCurrent ? 1.0 : (lyricsView.isUserScrolling ? 0.85 : (isHovered ? 0.90 : (dist === 1 ? 0.46 : (dist === 2 ? 0.22 : (dist === 3 ? 0.10 : 0.04)))))
-                            readonly property int targetFontSize: isPlainLine ? 28 : (isCurrent ? 28 : (dist === 1 ? 24 : (dist === 2 ? 20 : (dist === 3 ? 17 : 15))))
 
-                            opacity: targetOpacity
-                            transformOrigin: Item.Left
-                            scale: isPlainLine ? 1.0 : (isCurrent ? 1.0 : 0.985)
+                            // 1:1 Mochy-Music state scale & alpha transitions (LyricsGlowLine.kt)
+                            // Strictly NO dynamic font resizing (Footgun #217: causes layout reflows and stutter)
+                            readonly property real restingAlpha: isCurrent ? 1.0 : (lyricsView.isUserScrolling ? 0.85 : (isHovered ? 0.90 : (signedDist < 0 ? 0.24 : (dist === 1 ? 0.45 : 0.38))))
+                            readonly property real restingScale: isPlainLine ? 1.0 : (isCurrent ? 1.06 : (signedDist < 0 ? 0.93 : (dist === 1 ? 0.98 : 0.95)))
+
+                            // Duet vocal layout & agent classification (1:1 Mochy-Music & Apple Music)
+                            readonly property bool isBackgroundVocal: !!(modelData && modelData.isBackground)
+                            readonly property bool isEnsembleVoice: !!(modelData && (modelData.agent === "v1000" || modelData.isBackground))
+                            readonly property bool isAnsweringVoice: !!(modelData && !isEnsembleVoice && modelData.agent && modelData.agent !== "v1")
+
+                            opacity: restingAlpha
+                            transformOrigin: lyricRow.isAnsweringVoice ? Item.Right : (lyricRow.isEnsembleVoice ? Item.Center : Item.Left)
+                            scale: restingScale
                             Behavior on scale {
-                                NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+                                NumberAnimation {
+                                    duration: 950
+                                    easing.type: Easing.BezierSpline
+                                    easing.bezierCurve: [0.42, 0.0, 0.16, 1.0, 1.0, 1.0]
+                                }
                             }
                             Behavior on opacity {
-                                NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+                                NumberAnimation {
+                                    duration: 850
+                                    easing.type: Easing.BezierSpline
+                                    easing.bezierCurve: [0.42, 0.0, 0.16, 1.0, 1.0, 1.0]
+                                }
                             }
 
                             // High-performance depth-of-field: pure typography opacity and scale falloff (0 FBO overhead, zero thermal load)
@@ -1928,7 +1944,9 @@ Item {
                                         id: interludeBeadsRow
                                         visible: !!(modelData && modelData.isInterlude)
                                         spacing: 16
-                                        anchors.left: parent.left
+                                        anchors.left: (!lyricRow.isAnsweringVoice && !lyricRow.isEnsembleVoice) ? parent.left : undefined
+                                        anchors.right: lyricRow.isAnsweringVoice ? parent.right : undefined
+                                        anchors.horizontalCenter: lyricRow.isEnsembleVoice ? parent.horizontalCenter : undefined
                                         anchors.verticalCenter: parent.verticalCenter
                                         height: 28
 
@@ -2008,6 +2026,8 @@ Item {
                                                 currentTime: root.currentTime
                                                 fontSize: 28
                                                 accentColor: "#ffffff"
+                                                isAnsweringVoice: lyricRow.isAnsweringVoice
+                                                isEnsembleVoice: lyricRow.isEnsembleVoice
                                             }
                                         }
                                     }
@@ -2016,22 +2036,23 @@ Item {
                                     Text {
                                         id: staticLineTxt
                                         visible: !interludeBeadsRow.visible && !appleMusicFlowLoader.visible
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
+                                        anchors.left: (!lyricRow.isAnsweringVoice && !lyricRow.isEnsembleVoice) ? parent.left : undefined
+                                        anchors.right: lyricRow.isAnsweringVoice ? parent.right : undefined
+                                        anchors.horizontalCenter: lyricRow.isEnsembleVoice ? parent.horizontalCenter : undefined
+                                        width: Math.min(parent.width * 0.82, implicitWidth)
+                                        horizontalAlignment: lyricRow.isAnsweringVoice ? Text.AlignRight : (lyricRow.isEnsembleVoice ? Text.AlignHCenter : Text.AlignLeft)
                                         textFormat: Text.PlainText
                                         text: modelData.text || ""
                                         font.family: Theme.fontFamily
-                                        font.pixelSize: lyricRow.targetFontSize
+                                        font.pixelSize: 28
                                         font.weight: Font.Bold
+                                        font.italic: lyricRow.isBackgroundVocal
                                         color: lyricRow.isCurrent ? "#ffffff" : "#c4c8d4"
                                         wrapMode: Text.Wrap
                                         lineHeight: 1.28
 
                                         Behavior on color {
                                             ColorAnimation { duration: 180 }
-                                        }
-                                        Behavior on font.pixelSize {
-                                            NumberAnimation { duration: 180; easing.type: Easing.OutQuad }
                                         }
                                     }
                                 }
@@ -2040,11 +2061,15 @@ Item {
                                 Text {
                                     id: romanizedLineTxt
                                     visible: !modelData.isInterlude && root.lyricsRomanizationEnabled && !!(modelData && modelData.romanized && modelData.romanized.trim() !== "")
-                                    width: parent.width
+                                    anchors.left: (!lyricRow.isAnsweringVoice && !lyricRow.isEnsembleVoice) ? parent.left : undefined
+                                    anchors.right: lyricRow.isAnsweringVoice ? parent.right : undefined
+                                    anchors.horizontalCenter: lyricRow.isEnsembleVoice ? parent.horizontalCenter : undefined
+                                    width: Math.min(parent.width * 0.82, implicitWidth)
+                                    horizontalAlignment: lyricRow.isAnsweringVoice ? Text.AlignRight : (lyricRow.isEnsembleVoice ? Text.AlignHCenter : Text.AlignLeft)
                                     textFormat: Text.PlainText
                                     text: (modelData && modelData.romanized) ? modelData.romanized : ""
                                     font.family: Theme.fontFamily
-                                    font.pixelSize: Math.max(13, Math.round(lyricRow.targetFontSize * 0.54))
+                                    font.pixelSize: 15
                                     font.weight: Font.DemiBold
                                     font.italic: true
                                     color: lyricRow.isCurrent ? Qt.rgba(255, 255, 255, 0.82) : Qt.rgba(196, 200, 212, 0.50)
@@ -2053,9 +2078,6 @@ Item {
 
                                     Behavior on color {
                                         ColorAnimation { duration: 180 }
-                                    }
-                                    Behavior on font.pixelSize {
-                                        NumberAnimation { duration: 180; easing.type: Easing.OutQuad }
                                     }
                                 }
                             }
