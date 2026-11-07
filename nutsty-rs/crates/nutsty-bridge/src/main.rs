@@ -47,6 +47,8 @@ struct PlayerStatusOutput {
     volume: f64,
     is_loading: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    target_vid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     audio_specs: Option<AudioSpecs>,
 }
 
@@ -62,6 +64,7 @@ impl Default for PlayerStatusOutput {
             media_title: String::new(),
             volume: 100.0,
             is_loading: false,
+            target_vid: None,
             audio_specs: None,
         }
     }
@@ -454,6 +457,7 @@ fn handle_status() {
         media_title: if has_file { media_title } else { String::new() },
         volume,
         is_loading,
+        target_vid: state_file.as_ref().and_then(|s| if s.target_vid.is_empty() { None } else { Some(s.target_vid.clone()) }),
         audio_specs,
     };
 

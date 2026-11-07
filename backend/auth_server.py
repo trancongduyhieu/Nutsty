@@ -194,7 +194,10 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
 
         if path == "/api/player/status":
             try:
-                from . import player_daemon
+                try:
+                    from . import player_daemon
+                except (ImportError, ValueError):
+                    import player_daemon
                 self._send_raw_json(player_daemon.get_status_json(), 200)
             except Exception as e:
                 self._send_json({"error": str(e)}, 500)

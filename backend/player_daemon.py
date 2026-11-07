@@ -72,6 +72,11 @@ def is_play_epoch_active(my_epoch):
     if my_epoch <= 0:
         return True
     active = get_active_play_epoch()
+    if active <= 0:
+        return True
+    # Prevent dropping play request if active was millisecond timestamp while my_epoch was counter
+    if active > 1e11 and my_epoch < 1e9:
+        return True
     return my_epoch >= active
 
 YTDL_FORMAT_MAP = {
@@ -529,10 +534,10 @@ def get_status_dict():
             with open(PLAYBACK_STATE_FILE, "r", encoding="utf-8") as f:
                 st = json.load(f)
                 loading_ts = st.get("timestamp", 0)
+                target_vid = st.get("target_vid", "")
+                target_path = st.get("path", "")
                 if st.get("state") == "loading" and (time.time() - loading_ts) < 8.0:
                     is_loading = True
-                    target_vid = st.get("target_vid", "")
-                    target_path = st.get("path", "")
         except Exception:
             pass
 
@@ -547,8 +552,8 @@ def get_status_dict():
     vol = batch.get("volume") if batch.get("volume") is not None else 100
     idle = batch.get("idle-active")
 
-    # Detect failed playback / 403 / demux error: MPV is idle and loading was requested > 2.5s ago
-    if is_loading and idle and (time.time() - loading_ts) > 2.5:
+    # Detect failed playback / 403 / demux error: MPV is idle and loading was requested > 6.0s ago
+    if is_loading and idle and (time.time() - loading_ts) > 6.0:
         is_loading = False
         if target_vid:
             try:
@@ -563,8 +568,11 @@ def get_status_dict():
             pass
 
     global _CURRENT_PLAYING_VID, _CURRENT_PLAYING_PATH
+    is_direct_stream = bool(path.startswith("http://") or path.startswith("https://") or "googlevideo.com" in path or filename.startswith("videoplayback"))
     is_target_active = True
-    if target_vid:
+    if is_direct_stream or (time_pos > 0.1 and not idle):
+        is_target_active = True
+    elif target_vid:
         is_target_active = bool((_CURRENT_PLAYING_VID and _CURRENT_PLAYING_VID == target_vid) or (target_vid in path) or (target_vid in filename))
     elif target_path:
         is_target_active = bool((_CURRENT_PLAYING_PATH and _CURRENT_PLAYING_PATH == target_path) or (path == target_path) or (filename and target_path.endswith(filename)))
@@ -591,6 +599,8 @@ def get_status_dict():
         "time_pos": round(time_pos, 1) if (has_file and is_target_active) else 0.0,
         "duration": round(duration, 1) if (has_file and is_target_active) else 0.0,
         "filename": (filename or path) if (has_file and is_target_active) else "",
+        "path": path if (has_file and is_target_active) else "",
+        "target_vid": target_vid,
         "volume": vol,
         "is_loading": is_loading
     }
@@ -652,6 +662,9 @@ def execute_command(args):
         my_req_id = epoch_arg
 
         file_path = args[1]
+        if not file_path or file_path in ("undefined", "null", "None"):
+            sys.stderr.write(f"[player_daemon] Aborted invalid file_path: {file_path}\n")
+            return
         title_arg = args[2] if len(args) > 2 else ""
         artist_arg = args[3] if len(args) > 3 else ""
         art_arg = args[4] if len(args) > 4 else ""

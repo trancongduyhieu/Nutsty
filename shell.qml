@@ -152,6 +152,10 @@ Scope {
     property real pendingListenAlongSeekPosition: 0.0
     property real lastTrackSwitchTimestamp: 0.0
     property int playEpoch: 0
+    property string reconciledTrackId: ""
+    property real lastSeekTimestamp: 0.0
+    property bool isPendingTrackSwitch: false
+    property var seekDebounceTimer: seekDebounceTimer
     property var rapidNavDebounceTimer: rapidNavDebounceTimer
     property string toastMessage: ""
     property bool toastVisible: false
@@ -4186,6 +4190,16 @@ Scope {
     }
 
     Timer {
+        id: seekDebounceTimer
+        interval: 50
+        repeat: false
+        property real targetSec: 0.0
+        onTriggered: {
+            Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "seek", String(targetSec)]);
+        }
+    }
+
+    Timer {
         id: rapidNavDebounceTimer
         interval: 160
         repeat: false
@@ -4193,7 +4207,7 @@ Scope {
         onTriggered: {
             var trk = pendingTrack || win.currentTrack;
             if (trk) {
-                if ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId) {
+                if (PlaybackEngine.isTrackOnline(trk)) {
                     PlaybackEngine.playOnlineTrack(win, trk, false, radioProc, prewarmTimer, pollTimer);
                 } else {
                     PlaybackEngine.playTrack(win, trk, pollTimer);
