@@ -684,7 +684,7 @@ function deleteLocalTrack(win, trk) {
 
     if (!p.startsWith("ytdl://") && (p || fn || title)) {
         Quickshell.execDetached([
-            "python3", win.appDir + "/backend/library.py", "delete",
+            win.appDir + "/bin/nutsty-library", "delete",
             p, fn, title
         ]);
     }
@@ -715,7 +715,7 @@ function batchDeleteTracks(win, paths) {
     }
 
     Quickshell.execDetached([
-        "python3", win.appDir + "/backend/library.py", "batch_delete",
+        win.appDir + "/bin/nutsty-library", "batch_delete",
         JSON.stringify(paths)
     ]);
 }

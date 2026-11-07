@@ -10,6 +10,15 @@ use smol_str::SmolStr;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
+pub mod db;
+pub mod model;
+pub mod ops;
+pub mod scanner;
+
+pub use db::SimpDb;
+pub use model::{AlbumGroup, BatchDeleteResult, DeleteResult, TrackItem};
+pub use ops::{add_track, batch_delete_tracks, delete_track, get_grouped_albums};
+pub use scanner::{save_library_json, scan_all_tracks};
 use std::path::Path;
 use thiserror::Error;
 use walkdir::WalkDir;

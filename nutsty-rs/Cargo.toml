@@ -6,6 +6,7 @@ members = [
     "crates/nutsty-library",
     "crates/nutsty-ui",
     "crates/nutsty-bridge",
+    "crates/nutsty-daemon",
 ]
 resolver = "3"
 
@@ -28,8 +29,13 @@ crossbeam-channel = "0.5"
 lofty = "0.25"
 walkdir = "2"
 dirs = "6"
+rayon = "1.12"
+md-5 = "0.10"
+hex = "0.4"
+rusqlite = { version = "0.32", features = ["bundled"] }
 gpui = { package = "gpui-ce", version = "0.3" }
 gpui_platform = { package = "gpui_ce_platform", version = "0.3" }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 
 [profile.release]
 opt-level = 3

@@ -293,12 +293,11 @@ Scope {
                         }
                     } catch(e) {}
                 }
-                // Fallback to CLI process if auth_server is not reachable
+                // Fallback to native Rust CLI process if auth_server is not reachable
                 if (!songPaletteProc.running) {
                     songPaletteProc.command = [
-                        "python3", "-u",
-                        win.appDir + "/backend/palette_extractor.py",
-                        "song_palette",
+                        win.appDir + "/bin/nutsty-bridge",
+                        "palette",
                         imgUrl
                     ];
                     songPaletteProc.running = true;
@@ -608,7 +607,7 @@ Scope {
 
     Process {
         id: authServerProc
-        command: ["python3", "-u", win.appDir + "/backend/auth_server.py"]
+        command: [win.appDir + "/bin/nutsty-daemon"]
         running: (typeof __NutstyBridge === "undefined")
         onExited: (exitCode, exitStatus) => {
             if (exitCode !== 0 && typeof __NutstyBridge === "undefined") {
@@ -1481,7 +1480,7 @@ Scope {
 
     function refreshLocalAlbums() {
         localAlbumsProc.running = false;
-        localAlbumsProc.command = ["python3", "-u", win.appDir + "/backend/library.py", "albums"];
+        localAlbumsProc.command = [win.appDir + "/bin/nutsty-library", "albums"];
         localAlbumsProc.running = true;
     }
 

@@ -13,6 +13,8 @@ use std::time::Duration;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
 
+mod palette;
+
 #[derive(Debug, Serialize, Deserialize)]
 struct PlaybackState {
     #[serde(default)]
@@ -546,6 +548,11 @@ fn main() {
                 };
                 println!("{}", serde_json::to_string(&default_specs).unwrap());
             }
+        }
+        "palette" | "song_palette" => {
+            let src = args.get(2).map(|s| s.as_str()).unwrap_or("");
+            let pal = palette::extract_song_palette(src);
+            println!("{}", serde_json::to_string(&pal).unwrap());
         }
         _ => {
             handle_status();

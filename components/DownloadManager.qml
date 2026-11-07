@@ -153,9 +153,9 @@ Item {
             });
         }
 
-        // 2. Call backend library.py to delete file, .lrc and update library.json
+        // 2. Call nutsty-library to delete file, .lrc and update library.json
         Quickshell.execDetached([
-            "python3", win.appDir + "/backend/library.py", "delete",
+            win.appDir + "/bin/nutsty-library", "delete",
             filePath, "", songTitle
         ]);
 

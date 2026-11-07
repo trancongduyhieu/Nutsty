@@ -101,6 +101,11 @@ if not defined QSG_RHI_BACKEND (
     reg query "HKLM\HARDWARE\DESCRIPTION\System\BIOS" 2>nul | findstr /i /c:"innotek" /c:"VirtualBox" /c:"Oracle" >nul 2>nul
     if %errorlevel% equ 0 set "QSG_RHI_BACKEND=opengl"
 )
+:: Ensure ultra-lightweight Rust tray indicator on Windows
+if exist "bin\nutsty-tray.exe" (
+    start "" /b "bin\nutsty-tray.exe"
+)
+
 echo [3/3] Starting Nutsty...
 python launcher_win.py %*
 goto end
