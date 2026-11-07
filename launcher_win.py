@@ -426,345 +426,24 @@ def grab_screenshot(save_path: str = "") -> str:
     return ""
 
 
-class TaskbarLyricsService:
-    """Manages TaskbarLyrics.exe companion process and WebSocket bridge."""
-    _instance = None
-
-    def __init__(self, app_root):
-        TaskbarLyricsService._instance = self
-        self.app_root = app_root
-        candidates = [
-            os.path.join(app_root, "bin"),
-            os.path.join(app_root, "_internal", "bin"),
-            os.path.join(os.path.dirname(sys.executable), "bin"),
-            os.path.join(os.path.dirname(sys.executable), "_internal", "bin"),
-            os.path.join(getattr(sys, "_MEIPASS", ""), "bin") if hasattr(sys, "_MEIPASS") else ""
-        ]
-        self.bin_dir = next((p for p in candidates if p and os.path.exists(os.path.join(p, "TaskbarLyrics.exe"))), os.path.join(app_root, "bin"))
-        self.exe_path = os.path.join(self.bin_dir, "TaskbarLyrics.exe")
-        self.config_path = os.path.join(self.bin_dir, "config.json")
-        self.proc = None
-        self.started_by_us = False
-        self._playback_state = {}
-        self._active_lyrics = []
-        self._ws = None
-        self._loop = None
-        self._ws_thread = None
-        self._stop_event = threading.Event()
-        self._lock = threading.RLock()
-        self._last_lyrics_key = None
-        self._send_lock = None
-
-    def start(self):
-        if not pc.IS_WINDOWS or not os.path.exists(self.exe_path):
-            return
-        self.ensure_process()
-        if not self._ws_thread or not self._ws_thread.is_alive():
-            self._stop_event.clear()
-            self._ws_thread = threading.Thread(target=self._ws_loop_runner, daemon=True)
-            self._ws_thread.start()
-
-    def stop(self):
-        self._stop_event.set()
-        if self.proc and self.started_by_us:
-            try:
-                self.proc.terminate()
-            except Exception:
-                pass
-            self.proc = None
-
-    @staticmethod
-    def _is_port_open(port=9012):
-        import socket
+def trim_working_set():
+    """Flushes unreferenced virtual pages from physical RAM working set.
+    Prevents Windows NT memory manager from hoarding idle initialization buffers,
+    PyInstaller runtime caches, and stale texture memory.
+    """
+    if pc.IS_WINDOWS:
         try:
-            # "localhost" resolves to every loopback address (IPv4 and IPv6), matching the companion bridge binding
-            with socket.create_connection(("localhost", port), timeout=0.5):
-                return True
-        except (OSError, ConnectionRefusedError):
-            return False
-
-    def ensure_process(self):
-        try:
-            if self._is_port_open(9012):
-                return
-            # Never kill or respawn a companion that this app started and that is still alive:
-            # the .NET process needs time to open its port, and the reconnect loop calls this every 2s.
-            if self.proc is not None and self.proc.poll() is None:
-                return
-            now = time.time()
-            if now - getattr(self, "_last_spawn_ts", 0.0) < 30.0:
-                return
-            self._last_spawn_ts = now
-            check = subprocess.run(["tasklist", "/FI", "IMAGENAME eq TaskbarLyrics.exe"], capture_output=True, text=True, timeout=3)
-            if "TaskbarLyrics.exe" in check.stdout:
-                subprocess.run(["taskkill", "/F", "/IM", "TaskbarLyrics.exe"], capture_output=True, timeout=3)
-                time.sleep(0.3)
-            if os.path.exists(self.exe_path):
-                self.proc = subprocess.Popen([self.exe_path], cwd=self.bin_dir, **pc.get_daemon_popen_kwargs())
-                self.started_by_us = True
-        except Exception as e:
-            sys.stderr.write(f"TaskbarLyrics ensure_process error: {e}\n")
-
-    def update_config(self, **kwargs):
-        try:
-            cfg = {}
-            if os.path.exists(self.config_path):
-                try:
-                    with open(self.config_path, "r", encoding="utf-8") as f:
-                        cfg = json.load(f)
-                except Exception:
-                    cfg = {}
-            for k, v in kwargs.items():
-                cfg[k] = v
-            try:
-                tmp_path = self.config_path + ".tmp"
-                with open(tmp_path, "w", encoding="utf-8") as f:
-                    json.dump(cfg, f, indent=2)
-                os.replace(tmp_path, self.config_path)
-            except Exception:
-                # Direct in-place overwrite if atomic replace is denied on Windows
-                with open(self.config_path, "w", encoding="utf-8") as f:
-                    json.dump(cfg, f, indent=2)
-        except Exception as e:
-            sys.stderr.write(f"TaskbarLyrics update_config error: {e}\n")
-
-        if self._ws and self._loop and self._loop.is_running():
-            msg = {"type": "set_config"}
-            if "LyricsEnabled" in kwargs:
-                msg["enabled"] = bool(kwargs["LyricsEnabled"])
-            if "Placement" in kwargs:
-                msg["placement"] = str(kwargs["Placement"])
-            if "Align" in kwargs:
-                msg["align"] = str(kwargs["Align"])
-            asyncio.run_coroutine_threadsafe(self._send_raw(msg), self._loop)
-
-    def _is_ws_open(self):
-        ws = self._ws
-        if ws is None:
-            return False
-        if hasattr(ws, "state"):
-            try:
-                return getattr(ws.state, "name", "") == "OPEN" or int(ws.state) == 1
-            except Exception:
-                pass
-        if hasattr(ws, "closed"):
-            return not ws.closed
-        return True
-
-    async def _safe_send(self, msg):
-        try:
-            if self._is_ws_open():
-                if self._send_lock is None:
-                    self._send_lock = asyncio.Lock()
-                async with self._send_lock:
-                    await self._ws.send(json.dumps(msg))
-        except Exception as e:
-            sys.stderr.write(f"TaskbarLyrics _safe_send error: {e}\n")
-
-    async def _send_raw(self, msg):
-        await self._safe_send(msg)
-
-    def update_playback(self, playing: bool, position: float, duration: float, track, lyrics=None):
-        with self._lock:
-            if hasattr(track, "toVariant"):
-                track = track.toVariant()
-            if not isinstance(track, dict):
-                track = {}
-            
-            title = str(track.get("title") or "")
-            artist = str(track.get("artist") or "")
-            album = str(track.get("album") or "")
-            cover = str(track.get("thumbnail") or track.get("cover") or "")
-            track_id = str(track.get("id") or track.get("videoId") or f"{title}|{artist}")
-
-            self._playback_state = {
-                "type": "sp_state",
-                "playing": bool(playing),
-                "positionMs": float(position or 0) * 1000.0,
-                "durationMs": float(duration or 0) * 1000.0,
-                "trackId": f"sp:{track_id}" if track_id else "sp:idle",
-                "title": title,
-                "artist": artist,
-                "album": album,
-                "cover": cover
-            }
-            if lyrics is not None:
-                if hasattr(lyrics, "isNull") and lyrics.isNull():
-                    lyrics = None
-                elif hasattr(lyrics, "isUndefined") and lyrics.isUndefined():
-                    lyrics = None
-                elif hasattr(lyrics, "toVariant"):
-                    lyrics = lyrics.toVariant()
-                if isinstance(lyrics, list):
-                    self._active_lyrics = lyrics
-
-        if self._ws and self._loop and self._loop.is_running():
-            asyncio.run_coroutine_threadsafe(self._push_state(), self._loop)
-
-    def update_lyrics(self, lyrics):
-        with self._lock:
-            if hasattr(lyrics, "isNull") and lyrics.isNull():
-                lyrics = None
-            elif hasattr(lyrics, "isUndefined") and lyrics.isUndefined():
-                lyrics = None
-            elif hasattr(lyrics, "toVariant"):
-                lyrics = lyrics.toVariant()
-            if isinstance(lyrics, list):
-                self._active_lyrics = lyrics
-        if self._ws and self._loop and self._loop.is_running():
-            asyncio.run_coroutine_threadsafe(self._push_state(), self._loop)
-
-    async def _push_state(self):
-        try:
-            if not self._is_ws_open():
-                return
-            with self._lock:
-                st = dict(self._playback_state)
-                raw_lyrics = list(self._active_lyrics)
-                track_id = st.get("trackId") if st else None
-                raw_len = len(raw_lyrics)
-                first_t = raw_lyrics[0].get("time") if raw_len > 0 and isinstance(raw_lyrics[0], dict) else 0
-                last_t = raw_lyrics[-1].get("time") if raw_len > 0 and isinstance(raw_lyrics[-1], dict) else 0
-                lyrics_key = (track_id, raw_len, first_t, last_t)
-
-            fmt = self._format_lyrics(raw_lyrics) if raw_lyrics else None
-
-            if st:
-                await self._safe_send(st)
-            if fmt and (lyrics_key != self._last_lyrics_key):
-                self._last_lyrics_key = lyrics_key
-                await self._safe_send({"type": "push_lyrics", "lyrics": fmt})
-        except Exception as e:
-            sys.stderr.write(f"TaskbarLyrics _push_state error: {e}\n")
-
-    def _format_lyrics(self, raw_lyrics=None):
-        if raw_lyrics is None:
-            with self._lock:
-                raw = list(self._active_lyrics)
-        else:
-            raw = list(raw_lyrics)
-
-        if not raw:
-            return None
-
-        has_syllables = any(isinstance(line, dict) and not line.get("isInterlude") and line.get("words") and len(line["words"]) > 0 for line in raw)
-        
-        first_start = 0.0
-        for line in raw:
-            if isinstance(line, dict) and "time" in line:
-                first_start = float(line.get("time") or 0.0)
-                break
-
-        if has_syllables:
-            content = []
-            for line in raw:
-                if not isinstance(line, dict): continue
-                l_start = float(line.get("time") or 0.0)
-                words = line.get("words") or []
-                sylls = []
-                for w in words:
-                    if not isinstance(w, dict): continue
-                    sylls.append({
-                        "Text": str(w.get("text") or ""),
-                        "StartTime": float(w.get("start") or l_start),
-                        "EndTime": float(w.get("end") or (l_start + 0.5)),
-                        "IsPartOfWord": False
-                    })
-                l_end = sylls[-1]["EndTime"] if sylls else (l_start + 3.0)
-                content.append({
-                    "Lead": {
-                        "StartTime": l_start,
-                        "EndTime": l_end,
-                        "Syllables": sylls
-                    }
-                })
-            return {
-                "Type": "Syllable",
-                "StartTime": first_start,
-                "Content": content
-            }
-        else:
-            content = []
-            for i, line in enumerate(raw):
-                if not isinstance(line, dict): continue
-                l_start = float(line.get("time") or 0.0)
-                next_start = float(raw[i+1].get("time")) if (i+1 < len(raw) and isinstance(raw[i+1], dict) and "time" in raw[i+1]) else (l_start + 4.0)
-                content.append({
-                    "Text": str(line.get("text") or ""),
-                    "StartTime": l_start,
-                    "EndTime": next_start
-                })
-            return {
-                "Type": "Line",
-                "StartTime": first_start,
-                "Content": content
-            }
-
-    def _ws_loop_runner(self):
-        asyncio.run(self._ws_client_main())
-
-    async def _ws_client_main(self):
-        import websockets
-        uri = "ws://localhost:9012/"
-        self._loop = asyncio.get_running_loop()
-
-        self._send_lock = asyncio.Lock()
-        while not self._stop_event.is_set():
-            try:
-                self.ensure_process()
-                async with websockets.connect(uri) as ws:
-                    self._ws = ws
-                    self._last_lyrics_key = None
-                    await self._push_state()
-
-                    async for msg in ws:
-                        if self._stop_event.is_set():
-                            break
-                        try:
-                            data = json.loads(msg)
-                            req_type = data.get("type")
-                            req_id = data.get("reqId")
-
-                            if req_type == "search":
-                                with self._lock:
-                                    t = dict(self._playback_state)
-                                resp = {
-                                    "type": "resp",
-                                    "reqId": req_id,
-                                    "ok": True,
-                                    "results": [
-                                        {
-                                            "id": t.get("trackId", "sp:current"),
-                                            "name": t.get("title", ""),
-                                            "durationMs": t.get("durationMs", 240000.0),
-                                            "artists": [t.get("artist", "")]
-                                        }
-                                    ]
-                                }
-                                await self._safe_send(resp)
-                            elif req_type == "lyrics":
-                                fmt_lyrics = self._format_lyrics()
-                                if fmt_lyrics:
-                                    resp = {
-                                        "type": "resp",
-                                        "reqId": req_id,
-                                        "ok": True,
-                                        "status": 200,
-                                        "lyrics": fmt_lyrics
-                                    }
-                                else:
-                                    resp = {
-                                        "type": "resp",
-                                        "reqId": req_id,
-                                        "ok": False,
-                                        "status": 404
-                                    }
-                                await self._safe_send(resp)
-                        except Exception as e:
-                            sys.stderr.write(f"TaskbarLyrics msg handler error: {e}\n")
-            except Exception as e:
-                self._ws = None
-                await asyncio.sleep(2.0)
+            import gc
+            gc.collect()
+            kernel32 = ctypes.windll.kernel32
+            psapi = ctypes.windll.psapi
+            pid = kernel32.GetCurrentProcessId()
+            h_proc = kernel32.OpenProcess(0x1F0FFF, False, pid)
+            if h_proc:
+                psapi.EmptyWorkingSet(h_proc)
+                kernel32.CloseHandle(h_proc)
+        except Exception:
+            pass
 
 
 class NutstyBridge(QObject):
@@ -776,33 +455,30 @@ class NutstyBridge(QObject):
     def openSettings(self, tab: int = 0):
         self.openSettingsRequested.emit(tab)
 
+    @Slot()
+    def trimMemory(self):
+        """Allows QML to request working set flush after large operations."""
+        trim_working_set()
+
     @Slot(bool)
     def notifyTaskbarLyricsState(self, enabled: bool):
-        self.taskbarLyricsToggled.emit(enabled)
-        if TaskbarLyricsService._instance:
-            TaskbarLyricsService._instance.update_config(LyricsEnabled=bool(enabled))
-            if enabled:
-                TaskbarLyricsService._instance.ensure_process()
+        pass
 
     @Slot(str)
     def setTaskbarLyricsPlacement(self, placement: str):
-        if TaskbarLyricsService._instance:
-            TaskbarLyricsService._instance.update_config(Placement=str(placement))
+        pass
 
     @Slot(str)
     def setTaskbarLyricsAlign(self, align: str):
-        if TaskbarLyricsService._instance:
-            TaskbarLyricsService._instance.update_config(Align=str(align))
+        pass
 
     @Slot(bool, float, float, "QJSValue", "QJSValue")
     def updateTaskbarPlayback(self, playing: bool, position: float, duration: float, track, lyrics):
-        if TaskbarLyricsService._instance:
-            TaskbarLyricsService._instance.update_playback(playing, position, duration, track, lyrics)
+        pass
 
     @Slot("QJSValue")
     def updateTaskbarLyrics(self, lyrics):
-        if TaskbarLyricsService._instance:
-            TaskbarLyricsService._instance.update_lyrics(lyrics)
+        pass
 
     @Slot(result=str)
     def getTaskbarGeometry(self) -> str:
@@ -1772,10 +1448,10 @@ def main():
     start_daemons()
     if pc.IS_WINDOWS:
         try:
-            taskbar_srv = TaskbarLyricsService(APP_ROOT)
-            taskbar_srv.start()
-        except Exception as e:
-            sys.stderr.write(f"TaskbarLyricsService start error: {e}\n")
+            from PySide6.QtGui import QPixmapCache
+            QPixmapCache.setCacheLimit(16384)
+        except Exception:
+            pass
 
     engine = QQmlApplicationEngine()
     engine_ref[0] = engine
@@ -1887,21 +1563,23 @@ def main():
                 win_obj.heightChanged.connect(_apply_rgn)
             if hasattr(win_obj, "visibilityChanged"):
                 win_obj.visibilityChanged.connect(_apply_rgn)
+                def _on_vis_trim():
+                    try:
+                        if int(win_obj.property("visibility")) in (0, 1):
+                            QTimer.singleShot(300, trim_working_set)
+                    except Exception:
+                        pass
+                win_obj.visibilityChanged.connect(_on_vis_trim)
         except Exception as e:
             sys.stderr.write(f"_setup_frameless_window error: {e}\n")
 
     def _init_win(w):
-        if getattr(w, "property", None) and bool(w.property("isTaskbarLyrics")):
-            bridge.setupTaskbarWindow(w)
-            if bool(w.property("visible")):
-                w.show()
-            return
-        elif _is_bottom_panel(w):
+        if _is_bottom_panel(w):
             if bool(w.property("visible")):
                 w.show()
                 bridge.pinWindowToDesktopBottom(w)
         else:
-            if main_win_ref[0] is None and w.width() >= 500 and not bool(w.property("isTaskbarLyrics")):
+            if main_win_ref[0] is None and w.width() >= 500:
                 main_win_ref[0] = w
             _setup_frameless_window(w, radius=24)
             w.show()
@@ -1919,6 +1597,13 @@ def main():
     QTimer.singleShot(50, _init_all_windows)
     QTimer.singleShot(250, _init_all_windows)
     QTimer.singleShot(750, _init_all_windows)
+
+    # Periodic background memory trimming (keeps RAM footprint ~100MB instead of hoarding 400MB+)
+    mem_trim_timer = QTimer(app)
+    mem_trim_timer.setInterval(90000) # every 90s
+    mem_trim_timer.timeout.connect(trim_working_set)
+    mem_trim_timer.start()
+    QTimer.singleShot(6000, trim_working_set)
 
     # Setup Windows System Tray Icon with "Mở toàn màn hình / Mở cửa sổ chính" & "Tắt ứng dụng"
     tray_icon = None
@@ -1971,11 +1656,7 @@ def main():
                     tray_icon.hide()
             except Exception:
                 pass
-            try:
-                if TaskbarLyricsService._instance:
-                    TaskbarLyricsService._instance.stop()
-            except Exception:
-                pass
+
             try:
                 import player_daemon
                 player_daemon.handle_cli(["stop"])
@@ -1987,34 +1668,6 @@ def main():
         act_open.triggered.connect(_open_full_window)
         tray_menu.addAction(act_open)
 
-        act_lyrics = QAction("Lời bài hát Taskbar (Taskbar Lyrics)", tray_menu)
-        act_lyrics.setCheckable(True)
-        try:
-            cfg_p = pc.get_config_path("nutsty_settings.json")
-            if os.path.exists(cfg_p):
-                with open(cfg_p, "r", encoding="utf-8") as f:
-                    s_data = json.load(f)
-                    act_lyrics.setChecked(bool(s_data.get("taskbarLyricsEnabled", True)))
-            else:
-                act_lyrics.setChecked(True)
-        except Exception:
-            act_lyrics.setChecked(True)
-
-        def _on_toggle_tray_lyrics():
-            target_w = main_win_ref[0]
-            if target_w and hasattr(target_w, "setProperty"):
-                try:
-                    cur = bool(target_w.property("taskbarLyricsEnabled"))
-                    target_w.setProperty("taskbarLyricsEnabled", not cur)
-                    act_lyrics.setChecked(not cur)
-                    if hasattr(target_w, "saveSettings"):
-                        target_w.saveSettings()
-                except Exception:
-                    pass
-
-        act_lyrics.triggered.connect(_on_toggle_tray_lyrics)
-        tray_menu.addAction(act_lyrics)
-        bridge.taskbarLyricsToggled.connect(lambda state: act_lyrics.setChecked(state))
 
         act_settings = QAction("Cài đặt & Cập nhật (Settings)", tray_menu)
         act_settings.triggered.connect(lambda: request_open_settings(0))

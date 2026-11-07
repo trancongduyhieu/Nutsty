@@ -65,10 +65,7 @@ Tài liệu đặc tả chuyên sâu về hệ thống lời bài hát hiển th
 
 ---
 
-## 6. Windows Taskbar Lyrics Strip (kamol1dn/spicy-taskbar Native Companion)
-- **Kiến trúc Native Companion**: Tích hợp binary in/TaskbarLyrics.exe biên dịch từ kamol1dn/spicy-taskbar (.NET 8 WPF single-file). Tự động khởi chạy song song và kết nối qua WebSocket bridge hai chiều (ws://localhost:9012/).
-- **Typography Apple SF Pro Display**: Nạp font chính chủ SF Pro Display từ thư mục Fonts/ qua AppFonts.cs, thiết lập TextRenderingMode.Grayscale và TextFormattingMode.Ideal loại bỏ hoàn toàn viền màu ClearType, đạt độ mịn Retina/macOS trên nền trong suốt.
-- **Floating Ping-Pong Marquee & Dissolve Mask**: Với các câu dài vượt giới hạn thanh (line.Width > availW), giữ nguyên cỡ chữ 15px (chấm dứt ép teo chữ xuống 9px). Bám theo âm tiết đang hát (karaoke) hoặc marquee ping-pong (line lyric), bọc mặt nạ mờ dần 2 biên PushOpacityMask (28px LinearGradientBrush) tạo cảm giác câu chữ lơ lửng trôi êm ả.
-- **Đếm nhịp nghỉ 3 chấm phát sáng (Glowing Elastic 3-Dots)**: Khi vào khoảng nghỉ nhạc cụ (instrumental gap $\\ge 2.5\\text{s}$), 3 chấm tròn đếm nhịp tuần tự theo tiến trình thời gian với ánh hào quang tỏa tròn RadialGradientBrush (.5\\times$ bán kính) và nhịp nảy đàn hồi (elastic sine pulse .0 \\to 1.35\\times$).
-- **Cơ chế WebSocket Bridge 2 chiều**: Nutsty push trực tiếp sp_state (vị trí ms, playback state) và push_lyrics (cấu trúc Syllable / Line). TaskbarLyrics xử lý lệnh set_config cập nhật vị trí (taskbar/above), căn lề (center/left/right) tức thì không cần khởi động lại.
-- **Tối ưu VM & Hệ thống**: Mặc định tắt VizEnabled (audio visualizer) để tránh chiếm dụng WASAPI loopback và ngừa crash đồ họa VirtualBox / VM.
+## 6. Tối Ưu Hóa Bộ Nhớ Desktop Lyrics (Memory & Render Footprint)
+- **Loại Bỏ Hoàn Toàn TaskbarLyrics (.NET 8)**: Đã loại bỏ companion `TaskbarLyrics.exe` và WebSocket bridge; tiết kiệm trực tiếp 135–180MB RAM và 180MB dung lượng bộ cài.
+- **Bilinear Optical Haze (`AmberolDetailView.qml`)**: Đặt `sourceSize: Qt.size(160, 90)` cho ảnh nền artwork bokeh kết hợp `blurMax: 64`. Cắt giảm kích thước texture từ 20MB+ xuống 57KB, triệt tiêu tải VRAM và RAM bộ đệm đa tầng.
+- **Win32 Working Set Auto-Trimming (`EmptyWorkingSet`)**: Tự động xả các trang bộ nhớ ảo không còn sử dụng sau khởi động (6s), khi ẩn/thu nhỏ (minimize) hoặc định kỳ mỗi 90s, duy trì mức RAM ổn định ở ~100–130MB thay vì bị Windows om giữ 450MB+.

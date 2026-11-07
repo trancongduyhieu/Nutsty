@@ -351,7 +351,10 @@ Rectangle {
             id: bgArtworkImg
             anchors.fill: parent
             source: root.track && root.track.image ? root.track.image : ""
+            sourceSize: Qt.size(160, 90)
             fillMode: Image.PreserveAspectCrop
+            smooth: true
+            asynchronous: true
             visible: false
         }
 
@@ -359,7 +362,7 @@ Rectangle {
             id: bgArtworkBlur
             anchors.fill: parent
             source: bgArtworkImg
-            visible: bgArtworkImg.status === Image.Ready
+            visible: root.visible && bgArtworkImg.status === Image.Ready
             blurEnabled: true
             blur: 1.0
             blurMax: 64
@@ -818,9 +821,11 @@ Rectangle {
                             anchors.right: parent.right
                             anchors.top: parent.top
                             height: 108
+                            sourceSize: Qt.size(600, 216)
                             source: (root.songDetails && root.songDetails.authorThumbnail) ? root.songDetails.authorThumbnail : root.cachedArtistAvatar
                             fillMode: Image.PreserveAspectCrop
                             clip: true
+                            smooth: true
                             asynchronous: true
                         }
 

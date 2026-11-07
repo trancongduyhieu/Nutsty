@@ -295,7 +295,10 @@ Item {
                                         Image {
                                             anchors.fill: parent
                                             source: modelData.thumbnail || ""
+                                            sourceSize: Qt.size(76, 76)
                                             fillMode: Image.PreserveAspectCrop
+                                            smooth: true
+                                            asynchronous: true
                                             visible: status === Image.Ready
                                         }
 

@@ -197,6 +197,7 @@ PanelWindow {
                         return /^[A-Za-z]:/.test(clean) ? ("file:///" + clean) : ("file://" + clean);
                     }
                     fillMode: Image.PreserveAspectCrop
+                    sourceSize: Qt.size(Math.round(parent.width * 2.68), Math.round(parent.height * 2.68))
                     asynchronous: true
                     smooth: true
                     visible: status === Image.Ready
