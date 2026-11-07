@@ -281,6 +281,8 @@ function togglePlay(win, pollTimer) {
         return;
     }
 
+    win.lastLocalActionTimestamp = Date.now();
+
     if (!win.isPlaying) {
         win.postLoadGraceTimestamp = Date.now();
         if (isOnline && (win.currentTime === 0.0 || win.totalDuration === 0.0)) {
@@ -290,15 +292,16 @@ function togglePlay(win, pollTimer) {
         win.isPlaying = true;
         win.lastSyncTime = win.currentTime;
         win.lastSyncTimestamp = Date.now();
-        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume", targetPath]);
+        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "resume"]);
+        if (targetPath && (win.currentTime === 0.0 || win.totalDuration === 0.0)) {
+            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume", targetPath]);
+        }
     } else {
         win.isPlaying = false;
         win.isLoadingAudio = false;
         win.lastSyncTimestamp = 0;
         Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
     }
-
-    win.lastLocalActionTimestamp = Date.now();
     win.syncNowPlaying(true);
 
     if (!win.isSyncingFromFriend) {
@@ -692,15 +695,18 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
                 win.trackChangeTimestamp = Date.now();
                 return;
             }
-            if (s.is_playing) {
-                win.isLoadingAudio = false;
-                win.isPlaying = true;
-            } else if (s.is_paused) {
-                if (Date.now() - win.postLoadGraceTimestamp < 2500) {
-                    Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "resume"]);
-                } else {
-                    win.isPlaying = false;
-                    win.lastSyncTimestamp = 0;
+            var localActionElapsed = Date.now() - (win.lastLocalActionTimestamp || 0);
+            if (localActionElapsed >= 800) {
+                if (s.is_playing) {
+                    win.isLoadingAudio = false;
+                    win.isPlaying = true;
+                } else if (s.is_paused) {
+                    if (Date.now() - win.postLoadGraceTimestamp < 2500) {
+                        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "resume"]);
+                    } else {
+                        win.isPlaying = false;
+                        win.lastSyncTimestamp = 0;
+                    }
                 }
             }
             if (s.time_pos !== undefined && s.time_pos > 0) {

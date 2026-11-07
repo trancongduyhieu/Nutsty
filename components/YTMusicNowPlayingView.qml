@@ -2048,7 +2048,7 @@ Item {
                         highlightFollowsCurrentItem: false
                         highlightRangeMode: ListView.NoHighlightRange
                         highlightMoveDuration: 0
-                        cacheBuffer: 2500
+                        cacheBuffer: 300
                         model: root.activeLyrics
 
                         onMovementStarted: {

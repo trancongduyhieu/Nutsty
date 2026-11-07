@@ -25,8 +25,12 @@ Tất cả các tính năng mới và cải tiến của Nutsty được lưu tr
 - **Nút Thích và Đóng tiện lợi**: Trái tim đổi sang màu đỏ rực rỡ khi bạn yêu thích bài hát; nút [✕] giúp dừng phát và làm gọn thanh phát nhạc khi cần.
 - **Hiển thị chất lượng nhạc & nguồn lời bài hát**: Biết chính xác chất lượng âm thanh đang nghe (Opus, AAC, FLAC Lossless) cùng nguồn cung cấp lời bài hát (Spotify, Apple Music, LRCLIB) ngay dưới tên ca sĩ.
 - **Lời bài hát chạy từng từ một**: Phân biệt và ghi chú rõ ràng những bài hát có hỗ trợ nhấc chữ phát sáng theo từng từ khớp với giọng hát ca sĩ.
+- **Bộ điều khiển gốc siêu tốc**: Nâng cấp bộ cầu nối điều khiển âm nhạc chuyên dụng bằng ngôn ngữ Rust với tốc độ phản hồi chỉ 1 mili-giây, đảm bảo mọi thao tác bấm đều ăn ngay lập tức.
+- **Tự động tiết kiệm tài nguyên khi ẩn cửa sổ**: Khi thu nhỏ cửa sổ nghe nhạc nền, Nutsty tự động ngắt các hiệu ứng hình ảnh chuyển động và xả bộ nhớ RAM trả lại cho hệ thống, giúp máy tính luôn nhẹ nhàng và tiết kiệm pin tối đa.
 
 ### Fixed
+- **Nút Dừng & Phát nhạc dứt khoát tuyệt đối**: Sửa triệt để hiện tượng bấm Dừng nhưng nhạc vẫn chạy hoặc bấm Phát bị đảo ngược trạng thái, phản hồi cực kỳ chuẩn xác và ổn định.
+- **Điều hướng bài hát chuẩn xác**: Thao tác chuyển bài kế tiếp và quay lại bài trước hoạt động mượt mà, đúng danh sách và đúng nhịp điệu của hàng đợi.
 - **Tự động co gọn dấu chấm khi hết đoạn dạo**: Khắc phục hiện tượng dấu chấm bị lưu lại trên màn hình; khi chuẩn bị vào câu hát mới, 3 chấm sẽ tự động thu gọn êm ái về 0 và biến mất hoàn toàn.
 - **Khắc phục vệt cắt góc cạnh của quầng sáng phát quang**: Loại bỏ triệt để hiện tượng quầng sáng bị xén viền hình chữ nhật, ánh sáng tỏa đều 360 độ dịu mắt và liền mạch.
 - **Chấm dứt hiện tượng nhảy cóc lời bài hát khi cuộn**: Sửa triệt để lỗi danh sách lời bài hát tự động nhảy vọt xuống theo câu hát khi bạn đang kéo lên xem lại các câu trước, đảm bảo khung nhìn luôn đứng yên vững vàng cho bạn thoải mái đọc lời.

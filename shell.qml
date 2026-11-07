@@ -41,6 +41,12 @@ Scope {
                     desktopMusicWidget.visible = true;
                     if (typeof desktopMusicWidget.show === "function") desktopMusicWidget.show();
                 }
+                var purgeXhr = new XMLHttpRequest();
+                purgeXhr.open("GET", (win.localApiUrl || "http://127.0.0.1:17890") + "/api/system/purge_ram", true);
+                try { purgeXhr.send(); } catch(e) {}
+                if (typeof gc === "function") {
+                    try { gc(); } catch(e) {}
+                }
             }
         }
 
@@ -1559,7 +1565,7 @@ Scope {
         id: smoothProgressTimer
         interval: 40
         repeat: true
-        running: win.isPlaying && !win.isLoadingAudio && win.lastSyncTimestamp > 0
+        running: (win.visible || win.desktopLyricsEnabled) && win.isPlaying && !win.isLoadingAudio && win.lastSyncTimestamp > 0
         onTriggered: {
             var elapsed = (Date.now() - win.lastSyncTimestamp) / 1000.0;
             var newT = win.lastSyncTime + elapsed;
@@ -4191,13 +4197,34 @@ Scope {
 
     Timer {
         id: pollTimer
-        interval: win.isPlaying ? 250 : (win.isLoadingAudio ? 180 : 800)
+        property var statusXhr: null
+        interval: (!win.visible && !win.desktopLyricsEnabled) ? 2000 : (win.isPlaying ? 250 : (win.isLoadingAudio ? 180 : 800))
         running: true
         repeat: true
         onTriggered: {
-            if (!statusProcess.running) {
-                statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
-                statusProcess.running = true;
+            if (!statusXhr) {
+                statusXhr = new XMLHttpRequest();
+                statusXhr.onreadystatechange = function() {
+                    if (statusXhr.readyState === XMLHttpRequest.DONE) {
+                        if (statusXhr.status === 200 && statusXhr.responseText) {
+                            PlaybackEngine.handlePlayerStatus(win, statusXhr.responseText, listenAlongSeekSafetyTimer, sessionFileView);
+                        } else if (!statusProcess.running) {
+                            statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
+                            statusProcess.running = true;
+                        }
+                    }
+                };
+            }
+            if (statusXhr.readyState === XMLHttpRequest.UNSENT || statusXhr.readyState === XMLHttpRequest.DONE) {
+                statusXhr.open("GET", (win.localApiUrl || "http://127.0.0.1:17890") + "/api/player/status", true);
+                try {
+                    statusXhr.send();
+                } catch(e) {
+                    if (!statusProcess.running) {
+                        statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
+                        statusProcess.running = true;
+                    }
+                }
             }
         }
     }

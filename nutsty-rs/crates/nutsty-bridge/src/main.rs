@@ -114,7 +114,35 @@ fn send_mpv_command_single(cmd: Value) -> Option<Value> {
     serde_json::from_str(&line).ok()
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn get_pipe_path() -> String {
+    let profile = env::var("NUTSTY_PROFILE").unwrap_or_default().trim().to_lowercase();
+    let suffix = if profile.is_empty() {
+        String::new()
+    } else {
+        format!("_{profile}")
+    };
+    format!(r"\\.\pipe\nutsty_mpv{suffix}")
+}
+
+#[cfg(windows)]
+fn send_mpv_command_single(cmd: Value) -> Option<Value> {
+    use std::fs::OpenOptions;
+    let pipe_path = get_pipe_path();
+    let mut file = OpenOptions::new().read(true).write(true).open(pipe_path).ok()?;
+    let mut payload = serde_json::to_vec(&json!({ "command": cmd })).ok()?;
+    payload.push(b'\n');
+    file.write_all(&payload).ok()?;
+    file.flush().ok()?;
+
+    let mut reader = BufReader::new(file);
+    let mut line = String::new();
+    reader.read_line(&mut line).ok()?;
+
+    serde_json::from_str(&line).ok()
+}
+
+#[cfg(not(any(unix, windows)))]
 fn send_mpv_command_single(_cmd: Value) -> Option<Value> {
     None
 }
@@ -175,9 +203,83 @@ fn fetch_mpv_status_batch() -> Option<serde_json::Map<String, Value>> {
     Some(results)
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn fetch_mpv_status_batch() -> Option<serde_json::Map<String, Value>> {
+    use std::fs::OpenOptions;
+    let pipe_path = get_pipe_path();
+    let mut file = OpenOptions::new().read(true).write(true).open(pipe_path).ok()?;
+    let props = [
+        "pause",
+        "time-pos",
+        "duration",
+        "filename",
+        "path",
+        "volume",
+        "idle-active",
+        "audio-codec-name",
+        "audio-params",
+    ];
+
+    let mut payload = Vec::with_capacity(1024);
+    for (i, p) in props.iter().enumerate() {
+        let msg = json!({
+            "command": ["get_property", p],
+            "request_id": i
+        });
+        serde_json::to_writer(&mut payload, &msg).ok()?;
+        payload.push(b'\n');
+    }
+
+    file.write_all(&payload).ok()?;
+    file.flush().ok()?;
+
+    let mut reader = BufReader::new(file);
+    let mut results = serde_json::Map::with_capacity(props.len());
+    let mut line = String::with_capacity(512);
+
+    for _ in 0..props.len() {
+        line.clear();
+        if reader.read_line(&mut line).is_err() || line.trim().is_empty() {
+            break;
+        }
+
+        if let Ok(val) = serde_json::from_str::<Value>(&line) {
+            if let Some(req_id) = val.get("request_id").and_then(|v| v.as_u64()) {
+                let idx = req_id as usize;
+                if idx < props.len() {
+                    let prop_name = props[idx];
+                    let data = val.get("data").cloned().unwrap_or(Value::Null);
+                    results.insert(prop_name.to_string(), data);
+                }
+            }
+        }
+    }
+
+    Some(results)
+}
+
+#[cfg(not(any(unix, windows)))]
 fn fetch_mpv_status_batch() -> Option<serde_json::Map<String, Value>> {
     None
+}
+
+fn purge_memory() {
+    #[cfg(target_os = "linux")]
+    unsafe {
+        unsafe extern "C" {
+            fn malloc_trim(pad: usize) -> i32;
+        }
+        malloc_trim(0);
+    }
+
+    #[cfg(windows)]
+    unsafe {
+        unsafe extern "system" {
+            fn SetProcessWorkingSetSize(hProcess: isize, dwMinimumWorkingSetSize: usize, dwMaximumWorkingSetSize: usize) -> i32;
+        }
+        SetProcessWorkingSetSize(-1, usize::MAX, usize::MAX);
+    }
+    println!(r#"{{"success":true,"purged":true}}"#);
 }
 
 fn read_playback_state() -> Option<PlaybackState> {
@@ -327,9 +429,20 @@ fn main() {
             send_mpv_command_single(json!(["set_property", "pause", false]));
             println!(r#"{{"success":true}}"#);
         }
-        "toggle" => {
+        "toggle" | "play-pause" => {
             send_mpv_command_single(json!(["cycle", "pause"]));
             println!(r#"{{"success":true}}"#);
+        }
+        "next" => {
+            send_mpv_command_single(json!(["playlist-next"]));
+            println!(r#"{{"success":true}}"#);
+        }
+        "prev" => {
+            send_mpv_command_single(json!(["playlist-prev"]));
+            println!(r#"{{"success":true}}"#);
+        }
+        "purge" | "purge-memory" => {
+            purge_memory();
         }
         "stop" => {
             send_mpv_command_single(json!(["stop"]));

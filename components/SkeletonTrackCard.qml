@@ -14,7 +14,7 @@ Rectangle {
 
     // Smooth pulsing shimmer animation
     SequentialAnimation on opacity {
-        running: true
+        running: root.visible && root.opacity > 0.01
         loops: Animation.Infinite
         NumberAnimation { from: 0.25; to: 0.70; duration: 750; easing.type: Easing.InOutQuad }
         NumberAnimation { from: 0.70; to: 0.25; duration: 750; easing.type: Easing.InOutQuad }

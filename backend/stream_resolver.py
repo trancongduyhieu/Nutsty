@@ -47,10 +47,12 @@ QUALITY_ITAG_PRIORITIES = {
     "low": [250, 249, 139, 251, 140, 141, 774, 18]
 }
 
-# In-memory stream cache with TTL eviction (20 minutes) to prevent expired Google CDN links
-_MEMORY_STREAM_CACHE = {}
+# In-memory stream cache with LRU eviction and TTL (20 minutes) to prevent memory leaks and expired CDN links
+from collections import OrderedDict
+_MEMORY_STREAM_CACHE = OrderedDict()
 _STREAM_CACHE_LOCK = threading.Lock()
 STREAM_CACHE_TTL_SECONDS = 1200
+STREAM_CACHE_MAX_ENTRIES = 128
 
 _VISITOR_DATA_LOCK = threading.Lock()
 _CACHED_VISITOR_DATA = None
@@ -356,6 +358,7 @@ def get_cached_stream_url(video_id, quality="high_opus"):
         if cache_key in _MEMORY_STREAM_CACHE:
             entry = _MEMORY_STREAM_CACHE[cache_key]
             if now - entry.get("timestamp", 0) < STREAM_CACHE_TTL_SECONDS:
+                _MEMORY_STREAM_CACHE.move_to_end(cache_key)
                 return entry.get("url")
             else:
                 del _MEMORY_STREAM_CACHE[cache_key]
@@ -368,25 +371,36 @@ def get_cached_stream_url(video_id, quality="high_opus"):
             if now - entry.get("timestamp", 0) < STREAM_CACHE_TTL_SECONDS:
                 with _STREAM_CACHE_LOCK:
                     _MEMORY_STREAM_CACHE[cache_key] = entry
+                    _MEMORY_STREAM_CACHE.move_to_end(cache_key)
                 return entry.get("url")
         elif isinstance(entry, str):
             with _STREAM_CACHE_LOCK:
                 _MEMORY_STREAM_CACHE[cache_key] = {"url": entry, "timestamp": now}
+                _MEMORY_STREAM_CACHE.move_to_end(cache_key)
             return entry
     return None
 
 def put_cached_stream_url(video_id, url, quality="high_opus"):
-    """Store fresh stream URL in memory and persistent disk cache"""
+    """Store fresh stream URL in memory (LRU bounded) and persistent disk cache"""
     if not video_id or not url:
         return
     now = time.time()
     cache_key = f"{video_id}_{quality}"
     entry = {"url": url, "timestamp": now}
     with _STREAM_CACHE_LOCK:
+        if cache_key in _MEMORY_STREAM_CACHE:
+            _MEMORY_STREAM_CACHE.move_to_end(cache_key)
         _MEMORY_STREAM_CACHE[cache_key] = entry
+        while len(_MEMORY_STREAM_CACHE) > STREAM_CACHE_MAX_ENTRIES:
+            _MEMORY_STREAM_CACHE.popitem(last=False)
     try:
         disk_cache = load_json(STREAM_CACHE_FILE, {})
         disk_cache[cache_key] = entry
+        if len(disk_cache) > 256:
+            # Prune oldest disk cache entries
+            sorted_keys = sorted(disk_cache.keys(), key=lambda k: disk_cache[k].get("timestamp", 0) if isinstance(disk_cache[k], dict) else 0)
+            for old_k in sorted_keys[:-256]:
+                disk_cache.pop(old_k, None)
         save_json(STREAM_CACHE_FILE, disk_cache)
     except Exception:
         pass

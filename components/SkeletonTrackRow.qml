@@ -18,7 +18,7 @@ Item {
 
     SequentialAnimation on opacity {
         loops: Animation.Infinite
-        running: true
+        running: root.visible && root.opacity > 0.01
         NumberAnimation {
             from: 0.25
             to: 0.70
