@@ -151,6 +151,8 @@ Scope {
     property var listeningAlongFriend: null
     property real pendingListenAlongSeekPosition: 0.0
     property real lastTrackSwitchTimestamp: 0.0
+    property int playEpoch: 0
+    property var rapidNavDebounceTimer: rapidNavDebounceTimer
     property string toastMessage: ""
     property bool toastVisible: false
     property string localApiUrl: "http://127.0.0.1:17890"
@@ -4181,6 +4183,23 @@ Scope {
             });
         }
         win.showToast(I18n.tr("Đã xóa khỏi danh sách", "Removed from playlist"));
+    }
+
+    Timer {
+        id: rapidNavDebounceTimer
+        interval: 160
+        repeat: false
+        property var pendingTrack: null
+        onTriggered: {
+            var trk = pendingTrack || win.currentTrack;
+            if (trk) {
+                if ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId) {
+                    PlaybackEngine.playOnlineTrack(win, trk, false, radioProc, prewarmTimer, pollTimer);
+                } else {
+                    PlaybackEngine.playTrack(win, trk, pollTimer);
+                }
+            }
+        }
     }
 
     Timer {

@@ -257,14 +257,7 @@ Rectangle {
     }
 
     function fetchAudioSpecs() {
-        audioSpecsProc.running = false;
-        var daemonPath = root.appDir + "/backend/player_daemon.py";
-        audioSpecsProc.command = [
-            "python3", "-u",
-            daemonPath,
-            "audio_specs"
-        ];
-        audioSpecsProc.running = true;
+        // SSOT: root.audioSpecs is bound to win.audioSpecs, updated in real time via nutsty-bridge status.
     }
 
     onTrackChanged: {
@@ -339,22 +332,7 @@ Rectangle {
         }
     }
 
-    Process {
-        id: audioSpecsProc
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: data => {
-                try {
-                    var obj = JSON.parse(data);
-                    if (obj && typeof obj === "object") {
-                        root.audioSpecs = obj;
-                    }
-                } catch(e) {
-                    console.log("audioSpecsProc error:", e);
-                }
-            }
-        }
-    }
+
 
     Timer {
         id: delayedAudioSpecsTimer

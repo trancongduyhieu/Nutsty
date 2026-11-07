@@ -520,7 +520,8 @@ Item {
             }
 
             // --- State B: Scrubber Timestamps & Quality Text (SimpMusic Clean Typography - NO PILL!) ---
-            RowLayout {
+            Item {
+                id: stateBContainer
                 anchors.fill: parent
                 anchors.bottomMargin: 10
                 opacity: 1.0 - centerSectionBox.infoAlpha
@@ -528,21 +529,19 @@ Item {
 
                 // Elapsed Time (Left)
                 Text {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
                     text: root.fmtTime(root.isScrubbingProgress ? root.scrubTime : root.currentTime)
                     font.family: "Segoe UI, Inter, monospace"
                     font.pixelSize: 11
                     color: Qt.rgba(1, 1, 1, 0.70)
                 }
 
-                // Audio Quality Line (Center: Clean Headphones Icon + Text, NO PILL BOX!)
+                // Audio Quality Line (Center: Clean Optical Icon + Text, True Optical Horizontal Center)
                 Row {
-                    Layout.alignment: Qt.AlignHCenter
-                    Layout.fillWidth: true
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.verticalCenter: parent.verticalCenter
                     spacing: 4
-                    Layout.leftMargin: 8
-                    Layout.rightMargin: 8
-
-                    Item { Layout.fillWidth: true }
 
                     AppIcon {
                         anchors.verticalCenter: parent.verticalCenter
@@ -555,20 +554,27 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         text: {
                             if (root.audioSpecs && (root.audioSpecs.bitrate_str || root.audioSpecs.bitrate)) {
-                                return (root.audioSpecs.codec || "AAC") + " • " + (root.audioSpecs.bitrate_str || (root.audioSpecs.bitrate + " kbps"));
+                                var codecName = (root.audioSpecs.codec || "AAC").toUpperCase();
+                                var bStr = root.audioSpecs.bitrate_str || (root.audioSpecs.bitrate + " kbps");
+                                return codecName + " • " + bStr;
                             }
-                            return "192 kbps • 48 kHz";
+                            if (root.currentTrack && root.currentTrack.path) {
+                                var p = root.currentTrack.path.toLowerCase();
+                                if (p.endsWith(".flac")) return "FLAC • Lossless";
+                                if (p.endsWith(".mp3")) return "MP3 • 320 kbps";
+                            }
+                            return "AAC • 128 kbps";
                         }
                         font.family: "Segoe UI, Inter, sans-serif"
                         font.pixelSize: 11
                         color: Qt.rgba(1, 1, 1, 0.45)
                     }
-
-                    Item { Layout.fillWidth: true }
                 }
 
                 // Remaining Signed Time (Right: "-mm:ss")
                 Text {
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
                     text: "−" + root.fmtTime(Math.max(0, root.totalDuration - (root.isScrubbingProgress ? root.scrubTime : root.currentTime)))
                     font.family: "Segoe UI, Inter, monospace"
                     font.pixelSize: 11

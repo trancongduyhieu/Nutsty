@@ -28,6 +28,9 @@ struct PlaybackState {
 #[derive(Debug, Serialize)]
 struct AudioSpecs {
     codec: String,
+    bitrate: u64,
+    bitrate_str: String,
+    sample_rate: u64,
     sample_rate_str: String,
     channels: String,
 }
@@ -39,6 +42,8 @@ struct PlayerStatusOutput {
     time_pos: f64,
     duration: f64,
     filename: String,
+    path: String,
+    media_title: String,
     volume: f64,
     is_loading: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -53,6 +58,8 @@ impl Default for PlayerStatusOutput {
             time_pos: 0.0,
             duration: 0.0,
             filename: String::new(),
+            path: String::new(),
+            media_title: String::new(),
             volume: 100.0,
             is_loading: false,
             audio_specs: None,
@@ -160,10 +167,12 @@ fn fetch_mpv_status_batch() -> Option<serde_json::Map<String, Value>> {
         "duration",
         "filename",
         "path",
+        "media-title",
         "volume",
         "idle-active",
         "audio-codec-name",
         "audio-params",
+        "audio-bitrate",
     ];
 
     let mut payload = Vec::with_capacity(1024);
@@ -214,10 +223,12 @@ fn fetch_mpv_status_batch() -> Option<serde_json::Map<String, Value>> {
         "duration",
         "filename",
         "path",
+        "media-title",
         "volume",
         "idle-active",
         "audio-codec-name",
         "audio-params",
+        "audio-bitrate",
     ];
 
     let mut payload = Vec::with_capacity(1024);
@@ -304,6 +315,61 @@ fn update_playback_state_playing(current_path: &str) {
     }
 }
 
+fn parse_audio_specs_from_map(map: &serde_json::Map<String, Value>) -> AudioSpecs {
+    let codec = map
+        .get("audio-codec-name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_uppercase();
+
+    let bitrate_raw = map
+        .get("audio-bitrate")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let mut bitrate_kbps = if bitrate_raw > 1000.0 {
+        (bitrate_raw / 1000.0).round() as u64
+    } else {
+        bitrate_raw as u64
+    };
+    if bitrate_kbps == 0 && !codec.is_empty() {
+        bitrate_kbps = if codec == "MP3" { 320 } else { 192 };
+    }
+    let bitrate_str = if bitrate_kbps > 0 {
+        format!("{bitrate_kbps} kbps")
+    } else {
+        "192 kbps".to_string()
+    };
+
+    let mut sample_rate: u64 = 48000;
+    let mut sample_rate_str = "48.0 kHz".to_string();
+    let mut channels = "Stereo (2ch)".to_string();
+
+    if let Some(params) = map.get("audio-params").and_then(|v| v.as_object()) {
+        if let Some(sr) = params.get("samplerate").and_then(|v| v.as_u64()) {
+            sample_rate = sr;
+            sample_rate_str = format!("{:.1} kHz", (sr as f64) / 1000.0);
+        }
+        if let Some(ch) = params.get("channel-count").and_then(|v| v.as_u64()) {
+            channels = if ch == 2 {
+                "Stereo (2ch)".to_string()
+            } else if ch > 0 {
+                format!("{ch}ch")
+            } else {
+                "Stereo".to_string()
+            };
+        }
+    }
+
+    AudioSpecs {
+        codec: if codec.is_empty() { "AAC".to_string() } else { codec },
+        bitrate: bitrate_kbps,
+        bitrate_str,
+        sample_rate,
+        sample_rate_str,
+        channels,
+    }
+}
+
 fn handle_status() {
     let batch = fetch_mpv_status_batch();
     if batch.is_none() {
@@ -323,6 +389,11 @@ fn handle_status() {
         .to_string();
     let path = map
         .get("path")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let media_title = map
+        .get("media-title")
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
@@ -360,29 +431,7 @@ fn handle_status() {
     let is_paused = pause && has_file;
 
     let audio_specs = if has_file {
-        let codec = map
-            .get("audio-codec-name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-
-        let mut sample_rate_str = String::new();
-        let mut channels = String::new();
-
-        if let Some(params) = map.get("audio-params").and_then(|v| v.as_object()) {
-            if let Some(sr) = params.get("samplerate").and_then(|v| v.as_u64()) {
-                sample_rate_str = format!("{sr} Hz");
-            }
-            if let Some(ch) = params.get("channel-count").and_then(|v| v.as_u64()) {
-                channels = format!("{ch} ch");
-            }
-        }
-
-        Some(AudioSpecs {
-            codec,
-            sample_rate_str,
-            channels,
-        })
+        Some(parse_audio_specs_from_map(&map))
     } else {
         None
     };
@@ -396,11 +445,13 @@ fn handle_status() {
             if !filename.is_empty() {
                 filename
             } else {
-                path
+                path.clone()
             }
         } else {
             String::new()
         },
+        path: if has_file { path } else { String::new() },
+        media_title: if has_file { media_title } else { String::new() },
         volume,
         is_loading,
         audio_specs,
@@ -478,21 +529,18 @@ fn main() {
         }
         "audio_specs" => {
             if let Some(map) = fetch_mpv_status_batch() {
-                let codec = map.get("audio-codec-name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let mut sample_rate_str = String::new();
-                let mut channels = String::new();
-                if let Some(params) = map.get("audio-params").and_then(|v| v.as_object()) {
-                    if let Some(sr) = params.get("samplerate").and_then(|v| v.as_u64()) {
-                        sample_rate_str = format!("{sr} Hz");
-                    }
-                    if let Some(ch) = params.get("channel-count").and_then(|v| v.as_u64()) {
-                        channels = format!("{ch} ch");
-                    }
-                }
-                let specs = AudioSpecs { codec, sample_rate_str, channels };
+                let specs = parse_audio_specs_from_map(&map);
                 println!("{}", serde_json::to_string(&specs).unwrap());
             } else {
-                println!(r#"{{"codec":"","sample_rate_str":"","channels":""}}"#);
+                let default_specs = AudioSpecs {
+                    codec: "AAC".to_string(),
+                    bitrate: 192,
+                    bitrate_str: "192 kbps".to_string(),
+                    sample_rate: 48000,
+                    sample_rate_str: "48.0 kHz".to_string(),
+                    channels: "Stereo (2ch)".to_string(),
+                };
+                println!("{}", serde_json::to_string(&default_specs).unwrap());
             }
         }
         _ => {

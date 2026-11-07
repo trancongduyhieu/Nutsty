@@ -1,6 +1,44 @@
 // Nutsty Playback & Browse Engine (Playback Execution, Queue Lifecycle, Radio & MPV Status Handlers)
 // Deep frontend module consolidating all audio playback state machines, IPC triggers, and queue mutators.
 
+function extractTrackDuration(trk) {
+    if (!trk) return 0.0;
+    if (typeof trk.durationMs === "number" && trk.durationMs > 0) {
+        return trk.durationMs / 1000.0;
+    }
+    if (typeof trk.duration_seconds === "number" && trk.duration_seconds > 0) {
+        return trk.duration_seconds;
+    }
+    if (typeof trk.duration === "number" && trk.duration > 0) {
+        return trk.duration;
+    }
+    if (typeof trk.duration === "string" && trk.duration.indexOf(":") !== -1) {
+        var parts = trk.duration.trim().split(":");
+        if (parts.length === 2) {
+            var m = parseInt(parts[0], 10) || 0;
+            var sec = parseInt(parts[1], 10) || 0;
+            return m * 60 + sec;
+        } else if (parts.length === 3) {
+            var h = parseInt(parts[0], 10) || 0;
+            var m2 = parseInt(parts[1], 10) || 0;
+            var s2 = parseInt(parts[2], 10) || 0;
+            return h * 3600 + m2 * 60 + s2;
+        }
+    }
+    if (typeof trk.length === "number" && trk.length > 0) {
+        return trk.length;
+    }
+    if (typeof trk.length === "string" && trk.length.indexOf(":") !== -1) {
+        var partsL = trk.length.trim().split(":");
+        if (partsL.length === 2) {
+            var mL = parseInt(partsL[0], 10) || 0;
+            var secL = parseInt(partsL[1], 10) || 0;
+            return mL * 60 + secL;
+        }
+    }
+    return 0.0;
+}
+
 function isSameTrack(a, b) {
     if (!a || !b) return false;
     if (a.path && b.path && a.path === b.path) return true;
@@ -114,13 +152,19 @@ function playOnlineTrack(win, trk, startRadio, radioProc, prewarmTimer, pollTime
     }
     if (startRadio === undefined) startRadio = false;
 
+    if (win.rapidNavDebounceTimer) {
+        win.rapidNavDebounceTimer.stop();
+    }
+    win.playEpoch = (win.playEpoch || 0) + 1;
+    var currentEpoch = win.playEpoch;
+
     var localMatch = win.findLocalDownloadedTrack(trk);
     var hasLocalFile = Boolean(localMatch && localMatch.path);
 
     if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.stopImmediate) {
         __NutstyBridge.stopImmediate();
     } else {
-        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
+        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "stop"]);
     }
     win.trackChangeTimestamp = Date.now();
     win.postLoadGraceTimestamp = Date.now();
@@ -129,7 +173,8 @@ function playOnlineTrack(win, trk, startRadio, radioProc, prewarmTimer, pollTime
     win.lastSyncTime = 0.0;
     win.lastSyncTimestamp = Date.now();
     win.isLoadingAudio = !hasLocalFile;
-    win.totalDuration = 0.0;
+    var initDur = extractTrackDuration(trk);
+    win.totalDuration = initDur > 0 ? initDur : 0.0;
     win.isPlaying = true;
     if (win.currentView !== "search" && win.currentView !== "library") {
         win.showAmberolDetails = true;
@@ -160,7 +205,7 @@ function playOnlineTrack(win, trk, startRadio, radioProc, prewarmTimer, pollTime
     var tTitle = trk.title || trk.name || (localMatch ? (localMatch.title || localMatch.name || "") : "");
     var tArtist = trk.artist || (localMatch ? (localMatch.artist || "") : "");
     var tImage = trk.image || trk.cover || (localMatch ? (localMatch.image || "") : "");
-    Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "play", streamPath, tTitle, tArtist, tImage]);
+    Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "play", streamPath, tTitle, tArtist, tImage, String(currentEpoch)]);
     win.syncNowPlaying(true);
     if (!win.isSyncingFromFriend) {
         if (win.activeCoListeners && win.activeCoListeners.length > 0) {
@@ -217,10 +262,16 @@ function playTrack(win, trk, pollTimer) {
     if (win.currentTrack && win.isSameTrack(win.currentTrack, trk) && win.isPlaying) {
         return;
     }
+    if (win.rapidNavDebounceTimer) {
+        win.rapidNavDebounceTimer.stop();
+    }
+    win.playEpoch = (win.playEpoch || 0) + 1;
+    var currentEpoch = win.playEpoch;
+
     if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.stopImmediate) {
         __NutstyBridge.stopImmediate();
     } else {
-        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
+        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "stop"]);
     }
     win.trackChangeTimestamp = Date.now();
     win.postLoadGraceTimestamp = Date.now();
@@ -229,7 +280,8 @@ function playTrack(win, trk, pollTimer) {
     win.lastSyncTime = 0.0;
     win.lastSyncTimestamp = Date.now();
     win.isLoadingAudio = false;
-    win.totalDuration = (trk.durationMs || 0) / 1000.0;
+    var localDur = extractTrackDuration(trk);
+    win.totalDuration = localDur > 0 ? localDur : ((trk.durationMs || 0) / 1000.0);
     win.isPlaying = true;
     if (win.currentView !== "search") {
         win.isNowPlayingOpen = true;
@@ -244,7 +296,7 @@ function playTrack(win, trk, pollTimer) {
     var tTitle = trk.title || trk.name || "";
     var tArtist = trk.artist || "";
     var tImage = trk.image || "";
-    Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "play", trk.path, tTitle, tArtist, tImage]);
+    Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "play", trk.path, tTitle, tArtist, tImage, String(currentEpoch)]);
     win.syncNowPlaying(true);
     if (!win.isSyncingFromFriend) {
         if (win.activeCoListeners && win.activeCoListeners.length > 0) {
@@ -322,6 +374,37 @@ function togglePlay(win, pollTimer) {
     if (pollTimer) pollTimer.restart();
 }
 
+function triggerRapidTrackSwitch(win, targetTrack) {
+    if (!targetTrack) return;
+    if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.stopImmediate) {
+        __NutstyBridge.stopImmediate();
+    } else {
+        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "stop"]);
+    }
+    win.currentTrack = targetTrack;
+    win.currentTime = 0.0;
+    win.lastSyncTime = 0.0;
+    win.lastSyncTimestamp = Date.now();
+    var initDur = extractTrackDuration(targetTrack);
+    win.totalDuration = initDur > 0 ? initDur : 0.0;
+    win.isPlaying = true;
+    win.isLoadingAudio = true;
+    win.trackChangeTimestamp = Date.now();
+    win.lastTrackSwitchTimestamp = Date.now();
+    win.lastLocalActionTimestamp = Date.now();
+
+    if (win.rapidNavDebounceTimer) {
+        win.rapidNavDebounceTimer.pendingTrack = targetTrack;
+        win.rapidNavDebounceTimer.restart();
+    } else {
+        if ((targetTrack.path && targetTrack.path.startsWith("ytdl://")) || targetTrack.videoId) {
+            win.playOnlineTrack(targetTrack, false);
+        } else {
+            win.playTrack(targetTrack);
+        }
+    }
+}
+
 function playNext(win) {
     if (win.listeningAlongFriend && !win.isSyncingFromFriend && !win.guestCanControlHost) {
         win.showToast(I18n.tr("Host đã khóa quyền chuyển bài hát", "Host disabled track skipping"));
@@ -354,11 +437,7 @@ function playNext(win) {
     }
     var nextTrk = win.currentTracks[nextIdx];
     if (nextTrk) {
-        if ((nextTrk.path && nextTrk.path.startsWith("ytdl://")) || nextTrk.videoId) {
-            win.playOnlineTrack(nextTrk, false);
-        } else {
-            win.playTrack(nextTrk);
-        }
+        triggerRapidTrackSwitch(win, nextTrk);
     }
 }
 
@@ -376,11 +455,7 @@ function playPrev(win) {
     var prevIdx = (curIdx === -1 || curIdx === 0) ? (win.currentTracks.length - 1) : (curIdx - 1);
     var prevTrk = win.currentTracks[prevIdx];
     if (prevTrk) {
-        if ((prevTrk.path && prevTrk.path.startsWith("ytdl://")) || prevTrk.videoId) {
-            win.playOnlineTrack(prevTrk, false);
-        } else {
-            win.playTrack(prevTrk);
-        }
+        triggerRapidTrackSwitch(win, prevTrk);
     }
 }
 
@@ -661,6 +736,12 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
             win.audioSpecs = s.audio_specs;
         }
         var elapsed = Date.now() - win.trackChangeTimestamp;
+        var trackDur = extractTrackDuration(win.currentTrack);
+        if (s.duration !== undefined && s.duration > 0) {
+            win.totalDuration = s.duration;
+        } else if (win.totalDuration <= 0 && trackDur > 0) {
+            win.totalDuration = trackDur;
+        }
 
         if (win.isLoadingAudio) {
             if (elapsed > 20000) {
@@ -668,7 +749,7 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
                 win.isPlaying = false;
                 return;
             }
-            var hasStarted = (!s.is_loading || (s.time_pos && s.time_pos > 0.5) || s.is_playing) && (s.is_playing || (s.time_pos && s.time_pos > 0) || (s.duration && s.duration > 0));
+            var hasStarted = (!s.is_loading || (s.time_pos && s.time_pos > 0.5) || s.is_playing) && (s.is_playing || (s.time_pos && s.time_pos > 0) || (s.duration && s.duration > 0) || (trackDur > 0) || (win.totalDuration > 0));
             if (!hasStarted) {
                 win.currentTime = 0.0;
                 return;
@@ -679,7 +760,11 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
             win.currentTime = s.time_pos || 0.0;
             win.lastSyncTime = s.time_pos || 0.0;
             win.lastSyncTimestamp = Date.now();
-            if (s.duration !== undefined && s.duration > 0) win.totalDuration = s.duration;
+            if (s.duration !== undefined && s.duration > 0) {
+                win.totalDuration = s.duration;
+            } else if (win.totalDuration <= 0 && trackDur > 0) {
+                win.totalDuration = trackDur;
+            }
             if (win.pendingListenAlongSeekPosition > 0) {
                 var p = win.pendingListenAlongSeekPosition;
                 win.pendingListenAlongSeekPosition = 0;
@@ -709,16 +794,22 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
                     }
                 }
             }
-            if (s.time_pos !== undefined && s.time_pos > 0) {
-                if (Math.abs(win.currentTime - s.time_pos) > 0.45) {
-                    win.currentTime = s.time_pos;
+            if (s.time_pos !== undefined) {
+                if (s.time_pos > 0) {
+                    if (Math.abs(win.currentTime - s.time_pos) > 0.45) {
+                        win.currentTime = s.time_pos;
+                    }
+                    win.lastSyncTime = s.time_pos;
                 }
-                win.lastSyncTime = s.time_pos;
                 if (win.isPlaying) {
                     win.lastSyncTimestamp = Date.now();
                 }
             }
-            if (s.duration !== undefined && s.duration > 0) win.totalDuration = s.duration;
+            if (s.duration !== undefined && s.duration > 0) {
+                win.totalDuration = s.duration;
+            } else if (win.totalDuration <= 0 && trackDur > 0) {
+                win.totalDuration = trackDur;
+            }
             if (win.pendingListenAlongSeekPosition > 0 && (s.is_playing || s.is_paused)) {
                 var p2 = win.pendingListenAlongSeekPosition;
                 win.pendingListenAlongSeekPosition = 0;
@@ -726,6 +817,44 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
                 if (listenAlongSeekSafetyTimer) {
                     listenAlongSeekSafetyTimer.targetPos = p2;
                     listenAlongSeekSafetyTimer.restart();
+                }
+            }
+        }
+
+        // Active Reconciliation Check: Verify MPV is actually playing the expected track
+        var navActive = Boolean(win.rapidNavDebounceTimer && win.rapidNavDebounceTimer.running);
+        var trackChangeElapsed = Date.now() - (win.trackChangeTimestamp || 0);
+        if (s.is_playing && !win.isLoadingAudio && win.currentTrack && !navActive && trackChangeElapsed > 2500) {
+            var curVid = win.currentTrack.videoId || (win.currentTrack.path && win.currentTrack.path.startsWith("ytdl://") ? win.currentTrack.path.replace("ytdl://", "") : "");
+            if (curVid && curVid.startsWith("yt_")) curVid = curVid.replace(/^yt_/, "");
+            if (curVid && curVid.indexOf("watch?v=") !== -1) curVid = curVid.split("watch?v=")[1].split("&")[0];
+
+            var isTrackMatched = false;
+            if (curVid) {
+                if (s.filename && s.filename.indexOf(curVid) !== -1) isTrackMatched = true;
+                else if (s.path && s.path.indexOf(curVid) !== -1) isTrackMatched = true;
+            } else if (win.currentTrack.path) {
+                if (s.path && (s.path === win.currentTrack.path || s.path.endsWith(win.currentTrack.path) || win.currentTrack.path.endsWith(s.path))) isTrackMatched = true;
+                else if (s.filename && win.currentTrack.path.endsWith(s.filename)) isTrackMatched = true;
+            }
+            if (!isTrackMatched && win.currentTrack.title && s.media_title) {
+                var expTitle = win.currentTrack.title.toLowerCase().trim();
+                var actTitle = s.media_title.toLowerCase().trim();
+                if (actTitle.indexOf(expTitle) !== -1 || expTitle.indexOf(actTitle) !== -1) {
+                    isTrackMatched = true;
+                }
+            }
+
+            if (!isTrackMatched && (s.filename || s.path)) {
+                var trackIdentifier = curVid || (win.currentTrack.path || win.currentTrack.title);
+                if (win.reconciledTrackId !== trackIdentifier) {
+                    win.reconciledTrackId = trackIdentifier;
+                    console.warn("Nutsty PlaybackEngine: Track mismatch detected! Expected:", win.currentTrack.title, "(" + trackIdentifier + ")", "but MPV playing:", (s.filename || s.path || s.media_title), "- Re-aligning playback...");
+                    if ((win.currentTrack.path && win.currentTrack.path.startsWith("ytdl://")) || win.currentTrack.videoId) {
+                        win.playOnlineTrack(win.currentTrack, false);
+                    } else {
+                        win.playTrack(win.currentTrack);
+                    }
                 }
             }
         }
@@ -758,7 +887,9 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
         }
 
         // Auto-advance / Repeat khi het bai
-        if (!win.isLoadingAudio && win.isPlaying && win.totalDuration > 3 && win.currentTime >= win.totalDuration - 0.5) {
+        var isNearEnd = win.totalDuration > 3 && win.currentTime >= (win.totalDuration - 0.6);
+        var isEofStopped = (!s.is_playing && !s.is_paused && win.totalDuration > 3 && win.currentTime >= (win.totalDuration - 2.5));
+        if (!win.isLoadingAudio && (win.isPlaying || isEofStopped) && (isNearEnd || isEofStopped)) {
             if (win.isSleepTimerActive && win.sleepTimerMode === "end_of_track") {
                 win.isSleepTimerActive = false;
                 win.sleepTimerFadeTriggered = false;
