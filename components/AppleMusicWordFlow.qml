@@ -19,7 +19,16 @@ Item {
     property string fontFamily: Theme.fontFamily
     property int fontWeight: Font.Bold
     property color accentColor: "#ffffff"
-    property int wordSpacing: 9
+    TextMetrics {
+        id: spaceMetrics
+        font.family: root.fontFamily
+        font.pixelSize: root.fontSize
+        font.weight: root.fontWeight
+        text: " "
+    }
+
+    // Natural typographic space width matching static text (stops premature word wrapping)
+    property int wordSpacing: Math.max(5, Math.round(spaceMetrics.width))
 
     // Compensate for 60ms audio buffer latency so words light up on-beat
     readonly property real effectiveTime: root.currentTime + 0.06
@@ -47,7 +56,27 @@ Item {
         font.weight: root.fontWeight
     }
 
-    readonly property real maxLineWidth: parent ? Math.max(100, parent.width * 0.82) : 450
+    readonly property real maxLineWidth: parent ? Math.max(100, parent.width * (root.isAnsweringVoice ? 0.82 : 0.88)) : 480
+
+
+    // 1:1 Mochy-Music sequential reading head: Finds the single active singing word index
+    readonly property int activeWordIndex: {
+        var ws = root.effectiveWords;
+        if (!ws || ws.length === 0) return -1;
+        var t = root.effectiveTime;
+        for (var i = 0; i < ws.length; i++) {
+            var w = ws[i];
+            var wStart = (w.start !== undefined) ? Number(w.start) : 0.0;
+            var wEnd = (w.end !== undefined) ? Number(w.end) : (wStart + 0.1);
+            if (t < wStart) {
+                return i - 1;
+            }
+            if (t >= wStart && t < wEnd) {
+                return i;
+            }
+        }
+        return ws.length;
+    }
 
     // Partition words into lines that match the staticText wrap limit (parent.width * 0.82)
     // Ensures individual rows are properly right-aligned, centered, or left-aligned
@@ -64,7 +93,16 @@ Item {
         var curLine = [];
         var curWidth = 0;
         for (var i = 0; i < ws.length; i++) {
-            var w = ws[i];
+            var rawW = ws[i];
+            var w = {
+                text: rawW.text || "",
+                start: (rawW.start !== undefined) ? Number(rawW.start) : 0.0,
+                end: (rawW.end !== undefined) ? Number(rawW.end) : 0.0,
+                duration: (rawW.duration !== undefined) ? Number(rawW.duration) : Math.max(0.05, (rawW.end - rawW.start)),
+                hasSpace: (rawW.hasSpace !== false),
+                isHeld: !!rawW.isHeld,
+                globalIndex: i
+            };
             wordMetrics.text = w.text || "";
             var wW = wordMetrics.width;
             var prevHadSpace = (curLine.length > 0) ? (curLine[curLine.length - 1].hasSpace !== false) : true;
@@ -85,16 +123,19 @@ Item {
 
     onEffectiveWordsChanged: updatePartition()
     onMaxLineWidthChanged: updatePartition()
+    onIsAnsweringVoiceChanged: updatePartition()
+    onIsEnsembleVoiceChanged: updatePartition()
+    onWidthChanged: updatePartition()
     Component.onCompleted: updatePartition()
 
+    width: parent ? parent.width : implicitWidth
     implicitWidth: parent ? parent.width : 400
     implicitHeight: wordsColumn.implicitHeight + 8
 
     Column {
         id: wordsColumn
         y: 4
-        anchors.left: parent ? parent.left : undefined
-        anchors.right: parent ? parent.right : undefined
+        width: root.width
         spacing: 6
 
         Repeater {
@@ -102,15 +143,15 @@ Item {
 
             delegate: Item {
                 id: lineContainer
-                width: parent.width
-                implicitHeight: lineWordsRow.implicitHeight
+                width: wordsColumn.width
+                height: lineWordsRow.implicitHeight
 
                 Row {
                     id: lineWordsRow
                     spacing: 0
-                    anchors.right: root.isAnsweringVoice ? parent.right : undefined
-                    anchors.left: (!root.isAnsweringVoice && !root.isEnsembleVoice) ? parent.left : undefined
-                    anchors.horizontalCenter: root.isEnsembleVoice ? parent.horizontalCenter : undefined
+                    // 1:1 Mochy-Music Cartesian alignment: End -> (parent.width - width), Center -> (parent.width - width)/2, Start -> 0
+                    // Eliminates Qt Quick positioner anchor resolution latency and anchor-deadlock
+                    x: root.isAnsweringVoice ? Math.max(0, parent.width - width) : (root.isEnsembleVoice ? Math.max(0, Math.round((parent.width - width) / 2)) : 0)
 
                     Repeater {
                         id: lineWordsRepeater
@@ -119,14 +160,17 @@ Item {
                         delegate: Item {
                             id: wordRoot
                             readonly property var wData: modelData
+                            readonly property int wordIdx: (wData && wData.globalIndex !== undefined) ? wData.globalIndex : index
                             readonly property bool isLastInLine: index === (lineWordsRepeater.count - 1)
                             readonly property real wStart: wData.start || 0.0
                             readonly property real wEnd: wData.end || 0.0
                             readonly property real wDur: Math.max(0.05, wData.duration || (wEnd - wStart))
                             readonly property bool isHeld: !!wData.isHeld || (wDur >= 0.85)
-                            readonly property bool isPast: root.effectiveTime >= wEnd
-                            readonly property bool isSinging: root.effectiveTime >= wStart && root.effectiveTime < wEnd
-                            readonly property real wordProgress: Math.max(0.0, Math.min(1.0, (root.effectiveTime - wStart) / wDur))
+
+                            // Strict Mochy-Music Monotonic Reading: A word can NEVER be past or singing if the head hasn't reached it!
+                            readonly property bool isPast: wordRoot.wordIdx < root.activeWordIndex || (wordRoot.wordIdx === root.activeWordIndex && root.effectiveTime >= wEnd)
+                            readonly property bool isSinging: wordRoot.wordIdx === root.activeWordIndex && root.effectiveTime >= wStart && root.effectiveTime < wEnd
+                            readonly property real wordProgress: wordRoot.isPast ? 1.0 : (wordRoot.isSinging ? Math.max(0.0, Math.min(1.0, (root.effectiveTime - wStart) / wDur)) : 0.0)
 
                             // C1 continuous smooth progress
                             property real smoothProg: 0.0
@@ -224,17 +268,26 @@ Item {
                             }
 
                             // Layer 2: True Hardware Gaussian MultiEffect Glow on Singing Word
-                            MultiEffect {
-                                source: charRow
+                            // Optimization: Only instantiated on the single singing word to eliminate GPU FBO thrashing (60fps guaranteed)
+                            Loader {
+                                id: glowLoader
                                 anchors.fill: charRow
-                                shadowEnabled: wordRoot.isSinging
-                                shadowColor: "#ffffff"
-                                shadowBlur: 0.95
-                                shadowOpacity: wordRoot.isSinging ? (0.92 * wordRoot.flareGate * Math.sin(Math.PI * wordRoot.smoothProg)) : 0.0
-                                shadowHorizontalOffset: 0
-                                shadowVerticalOffset: 0
-                                shadowScale: 1.08
-                                visible: shadowOpacity > 0.01
+                                active: wordRoot.isSinging
+                                visible: active
+                                sourceComponent: Component {
+                                    MultiEffect {
+                                        source: charRow
+                                        anchors.fill: parent
+                                        shadowEnabled: true
+                                        shadowColor: "#ffffff"
+                                        shadowBlur: 0.95
+                                        shadowOpacity: wordRoot.isSinging ? (0.92 * wordRoot.flareGate * Math.sin(Math.PI * wordRoot.smoothProg)) : 0.0
+                                        shadowHorizontalOffset: 0
+                                        shadowVerticalOffset: 0
+                                        shadowScale: 1.08
+                                        visible: shadowOpacity > 0.01
+                                    }
+                                }
                             }
                         }
                     }
@@ -243,3 +296,4 @@ Item {
         }
     }
 }
+

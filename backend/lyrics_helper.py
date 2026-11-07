@@ -386,7 +386,7 @@ def parse_ttml(ttml_str):
         return []
 
     p_re = re.compile(
-        r'<p\s[^>]*begin="([^"]+)"[^>]*end="([^"]+)"[^>]*>([\s\S]*?)</p>'
+        r'<p\s+([^>]*?)>([\s\S]*?)</p>'
     )
     span_re = re.compile(
         r'<span\s[^>]*begin="([^"]+)"[^>]*end="([^"]+)"[^>]*>(.*?)</span>'
@@ -394,15 +394,30 @@ def parse_ttml(ttml_str):
 
     results = []
     for pm in p_re.finditer(ttml_str):
-        line_start = round(_parse_ttml_time(pm.group(1)), 3)
-        line_end   = round(_parse_ttml_time(pm.group(2)), 3)
-        inner      = pm.group(3)
+        attrs = pm.group(1)
+        inner = pm.group(2)
 
-        spans = span_re.findall(inner)
+        begin_m = re.search(r'begin="([^"]+)"', attrs)
+        end_m = re.search(r'end="([^"]+)"', attrs)
+        if not begin_m or not end_m:
+            continue
+
+        line_start = round(_parse_ttml_time(begin_m.group(1)), 3)
+        line_end   = round(_parse_ttml_time(end_m.group(1)), 3)
+
+        agent_m = re.search(r'(?:ttm:)?agent="([^"]+)"', attrs)
+        agent = agent_m.group(1) if agent_m else None
+        is_bg = bool(re.search(r'(?:ttm:)?role="x-bg"', attrs))
+
+        spans = list(span_re.finditer(inner))
         if spans:
             words = []
-            for sp_begin, sp_end, sp_text in spans:
-                has_space = sp_text.endswith(" ") or sp_text.endswith("\t")
+            for i, sm in enumerate(spans):
+                sp_begin = sm.group(1)
+                sp_end = sm.group(2)
+                sp_text = sm.group(3)
+                trailing = inner[sm.end():spans[i + 1].start()] if i + 1 < len(spans) else ""
+                has_space = sp_text.endswith(" ") or sp_text.endswith("\t") or bool(re.search(r'\s', trailing))
                 clean_sp = html.unescape(sp_text.strip())
                 if not clean_sp:
                     continue
@@ -419,25 +434,35 @@ def parse_ttml(ttml_str):
                 })
             if words:
                 plain = clean_vocal_markers("".join(w["text"] + (" " if w.get("hasSpace", True) else "") for w in words).strip())
-                results.append({
+                line_dict = {
                     "time": line_start,
                     "endTime": line_end,
                     "text": plain,
                     "hasWords": True,
                     "isSynthetic": False,
                     "words": words,
-                })
+                }
+                if agent:
+                    line_dict["agent"] = agent
+                if is_bg:
+                    line_dict["isBackground"] = True
+                results.append(line_dict)
         else:
             plain = clean_vocal_markers(html.unescape(re.sub(r'<[^>]+>', '', inner).strip()))
             if plain:
-                results.append({
+                line_dict = {
                     "time": line_start,
                     "endTime": line_end,
                     "text": plain,
                     "hasWords": False,
                     "isSynthetic": True,
                     "words": [],
-                })
+                }
+                if agent:
+                    line_dict["agent"] = agent
+                if is_bg:
+                    line_dict["isBackground"] = True
+                results.append(line_dict)
 
     results.sort(key=lambda x: x["time"])
     return results
@@ -1232,27 +1257,27 @@ def _insert_interlude_dots(lines):
             source_val = l["source"]
             break
 
-    # 1. Check Intro gap before first vocal line
+    # 1. Check Intro gap before first vocal line (1:1 Mochy MinInterludeGapMs = 4000L)
     first_line = lines[0]
     if isinstance(first_line, dict) and "time" in first_line:
         first_time = float(first_line.get("time") or 0.0)
-        if first_time >= 3.5:
-            cd_start = max(0.5, first_time - 3.0)
-            dot_dur = (first_time - cd_start) / 3.0
+        if first_time >= 4.0:
+            dot_dur = first_time / 3.0
             interlude_item = {
-                "time": round(max(0.0, first_time - 6.0), 3),
+                "time": 0.0,
                 "endTime": round(first_time, 3),
                 "text": "• • •",
                 "isInterlude": True,
                 "hasWords": True,
                 "isSynthetic": False,
                 "words": [
-                    {"text": "•", "start": round(cd_start, 3), "end": round(cd_start + dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": True},
-                    {"text": "•", "start": round(cd_start + dot_dur, 3), "end": round(cd_start + 2 * dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": True},
-                    {"text": "•", "start": round(cd_start + 2 * dot_dur, 3), "end": round(first_time, 3), "duration": round(dot_dur, 3), "isHeld": True},
+                    {"text": "•", "start": 0.0, "end": round(dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": True},
+                    {"text": "•", "start": round(dot_dur, 3), "end": round(2 * dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": True},
+                    {"text": "•", "start": round(2 * dot_dur, 3), "end": round(first_time, 3), "duration": round(dot_dur, 3), "isHeld": True},
                 ],
                 "romanized": "",
-                "source": source_val
+                "source": source_val,
+                "agent": first_line.get("agent", "v1")
             }
             result.append(interlude_item)
 
@@ -1278,24 +1303,24 @@ def _insert_interlude_dots(lines):
                     cur_end = cur_time + min(5.0, max(2.2, txt_len * 0.25))
 
             gap = next_time - cur_end
-            if gap >= 3.5:
-                cd_start = max(cur_end + 0.3, next_time - 3.0)
-                dot_dur = (next_time - cd_start) / 3.0
-                interlude_start = max(cur_end + 0.2, next_time - 6.0)
+            if gap >= 4.0:
+                dot_dur = gap / 3.0
+                interlude_start = round(cur_end, 3)
                 interlude_item = {
-                    "time": round(interlude_start, 3),
+                    "time": interlude_start,
                     "endTime": round(next_time, 3),
                     "text": "• • •",
                     "isInterlude": True,
                     "hasWords": True,
                     "isSynthetic": False,
                     "words": [
-                        {"text": "•", "start": round(cd_start, 3), "end": round(cd_start + dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": True},
-                        {"text": "•", "start": round(cd_start + dot_dur, 3), "end": round(cd_start + 2 * dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": True},
-                        {"text": "•", "start": round(cd_start + 2 * dot_dur, 3), "end": round(next_time, 3), "duration": round(dot_dur, 3), "isHeld": True},
+                        {"text": "•", "start": interlude_start, "end": round(interlude_start + dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": True},
+                        {"text": "•", "start": round(interlude_start + dot_dur, 3), "end": round(interlude_start + 2 * dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": True},
+                        {"text": "•", "start": round(interlude_start + 2 * dot_dur, 3), "end": round(next_time, 3), "duration": round(dot_dur, 3), "isHeld": True},
                     ],
                     "romanized": "",
-                    "source": source_val
+                    "source": source_val,
+                    "agent": next_line.get("agent", "v1")
                 }
                 result.append(interlude_item)
 

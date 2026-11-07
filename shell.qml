@@ -4305,9 +4305,13 @@ Scope {
         function openWhatsNew() {
             whatsNewModal.openModal(win.updateReleaseNotes);
         }
+        function closeWhatsNew() {
+            whatsNewModal.closeModal();
+        }
         function getAccentColorInfo() {
             console.log("[NutstyAccent]", "accentColor:", win.accentColor, "songAccentColor:", win.songAccentColor, "wallpaperAccentColor:", win.wallpaperAccentColor, "isPlaying:", win.isPlaying, "track:", win.currentTrack ? win.currentTrack.title : "null", "cover:", win.currentTrack ? win.currentTrack.image : "null");
         }
+
         function testSendChatMessage(text: string) {
             win.sendChatMessage(text);
         }

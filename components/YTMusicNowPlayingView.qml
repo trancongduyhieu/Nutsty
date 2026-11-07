@@ -21,6 +21,17 @@ Item {
     property string appDir: (typeof win !== "undefined" && win && win.appDir) ? win.appDir : (Quickshell.env("NUTSTY_APP_DIR") || (Quickshell.env("HOME") + "/Applications/FrostifyLocal"))
 
     property string activeTab: "lyrics" // "up_next" | "lyrics" | "related"
+    onActiveTabChanged: {
+        if (activeTab === "lyrics") {
+            root.followPlayback = true;
+            userScrollTimer.stop();
+            Qt.callLater(function() {
+                root.recenterToCurrentLyric(false);
+            });
+        }
+    }
+
+    property bool followPlayback: true
 
     property var activeLyrics: []
     property int currentLyricIndex: -1
@@ -39,6 +50,172 @@ Item {
             }
         }
         return false;
+    }
+
+    // Duet detection matching Mochy-Music: usesAgentAlignment(lines)
+    // Left and right only mean something when the song really has more than one voice; untagged lines count as lead (v1), background lines don't count
+    property bool hasDuetVoices: false
+
+    function computeHasDuetVoices(lyricsList) {
+        if (!lyricsList || lyricsList.length === 0) return false;
+        var leadAgents = {};
+        var count = 0;
+        for (var i = 0; i < lyricsList.length; ++i) {
+            var entry = lyricsList[i];
+            if (entry && !entry.isBackground && !entry.isInterlude) {
+                var ag = entry.agent || "v1";
+                if (!leadAgents[ag]) {
+                    leadAgents[ag] = true;
+                    count++;
+                }
+            }
+        }
+        return count > 1;
+    }
+
+    onActiveLyricsChanged: {
+        hasDuetVoices = computeHasDuetVoices(activeLyrics);
+        root.followPlayback = true;
+        userScrollTimer.stop();
+        Qt.callLater(function() {
+            root.recenterToCurrentLyric(false);
+        });
+    }
+
+    // 1:1 Mochy-Music multi-active anchor (LyricsScreen.kt lyricAnchorIndex)
+    // Walks backward from current line while an earlier singer is still singing/holding a note
+    readonly property int anchorLyricIndex: {
+        var cur = root.currentLyricIndex;
+        if (cur <= 0 || !root.activeLyrics || cur >= root.activeLyrics.length) return cur;
+        var pos = root.currentTime;
+        var i = cur;
+        while (i > 0) {
+            var prev = i - 1;
+            var prevLine = root.activeLyrics[prev];
+            if (!prevLine) return i;
+            var endSec = 0.0;
+            if (prevLine.words && prevLine.words.length > 0) {
+                var lastW = prevLine.words[prevLine.words.length - 1];
+                endSec = (lastW.end !== undefined) ? Number(lastW.end) : 0.0;
+            } else if (prevLine.endTime !== undefined) {
+                endSec = Number(prevLine.endTime);
+            }
+            if (endSec <= pos) return i;
+            i = prev;
+        }
+        return i;
+    }
+
+    onAnchorLyricIndexChanged: {
+        if (root.followPlayback && !userScrollTimer.running && !lyricsView.moving && !lyricsView.dragging && !lyricsView.flicking && root.activeTab === "lyrics") {
+            root.recenterToCurrentLyric(true);
+        }
+    }
+
+    // Sanitize word timestamps to guarantee monotonically non-decreasing start times and positive duration
+    function sanitizeWordList(wList) {
+        if (!wList || wList.length === 0) return [];
+        var res = [];
+        var lastStart = -1.0;
+        for (var i = 0; i < wList.length; i++) {
+            var w = wList[i];
+            var s = (w.start !== undefined) ? Number(w.start) : 0.0;
+            var e = (w.end !== undefined) ? Number(w.end) : (s + 0.2);
+            if (lastStart >= 0 && s < lastStart) {
+                s = lastStart;
+            }
+            if (e < s + 0.05) {
+                e = s + 0.05;
+            }
+            lastStart = s;
+            res.push({
+                text: w.text || "",
+                start: s,
+                end: e,
+                duration: Math.max(0.05, e - s),
+                hasSpace: (w.hasSpace !== false),
+                isHeld: !!w.isHeld
+            });
+        }
+        return res;
+    }
+
+    // 1:1 Mochy-Music splitBackingVocal: separates lead text and bracketed backing vocal
+    function splitBackingVocal(text, words) {
+        if (!text || (text.indexOf('(') < 0 && text.indexOf('[') < 0)) {
+            return { lead: text || "", backing: "", leadWords: sanitizeWordList(words || []), backingWords: [] };
+        }
+
+        var leadChars = [];
+        var backingChars = [];
+        var inBracket = new Array(text.length);
+        var depth = 0;
+
+        for (var i = 0; i < text.length; i++) {
+            var ch = text.charAt(i);
+            if (ch === '(' || ch === '[') {
+                depth++;
+                inBracket[i] = true;
+            } else if ((ch === ')' || ch === ']') && depth > 0) {
+                depth--;
+                inBracket[i] = true;
+                if (depth === 0) backingChars.push(' ');
+            } else if (depth > 0) {
+                inBracket[i] = true;
+                backingChars.push(ch);
+            } else {
+                inBracket[i] = false;
+                leadChars.push(ch);
+            }
+        }
+
+        if (depth !== 0) {
+            return { lead: text, backing: "", leadWords: sanitizeWordList(words || []), backingWords: [] };
+        }
+
+        var leadText = leadChars.join('').replace(/\s{2,}/g, ' ').trim();
+        var backingText = backingChars.join('').replace(/\s{2,}/g, ' ').trim();
+
+        if (!backingText) {
+            return { lead: text, backing: "", leadWords: sanitizeWordList(words || []), backingWords: [] };
+        }
+
+        var leadWords = [];
+        var backingWords = [];
+        if (words && words.length > 0) {
+            var searchFrom = 0;
+            for (var j = 0; j < words.length; j++) {
+                var w = words[j];
+                var trimmed = (w.text || "").trim();
+                if (!trimmed) continue;
+                var start = text.indexOf(trimmed, searchFrom);
+                if (start < 0) continue;
+                searchFrom = start + trimmed.length;
+
+                var bare = (w.text || "").replace(/[\(\)\[\]]/g, '');
+                var cleanWord = {
+                    text: bare,
+                    start: w.start,
+                    end: w.end,
+                    duration: w.duration,
+                    hasSpace: w.hasSpace,
+                    isHeld: w.isHeld
+                };
+
+                if (start < inBracket.length && inBracket[start]) {
+                    backingWords.push(cleanWord);
+                } else {
+                    leadWords.push(cleanWord);
+                }
+            }
+        }
+
+        return {
+            lead: leadText,
+            backing: backingText,
+            leadWords: sanitizeWordList(leadWords),
+            backingWords: sanitizeWordList(backingWords)
+        };
     }
 
     function formatLyricSourceName(rawSrc) {
@@ -295,32 +472,56 @@ Item {
         id: userScrollTimer
         interval: 3500
         repeat: false
-    }
-
-    // AMLL-style pixel-scroll engine.
-    // scrollTo(index) computes contentY target so the active line sits at 35% from top,
-    // then writes lyricsView.contentY — the Behavior SmoothedAnimation on contentY handles the rest.
-    // Calling scrollTo() rapidly (fast songs) is safe: SmoothedAnimation absorbs rapid retargeting
-    // by converging toward the latest target value without spawning nested animations.
-    QtObject {
-        id: lyricsScrollAnim
-
-        function scrollTo(idx) {
-            if (idx < 0 || !lyricsView) return;
-            var item = lyricsView.itemAtIndex(idx);
-            if (!item) {
-                // Item not yet in viewport (ListView virtualisation). Fallback: estimate via spacing.
-                // This only happens on big seek jumps; SmoothedAnimation will still look smooth.
-                var avgH = (lyricsView.contentHeight / Math.max(1, root.activeLyrics.length));
-                var rawEst = idx * (avgH + lyricsView.spacing) + lyricsView.topMargin - lyricsView.height * 0.35;
-                lyricsView.contentY = Math.max(0, Math.min(rawEst, lyricsView.contentHeight - lyricsView.height));
-                return;
+        onTriggered: {
+            if (!lyricsView.moving && !lyricsView.dragging && !lyricsView.flicking) {
+                root.followPlayback = true;
+                root.recenterToCurrentLyric(true);
             }
-            // item.y is in ListView content-coordinate space — correct for topMargin offset
-            var rawY = item.y + lyricsView.topMargin - lyricsView.height * 0.35;
-            lyricsView.contentY = Math.max(0, Math.min(rawY, lyricsView.contentHeight - lyricsView.height));
         }
     }
+
+    // 1:1 Mochy-Music independent smooth recenter controller (LyricsScreen.kt)
+    // RecenterDurationMs = 950ms, CubicBezierEasing(0.42f, 0f, 0.16f, 1f), MinPastLineVisibleHeight = 72.dp
+    function recenterToCurrentLyric(smooth) {
+        if (!lyricsView || !activeLyrics || activeLyrics.length === 0) return;
+        var targetIdx = root.anchorLyricIndex;
+        if (targetIdx < 0 || targetIdx >= activeLyrics.length) targetIdx = root.currentLyricIndex;
+        if (targetIdx < 0 || targetIdx >= activeLyrics.length) return;
+
+        var restingOffset = Math.max(72, Math.round(lyricsView.height * 0.055));
+        var targetItem = lyricsView.itemAtIndex(targetIdx);
+
+        if (!targetItem) {
+            lyricsView.positionViewAtIndex(targetIdx, ListView.Beginning);
+            targetItem = lyricsView.itemAtIndex(targetIdx);
+        }
+
+        if (targetItem) {
+            var destY = targetItem.y - restingOffset;
+            var minContentY = -lyricsView.topMargin;
+            var maxContentY = Math.max(minContentY, lyricsView.contentHeight + lyricsView.bottomMargin - lyricsView.height);
+            destY = Math.max(minContentY, Math.min(maxContentY, destY));
+
+            if (smooth) {
+                smoothRecenterAnim.stop();
+                smoothRecenterAnim.to = destY;
+                smoothRecenterAnim.start();
+            } else {
+                smoothRecenterAnim.stop();
+                lyricsView.contentY = destY;
+            }
+        }
+    }
+
+    NumberAnimation {
+        id: smoothRecenterAnim
+        target: (typeof lyricsView !== "undefined") ? lyricsView : null
+        property: "contentY"
+        duration: 950
+        easing.type: Easing.BezierSpline
+        easing.bezierCurve: [0.42, 0.0, 0.16, 1.0, 1.0, 1.0]
+    }
+
 
     function getHighResImage(url) {
         if (!url || typeof url !== "string") return "";
@@ -501,6 +702,7 @@ Item {
                 try {
                     var parsed = JSON.parse(data);
                     if (Array.isArray(parsed) && parsed.length > 0) {
+                        root.hasDuetVoices = root.computeHasDuetVoices(parsed);
                         root.activeLyrics = parsed;
                         root.hasLyrics = true;
                         root.isLoadingLyrics = false;
@@ -663,41 +865,33 @@ Item {
             return;
         }
         var cur = root.currentTime;
+        // 1:1 Mochy-Music line lead-in (LineLeadInMs = 300L): line becomes active 300ms before start,
+        // allowing interlude dots to collapse smoothly in step with the recenter scroll!
+        var leadIn = 0.3;
+        var pos = cur + leadIn;
         var found = -1;
         for (var i = 0; i < activeLyrics.length; i++) {
-            var t = activeLyrics[i].time;
-            var nextT = (i + 1 < activeLyrics.length) ? activeLyrics[i + 1].time : 999999;
-            if (cur >= t && cur < nextT) {
-                found = i;
+            if (activeLyrics[i].time > pos) {
+                found = i - 1;
                 break;
             }
         }
-        if (found === -1 && cur < activeLyrics[0].time) {
+        if (found === -1) {
+            found = activeLyrics.length - 1;
+        }
+        if (found < 0) {
             found = 0;
         }
         if (found !== -1) {
-            var changed = (currentLyricIndex !== found);
             currentLyricIndex = found;
-
-            // Smooth contentY scroll — AMLL-style pixel-accurate scrolling.
-            // We scroll by animating contentY directly (SmoothedAnimation defined on lyricsView),
-            // NOT via currentIndex/highlight mechanism which causes double-animation conflict.
-            // Target: active line sits at 35% from the top of the visible viewport.
-            if (!lyricsView.moving && !lyricsView.dragging && !lyricsView.flicking && !userScrollTimer.running) {
-                if (forceScroll) {
-                    // On first load: jump instantly, no animation
-                    var item0 = lyricsView.itemAtIndex(found);
-                    if (item0) {
-                        var raw0 = item0.y - lyricsView.height * 0.35 + lyricsView.topMargin;
-                        lyricsView.contentY = Math.max(0, Math.min(raw0, lyricsView.contentHeight - lyricsView.height));
-                    }
-                } else if (changed) {
-                    // On line change: smooth scroll via SmoothedAnimation on contentY
-                    lyricsScrollAnim.scrollTo(found);
-                }
+            if (forceScroll && lyricsView) {
+                root.followPlayback = true;
+                userScrollTimer.stop();
+                root.recenterToCurrentLyric(false);
             }
         }
     }
+
 
     function fetchRelatedContent() {
         if (!track) return;
@@ -1843,42 +2037,67 @@ Item {
                     ListView {
                         id: lyricsView
                         anchors.fill: parent
-                        readonly property bool isUserScrolling: dragging || moving || flicking
+                        readonly property bool isUserScrolling: dragging || flicking || moving || !root.followPlayback
                         anchors.leftMargin: 8
                         anchors.rightMargin: 8
                         clip: false
                         spacing: 22
-                        topMargin: 24
-                        bottomMargin: height * 0.45
-                        // currentIndex tracks highlight only — no longer used for scrolling
-                        currentIndex: root.currentLyricIndex
-                        // Disable Qt highlight scroll engine entirely — we scroll contentY directly
+                        topMargin: 72
+                        bottomMargin: Math.round(height * 0.65)
+                        currentIndex: -1
+                        highlightFollowsCurrentItem: false
                         highlightRangeMode: ListView.NoHighlightRange
+                        highlightMoveDuration: 0
+                        cacheBuffer: 2500
                         model: root.activeLyrics
 
-                        // 1:1 Mochy-Music smooth recenter scroll: 950ms with LyricsSmoothRecenterEasing [0.42, 0, 0.16, 1]
-                        Behavior on contentY {
-                            enabled: !lyricsView.moving && !lyricsView.dragging && !lyricsView.flicking
-                            NumberAnimation {
-                                duration: 950
-                                easing.type: Easing.BezierSpline
-                                easing.bezierCurve: [0.42, 0.0, 0.16, 1.0, 1.0, 1.0]
-                            }
+                        onMovementStarted: {
+                            smoothRecenterAnim.stop();
+                            root.followPlayback = false;
+                            userScrollTimer.stop();
+                        }
+                        onMovementEnded: {
+                            smoothRecenterAnim.stop();
+                            root.followPlayback = false;
+                            userScrollTimer.restart();
+                        }
+                        onDragStarted: {
+                            smoothRecenterAnim.stop();
+                            root.followPlayback = false;
+                            userScrollTimer.stop();
+                        }
+                        onDragEnded: {
+                            smoothRecenterAnim.stop();
+                            root.followPlayback = false;
+                            userScrollTimer.restart();
+                        }
+                        onFlickStarted: {
+                            smoothRecenterAnim.stop();
+                            root.followPlayback = false;
+                            userScrollTimer.stop();
+                        }
+                        onFlickEnded: {
+                            smoothRecenterAnim.stop();
+                            root.followPlayback = false;
+                            userScrollTimer.restart();
                         }
 
-                        onMovementStarted: userScrollTimer.restart()
-                        onMovementEnded: userScrollTimer.restart()
-                        onFlickStarted: userScrollTimer.restart()
-                        onFlickEnded: userScrollTimer.restart()
 
                         delegate: Item {
                             id: lyricRow
                             width: Math.max(100, lyricsView.width - 24)
-                            height: Math.max(48, lyricContentItem.implicitHeight + 16)
+                            height: isDuetInterlude ? (isCurrent ? 48 : 0) : Math.max(48, lyricContentItem.implicitHeight + 16)
+                            visible: isDuetInterlude ? (height > 0.5) : true
+                            clip: isDuetInterlude && height < 47.5
 
-                            readonly property int signedDist: index - root.currentLyricIndex
+                            readonly property int signedDist: {
+                                if (root.currentLyricIndex < 0) return index - root.currentLyricIndex;
+                                if (index < root.anchorLyricIndex) return index - root.anchorLyricIndex;
+                                if (index > root.currentLyricIndex) return index - root.currentLyricIndex;
+                                return 0;
+                            }
                             readonly property int dist: Math.abs(signedDist)
-                            // Strict SSOT: Exactly ONE line is current at any time (prevents 2 lines glowing together)
+                            // 1:1 Mochy-Music multi-active range: All lines in [anchorLyricIndex .. currentLyricIndex] are active simultaneously
                             readonly property bool isCurrent: dist === 0
                             readonly property real lineStartTime: (modelData && modelData.time !== undefined) ? modelData.time : 0.0
                             readonly property real lineEndTime: (modelData && modelData.endTime && modelData.endTime > lineStartTime)
@@ -1887,10 +2106,18 @@ Item {
                             readonly property real duration: Math.max(0.6, lineEndTime - lineStartTime)
                             readonly property real lineProgress: isCurrent ? Math.min(1.0, Math.max(0.0, (root.currentTime - lineStartTime) / duration)) : 0.0
 
+                            // Backing vocal separation (1:1 Mochy-Music splitBackingVocal)
+                            readonly property var lineParts: root.splitBackingVocal(modelData ? (modelData.text || "") : "", (modelData && modelData.words) ? modelData.words : null)
+                            readonly property string leadText: lineParts ? lineParts.lead : (modelData ? (modelData.text || "") : "")
+                            readonly property var leadWords: lineParts ? lineParts.leadWords : ((modelData && modelData.words) ? modelData.words : [])
+                            readonly property string backingText: lineParts ? lineParts.backing : ""
+                            readonly property var backingWords: lineParts ? lineParts.backingWords : []
+                            readonly property bool hasBackingVocal: !!backingText
+
                             // isHovered: chỉ TRUE khi đang NHẤN GIỮ chuột trái (pressed), KHÔNG phải hover.
                             readonly property bool isHovered: rowMouse.pressed && !isCurrent
 
-                            readonly property bool isPlainLine: !modelData.hasWords || modelData.isSynthetic || !modelData.words || modelData.words.length === 0
+                            readonly property bool isPlainLine: !modelData.hasWords || modelData.isSynthetic || !leadWords || leadWords.length === 0
                             readonly property real targetBlur: (isCurrent || lyricsView.isUserScrolling || isHovered) ? 0.0 : (dist === 1 ? 0.20 : (dist === 2 ? 0.42 : (dist === 3 ? 0.65 : 0.85)))
 
                             // 1:1 Mochy-Music state scale & alpha transitions (LyricsGlowLine.kt)
@@ -1899,13 +2126,25 @@ Item {
                             readonly property real restingScale: isPlainLine ? 1.0 : (isCurrent ? 1.06 : (signedDist < 0 ? 0.93 : (dist === 1 ? 0.98 : 0.95)))
 
                             // Duet vocal layout & agent classification (1:1 Mochy-Music & Apple Music)
+                            readonly property bool isDuetInterlude: !!(modelData && modelData.isInterlude)
+                            readonly property var nextLyricEntry: (isDuetInterlude && (index + 1 < root.activeLyrics.length)) ? root.activeLyrics[index + 1] : null
+                            readonly property string effectiveAgent: isDuetInterlude ? (nextLyricEntry ? (nextLyricEntry.agent || "v1") : "v1") : (modelData ? (modelData.agent || "v1") : "v1")
                             readonly property bool isBackgroundVocal: !!(modelData && modelData.isBackground)
-                            readonly property bool isEnsembleVoice: !!(modelData && (modelData.agent === "v1000" || modelData.isBackground))
-                            readonly property bool isAnsweringVoice: !!(modelData && !isEnsembleVoice && modelData.agent && modelData.agent !== "v1")
+                            readonly property bool isEnsembleVoice: root.hasDuetVoices && ((effectiveAgent === "v1000" || effectiveAgent === "v3") || (isBackgroundVocal && !isDuetInterlude))
+                            readonly property bool isAnsweringVoice: root.hasDuetVoices && !isEnsembleVoice && (effectiveAgent === "v2" || (effectiveAgent && effectiveAgent.indexOf("v2") === 0))
 
-                            opacity: restingAlpha
+                            opacity: isDuetInterlude ? (isCurrent ? 1.0 : 0.0) : restingAlpha
                             transformOrigin: lyricRow.isAnsweringVoice ? Item.Right : (lyricRow.isEnsembleVoice ? Item.Center : Item.Left)
                             scale: restingScale
+
+                            Behavior on height {
+                                enabled: lyricRow.isDuetInterlude
+                                NumberAnimation {
+                                    duration: 950
+                                    easing.type: Easing.BezierSpline
+                                    easing.bezierCurve: [0.42, 0.0, 0.16, 1.0, 1.0, 1.0]
+                                }
+                            }
                             Behavior on scale {
                                 NumberAnimation {
                                     duration: 950
@@ -1927,102 +2166,138 @@ Item {
 
                             Column {
                                 id: lyricContentItem
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.verticalCenter: parent.verticalCenter
+                                width: parent.width
+                                anchors.top: parent.top
+                                anchors.topMargin: lyricRow.isDuetInterlude ? 10 : 8
                                 spacing: 3
 
                                 Item {
                                     width: parent.width
-                                    implicitHeight: Math.max(36, (appleMusicFlowLoader.visible && appleMusicFlowLoader.item)
+                                    height: implicitHeight
+                                    implicitHeight: lyricRow.isDuetInterlude ? 28 : ((lyricRow.leadText.length === 0) ? 0 : Math.max(36, (appleMusicFlowLoader.visible && appleMusicFlowLoader.item)
                                         ? appleMusicFlowLoader.item.implicitHeight
-                                        : staticLineTxt.implicitHeight)
+                                        : staticLineTxt.implicitHeight))
+                                    visible: lyricRow.isDuetInterlude ? (lyricRow.height > 0.5) : (lyricRow.leadText.length > 0)
 
-                                    // 1. SimpMusic / Apple Music Interlude Countdown Beads (• • •)
-                                    // Persistent: Rises -2.0px with MultiEffect Gaussian Glow, stays at 0.35 opacity when past!
+                                    // 1. SimpMusic / Apple Music Interlude Countdown Beads (• • •) (1:1 Mochy-Music LyricsInterludeDots.kt)
+                                    // Dynamic Lifecycle: Grows on spring/bezier when gap begins, collapses to 0px in step with recenter scroll!
                                     Row {
                                         id: interludeBeadsRow
-                                        visible: !!(modelData && modelData.isInterlude)
+                                        visible: !!(modelData && modelData.isInterlude) && (lyricRow.height > 0.5)
                                         spacing: 16
                                         anchors.left: (!lyricRow.isAnsweringVoice && !lyricRow.isEnsembleVoice) ? parent.left : undefined
+                                        anchors.leftMargin: 0
                                         anchors.right: lyricRow.isAnsweringVoice ? parent.right : undefined
+                                        anchors.rightMargin: 0
                                         anchors.horizontalCenter: lyricRow.isEnsembleVoice ? parent.horizontalCenter : undefined
                                         anchors.verticalCenter: parent.verticalCenter
                                         height: 28
 
+                                        readonly property real gapStart: (modelData && modelData.time !== undefined) ? modelData.time : 0.0
+                                        readonly property real gapEnd: (modelData && modelData.endTime !== undefined) ? modelData.endTime : (gapStart + 4.0)
+                                        readonly property real gapSpan: Math.max(0.1, gapEnd - gapStart)
+                                        readonly property real gapProgress: lyricRow.isCurrent ? Math.max(0.0, Math.min(1.0, (root.currentTime - gapStart) / gapSpan)) : 0.0
+
+                                        function smoothstep(t) {
+                                            var x = Math.max(0.0, Math.min(1.0, t));
+                                            return x * x * (3.0 - 2.0 * x);
+                                        }
+
+                                        // Finale Swell (at 88% of gap): All 3 dots swell together before the next line starts
+                                        readonly property real finaleNow: (gapProgress >= 0.88) ? smoothstep((gapProgress - 0.88) / 0.12) : 0.0
+
                                         Repeater {
-                                            model: (modelData && modelData.words && modelData.words.length === 3) ? modelData.words : [
-                                                { "text": "•", "start": (modelData ? modelData.endTime - 3.0 : 0.0), "end": (modelData ? modelData.endTime - 2.0 : 1.0) },
-                                                { "text": "•", "start": (modelData ? modelData.endTime - 2.0 : 1.0), "end": (modelData ? modelData.endTime - 1.0 : 2.0) },
-                                                { "text": "•", "start": (modelData ? modelData.endTime - 1.0 : 2.0), "end": (modelData ? modelData.endTime : 3.0) }
-                                            ]
+                                            model: 3
 
                                             delegate: Item {
                                                 id: dotItem
-                                                width: 18
-                                                height: 18
+                                                width: 10
+                                                height: 10
 
-                                                readonly property real dStart: modelData.start || 0.0
-                                                readonly property real dEnd: modelData.end || 0.0
-                                                readonly property real dDur: Math.max(0.1, dEnd - dStart)
-                                                readonly property bool isPast: root.currentTime >= dEnd
-                                                readonly property bool isSinging: root.currentTime >= dStart && root.currentTime < dEnd
-                                                readonly property real dProg: isPast ? 1.0 : (isSinging ? Math.max(0.0, Math.min(1.0, (root.currentTime - dStart) / dDur)) : 0.0)
+                                                readonly property real sliceStart: index / 3.0
+                                                // DotFadeFraction = 0.55 in Mochy: How long a dot takes from unlit to lit
+                                                readonly property real within: (interludeBeadsRow.gapProgress - sliceStart) * 3.0 / 0.55
+                                                readonly property real fill: interludeBeadsRow.smoothstep(within)
 
-                                                property real liftProgress: (isSinging || isPast) ? 1.0 : 0.0
-                                                Behavior on liftProgress {
+                                                // Glow rides the fill up while lighting, then lets go slowly once lit (flare, not constant halo)
+                                                readonly property real litAt: sliceStart + 0.55 / 3.0
+                                                readonly property real glow: (interludeBeadsRow.gapProgress < litAt)
+                                                    ? fill
+                                                    : Math.exp(-((interludeBeadsRow.gapProgress - litAt) * interludeBeadsRow.gapSpan) / 0.9)
+                                                readonly property real effectiveGlow: Math.max(glow, Math.sin(Math.PI * interludeBeadsRow.finaleNow) * 0.7)
+
+                                                // Stagger pop-in when row becomes active
+                                                property real pop: lyricRow.isCurrent ? 1.0 : 0.0
+                                                Behavior on pop {
                                                     NumberAnimation {
-                                                        duration: 750
-                                                        easing.type: Easing.BezierSpline
-                                                        easing.bezierCurve: [0.4, 0.0, 0.2, 1.0]
+                                                        duration: 320
+                                                        easing.type: Easing.OutBack
                                                     }
                                                 }
+
+                                                // Scale: RestScale(0.8) + (LitScale(1.1) - RestScale(0.8)) * fill + 0.14 * finaleNow
+                                                scale: (0.8 + 0.3 * fill + 0.14 * interludeBeadsRow.finaleNow) * pop
+                                                // Alpha: RestAlpha(0.3) + (1.0 - RestAlpha(0.3)) * max(fill, finaleNow)
+                                                opacity: (0.3 + 0.7 * Math.max(fill, interludeBeadsRow.finaleNow)) * pop
+
+                                                // Idle bobbing: one slow breath up and down (BobPeriodMs = 2600ms, BobHeight = 1.8px, BobPhaseStep = 0.9)
+                                                readonly property real bobPhase: (root.currentTime / 2.6) * 2.0 * Math.PI - index * 0.9
+                                                readonly property real bobY: lyricRow.isCurrent ? (Math.sin(bobPhase) * 1.8) : 0.0
 
                                                 transform: Translate {
-                                                    y: -dotItem.liftProgress * 2.0
+                                                    y: dotItem.bobY
                                                 }
 
-                                                Rectangle {
-                                                    id: dotCore
+                                                // Layer 1: Perfect 360-degree Organic Radial Halo (Zero FBO truncation, zero box artifacts)
+                                                Image {
+                                                    id: auraImg
+                                                    source: "file://" + root.appDir + "/assets/icons/dot-radial-glow.svg"
                                                     anchors.centerIn: parent
-                                                    width: 8
-                                                    height: 8
-                                                    radius: 4
-                                                    color: "#ffffff"
-                                                    opacity: {
-                                                        if (dotItem.isPast || dotItem.isSinging) return 1.0;
-                                                        return 0.38;
-                                                    }
-                                                    Behavior on opacity { NumberAnimation { duration: 160 } }
+                                                    width: 64
+                                                    height: 64
+                                                    sourceSize.width: 64
+                                                    sourceSize.height: 64
+                                                    smooth: true
+                                                    visible: false
                                                 }
 
                                                 MultiEffect {
-                                                    source: dotCore
-                                                    anchors.fill: dotCore
-                                                    shadowEnabled: dotItem.isSinging
-                                                    shadowColor: "#ffffff"
-                                                    shadowBlur: 0.95
-                                                    shadowOpacity: dotItem.isSinging ? (0.92 * Math.sin(Math.PI * dotItem.dProg)) : 0.0
-                                                    shadowScale: 1.5
-                                                    shadowHorizontalOffset: 0
-                                                    shadowVerticalOffset: 0
-                                                    visible: shadowOpacity > 0.01
+                                                    source: auraImg
+                                                    anchors.fill: auraImg
+                                                    colorization: 1.0
+                                                    colorizationColor: root.accentColor || "#38bdf8"
+                                                    autoPaddingEnabled: false
+                                                    opacity: 0.85 * dotItem.effectiveGlow
+                                                    visible: dotItem.effectiveGlow > 0.01 && lyricRow.isCurrent
+                                                }
+
+                                                // Layer 2: Sharp Solid White Core Bead
+                                                Rectangle {
+                                                    id: dotCore
+                                                    anchors.centerIn: parent
+                                                    width: 10
+                                                    height: 10
+                                                    radius: 5
+                                                    color: "#ffffff"
+                                                    opacity: 0.75 + 0.25 * dotItem.fill
                                                 }
                                             }
                                         }
                                     }
 
                                     // 2. Apple Music Word Flow: Progressive character sweep + MultiEffect Gaussian bloom
+                                    // Persistent across nearby lines (dist <= 3) to guarantee 100% steady wrapping without jumps
                                     Loader {
                                         id: appleMusicFlowLoader
-                                        active: !interludeBeadsRow.visible && lyricRow.dist <= 1 && modelData.hasWords && !modelData.isSynthetic && modelData.words && modelData.words.length > 0
-                                        visible: active && (lyricRow.isCurrent ||
-                                                 (lyricRow.signedDist === -1 && appleMusicFlowLoader.item !== null && appleMusicFlowLoader.item.hasActiveHeldWord))
+                                        active: !interludeBeadsRow.visible && lyricRow.dist <= 3 && modelData.hasWords && !modelData.isSynthetic && lyricRow.leadWords && lyricRow.leadWords.length > 0
+                                        visible: active
                                         anchors.left: parent.left
                                         anchors.right: parent.right
                                         sourceComponent: Component {
                                             AppleMusicWordFlow {
-                                                words: (modelData.hasWords && !modelData.isSynthetic && modelData.words) ? modelData.words : []
+                                                anchors.left: parent.left
+                                                anchors.right: parent.right
+                                                words: (modelData.hasWords && !modelData.isSynthetic && lyricRow.leadWords) ? lyricRow.leadWords : []
                                                 currentTime: root.currentTime
                                                 fontSize: 28
                                                 accentColor: "#ffffff"
@@ -2032,17 +2307,17 @@ Item {
                                         }
                                     }
 
-                                    // 3. Unified Static Typography: Used for plain LRC lines and inactive lines
+                                    // 3. Unified Static Typography: Used for plain LRC lines and distant unmaterialized lines
                                     Text {
                                         id: staticLineTxt
-                                        visible: !interludeBeadsRow.visible && !appleMusicFlowLoader.visible
+                                        visible: !interludeBeadsRow.visible && !appleMusicFlowLoader.visible && lyricRow.leadText.length > 0
                                         anchors.left: (!lyricRow.isAnsweringVoice && !lyricRow.isEnsembleVoice) ? parent.left : undefined
                                         anchors.right: lyricRow.isAnsweringVoice ? parent.right : undefined
                                         anchors.horizontalCenter: lyricRow.isEnsembleVoice ? parent.horizontalCenter : undefined
-                                        width: Math.min(parent.width * 0.82, implicitWidth)
+                                        width: Math.min(parent.width * (lyricRow.isAnsweringVoice ? 0.82 : 0.88), implicitWidth)
                                         horizontalAlignment: lyricRow.isAnsweringVoice ? Text.AlignRight : (lyricRow.isEnsembleVoice ? Text.AlignHCenter : Text.AlignLeft)
                                         textFormat: Text.PlainText
-                                        text: modelData.text || ""
+                                        text: lyricRow.leadText
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 28
                                         font.weight: Font.Bold
@@ -2056,6 +2331,20 @@ Item {
                                         }
                                     }
                                 }
+
+                                // 1:1 Mochy-Music Backing Vocal Line: expands & collapses with smoothstep Hermite curve
+                                BackingVocalLine {
+                                    id: backingVocalLine
+                                    visible: lyricRow.hasBackingVocal && (smoothExpand > 0.001)
+                                    text: lyricRow.backingText
+                                    words: lyricRow.backingWords
+                                    currentTime: root.currentTime
+                                    lineIsActive: lyricRow.isCurrent
+                                    slide: lyricRow.leadText.length > 0
+                                    isAnsweringVoice: lyricRow.isAnsweringVoice
+                                    isEnsembleVoice: lyricRow.isEnsembleVoice
+                                }
+
 
                                 // Secondary Romanization Row (Romaji / Romaja / Pinyin)
                                 Text {
@@ -2088,8 +2377,12 @@ Item {
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
                                     if (modelData && modelData.time !== undefined) {
-                                        userScrollTimer.restart();
                                         root.seekRequested(modelData.time);
+                                        root.followPlayback = true;
+                                        userScrollTimer.stop();
+                                        Qt.callLater(function() {
+                                            root.recenterToCurrentLyric(true);
+                                        });
                                     }
                                 }
                             }

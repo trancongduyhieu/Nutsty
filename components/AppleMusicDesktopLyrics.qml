@@ -133,9 +133,12 @@ Item {
         delegate: Item {
             id: lyricRow
             width: lyricsList.width
-            height: root.lineHeight
+            height: isInterlude ? (isCurrent ? root.lineHeight : 0) : root.lineHeight
+            visible: isInterlude ? (isCurrent && height > 0.5) : (dist >= -1 && dist <= 4 && opacity > 0.01)
+            clip: isInterlude && height < (root.lineHeight - 0.5)
             transformOrigin: Item.Left
 
+            readonly property bool isInterlude: !!(modelData && modelData.isInterlude)
             readonly property int dist: index - root.currentLyricIndex
             readonly property bool isCurrent: dist === 0
             readonly property bool isHeldNoteActive: dist === -1 && flowLoader.item !== null && flowLoader.item.hasActiveHeldWord
@@ -167,10 +170,17 @@ Item {
                 return 0.90;
             }
 
-            opacity: targetOpacity
-            scale: targetScale
-            visible: dist >= -1 && dist <= 4 && opacity > 0.01
+            opacity: isInterlude ? (isCurrent ? 1.0 : 0.0) : targetOpacity
+            scale: isInterlude ? (isCurrent ? 1.0 : 0.0) : targetScale
 
+            Behavior on height {
+                enabled: lyricRow.isInterlude
+                NumberAnimation {
+                    duration: 950
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: [0.42, 0.0, 0.16, 1.0, 1.0, 1.0]
+                }
+            }
             Behavior on opacity {
                 NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
             }
@@ -182,72 +192,97 @@ Item {
             layer.enabled: false
 
 
-            // ── 0. SimpMusic / Apple Music Interlude Countdown Beads (• • •) ──
+            // ── 0. SimpMusic / Apple Music Interlude Countdown Beads (• • •) (1:1 Mochy-Music) ──
             Row {
                 id: interludeBeadsRow
-                visible: !!(modelData && modelData.isInterlude)
+                visible: lyricRow.isInterlude && (lyricRow.height > 0.5)
                 spacing: 16
                 anchors.left: parent.left
+                anchors.leftMargin: 0
                 anchors.verticalCenter: parent.verticalCenter
                 height: 28
 
+                readonly property real gapStart: (modelData && modelData.time !== undefined) ? modelData.time : 0.0
+                readonly property real gapEnd: (modelData && modelData.endTime !== undefined) ? modelData.endTime : (gapStart + 4.0)
+                readonly property real gapSpan: Math.max(0.1, gapEnd - gapStart)
+                readonly property real gapProgress: lyricRow.isCurrent ? Math.max(0.0, Math.min(1.0, (root.currentTime - gapStart) / gapSpan)) : 0.0
+
+                function smoothstep(t) {
+                    var x = Math.max(0.0, Math.min(1.0, t));
+                    return x * x * (3.0 - 2.0 * x);
+                }
+
+                // Finale Swell (at 88% of gap): All 3 dots swell together
+                readonly property real finaleNow: (gapProgress >= 0.88) ? smoothstep((gapProgress - 0.88) / 0.12) : 0.0
+
                 Repeater {
-                    model: (modelData && modelData.words && modelData.words.length === 3) ? modelData.words : [
-                        { "text": "•", "start": (modelData ? modelData.endTime - 3.0 : 0.0), "end": (modelData ? modelData.endTime - 2.0 : 1.0) },
-                        { "text": "•", "start": (modelData ? modelData.endTime - 2.0 : 1.0), "end": (modelData ? modelData.endTime - 1.0 : 2.0) },
-                        { "text": "•", "start": (modelData ? modelData.endTime - 1.0 : 2.0), "end": (modelData ? modelData.endTime : 3.0) }
-                    ]
+                    model: 3
 
                     delegate: Item {
                         id: dotItem
-                        width: 18
-                        height: 18
+                        width: 10
+                        height: 10
 
-                        readonly property real dStart: modelData.start || 0.0
-                        readonly property real dEnd: modelData.end || 0.0
-                        readonly property real dDur: Math.max(0.1, dEnd - dStart)
-                        readonly property bool isPast: root.currentTime >= dEnd
-                        readonly property bool isSinging: root.currentTime >= dStart && root.currentTime < dEnd
-                        readonly property real dProg: isPast ? 1.0 : (isSinging ? Math.max(0.0, Math.min(1.0, (root.currentTime - dStart) / dDur)) : 0.0)
+                        readonly property real sliceStart: index / 3.0
+                        readonly property real within: (interludeBeadsRow.gapProgress - sliceStart) * 3.0 / 0.55
+                        readonly property real fill: interludeBeadsRow.smoothstep(within)
 
-                        property real liftProgress: (isSinging || isPast) ? 1.0 : 0.0
-                        Behavior on liftProgress {
+                        readonly property real litAt: sliceStart + 0.55 / 3.0
+                        readonly property real glow: (interludeBeadsRow.gapProgress < litAt)
+                            ? fill
+                            : Math.exp(-((interludeBeadsRow.gapProgress - litAt) * interludeBeadsRow.gapSpan) / 0.9)
+                        readonly property real effectiveGlow: Math.max(glow, Math.sin(Math.PI * interludeBeadsRow.finaleNow) * 0.7)
+
+                        property real pop: lyricRow.isCurrent ? 1.0 : 0.0
+                        Behavior on pop {
                             NumberAnimation {
-                                duration: 750
-                                easing.type: Easing.BezierSpline
-                                easing.bezierCurve: [0.4, 0.0, 0.2, 1.0]
+                                duration: 320
+                                easing.type: Easing.OutBack
                             }
                         }
+
+                        scale: (0.8 + 0.3 * fill + 0.14 * interludeBeadsRow.finaleNow) * pop
+                        opacity: (0.3 + 0.7 * Math.max(fill, interludeBeadsRow.finaleNow)) * pop
+
+                        readonly property real bobPhase: (root.currentTime / 2.6) * 2.0 * Math.PI - index * 0.9
+                        readonly property real bobY: lyricRow.isCurrent ? (Math.sin(bobPhase) * 1.8) : 0.0
 
                         transform: Translate {
-                            y: -dotItem.liftProgress * 2.0
+                            y: dotItem.bobY
                         }
 
-                        Rectangle {
-                            id: dotCore
+                        // Layer 1: Perfect 360-degree Organic Radial Halo (Zero FBO truncation, zero box artifacts)
+                        Image {
+                            id: auraImg
+                            source: Qt.resolvedUrl("../assets/icons/dot-radial-glow.svg")
                             anchors.centerIn: parent
-                            width: 8
-                            height: 8
-                            radius: 4
-                            color: "#ffffff"
-                            opacity: {
-                                if (dotItem.isPast || dotItem.isSinging) return 1.0;
-                                return 0.38;
-                            }
-                            Behavior on opacity { NumberAnimation { duration: 160 } }
+                            width: 64
+                            height: 64
+                            sourceSize.width: 64
+                            sourceSize.height: 64
+                            smooth: true
+                            visible: false
                         }
 
                         MultiEffect {
-                            source: dotCore
-                            anchors.fill: dotCore
-                            shadowEnabled: dotItem.isSinging
-                            shadowColor: "#ffffff"
-                            shadowBlur: 0.95
-                            shadowOpacity: dotItem.isSinging ? (0.92 * Math.sin(Math.PI * dotItem.dProg)) : 0.0
-                            shadowScale: 1.5
-                            shadowHorizontalOffset: 0
-                            shadowVerticalOffset: 0
-                            visible: shadowOpacity > 0.01
+                            source: auraImg
+                            anchors.fill: auraImg
+                            colorization: 1.0
+                            colorizationColor: root.colHighlight || "#deb06c"
+                            autoPaddingEnabled: false
+                            opacity: 0.85 * dotItem.effectiveGlow
+                            visible: dotItem.effectiveGlow > 0.01 && lyricRow.isCurrent
+                        }
+
+                        // Layer 2: Sharp Solid White Core Bead
+                        Rectangle {
+                            id: dotCore
+                            anchors.centerIn: parent
+                            width: 10
+                            height: 10
+                            radius: 5
+                            color: "#ffffff"
+                            opacity: 0.75 + 0.25 * dotItem.fill
                         }
                     }
                 }

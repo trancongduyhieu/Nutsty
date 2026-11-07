@@ -155,21 +155,33 @@ def parse_ttml_body(ttml_text: str) -> List[Dict[str, Any]]:
     if not ttml_text:
         return []
     lines = []
-    p_pattern = re.compile(r'<p\s+begin="([^"]+)"\s+end="([^"]+)"[^>]*>(.*?)</p>', re.DOTALL)
+    p_pattern = re.compile(r'<p\s+([^>]*?)>(.*?)</p>', re.DOTALL)
     span_pattern = re.compile(r'<span\s+begin="([^"]+)"\s+end="([^"]+)"[^>]*>([^<]+)</span>')
 
     for p_match in p_pattern.finditer(ttml_text):
-        line_begin = parse_ttml_time(p_match.group(1))
-        line_end = parse_ttml_time(p_match.group(2))
-        inner = p_match.group(3)
+        attrs = p_match.group(1)
+        inner = p_match.group(2)
+
+        begin_m = re.search(r'begin="([^"]+)"', attrs)
+        end_m = re.search(r'end="([^"]+)"', attrs)
+        if not begin_m or not end_m:
+            continue
+
+        line_begin = parse_ttml_time(begin_m.group(1))
+        line_end = parse_ttml_time(end_m.group(1))
+
+        agent_m = re.search(r'(?:ttm:)?agent="([^"]+)"', attrs)
+        agent = agent_m.group(1) if agent_m else None
+        is_bg = bool(re.search(r'(?:ttm:)?role="x-bg"', attrs))
 
         spans = list(span_pattern.finditer(inner))
         words = []
-        for sm in spans:
+        for i, sm in enumerate(spans):
             wb = parse_ttml_time(sm.group(1))
             we = parse_ttml_time(sm.group(2))
             raw_span = sm.group(3)
-            has_space = raw_span.endswith(" ") or raw_span.endswith("\t")
+            trailing = inner[sm.end():spans[i + 1].start()] if i + 1 < len(spans) else ""
+            has_space = raw_span.endswith(" ") or raw_span.endswith("\t") or bool(re.search(r'\s', trailing))
             raw_wtxt = clean_vocal_markers(html.unescape(raw_span).strip())
             if not raw_wtxt:
                 continue
@@ -187,24 +199,20 @@ def parse_ttml_body(ttml_text: str) -> List[Dict[str, Any]]:
         if not plain_text or plain_text in ("♪", "♫", "🎵"):
             continue
 
-        if words:
-            lines.append({
-                "time": round(line_begin, 3),
-                "endTime": round(line_end, 3),
-                "text": plain_text,
-                "hasWords": True,
-                "isSynthetic": False,
-                "words": words,
-            })
-        else:
-            lines.append({
-                "time": round(line_begin, 3),
-                "endTime": round(line_end, 3),
-                "text": plain_text,
-                "hasWords": False,
-                "isSynthetic": True,
-                "words": [],
-            })
+        line_dict: Dict[str, Any] = {
+            "time": round(line_begin, 3),
+            "endTime": round(line_end, 3),
+            "text": plain_text,
+            "hasWords": bool(words),
+            "isSynthetic": not bool(words),
+            "words": words,
+        }
+        if agent:
+            line_dict["agent"] = agent
+        if is_bg:
+            line_dict["isBackground"] = True
+
+        lines.append(line_dict)
 
     lines.sort(key=lambda x: x["time"])
     return lines
