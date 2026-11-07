@@ -743,10 +743,12 @@ class DownloadManager:
             pass
 
     def _trigger_library_rescan(self, audio_path="", title="", artist="", video_id="", image=""):
+        bin_name = "nutsty-library.exe" if sys.platform == "win32" else "nutsty-library"
+        rust_bin = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bin", bin_name)
+
         # 1. Instant single-track add into library.json (<2ms via Rust binary)
         if audio_path and os.path.exists(audio_path):
-            rust_bin = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bin", "nutsty-library")
-            if os.path.exists(rust_bin) and os.access(rust_bin, os.X_OK):
+            if os.path.exists(rust_bin) and (sys.platform == "win32" or os.access(rust_bin, os.X_OK)):
                 try:
                     subprocess.run([
                         rust_bin, "add", audio_path, title or "", artist or "", video_id or "", image or ""
@@ -766,8 +768,7 @@ class DownloadManager:
 
         # 2. Asynchronous full scan in background thread if single track add was not possible
         def do_rescan():
-            rust_bin = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bin", "nutsty-library")
-            if os.path.exists(rust_bin) and os.access(rust_bin, os.X_OK):
+            if os.path.exists(rust_bin) and (sys.platform == "win32" or os.access(rust_bin, os.X_OK)):
                 try:
                     subprocess.run([rust_bin, "scan"], timeout=5)
                     return

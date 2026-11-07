@@ -1006,7 +1006,7 @@ Scope {
 
     Timer {
         id: socialEventsFastTimer
-        interval: win.isCoListeningActive ? 800 : (win.isUserActiveBoost ? 5000 : 15000)
+        interval: win.isCoListeningActive ? 800 : (!win.visible ? 30000 : (win.isUserActiveBoost ? 5000 : 20000))
         repeat: true
         running: true
         triggeredOnStart: true
@@ -1017,7 +1017,7 @@ Scope {
 
     Timer {
         id: friendsNotesTimer
-        interval: win.isCoListeningActive ? 2000 : 20000
+        interval: win.isCoListeningActive ? 2000 : (!win.visible ? 60000 : (win.isUserActiveBoost ? 20000 : 45000))
         repeat: true
         running: true
         triggeredOnStart: true
@@ -1029,7 +1029,7 @@ Scope {
 
     Timer {
         id: friendsSyncTimer
-        interval: win.isCoListeningActive ? 4000 : 30000
+        interval: win.isCoListeningActive ? 4000 : (!win.visible ? 90000 : (win.isUserActiveBoost ? 30000 : 60000))
         repeat: true
         running: true
         triggeredOnStart: true
@@ -1090,7 +1090,7 @@ Scope {
         id: uiActionPollTimer
         interval: 2000
         repeat: true
-        running: true
+        running: Qt.platform.os !== "windows"
         onTriggered: {
             var xhr = new XMLHttpRequest();
             xhr.open("GET", (win.localApiUrl || "http://127.0.0.1:17890") + "/api/ui/pending_action", true);

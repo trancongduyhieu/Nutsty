@@ -57,7 +57,7 @@ Item {
         id: capsuleMask
         anchors.fill: parent
         visible: false
-        layer.enabled: true
+        layer.enabled: root.isEffectActive
         Rectangle {
             anchors.fill: parent
             radius: root.radius
