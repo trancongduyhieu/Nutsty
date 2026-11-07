@@ -155,7 +155,8 @@ fn dispatch_to_python(state: &AppState, method: &str, raw_url: &str, body_str: &
         "body": body_str
     });
 
-    let mut child = match Command::new("python3")
+    let python_cmd = if cfg!(windows) { "python" } else { "python3" };
+    let mut child = match Command::new(python_cmd)
         .arg(&script_path)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

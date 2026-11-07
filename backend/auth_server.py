@@ -415,7 +415,7 @@ def run_server():
         print(f"Nutsty Local IPC Bridge ready (127.0.0.1:{PORT}) | Global Social: {GLOBAL_RELAY_CLIENT.relay_url}")
         httpd.serve_forever()
     except OSError as e:
-        if "Address already in use" in str(e):
+        if "Address already in use" in str(e) or getattr(e, "winerror", None) in (10013, 10048) or getattr(e, "errno", None) in (98, 48):
             print(f"Nutsty Local IPC Bridge (port {PORT}) already active.")
         else:
             sys.stderr.write(f"Auth server error: {e}\n")

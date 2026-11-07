@@ -32,7 +32,7 @@ Scope {
                     if (typeof desktopMusicWidget.hide === "function") desktopMusicWidget.hide();
                 }
                 if (!statusProcess.running) {
-                    statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
+                    statusProcess.command = [win.nutstyBridgePath, "status"];
                     statusProcess.running = true;
                 }
                 Qt.callLater(function() { if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) ytNowPlayingView.updateActiveLyric(true); });
@@ -54,6 +54,10 @@ Scope {
         property var audioSpecs: null
 
     readonly property string appDir: Quickshell.env("NUTSTY_APP_DIR") || (Quickshell.env("HOME") + "/Applications/FrostifyLocal")
+    readonly property string binExt: (Qt.platform.os === "windows") ? ".exe" : ""
+    readonly property string nutstyBridgePath: win.appDir + "/bin/nutsty-bridge" + win.binExt
+    readonly property string nutstyDaemonPath: win.appDir + "/bin/nutsty-daemon" + win.binExt
+    readonly property string nutstyLibraryPath: win.appDir + "/bin/nutsty-library" + win.binExt
 
     property string currentView: "home" // "home", "library", "playlist", "search"
     property string previousView: "home"
@@ -296,7 +300,7 @@ Scope {
                 // Fallback to native Rust CLI process if auth_server is not reachable
                 if (!songPaletteProc.running) {
                     songPaletteProc.command = [
-                        win.appDir + "/bin/nutsty-bridge",
+                        win.nutstyBridgePath,
                         "palette",
                         imgUrl
                     ];
@@ -607,7 +611,7 @@ Scope {
 
     Process {
         id: authServerProc
-        command: [win.appDir + "/bin/nutsty-daemon"]
+        command: [win.nutstyDaemonPath]
         running: (typeof __NutstyBridge === "undefined")
         onExited: (exitCode, exitStatus) => {
             if (exitCode !== 0 && typeof __NutstyBridge === "undefined") {
@@ -1480,7 +1484,7 @@ Scope {
 
     function refreshLocalAlbums() {
         localAlbumsProc.running = false;
-        localAlbumsProc.command = [win.appDir + "/bin/nutsty-library", "albums"];
+        localAlbumsProc.command = [win.nutstyLibraryPath, "albums"];
         localAlbumsProc.running = true;
     }
 
@@ -1628,7 +1632,7 @@ Scope {
 
     Component.onDestruction: {
         win.sendOfflineSignal();
-        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
+        Quickshell.execDetached([win.nutstyBridgePath, "pause"]);
     }
 
     // Concentric Window Corner Mask: R_outer = 24px (R_inner = 16px + 8px margin)
@@ -1636,7 +1640,7 @@ Scope {
         id: windowCornerMask
         anchors.fill: parent
         visible: false
-        layer.enabled: !(win.maximized || win.fullscreen)
+        layer.enabled: false
         layer.smooth: true
 
         Rectangle {
@@ -3530,7 +3534,7 @@ Scope {
             // Queue remains empty until user explicitly clicks a track, album or playlist.
 
             if (!statusProcess.running) {
-                statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
+                statusProcess.command = [win.nutstyBridgePath, "status"];
                 statusProcess.running = true;
             }
             win.refreshLocalAlbums();
@@ -4174,7 +4178,7 @@ Scope {
         repeat: false
         property real targetSec: 0.0
         onTriggered: {
-            Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "seek", String(targetSec)]);
+            Quickshell.execDetached([win.nutstyBridgePath, "seek", String(targetSec)]);
         }
     }
 
@@ -4221,7 +4225,7 @@ Scope {
                         if (statusXhr.status === 200 && statusXhr.responseText) {
                             PlaybackEngine.handlePlayerStatus(win, statusXhr.responseText, listenAlongSeekSafetyTimer, sessionFileView);
                         } else if (!statusProcess.running) {
-                            statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
+                            statusProcess.command = [win.nutstyBridgePath, "status"];
                             statusProcess.running = true;
                         }
                     }
@@ -4233,7 +4237,7 @@ Scope {
                     statusXhr.send();
                 } catch(e) {
                     if (!statusProcess.running) {
-                        statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
+                        statusProcess.command = [win.nutstyBridgePath, "status"];
                         statusProcess.running = true;
                     }
                 }
@@ -4506,7 +4510,7 @@ Scope {
         function openWindow() {
             win.visible = true;
             if (!statusProcess.running) {
-                statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
+                statusProcess.command = [win.nutstyBridgePath, "status"];
                 statusProcess.running = true;
             }
             Qt.callLater(function() { if (ytNowPlayingView) ytNowPlayingView.updateActiveLyric(true); });
@@ -4518,7 +4522,7 @@ Scope {
             win.visible = !win.visible;
             if (win.visible) {
                 if (!statusProcess.running) {
-                    statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
+                    statusProcess.command = [win.nutstyBridgePath, "status"];
                     statusProcess.running = true;
                 }
                 Qt.callLater(function() { if (ytNowPlayingView) ytNowPlayingView.updateActiveLyric(true); });

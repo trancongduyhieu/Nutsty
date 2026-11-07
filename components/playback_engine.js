@@ -185,7 +185,7 @@ function playOnlineTrack(win, trk, startRadio, radioProc, prewarmTimer, pollTime
     if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.stopImmediate) {
         __NutstyBridge.stopImmediate();
     } else {
-        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "stop"]);
+        Quickshell.execDetached([(win.nutstyBridgePath || (win.appDir + "/bin/nutsty-bridge")), "stop"]);
     }
     win.trackChangeTimestamp = Date.now();
     win.postLoadGraceTimestamp = Date.now();
@@ -297,7 +297,7 @@ function playTrack(win, trk, pollTimer) {
     if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.stopImmediate) {
         __NutstyBridge.stopImmediate();
     } else {
-        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "stop"]);
+        Quickshell.execDetached([(win.nutstyBridgePath || (win.appDir + "/bin/nutsty-bridge")), "stop"]);
     }
     win.trackChangeTimestamp = Date.now();
     win.postLoadGraceTimestamp = Date.now();
@@ -353,7 +353,7 @@ function togglePlay(win, pollTimer) {
         win.isLoadingAudio = false;
         win.isPlaying = false;
         win.lastSyncTimestamp = 0;
-        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
+        Quickshell.execDetached([(win.nutstyBridgePath || (win.appDir + "/bin/nutsty-bridge")), "pause"]);
         if (pollTimer) pollTimer.restart();
         win.syncNowPlaying(true);
         return;
@@ -370,7 +370,7 @@ function togglePlay(win, pollTimer) {
         win.isPlaying = true;
         win.lastSyncTime = win.currentTime;
         win.lastSyncTimestamp = Date.now();
-        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "resume"]);
+        Quickshell.execDetached([(win.nutstyBridgePath || (win.appDir + "/bin/nutsty-bridge")), "resume"]);
         if (targetPath && (win.currentTime === 0.0 || win.totalDuration === 0.0)) {
             Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume", targetPath]);
         }
@@ -378,7 +378,7 @@ function togglePlay(win, pollTimer) {
         win.isPlaying = false;
         win.isLoadingAudio = false;
         win.lastSyncTimestamp = 0;
-        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
+        Quickshell.execDetached([(win.nutstyBridgePath || (win.appDir + "/bin/nutsty-bridge")), "pause"]);
     }
     win.syncNowPlaying(true);
 
@@ -405,7 +405,7 @@ function triggerRapidTrackSwitch(win, targetTrack) {
     if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.stopImmediate) {
         __NutstyBridge.stopImmediate();
     } else {
-        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "stop"]);
+        Quickshell.execDetached([(win.nutstyBridgePath || (win.appDir + "/bin/nutsty-bridge")), "stop"]);
     }
     win.currentTrack = targetTrack;
     win.currentTime = 0.0;
@@ -444,7 +444,7 @@ function playNext(win) {
         win.sleepTimerMode = "";
         win.sleepTimerRemainingSeconds = 0;
         win.isPlaying = false;
-        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
+        Quickshell.execDetached([(win.nutstyBridgePath || (win.appDir + "/bin/nutsty-bridge")), "pause"]);
         return;
     }
     if (!win.currentTrack || !win.currentTracks || win.currentTracks.length === 0) return;
@@ -496,7 +496,7 @@ function seekLocalOnly(win, sec) {
         win.seekDebounceTimer.targetSec = sec;
         win.seekDebounceTimer.restart();
     } else {
-        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "seek", String(sec)]);
+        Quickshell.execDetached([(win.nutstyBridgePath || (win.appDir + "/bin/nutsty-bridge")), "seek", String(sec)]);
     }
 }
 
@@ -514,7 +514,7 @@ function seekAudio(win, sec) {
         win.seekDebounceTimer.targetSec = sec;
         win.seekDebounceTimer.restart();
     } else {
-        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "seek", String(sec)]);
+        Quickshell.execDetached([(win.nutstyBridgePath || (win.appDir + "/bin/nutsty-bridge")), "seek", String(sec)]);
     }
     win.syncNowPlaying(true);
     if (!win.isSyncingFromFriend) {
@@ -534,7 +534,7 @@ function seekAudio(win, sec) {
 
 function setVolume(win, vol) {
     win.volume = vol;
-    Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "volume", String(vol)]);
+    Quickshell.execDetached([(win.nutstyBridgePath || (win.appDir + "/bin/nutsty-bridge")), "volume", String(vol)]);
 }
 
 function startSleepTimer(win, seconds, mode) {
@@ -553,7 +553,7 @@ function cancelSleepTimer(win) {
     win.sleepTimerFadeTriggered = false;
     win.sleepTimerRemainingSeconds = 0;
     win.sleepTimerMode = "";
-    Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "cancel_fade"]);
+    Quickshell.execDetached([(win.nutstyBridgePath || (win.appDir + "/bin/nutsty-bridge")), "cancel_fade"]);
 }
 
 function rateSong(win, vid, rating) {
@@ -595,7 +595,7 @@ function handleDislikedTrack(win, trk) {
     } else {
         win.isPlaying = false;
         win.currentTrack = null;
-        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
+        Quickshell.execDetached([(win.nutstyBridgePath || (win.appDir + "/bin/nutsty-bridge")), "pause"]);
     }
 }
 
@@ -678,13 +678,13 @@ function deleteLocalTrack(win, trk) {
             win.isPlaying = false;
             win.currentTrack = null;
             win.currentTime = 0.0;
-            Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "stop"]);
+            Quickshell.execDetached([(win.nutstyBridgePath || (win.appDir + "/bin/nutsty-bridge")), "stop"]);
         }
     }
 
     if (!p.startsWith("ytdl://") && (p || fn || title)) {
         Quickshell.execDetached([
-            win.appDir + "/bin/nutsty-library", "delete",
+            (win.nutstyLibraryPath || (win.appDir + "/bin/nutsty-library")), "delete",
             p, fn, title
         ]);
     }
@@ -710,12 +710,12 @@ function batchDeleteTracks(win, paths) {
             win.isPlaying = false;
             win.currentTrack = null;
             win.currentTime = 0.0;
-            Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "stop"]);
+            Quickshell.execDetached([(win.nutstyBridgePath || (win.appDir + "/bin/nutsty-bridge")), "stop"]);
         }
     }
 
     Quickshell.execDetached([
-        win.appDir + "/bin/nutsty-library", "batch_delete",
+        (win.nutstyLibraryPath || (win.appDir + "/bin/nutsty-library")), "batch_delete",
         JSON.stringify(paths)
     ]);
 }
@@ -828,7 +828,7 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
                     win.isPlaying = true;
                 } else if (s.is_paused) {
                     if (Date.now() - win.postLoadGraceTimestamp < 2500) {
-                        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "resume"]);
+                        Quickshell.execDetached([(win.nutstyBridgePath || (win.appDir + "/bin/nutsty-bridge")), "resume"]);
                         win.isPlaying = true;
                     } else {
                         win.isPlaying = false;
@@ -968,7 +968,7 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
                 win.sleepTimerMode = "";
                 win.sleepTimerRemainingSeconds = 0;
                 win.isPlaying = false;
-                Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
+                Quickshell.execDetached([(win.nutstyBridgePath || (win.appDir + "/bin/nutsty-bridge")), "pause"]);
             } else if (win.isRepeat) {
                 win.seekAudio(0.0);
             } else {

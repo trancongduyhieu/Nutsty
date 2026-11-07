@@ -185,6 +185,8 @@ BACKEND_MAP = {
     "browser_login.py": "browser_login",
     "spotify_importer.py": "spotify_importer",
     "updater.py": "updater",
+    "nutsty-library": "library",
+    "nutsty-library.exe": "library",
 }
 
 # Backend CLI Dispatcher: Prevents re-launching GUI when invoked as backend worker
@@ -965,6 +967,12 @@ class NutstyBridge(QObject):
 
     @Slot()
     def quitApp(self):
+        global _nutsty_daemon_proc
+        if _nutsty_daemon_proc is not None:
+            try:
+                _nutsty_daemon_proc.terminate()
+            except Exception:
+                pass
         try:
             from PySide6.QtCore import QCoreApplication
             QCoreApplication.quit()
@@ -1381,6 +1389,9 @@ class NutstyBridge(QObject):
         cmd = list(args)
         if cmd[0] == "python3" or cmd[0] == "python":
             cmd[0] = sys.executable
+        elif sys.platform == "win32" and not cmd[0].lower().endswith((".exe", ".bat", ".cmd")):
+            if os.path.isfile(cmd[0] + ".exe"):
+                cmd[0] = cmd[0] + ".exe"
         try:
             subprocess.Popen(cmd, **pc.get_daemon_popen_kwargs())
         except Exception as e:
@@ -1500,6 +1511,9 @@ class NutstyBridge(QObject):
         cmd = list(args)
         if cmd[0] == "python3" or cmd[0] == "python":
             cmd[0] = sys.executable
+        elif sys.platform == "win32" and not cmd[0].lower().endswith((".exe", ".bat", ".cmd")):
+            if os.path.isfile(cmd[0] + ".exe"):
+                cmd[0] = cmd[0] + ".exe"
 
         def _worker():
             out, err, code = "", "", 1
@@ -1549,7 +1563,23 @@ def register_qml_types():
             qmlAttachedProperties = WlrLayershellAttached
         qmlRegisterType(WlrLayershell, "Quickshell.Wayland", 1, 0, "WlrLayershell", attachedProperties=WlrLayershellAttached)
 
+_nutsty_daemon_proc = None
+
 def start_daemons():
+    """Start resident backend daemons (nutsty-daemon native Rust or auth_server HTTP daemon, palette_extractor)."""
+    global _nutsty_daemon_proc
+    daemon_exe = os.path.join(APP_ROOT, "bin", "nutsty-daemon.exe")
+    if os.path.isfile(daemon_exe):
+        try:
+            import socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(0.3)
+            res = sock.connect_ex(("127.0.0.1", 17890))
+            sock.close()
+            if res != 0:
+                _nutsty_daemon_proc = subprocess.Popen([daemon_exe], **pc.get_daemon_popen_kwargs())
+        except Exception as e:
+            sys.stderr.write(f"nutsty-daemon launch error: {e}\n")
     """Start resident backend daemons (auth_server HTTP daemon, palette_extractor)."""
     def _auth_runner():
         try:
@@ -1930,6 +1960,12 @@ def main():
 
 
         def _quit_nutsty_completely():
+            global _nutsty_daemon_proc
+            if _nutsty_daemon_proc is not None:
+                try:
+                    _nutsty_daemon_proc.terminate()
+                except Exception:
+                    pass
             try:
                 if tray_icon:
                     tray_icon.hide()

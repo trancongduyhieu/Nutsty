@@ -70,6 +70,8 @@ scripts/
 cloudflare/
 docs/plans/
 bin/*.exe
+!bin/nutsty-bridge.exe
+!bin/nutsty-daemon.exe
 Nutsty.exe
 _internal/
 bin/Fonts/

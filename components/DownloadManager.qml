@@ -155,7 +155,7 @@ Item {
 
         // 2. Call nutsty-library to delete file, .lrc and update library.json
         Quickshell.execDetached([
-            win.appDir + "/bin/nutsty-library", "delete",
+            (win.nutstyLibraryPath || (win.appDir + "/bin/nutsty-library")), "delete",
             filePath, "", songTitle
         ]);
 

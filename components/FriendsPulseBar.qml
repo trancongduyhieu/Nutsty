@@ -61,7 +61,7 @@ Item {
             var appDir = (typeof win !== "undefined" && win.appDir) ? win.appDir : (Quickshell.env("NUTSTY_APP_DIR") || (Quickshell.env("HOME") + "/Applications/FrostifyLocal"));
             userTrackPaletteProc.running = false;
             userTrackPaletteProc.command = [
-                appDir + "/bin/nutsty-bridge",
+                (typeof win !== "undefined" && win.nutstyBridgePath) ? win.nutstyBridgePath : (appDir + "/bin/nutsty-bridge" + (Qt.platform.os === "windows" ? ".exe" : "")),
                 "palette",
                 cov
             ];

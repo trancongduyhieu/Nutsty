@@ -55,6 +55,9 @@ if not exist "venv\.installed" (
 
 :run_app
 :: Ensure ultra-lightweight Rust tray indicator on Windows
+if exist "bin\nutsty-daemon.exe" (
+    start "" /b "bin\nutsty-daemon.exe"
+)
 if exist "bin\\nutsty-tray.exe" (
     start "" /b "bin\\nutsty-tray.exe"
 )
