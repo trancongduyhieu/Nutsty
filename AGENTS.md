@@ -69,7 +69,7 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 │   ├── wrangler.toml               # Cấu hình Cloudflare Workers & D1 database binding
 │   └── src/index.js                # Serverless Edge Router & Logic mạng xã hội toàn cầu
 ├── backend/
-│   ├── auth_server.py              # Resident HTTP router daemon (port 17890)
+│   ├── route_dispatcher.py         # Subprocess CLI router cho nutsty-daemon (port 17890)
 │   ├── social_relay_core.py        # Deep Module mạng xã hội, SSOT identity, unified cache
 │   ├── stream_resolver.py          # Audio stream resolver (Android client, 403 prevention)
 │   ├── catalog_engine.py           # Shelves, mood continuation, artist/album/search

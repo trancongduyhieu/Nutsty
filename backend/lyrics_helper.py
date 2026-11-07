@@ -386,7 +386,7 @@ def parse_ttml(ttml_str):
         return []
 
     p_re = re.compile(
-        r'<p\s[^>]*begin="([^"]+)"[^>]*end="([^"]+)"[^>]*>([\s\S]*?)</p>'
+        r'<p\s+([^>]*?)>([\s\S]*?)</p>'
     )
     span_re = re.compile(
         r'<span\s[^>]*begin="([^"]+)"[^>]*end="([^"]+)"[^>]*>(.*?)</span>'
@@ -394,48 +394,75 @@ def parse_ttml(ttml_str):
 
     results = []
     for pm in p_re.finditer(ttml_str):
-        line_start = round(_parse_ttml_time(pm.group(1)), 3)
-        line_end   = round(_parse_ttml_time(pm.group(2)), 3)
-        inner      = pm.group(3)
+        attrs = pm.group(1)
+        inner = pm.group(2)
 
-        spans = span_re.findall(inner)
+        begin_m = re.search(r'begin="([^"]+)"', attrs)
+        end_m = re.search(r'end="([^"]+)"', attrs)
+        if not begin_m or not end_m:
+            continue
+
+        line_start = round(_parse_ttml_time(begin_m.group(1)), 3)
+        line_end   = round(_parse_ttml_time(end_m.group(1)), 3)
+
+        agent_m = re.search(r'(?:ttm:)?agent="([^"]+)"', attrs)
+        agent = agent_m.group(1) if agent_m else None
+        is_bg = bool(re.search(r'(?:ttm:)?role="x-bg"', attrs))
+
+        spans = list(span_re.finditer(inner))
         if spans:
             words = []
-            for sp_begin, sp_end, sp_text in spans:
-                sp_text = html.unescape(sp_text.strip())
-                if not sp_text:
+            for i, sm in enumerate(spans):
+                sp_begin = sm.group(1)
+                sp_end = sm.group(2)
+                sp_text = sm.group(3)
+                trailing = inner[sm.end():spans[i + 1].start()] if i + 1 < len(spans) else ""
+                has_space = sp_text.endswith(" ") or sp_text.endswith("\t") or bool(re.search(r'\s', trailing))
+                clean_sp = html.unescape(sp_text.strip())
+                if not clean_sp:
                     continue
                 start = round(_parse_ttml_time(sp_begin), 3)
                 end   = round(_parse_ttml_time(sp_end), 3)
                 dur   = max(0.08, round(end - start, 3))
                 words.append({
-                    "text": sp_text,
+                    "text": clean_sp,
                     "start": start,
                     "end": end,
                     "duration": dur,
+                    "hasSpace": has_space,
                     "isHeld": dur >= 0.85,
                 })
             if words:
-                plain = clean_vocal_markers(" ".join(w["text"] for w in words))
-                results.append({
+                plain = clean_vocal_markers("".join(w["text"] + (" " if w.get("hasSpace", True) else "") for w in words).strip())
+                line_dict = {
                     "time": line_start,
                     "endTime": line_end,
                     "text": plain,
                     "hasWords": True,
                     "isSynthetic": False,
                     "words": words,
-                })
+                }
+                if agent:
+                    line_dict["agent"] = agent
+                if is_bg:
+                    line_dict["isBackground"] = True
+                results.append(line_dict)
         else:
             plain = clean_vocal_markers(html.unescape(re.sub(r'<[^>]+>', '', inner).strip()))
             if plain:
-                results.append({
+                line_dict = {
                     "time": line_start,
                     "endTime": line_end,
                     "text": plain,
                     "hasWords": False,
                     "isSynthetic": True,
                     "words": [],
-                })
+                }
+                if agent:
+                    line_dict["agent"] = agent
+                if is_bg:
+                    line_dict["isBackground"] = True
+                results.append(line_dict)
 
     results.sort(key=lambda x: x["time"])
     return results
@@ -952,13 +979,18 @@ def _get_lyrics_raw(title, artist=None, video_id=None, file_path=None, duration_
     if not title:
         return []
 
+    pref = get_lyrics_source_preference()
+
     # ──────────────────────────────────────────────────────────────────────
     # TẦNG 0: Local SQLite (SimpMusic DB — rich syllable)
+    # ONLY load from SimpMusic DB if pref is 'auto' or 'simpmusic'.
+    # If user selected another provider (e.g. youlyplus, betterlyrics, spotify), bypass DB!
     # ──────────────────────────────────────────────────────────────────────
-    db_lyrics = get_lyrics_from_local_db(title, artist, video_id)
-    if _has_real_syllables(db_lyrics):
-        _tag_source(db_lyrics, "SimpMusic")
-        return db_lyrics
+    if pref in ("auto", "simpmusic"):
+        db_lyrics = get_lyrics_from_local_db(title, artist, video_id)
+        if _has_real_syllables(db_lyrics):
+            _tag_source(db_lyrics, "SimpMusic")
+            return db_lyrics
 
     # ──────────────────────────────────────────────────────────────────────
     # TẦNG 1: Local .lrc file next to audio
@@ -995,6 +1027,29 @@ def _get_lyrics_raw(title, artist=None, video_id=None, file_path=None, duration_
                     cached_source = m_src.group(1).strip() if m_src else ""
                     res = parse_lrc(content)
                     if res:
+                        # If user explicitly preferred a specific source, don't serve a mismatched cache!
+                        if pref != "auto":
+                            c_lower = cached_source.lower()
+                            is_matching = False
+                            if pref == "youlyplus" and ("youlyplus" in c_lower or "apple music" in c_lower):
+                                is_matching = True
+                            elif pref == "simpmusic" and "simpmusic" in c_lower:
+                                is_matching = True
+                            elif pref == "betterlyrics" and ("betterlyrics" in c_lower or "apple music" in c_lower):
+                                is_matching = True
+                            elif pref == "spotify" and "spotify" in c_lower:
+                                is_matching = True
+                            elif pref == "lrclib" and "lrclib" in c_lower:
+                                is_matching = True
+                            elif pref == "kugou" and "kugou" in c_lower:
+                                is_matching = True
+                            elif pref == "netease" and "netease" in c_lower:
+                                is_matching = True
+                            elif pref == "youtube" and "youtube" in c_lower:
+                                is_matching = True
+                            if not is_matching:
+                                continue
+
                         if not cached_source:
                             cached_source = "Spotify" if (get_spotify_spdc() and _has_real_syllables(res)) else ("Apple Music" if _has_real_syllables(res) else "LRCLIB")
                         _tag_source(res, cached_source)
@@ -1043,13 +1098,31 @@ def _get_lyrics_raw(title, artist=None, video_id=None, file_path=None, duration_
             _save_lrc_cache_from_lines(res, title, artist, source="Spotify")
         return res
 
+    def _run_youlyplus():
+        try:
+            try:
+                from .multi_lyrics_resolver import fetch_youlyplus_candidate, candidate_to_nutsty_lines
+            except (ImportError, ValueError):
+                from multi_lyrics_resolver import fetch_youlyplus_candidate, candidate_to_nutsty_lines
+            cand = fetch_youlyplus_candidate(cleaned_title, artist)
+            if cand:
+                lines = candidate_to_nutsty_lines(cand)
+                if lines:
+                    _tag_source(lines, "Apple Music (YouLyPlus)")
+                    _save_lrc_cache_from_lines(lines, title, artist, source="Apple Music (YouLyPlus)")
+                    return lines
+        except Exception as e:
+            sys.stderr.write(f"[_run_youlyplus error]: {e}\n")
+        return None
+
     def _run_betterlyrics():
         res = fetch_betterlyrics_ttml(cleaned_title, artist, duration_sec)
         if _has_real_syllables(res):
             _tag_source(res, "Apple Music")
             _save_ttml_as_lrc_cache(res, title, artist, source="Apple Music")
             return res
-        return None
+        # Seamless fallback to live Apple Music qApple provider via YouLyPlus
+        return _run_youlyplus()
 
     def _run_lrclib():
         res = fetch_lrclib(cleaned_title, artist, duration_sec)
@@ -1090,69 +1163,34 @@ def _get_lyrics_raw(title, artist=None, video_id=None, file_path=None, duration_
             sys.stderr.write("[syncedlyrics not installed]\n")
         return None
 
-    if pref == "spotify":
-        sp_res = _run_spotify()
-        if sp_res:
-            return sp_res
-        for fn in [_run_betterlyrics, _run_simpmusic, _run_lrclib, _run_netease]:
-            res = fn()
-            if res:
-                return res
-    elif pref == "betterlyrics":
-        bl_res = _run_betterlyrics()
-        if bl_res:
-            return bl_res
-        for fn in [_run_simpmusic, _run_spotify, _run_lrclib, _run_netease]:
-            res = fn()
-            if res:
-                return res
-    elif pref == "lrclib":
-        for fn in [_run_lrclib, _run_simpmusic, _run_spotify, _run_betterlyrics, _run_netease]:
-            res = fn()
-            if res:
-                return res
-    elif pref == "netease":
-        for fn in [_run_netease, _run_simpmusic, _run_spotify, _run_betterlyrics, _run_lrclib]:
-            res = fn()
-            if res:
-                return res
-    else:  # 'auto' default: Pass 1 (Syllables) -> Pass 2 (Line sync)
-        # Pass 1: True syllable-level word highlights
-        # If user has Spotify cookie configured, check Spotify syllable-level first!
-        sp_res = None
-        if get_spotify_spdc():
-            sp_res = _run_spotify()
-            if sp_res and _has_real_syllables(sp_res):
-                return sp_res
+    # ──────────────────────────────────────────────────────────────────────
+    # PARALLEL RESOLUTION WITH PREFERRED PROVIDER BIAS
+    # ──────────────────────────────────────────────────────────────────────
+    if pref == "youlyplus":
+        yl = _run_youlyplus()
+        if yl:
+            return yl
 
-        # 1a. BetterLyrics (Apple Music TTML word-level)
-        bl_res = _run_betterlyrics()
-        if bl_res and _has_real_syllables(bl_res):
-            return bl_res
+    try:
+        try:
+            from .multi_lyrics_resolver import resolve_lyrics_parallel
+        except (ImportError, ValueError):
+            from multi_lyrics_resolver import resolve_lyrics_parallel
 
-        # 1b. SimpMusic API (video_id available or resolved - rich syllable timestamps)
-        simp_res = _run_simpmusic()
-        if simp_res and _has_real_syllables(simp_res):
-            return simp_res
+        parallel_res = resolve_lyrics_parallel(cleaned_title, artist, video_id, duration_sec, preferred_provider=pref)
+        if parallel_res:
+            src = parallel_res[0].get("source", "MultiSource")
+            _save_lrc_cache_from_lines(parallel_res, title, artist, source=src)
+            return parallel_res
+    except Exception as pe:
+        sys.stderr.write(f"[multi_lyrics_resolver error]: {pe}\n")
 
-        # Pass 2: Line-synced Fallback (if no provider had real syllables)
-        if sp_res and (_has_synced(sp_res) or sp_res):
-            return sp_res
-        if not sp_res and get_spotify_spdc():
-            sp_res = _run_spotify()
-            if sp_res and (_has_synced(sp_res) or sp_res):
-                return sp_res
-
-        if simp_res and (_has_synced(simp_res) or simp_res):
-            return simp_res
-
-        lrc_res = _run_lrclib()
-        if lrc_res:
-            return lrc_res
-
-        ne_res = _run_netease()
-        if ne_res:
-            return ne_res
+    # Fallback sequential if parallel encountered unexpected error
+    fallback_fns = [_run_youlyplus, _run_betterlyrics, _run_simpmusic, _run_spotify, _run_lrclib, _run_netease]
+    for fn in fallback_fns:
+        res = fn()
+        if res:
+            return res
 
     # Return plain cache if we have it
     if cached_plain:
@@ -1219,27 +1257,27 @@ def _insert_interlude_dots(lines):
             source_val = l["source"]
             break
 
-    # 1. Check Intro gap before first vocal line
+    # 1. Check Intro gap before first vocal line (1:1 Mochy MinInterludeGapMs = 4000L)
     first_line = lines[0]
     if isinstance(first_line, dict) and "time" in first_line:
         first_time = float(first_line.get("time") or 0.0)
-        if first_time >= 3.5:
-            cd_start = max(0.5, first_time - 3.0)
-            dot_dur = (first_time - cd_start) / 3.0
+        if first_time >= 4.0:
+            dot_dur = first_time / 3.0
             interlude_item = {
-                "time": round(max(0.0, first_time - 6.0), 3),
+                "time": 0.0,
                 "endTime": round(first_time, 3),
                 "text": "• • •",
                 "isInterlude": True,
                 "hasWords": True,
                 "isSynthetic": False,
                 "words": [
-                    {"text": "•", "start": round(cd_start, 3), "end": round(cd_start + dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": True},
-                    {"text": "•", "start": round(cd_start + dot_dur, 3), "end": round(cd_start + 2 * dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": True},
-                    {"text": "•", "start": round(cd_start + 2 * dot_dur, 3), "end": round(first_time, 3), "duration": round(dot_dur, 3), "isHeld": True},
+                    {"text": "•", "start": 0.0, "end": round(dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": True},
+                    {"text": "•", "start": round(dot_dur, 3), "end": round(2 * dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": True},
+                    {"text": "•", "start": round(2 * dot_dur, 3), "end": round(first_time, 3), "duration": round(dot_dur, 3), "isHeld": True},
                 ],
                 "romanized": "",
-                "source": source_val
+                "source": source_val,
+                "agent": first_line.get("agent", "v1")
             }
             result.append(interlude_item)
 
@@ -1265,24 +1303,24 @@ def _insert_interlude_dots(lines):
                     cur_end = cur_time + min(5.0, max(2.2, txt_len * 0.25))
 
             gap = next_time - cur_end
-            if gap >= 3.5:
-                cd_start = max(cur_end + 0.3, next_time - 3.0)
-                dot_dur = (next_time - cd_start) / 3.0
-                interlude_start = max(cur_end + 0.2, next_time - 6.0)
+            if gap >= 4.0:
+                dot_dur = gap / 3.0
+                interlude_start = round(cur_end, 3)
                 interlude_item = {
-                    "time": round(interlude_start, 3),
+                    "time": interlude_start,
                     "endTime": round(next_time, 3),
                     "text": "• • •",
                     "isInterlude": True,
                     "hasWords": True,
                     "isSynthetic": False,
                     "words": [
-                        {"text": "•", "start": round(cd_start, 3), "end": round(cd_start + dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": True},
-                        {"text": "•", "start": round(cd_start + dot_dur, 3), "end": round(cd_start + 2 * dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": True},
-                        {"text": "•", "start": round(cd_start + 2 * dot_dur, 3), "end": round(next_time, 3), "duration": round(dot_dur, 3), "isHeld": True},
+                        {"text": "•", "start": interlude_start, "end": round(interlude_start + dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": True},
+                        {"text": "•", "start": round(interlude_start + dot_dur, 3), "end": round(interlude_start + 2 * dot_dur, 3), "duration": round(dot_dur, 3), "isHeld": True},
+                        {"text": "•", "start": round(interlude_start + 2 * dot_dur, 3), "end": round(next_time, 3), "duration": round(dot_dur, 3), "isHeld": True},
                     ],
                     "romanized": "",
-                    "source": source_val
+                    "source": source_val,
+                    "agent": next_line.get("agent", "v1")
                 }
                 result.append(interlude_item)
 
@@ -1307,14 +1345,17 @@ def _save_ttml_as_lrc_cache(lines, title, artist, source="Apple Music"):
         for ln in lines:
             mm = int(ln["time"] // 60)
             ss = ln["time"] % 60
+            agent_tag = f"{{agent:{ln['agent']}}}" if ln.get("agent") else ""
+            bg_tag = "{bg}" if ln.get("isBackground") else ""
+            prefix = f"{agent_tag}{bg_tag}"
             if ln.get("words"):
                 word_tags = "".join(
-                    f"<{int(w['start']//60):02d}:{w['start']%60:05.2f}>{w['text']} "
+                    f"<{int(w['start']//60):02d}:{w['start']%60:05.2f}>{w['text']}{' ' if w.get('hasSpace', True) else ''}"
                     for w in ln["words"]
                 ).rstrip()
-                out.append(f"[{mm:02d}:{ss:05.2f}]{word_tags}")
+                out.append(f"[{mm:02d}:{ss:05.2f}]{prefix}{word_tags}")
             else:
-                out.append(f"[{mm:02d}:{ss:05.2f}]{ln['text']}")
+                out.append(f"[{mm:02d}:{ss:05.2f}]{prefix}{ln['text']}")
         path = get_cache_path(title, artist)
         with open(path, "w", encoding="utf-8") as f:
             f.write("\n".join(out))
@@ -1330,14 +1371,17 @@ def _save_lrc_cache_from_lines(lines, title, artist, source=""):
         for ln in lines:
             mm = int(ln["time"] // 60)
             ss = ln["time"] % 60
+            agent_tag = f"{{agent:{ln['agent']}}}" if ln.get("agent") else ""
+            bg_tag = "{bg}" if ln.get("isBackground") else ""
+            prefix = f"{agent_tag}{bg_tag}"
             if ln.get("words"):
                 word_tags = "".join(
-                    f"<{int(w['start']//60):02d}:{w['start']%60:05.2f}>{w['text']} "
+                    f"<{int(w['start']//60):02d}:{w['start']%60:05.2f}>{w['text']}{' ' if w.get('hasSpace', True) else ''}"
                     for w in ln["words"]
                 ).rstrip()
-                out.append(f"[{mm:02d}:{ss:05.2f}]{word_tags}")
+                out.append(f"[{mm:02d}:{ss:05.2f}]{prefix}{word_tags}")
             else:
-                out.append(f"[{mm:02d}:{ss:05.2f}]{ln['text']}")
+                out.append(f"[{mm:02d}:{ss:05.2f}]{prefix}{ln['text']}")
         path = get_cache_path(title, artist)
         with open(path, "w", encoding="utf-8") as f:
             f.write("\n".join(out))

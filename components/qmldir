@@ -4,6 +4,7 @@ AppIcon 1.0 AppIcon.qml
 AppleMusicDesktopLyrics 1.0 AppleMusicDesktopLyrics.qml
 AppleMusicWordFlow 1.0 AppleMusicWordFlow.qml
 ArtistDetailView 1.0 ArtistDetailView.qml
+BackingVocalLine 1.0 BackingVocalLine.qml
 CarouselSectionHeader 1.0 CarouselSectionHeader.qml
 CategorizedSearchView 1.0 CategorizedSearchView.qml
 CircularSpinner 1.0 CircularSpinner.qml

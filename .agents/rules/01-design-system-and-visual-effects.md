@@ -84,3 +84,14 @@ Tài liệu đặc tả chuyên sâu về hệ thống đồ họa, ngôn ngữ 
 - **Tuyệt đối cấm hình con nhộng (Pill / Capsule)**: Không dùng `radius = height / 2` trên nút bấm, thẻ, khung hay badge trừ khi được người dùng yêu cầu rõ ràng (như Mood Chips).
 - **Chuẩn hóa nút bấm & badge**: Nút bấm dùng $R = 8\text{px}$ (`rounded-lg`), badge $R = 4\text{px}$/6px (`rounded-md`).
 - **Bố cục đồng phẳng (Planar Purity)**: Không lồng các khối hộp nổi viền dày chồng chéo (box-in-a-box). Phân vùng bằng khoảng trắng hệ 8pt/16pt và đường kẻ viền siêu mảnh hairline 1px `Qt.rgba(1, 1, 1, 0.08)`.
+
+---
+
+## 8. Bộ Máy Trích Xuất Màu Sắc Chromatic Salience (Rust Native)
+- **Tệp cốt lõi**: `nutsty-rs/crates/nutsty-bridge/src/palette.rs`, `bin/nutsty-bridge palette <path>`.
+- **Cơ chế hoạt động**:
+  - Nhận diện magic bytes (`ImageReader::with_guessed_format`) chống lỗi sai đuôi ảnh (PNG gắn đuôi `.jpg`).
+  - Lấy mẫu nhanh 96x96, chuyển đổi sRGB sang OKLab ($L, a, b, C, h$), lọc pixel nghệ thuật $C \ge 0.028$.
+  - Phân cụm K-Means 4 tâm tất định (8 vòng), tính điểm Salience $\text{Score} = \text{count}^{0.35} \times C$.
+  - Xuất bộ ba màu: `highlightColor` ($L=0.82$), `accentColor` ($L=0.68$), `backgroundTint` ($L=0.16$) trong $\le 3\text{ms}$.
+- **Bẫy lỗi**: Luôn đặt `#[serde(default)]` cho các trường mở rộng trong JSON cache để tương thích cache cũ của Python.

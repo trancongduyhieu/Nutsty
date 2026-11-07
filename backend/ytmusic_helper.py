@@ -27,6 +27,7 @@ try:
         HOME_CACHE_FILE, ONLINE_TRACKS_FILE, MOOD_CACHE_DIR, MOOD_CATS_FILE,
         DISLIKED_SONGS_FILE, ARTIST_AVATARS_FILE,
         load_disliked_songs, save_disliked_songs, add_disliked_song, remove_disliked_song, is_song_disliked,
+        load_liked_songs, save_liked_songs, add_liked_song, remove_liked_song, is_song_liked,
         load_artist_avatars, save_artist_avatars, cache_artist_avatar, get_cached_artist_avatar,
         cache_online_tracks, clean_artist_name, clean_thumbnail_url, normalize_track,
         get_recent_seed_track, get_mood_categories_live, get_creator_color, classify_section,
@@ -37,9 +38,10 @@ try:
     )
     from .stream_resolver import (
         STREAM_CACHE_FILE, LOCAL_YT_MAPPINGS_FILE, PENDING_HISTORY_FILE,
-        QUALITY_ITAG_PRIORITIES,
+        QUALITY_ITAG_PRIORITIES, AUDIO_CACHE_DIR,
         resolve_stream_url, resolve_video_id_for_track, send_playback_tracking,
-        get_cached_stream_url, put_cached_stream_url, invalidate_cached_stream_url
+        get_cached_stream_url, put_cached_stream_url, invalidate_cached_stream_url,
+        resolve_visionos_stream, find_audio_disk_cache, cache_audio_stream_async
     )
     from .song_enrichment import (
         SQUARE_COVERS_CACHE_FILE,
@@ -62,6 +64,7 @@ except (ImportError, ValueError):
         HOME_CACHE_FILE, ONLINE_TRACKS_FILE, MOOD_CACHE_DIR, MOOD_CATS_FILE,
         DISLIKED_SONGS_FILE, ARTIST_AVATARS_FILE,
         load_disliked_songs, save_disliked_songs, add_disliked_song, remove_disliked_song, is_song_disliked,
+        load_liked_songs, save_liked_songs, add_liked_song, remove_liked_song, is_song_liked,
         load_artist_avatars, save_artist_avatars, cache_artist_avatar, get_cached_artist_avatar,
         cache_online_tracks, clean_artist_name, clean_thumbnail_url, normalize_track,
         get_recent_seed_track, get_mood_categories_live, get_creator_color, classify_section,
@@ -72,9 +75,10 @@ except (ImportError, ValueError):
     )
     from stream_resolver import (
         STREAM_CACHE_FILE, LOCAL_YT_MAPPINGS_FILE, PENDING_HISTORY_FILE,
-        QUALITY_ITAG_PRIORITIES,
+        QUALITY_ITAG_PRIORITIES, AUDIO_CACHE_DIR,
         resolve_stream_url, resolve_video_id_for_track, send_playback_tracking,
-        get_cached_stream_url, put_cached_stream_url, invalidate_cached_stream_url
+        get_cached_stream_url, put_cached_stream_url, invalidate_cached_stream_url,
+        resolve_visionos_stream, find_audio_disk_cache, cache_audio_stream_async
     )
     from song_enrichment import (
         SQUARE_COVERS_CACHE_FILE,
@@ -122,11 +126,19 @@ def execute_command(args):
     elif cmd == "rate_song" and len(args) > 2:
         vid = args[1]
         rating = args[2]
-        res = rate_song_action(vid, rating)
+        title = args[3] if len(args) > 3 else ""
+        artist = args[4] if len(args) > 4 else ""
+        image = args[5] if len(args) > 5 else ""
+        duration = args[6] if len(args) > 6 else ""
+        path = args[7] if len(args) > 7 else ""
+        res = rate_song_action(vid, rating, title, artist, image, duration, path)
         print(json.dumps(res, ensure_ascii=False))
 
     elif cmd == "disliked_list":
         print(json.dumps(load_disliked_songs(), ensure_ascii=False))
+
+    elif cmd == "liked_list":
+        print(json.dumps(load_liked_songs(), ensure_ascii=False))
 
     elif cmd == "home":
         res = get_personalized_home()

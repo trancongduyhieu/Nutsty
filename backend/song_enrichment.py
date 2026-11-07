@@ -23,6 +23,8 @@ try:
         clean_artist_name, clean_thumbnail_url, normalize_track,
         load_disliked_songs, save_disliked_songs, add_disliked_song,
         remove_disliked_song, is_song_disliked,
+        load_liked_songs, save_liked_songs, add_liked_song,
+        remove_liked_song, is_song_liked,
         load_artist_avatars, save_artist_avatars, cache_artist_avatar,
         get_cached_artist_avatar, DISLIKED_SONGS_FILE, ARTIST_AVATARS_FILE
     )
@@ -40,6 +42,8 @@ except (ImportError, ValueError):
         clean_artist_name, clean_thumbnail_url, normalize_track,
         load_disliked_songs, save_disliked_songs, add_disliked_song,
         remove_disliked_song, is_song_disliked,
+        load_liked_songs, save_liked_songs, add_liked_song,
+        remove_liked_song, is_song_liked,
         load_artist_avatars, save_artist_avatars, cache_artist_avatar,
         get_cached_artist_avatar, DISLIKED_SONGS_FILE, ARTIST_AVATARS_FILE
     )
@@ -249,16 +253,21 @@ def get_song_details(video_id):
 
     return details
 
-def rate_song_action(video_id, rating):
+def rate_song_action(video_id, rating, title="", artist="", image="", duration="", path=""):
     clean_vid = str(video_id).strip().replace("ytdl://", "").replace("yt_", "")
     upper_rating = str(rating).upper().strip()
     if upper_rating not in ("LIKE", "DISLIKE", "INDIFFERENT"):
         upper_rating = "INDIFFERENT"
 
     if upper_rating == "DISLIKE":
-        add_disliked_song(clean_vid)
-    elif upper_rating in ("LIKE", "INDIFFERENT"):
+        add_disliked_song(clean_vid, title, artist)
+        remove_liked_song(clean_vid, title, artist)
+    elif upper_rating == "LIKE":
         remove_disliked_song(clean_vid)
+        add_liked_song(clean_vid, title, artist, image, duration, path)
+    elif upper_rating == "INDIFFERENT":
+        remove_disliked_song(clean_vid)
+        remove_liked_song(clean_vid, title, artist)
 
     res = {"success": True, "videoId": clean_vid, "rating": upper_rating}
     try:
@@ -267,6 +276,7 @@ def rate_song_action(video_id, rating):
     except Exception as e:
         sys.stderr.write(f"[rate_song error for {clean_vid}]: {e}\n")
         res["ytm_error"] = str(e)
+    return res
 RELATED_CACHE_DIR = os.path.join(pc.get_cache_dir(), "related")
 
 def get_song_related_content(video_id, title="", artist=""):

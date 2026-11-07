@@ -21,7 +21,10 @@ def clean_vocal_markers(text: str) -> str:
 def strip_rich_sync_tags(text: str) -> str:
     if not text:
         return ""
-    t = re.sub(r'<[0-9:.]+>', ' ', text)
+    # Removing tags directly preserves spaces between words without creating artificial spaces between syllables:
+    # e.g. <00:27.124>real<00:27.522>i<00:28.572>zed -> realized
+    # e.g. <00:01.00>Hello <00:02.00>world -> Hello world
+    t = re.sub(r'<[0-9:.]+>', '', text)
     t = html.unescape(t)
     t = re.sub(r'\s+', ' ', t).strip()
     return clean_vocal_markers(t)
@@ -31,7 +34,7 @@ def parse_rich_sync_words(line_str: str, default_start: float = 0.0) -> List[Dic
     """Parse <mm:ss.xx> word timestamps embedded in a LRC line."""
     if not line_str or "<" not in line_str or ">" not in line_str:
         return []
-    pattern = re.compile(r'<(\d{1,2}):(\d{1,2}(?:\.\d+)?)>\s*([^<]*)')
+    pattern = re.compile(r'<(\d{1,2}):(\d{1,2}(?:\.\d+)?)>([^<]*)')
     matches = list(pattern.finditer(line_str))
     if not matches:
         return []
@@ -39,7 +42,9 @@ def parse_rich_sync_words(line_str: str, default_start: float = 0.0) -> List[Dic
     for i, m in enumerate(matches):
         mins, secs = int(m.group(1)), float(m.group(2))
         start_t = round(mins * 60.0 + secs, 3)
-        txt = clean_vocal_markers(html.unescape(m.group(3).strip()))
+        raw_val = m.group(3)
+        has_space = raw_val.endswith(" ") or raw_val.endswith("\t")
+        txt = clean_vocal_markers(html.unescape(raw_val.strip()))
         if not txt:
             continue
         if i + 1 < len(matches):
@@ -53,6 +58,7 @@ def parse_rich_sync_words(line_str: str, default_start: float = 0.0) -> List[Dic
             "start": start_t,
             "end": end_t,
             "duration": dur,
+            "hasSpace": has_space,
             "isHeld": dur >= 0.85,
         })
     return words
@@ -82,6 +88,16 @@ def parse_lrc(lrc_text: str) -> List[Dict[str, Any]]:
             continue
         last_match = matches[-1]
         raw_text = line[last_match.end():].strip()
+        agent = None
+        is_bg = False
+        m_agent = re.search(r'\{agent:([^}]+)\}', raw_text)
+        if m_agent:
+            agent = m_agent.group(1).strip()
+            raw_text = re.sub(r'\{agent:[^}]+\}', '', raw_text).strip()
+        if "{bg}" in raw_text:
+            is_bg = True
+            raw_text = raw_text.replace("{bg}", "").strip()
+
         clean_text = strip_rich_sync_tags(raw_text)
         if not clean_text or clean_text in ("♪", "♫", "🎵"):
             continue
@@ -98,6 +114,10 @@ def parse_lrc(lrc_text: str) -> List[Dict[str, Any]]:
                 "isSynthetic": not bool(syllable_words),
                 "words": syllable_words,
             }
+            if agent:
+                item["agent"] = agent
+            if is_bg:
+                item["isBackground"] = True
             if lrc_source:
                 item["source"] = lrc_source
             results.append(item)
@@ -135,20 +155,34 @@ def parse_ttml_body(ttml_text: str) -> List[Dict[str, Any]]:
     if not ttml_text:
         return []
     lines = []
-    p_pattern = re.compile(r'<p\s+begin="([^"]+)"\s+end="([^"]+)"[^>]*>(.*?)</p>', re.DOTALL)
+    p_pattern = re.compile(r'<p\s+([^>]*?)>(.*?)</p>', re.DOTALL)
     span_pattern = re.compile(r'<span\s+begin="([^"]+)"\s+end="([^"]+)"[^>]*>([^<]+)</span>')
 
     for p_match in p_pattern.finditer(ttml_text):
-        line_begin = parse_ttml_time(p_match.group(1))
-        line_end = parse_ttml_time(p_match.group(2))
-        inner = p_match.group(3)
+        attrs = p_match.group(1)
+        inner = p_match.group(2)
+
+        begin_m = re.search(r'begin="([^"]+)"', attrs)
+        end_m = re.search(r'end="([^"]+)"', attrs)
+        if not begin_m or not end_m:
+            continue
+
+        line_begin = parse_ttml_time(begin_m.group(1))
+        line_end = parse_ttml_time(end_m.group(1))
+
+        agent_m = re.search(r'(?:ttm:)?agent="([^"]+)"', attrs)
+        agent = agent_m.group(1) if agent_m else None
+        is_bg = bool(re.search(r'(?:ttm:)?role="x-bg"', attrs))
 
         spans = list(span_pattern.finditer(inner))
         words = []
-        for sm in spans:
+        for i, sm in enumerate(spans):
             wb = parse_ttml_time(sm.group(1))
             we = parse_ttml_time(sm.group(2))
-            raw_wtxt = clean_vocal_markers(html.unescape(sm.group(3)).strip())
+            raw_span = sm.group(3)
+            trailing = inner[sm.end():spans[i + 1].start()] if i + 1 < len(spans) else ""
+            has_space = raw_span.endswith(" ") or raw_span.endswith("\t") or bool(re.search(r'\s', trailing))
+            raw_wtxt = clean_vocal_markers(html.unescape(raw_span).strip())
             if not raw_wtxt:
                 continue
             dur = max(0.08, round(we - wb, 3))
@@ -157,6 +191,7 @@ def parse_ttml_body(ttml_text: str) -> List[Dict[str, Any]]:
                 "start": round(wb, 3),
                 "end": round(we, 3),
                 "duration": dur,
+                "hasSpace": has_space,
                 "isHeld": dur >= 0.85,
             })
 
@@ -164,24 +199,20 @@ def parse_ttml_body(ttml_text: str) -> List[Dict[str, Any]]:
         if not plain_text or plain_text in ("♪", "♫", "🎵"):
             continue
 
-        if words:
-            lines.append({
-                "time": round(line_begin, 3),
-                "endTime": round(line_end, 3),
-                "text": plain_text,
-                "hasWords": True,
-                "isSynthetic": False,
-                "words": words,
-            })
-        else:
-            lines.append({
-                "time": round(line_begin, 3),
-                "endTime": round(line_end, 3),
-                "text": plain_text,
-                "hasWords": False,
-                "isSynthetic": True,
-                "words": [],
-            })
+        line_dict: Dict[str, Any] = {
+            "time": round(line_begin, 3),
+            "endTime": round(line_end, 3),
+            "text": plain_text,
+            "hasWords": bool(words),
+            "isSynthetic": not bool(words),
+            "words": words,
+        }
+        if agent:
+            line_dict["agent"] = agent
+        if is_bg:
+            line_dict["isBackground"] = True
+
+        lines.append(line_dict)
 
     lines.sort(key=lambda x: x["time"])
     return lines

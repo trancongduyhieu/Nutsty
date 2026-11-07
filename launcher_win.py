@@ -928,7 +928,14 @@ class NutstyBridge(QObject):
     def _onProcessFinished(self, cb_id, out, err, code):
         cb = None
         with self._cb_lock:
-            cb = self._callbacks.pop(cb_id, None)
+            entry = self._callbacks.pop(cb_id, None)
+            if entry:
+                cb = entry[0] if isinstance(entry, tuple) else entry
+            # Auto prune any orphaned callbacks older than 180s to prevent memory leaks
+            now = time.time()
+            stale_ids = [cid for cid, val in self._callbacks.items() if isinstance(val, tuple) and (now - val[1] > 180)]
+            for sid in stale_ids:
+                self._callbacks.pop(sid, None)
         if cb:
             try:
                 if hasattr(cb, "call"):
@@ -1388,7 +1395,7 @@ class NutstyBridge(QObject):
         with self._cb_lock:
             self._cb_id += 1
             cb_id = self._cb_id
-            self._callbacks[cb_id] = callback
+            self._callbacks[cb_id] = (callback, time.time())
 
         if args[0] == "wl-copy":
             self.copyToClipboard(args[1] if len(args) > 1 else "")
@@ -1407,6 +1414,7 @@ class NutstyBridge(QObject):
         # Fast path for player_daemon status (executes in 0.1ms in-process with direct JSON getter)
         if target_script == "player_daemon.py" and script_args and script_args[0] == "status":
             def _status_worker():
+                out, err, code = "", "", 1
                 try:
                     import player_daemon
                     out = player_daemon.get_status_json()
@@ -1416,8 +1424,11 @@ class NutstyBridge(QObject):
                     out = ""
                     err = str(e)
                     code = 1
-                self.processFinished.emit(cb_id, out, err, code)
-            _safe_submit(_status_worker)
+                finally:
+                    self.processFinished.emit(cb_id, out, err, code)
+            fut = _safe_submit(_status_worker)
+            if fut is None:
+                self.processFinished.emit(cb_id, "", "Worker pool unavailable", 1)
             return
 
         # Fast unified in-process execution for all backend scripts in BACKEND_MAP (except browser_login which requires isolated subprocess)
@@ -1471,17 +1482,19 @@ class NutstyBridge(QObject):
                     if hasattr(sys.stderr, "clear_stream"):
                         sys.stderr.clear_stream()
 
-                out = out_buf.getvalue()
-                err = err_buf.getvalue()
-                if err and default_err:
-                    try:
-                        default_err.write(f"[_in_proc_run {target_script}]: {err}\n")
-                        default_err.flush()
-                    except Exception:
-                        pass
-                self.processFinished.emit(cb_id, out, err, code)
+                    out = out_buf.getvalue()
+                    err = err_buf.getvalue()
+                    if err and default_err:
+                        try:
+                            default_err.write(f"[_in_proc_run {target_script}]: {err}\n")
+                            default_err.flush()
+                        except Exception:
+                            pass
+                    self.processFinished.emit(cb_id, out, err, code)
 
-            _safe_submit(_in_proc_run)
+            fut = _safe_submit(_in_proc_run)
+            if fut is None:
+                self.processFinished.emit(cb_id, "", "Worker pool unavailable", 1)
             return
 
         cmd = list(args)
@@ -1489,6 +1502,7 @@ class NutstyBridge(QObject):
             cmd[0] = sys.executable
 
         def _worker():
+            out, err, code = "", "", 1
             try:
                 proc_timeout = 360 if any("browser_login" in str(x) for x in cmd) else 60
                 res = subprocess.run(cmd, capture_output=True, text=True, timeout=proc_timeout, **pc.get_daemon_popen_kwargs())
@@ -1499,10 +1513,12 @@ class NutstyBridge(QObject):
                 out = ""
                 err = str(e)
                 code = 1
-            
-            self.processFinished.emit(cb_id, out, err, code)
+            finally:
+                self.processFinished.emit(cb_id, out, err, code)
 
-        _safe_submit(_worker)
+        fut = _safe_submit(_worker)
+        if fut is None:
+            self.processFinished.emit(cb_id, "", "Worker pool unavailable", 1)
 
 # Quickshell Compatibility Classes
 class WlrLayershellAttached(QObject):

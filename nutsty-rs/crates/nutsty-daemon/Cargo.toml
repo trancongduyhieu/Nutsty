@@ -1,0 +1,16 @@
+[package]
+name = "nutsty-daemon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+tiny_http = "0.12"
+url = "2.5"
+nutsty-bridge = { path = "../nutsty-bridge" }
+
+[[bin]]
+name = "nutsty-daemon"
+path = "src/main.rs"

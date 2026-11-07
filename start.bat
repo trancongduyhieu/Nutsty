@@ -54,6 +54,10 @@ if not exist "venv\.installed" (
 )
 
 :run_app
+:: Ensure ultra-lightweight Rust tray indicator on Windows
+if exist "bin\\nutsty-tray.exe" (
+    start "" /b "bin\\nutsty-tray.exe"
+)
 echo [3/3] Starting Nutsty...
 python launcher_win.py %*
 goto end

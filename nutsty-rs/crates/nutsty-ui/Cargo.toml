@@ -1,0 +1,21 @@
+[package]
+name = "nutsty-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+nutsty-core = { path = "../nutsty-core" }
+nutsty-lyrics = { path = "../nutsty-lyrics" }
+nutsty-audio = { path = "../nutsty-audio" }
+nutsty-library = { path = "../nutsty-library" }
+gpui.workspace = true
+gpui_platform.workspace = true
+smol_str.workspace = true
+dirs.workspace = true
+tracing.workspace = true
+crossbeam-channel.workspace = true
+
+[[bin]]
+name = "nutsty"
+path = "src/main.rs"

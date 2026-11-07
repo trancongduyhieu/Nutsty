@@ -326,16 +326,24 @@ Rectangle {
     }
 
     function getLyricsSourceLabel(src) {
-        if (src === "spotify") {
+        if (src === "youlyplus") {
+            return I18n.tr("YouLyPlus (Apple Music/QQ)", "YouLyPlus (Apple Music/QQ)");
+        } else if (src === "simpmusic") {
+            return I18n.tr("SimpMusic (YouTube Music)", "SimpMusic (YouTube Music)");
+        } else if (src === "spotify") {
             return I18n.tr("Spotify (sp_dc)", "Spotify (sp_dc)");
         } else if (src === "betterlyrics") {
             return I18n.tr("Apple Music (BetterLyrics)", "Apple Music (BetterLyrics)");
         } else if (src === "lrclib") {
             return I18n.tr("LRCLIB", "LRCLIB");
+        } else if (src === "kugou") {
+            return I18n.tr("KuGou (酷狗音乐)", "KuGou (酷狗音乐)");
         } else if (src === "netease") {
             return I18n.tr("NetEase Cloud Music", "NetEase Cloud Music");
+        } else if (src === "youtube") {
+            return I18n.tr("YouTube Subtitles", "YouTube Subtitles");
         } else {
-            return I18n.tr("Tự động (Khuyến nghị)", "Auto (Recommended)");
+            return I18n.tr("Tự động (Đa nguồn song song)", "Auto (Multi-Source)");
         }
     }
 
@@ -652,7 +660,7 @@ Rectangle {
                     height: implicitHeight
                     implicitHeight: (root.currentTab === 0
                                      ? tab0Content.implicitHeight + (langRowItem.menuOpen || streamQualityRowItem.menuOpen || downloadQualityRowItem.menuOpen || (typeof canvasPrefRowItem !== "undefined" && canvasPrefRowItem.menuOpen) ? 240 : 30)
-                                     : tab1Content.implicitHeight + (typeof lyricsSourceRowItem !== "undefined" && lyricsSourceRowItem.menuOpen ? 240 : 0)) + 8
+                                     : tab1Content.implicitHeight + (typeof lyricsSourceRowItem !== "undefined" && lyricsSourceRowItem.menuOpen ? 400 : 0)) + 8
 
                     // =========================================================
                     // TAB 0: Google & Cloud Account Content (100% Frameless)
@@ -2994,120 +3002,148 @@ Rectangle {
                         anchors.top: lyricsSourceDropdownBtn.bottom
                         anchors.topMargin: 6
                         anchors.right: lyricsSourceDropdownBtn.right
-                        width: 290
-                        height: lyricsSourceCol.implicitHeight + 10
+                        width: 330
+                        height: Math.min(380, lyricsSourceCol.implicitHeight + 12)
                         radius: 10
                         color: Qt.rgba(0.06 + root.accentColor.r * 0.08, 0.06 + root.accentColor.g * 0.08, 0.08 + root.accentColor.b * 0.12, 0.96)
                         border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
                         border.width: 1
+                        clip: true
                         z: 100
 
-                        Column {
-                            id: lyricsSourceCol
-                            anchors.top: parent.top
-                            anchors.topMargin: 5
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            spacing: 3
+                        Flickable {
+                            id: lyricsSourceFlickable
+                            anchors.fill: parent
+                            anchors.margins: 4
+                            contentHeight: lyricsSourceCol.implicitHeight + 6
+                            contentWidth: width
+                            clip: true
+                            boundsBehavior: Flickable.StopAtBounds
 
-                            readonly property var sourceOptions: [
-                                {
-                                    key: "auto",
-                                    name: I18n.tr("Tự động (Khuyến nghị)", "Auto (Recommended)"),
-                                    desc: I18n.tr("Spotify (nếu có sp_dc) → BetterLyrics → LRCLIB → NetEase", "Spotify (if sp_dc) → BetterLyrics → LRCLIB → NetEase")
-                                },
-                                {
-                                    key: "spotify",
-                                    name: I18n.tr("Spotify (sp_dc)", "Spotify (sp_dc)"),
-                                    desc: I18n.tr("Lời đồng bộ word-level trực tiếp từ Spotify spclient", "Word-level synced lyrics directly from Spotify spclient")
-                                },
-                                {
-                                    key: "betterlyrics",
-                                    name: I18n.tr("Apple Music (BetterLyrics)", "Apple Music (BetterLyrics)"),
-                                    desc: I18n.tr("Định dạng TTML Apple Music từng từ độ chính xác cao", "High precision word-level Apple Music TTML")
-                                },
-                                {
-                                    key: "lrclib",
-                                    name: I18n.tr("LRCLIB", "LRCLIB"),
-                                    desc: I18n.tr("Cơ sở dữ liệu LRC mã nguồn mở cộng đồng", "Open-source community LRC database")
-                                },
-                                {
-                                    key: "netease",
-                                    name: I18n.tr("NetEase Cloud Music", "NetEase Cloud Music"),
-                                    desc: I18n.tr("Kho lời bài hát phong phú cho nhạc Á Đông & Anime", "Rich lyrics repository for Asian & Anime tracks")
-                                }
-                            ]
+                            Column {
+                                id: lyricsSourceCol
+                                width: parent.width
+                                spacing: 3
 
-                            Repeater {
-                                model: lyricsSourceCol.sourceOptions
-                                delegate: Rectangle {
-                                    width: lyricsSourceCol.width - 10
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    height: 42
-                                    radius: 7
-                                    color: (root.lyricsSource === modelData.key)
-                                           ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.26)
-                                           : (lsItemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.14) : "transparent")
-                                    border.color: (root.lyricsSource === modelData.key)
-                                                  ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
-                                                  : (lsItemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25) : "transparent")
-                                    border.width: 1
-
-                                    Behavior on color { ColorAnimation { duration: 100 } }
-                                    Behavior on border.color { ColorAnimation { duration: 100 } }
-
-                                    Item {
-                                        anchors.fill: parent
-                                        anchors.leftMargin: 10
-                                        anchors.rightMargin: 10
-
-                                        Column {
-                                            anchors.left: parent.left
-                                            anchors.right: lsCheckIcon.left
-                                            anchors.rightMargin: 8
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            spacing: 1
-
-                                            Text {
-                                                width: parent.width
-                                                text: modelData.name
-                                                font.family: Theme.fontFamily
-                                                font.pixelSize: 12
-                                                font.bold: root.lyricsSource === modelData.key
-                                                color: (root.lyricsSource === modelData.key) ? "#ffffff" : (lsItemMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.85))
-                                                elide: Text.ElideRight
-                                            }
-
-                                            MarqueeText {
-                                                width: parent.width
-                                                text: modelData.desc
-                                                font.family: Theme.fontFamily
-                                                font.pixelSize: 10
-                                                color: (root.lyricsSource === modelData.key) ? Qt.rgba(255, 255, 255, 0.80) : Theme.textSecondary
-                                                active: lyricsSourceRowItem.menuOpen
-                                            }
-                                        }
-
-                                        AppIcon {
-                                            id: lsCheckIcon
-                                            anchors.right: parent.right
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            source: "../assets/icons/emblem-ok-symbolic.svg"
-                                            iconSize: 12
-                                            color: root.accentColor
-                                            visible: root.lyricsSource === modelData.key
-                                        }
+                                readonly property var sourceOptions: [
+                                    {
+                                        key: "auto",
+                                        name: I18n.tr("Tự động (Đa nguồn song song)", "Auto (Multi-Source Parallel)"),
+                                        desc: I18n.tr("Gọi song song YouLyPlus, SimpMusic, LRCLIB, KuGou... với pickBest", "Parallel queries YouLyPlus, SimpMusic, LRCLIB, KuGou... with pickBest")
+                                    },
+                                    {
+                                        key: "youlyplus",
+                                        name: I18n.tr("YouLyPlus (Apple Music/QQ)", "YouLyPlus (Apple Music/QQ)"),
+                                        desc: I18n.tr("Karaoke từng từ chuẩn studio kèm phân vai song ca", "Studio word-level karaoke with duet singer attribution")
+                                    },
+                                    {
+                                        key: "simpmusic",
+                                        name: I18n.tr("SimpMusic (YouTube Music)", "SimpMusic (YouTube Music)"),
+                                        desc: I18n.tr("Kho lời rich-sync & karaoke từng từ chất lượng cao", "High-quality rich-sync & word-level karaoke from SimpMusic")
+                                    },
+                                    {
+                                        key: "betterlyrics",
+                                        name: I18n.tr("Apple Music (BetterLyrics)", "Apple Music (BetterLyrics)"),
+                                        desc: I18n.tr("Định dạng TTML Apple Music từng từ độ chính xác cao", "High precision word-level Apple Music TTML")
+                                    },
+                                    {
+                                        key: "spotify",
+                                        name: I18n.tr("Spotify (sp_dc)", "Spotify (sp_dc)"),
+                                        desc: I18n.tr("Lời đồng bộ word-level trực tiếp từ Spotify spclient", "Word-level synced lyrics directly from Spotify spclient")
+                                    },
+                                    {
+                                        key: "lrclib",
+                                        name: I18n.tr("LRCLIB", "LRCLIB"),
+                                        desc: I18n.tr("Cơ sở dữ liệu LRC mã nguồn mở cộng đồng lớn nhất", "Largest open-source community LRC database")
+                                    },
+                                    {
+                                        key: "kugou",
+                                        name: I18n.tr("KuGou (酷狗音乐)", "KuGou (酷狗音乐)"),
+                                        desc: I18n.tr("Kho lời bài hát KRC khổng lồ cho nhạc Á Đông & C-Pop", "Massive Asian & C-Pop KRC lyrics repository")
+                                    },
+                                    {
+                                        key: "netease",
+                                        name: I18n.tr("NetEase Cloud Music", "NetEase Cloud Music"),
+                                        desc: I18n.tr("Kho lời bài hát phong phú cho nhạc Á Đông & Anime", "Rich lyrics repository for Asian & Anime tracks")
+                                    },
+                                    {
+                                        key: "youtube",
+                                        name: I18n.tr("YouTube Subtitles", "YouTube Subtitles"),
+                                        desc: I18n.tr("Phụ đề chính thức & Auto-captions trực tiếp từ YouTube", "Official subtitles & auto-captions from YouTube")
                                     }
+                                ]
 
-                                    MouseArea {
-                                        id: lsItemMouse
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            root.lyricsSource = modelData.key;
-                                            root.saveLyricsSourceRequested(modelData.key);
-                                            lyricsSourceRowItem.menuOpen = false;
+                                Repeater {
+                                    model: lyricsSourceCol.sourceOptions
+                                    delegate: Rectangle {
+                                        width: lyricsSourceCol.width - 6
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        height: 42
+                                        radius: 7
+                                        color: (root.lyricsSource === modelData.key)
+                                               ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.26)
+                                               : (lsItemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.14) : "transparent")
+                                        border.color: (root.lyricsSource === modelData.key)
+                                                      ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                                                      : (lsItemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25) : "transparent")
+                                        border.width: 1
+
+                                        Behavior on color { ColorAnimation { duration: 100 } }
+                                        Behavior on border.color { ColorAnimation { duration: 100 } }
+
+                                        Item {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: 10
+                                            anchors.rightMargin: 10
+
+                                            Column {
+                                                anchors.left: parent.left
+                                                anchors.right: lsCheckIcon.left
+                                                anchors.rightMargin: 8
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                spacing: 1
+
+                                                Text {
+                                                    width: parent.width
+                                                    text: modelData.name
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: 12
+                                                    font.bold: root.lyricsSource === modelData.key
+                                                    color: (root.lyricsSource === modelData.key) ? "#ffffff" : (lsItemMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.85))
+                                                    elide: Text.ElideRight
+                                                }
+
+                                                MarqueeText {
+                                                    width: parent.width
+                                                    text: modelData.desc
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: 10
+                                                    color: (root.lyricsSource === modelData.key) ? Qt.rgba(255, 255, 255, 0.80) : Theme.textSecondary
+                                                    active: lyricsSourceRowItem.menuOpen
+                                                }
+                                            }
+
+                                            AppIcon {
+                                                id: lsCheckIcon
+                                                anchors.right: parent.right
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                source: "../assets/icons/emblem-ok-symbolic.svg"
+                                                iconSize: 12
+                                                color: root.accentColor
+                                                visible: root.lyricsSource === modelData.key
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            id: lsItemMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                root.lyricsSource = modelData.key;
+                                                root.saveLyricsSourceRequested(modelData.key);
+                                                lyricsSourceRowItem.menuOpen = false;
+                                            }
                                         }
                                     }
                                 }

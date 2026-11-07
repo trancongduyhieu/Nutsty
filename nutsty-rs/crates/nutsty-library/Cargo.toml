@@ -1,0 +1,27 @@
+[package]
+name = "nutsty-library"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+nutsty-core = { path = "../nutsty-core" }
+lofty.workspace = true
+walkdir.workspace = true
+smol_str.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+dirs.workspace = true
+rayon.workspace = true
+md-5.workspace = true
+hex.workspace = true
+rusqlite.workspace = true
+
+[[bin]]
+name = "nutsty-library"
+path = "src/main.rs"
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,0 +1,13 @@
+[package]
+name = "nutsty-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+smol_str.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

@@ -239,11 +239,15 @@ def extract_adaptive_palette(img: Any, is_light: bool):
         # Calibrate to Luminous Jewel Tone (L=0.82, C in [0.08, 0.12])
         norm_c = min(0.12, max(0.08, best_c * 1.4))
         hl_color = oklch_to_hex(0.82, norm_c, best_h)
+        acc_color = oklch_to_hex(0.68, min(0.16, max(0.10, best_c * 1.3)), best_h)
+        bg_tint = oklch_to_hex(0.16, min(0.04, max(0.02, best_c * 0.6)), best_h)
     else:
         # Pure monochrome/pencil sketch without color:
         # Fallback to timeless, luxurious Vintage Champagne Gold
         top_theme = "warm_classic"
         hl_color = "#deb06c"
+        acc_color = "#deb06c"
+        bg_tint = "#161514"
 
     # Universal High-End Cinematic Typography (Pure white base + custom jewel highlight + deep dark shadows)
     # Eliminates cheap/blurry white halos completely across all wallpapers
@@ -257,6 +261,8 @@ def extract_adaptive_palette(img: Any, is_light: bool):
         "isLightArea": is_light,
         "baseTextColor": base_text,
         "highlightColor": hl_color,
+        "accentColor": acc_color,
+        "backgroundTint": bg_tint,
         "deadTextColor": dead_text,
         "shadowDirectional": shadow_dir,
         "shadowAmbient": shadow_amb
@@ -351,11 +357,41 @@ def main():
 SONG_PALETTES_CACHE = Path(pc.get_cache_dir()) / "song_palettes.json"
 
 def extract_song_palette(img_src: str) -> dict:
-    default_res = {"highlightColor": "", "theme": "default"}
-    if not HAS_PIL or not img_src or not str(img_src).strip():
+    default_res = {
+        "highlightColor": "#deb06c",
+        "accentColor": "#deb06c",
+        "backgroundTint": "#161514",
+        "theme": "default",
+        "baseTextColor": "#f8fafc"
+    }
+    if not img_src or not str(img_src).strip():
         return default_res
 
     clean_src = str(img_src).strip()
+
+    # 0. Fast-path: Delegate to high-performance native Rust bridge if available
+    bridge_bin = Path(pc.APP_ROOT) / "bin" / ("nutsty-bridge.exe" if pc.IS_WINDOWS else "nutsty-bridge")
+    if bridge_bin.exists():
+        try:
+            import subprocess
+            proc = subprocess.run(
+                [str(bridge_bin), "palette", clean_src],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=4,
+                check=False
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                parsed = json.loads(proc.stdout.strip())
+                if parsed and parsed.get("highlightColor"):
+                    return parsed
+        except Exception:
+            pass
+
+    if not HAS_PIL:
+        return default_res
+
     cache_key = clean_src
 
     try:
@@ -394,6 +430,8 @@ def extract_song_palette(img_src: str) -> dict:
         pal = extract_adaptive_palette(img, is_light=False)
         res = {
             "highlightColor": pal["highlightColor"],
+            "accentColor": pal.get("accentColor", pal["highlightColor"]),
+            "backgroundTint": pal.get("backgroundTint", "#161514"),
             "theme": pal["theme"],
             "baseTextColor": pal.get("baseTextColor", "#f8fafc")
         }

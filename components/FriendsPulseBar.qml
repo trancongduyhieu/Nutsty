@@ -61,9 +61,8 @@ Item {
             var appDir = (typeof win !== "undefined" && win.appDir) ? win.appDir : (Quickshell.env("NUTSTY_APP_DIR") || (Quickshell.env("HOME") + "/Applications/FrostifyLocal"));
             userTrackPaletteProc.running = false;
             userTrackPaletteProc.command = [
-                "python3", "-u",
-                appDir + "/backend/palette_extractor.py",
-                "song_palette",
+                appDir + "/bin/nutsty-bridge",
+                "palette",
                 cov
             ];
             userTrackPaletteProc.running = true;

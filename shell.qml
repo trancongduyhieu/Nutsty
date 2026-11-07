@@ -32,7 +32,7 @@ Scope {
                     if (typeof desktopMusicWidget.hide === "function") desktopMusicWidget.hide();
                 }
                 if (!statusProcess.running) {
-                    statusProcess.command = ["python3", win.appDir + "/backend/player_daemon.py", "status"];
+                    statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
                     statusProcess.running = true;
                 }
                 Qt.callLater(function() { if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) ytNowPlayingView.updateActiveLyric(true); });
@@ -40,6 +40,12 @@ Scope {
                 if (typeof desktopMusicWidget !== "undefined" && desktopMusicWidget) {
                     desktopMusicWidget.visible = true;
                     if (typeof desktopMusicWidget.show === "function") desktopMusicWidget.show();
+                }
+                var purgeXhr = new XMLHttpRequest();
+                purgeXhr.open("GET", (win.localApiUrl || "http://127.0.0.1:17890") + "/api/system/purge_ram", true);
+                try { purgeXhr.send(); } catch(e) {}
+                if (typeof gc === "function") {
+                    try { gc(); } catch(e) {}
                 }
             }
         }
@@ -145,6 +151,12 @@ Scope {
     property var listeningAlongFriend: null
     property real pendingListenAlongSeekPosition: 0.0
     property real lastTrackSwitchTimestamp: 0.0
+    property int playEpoch: 0
+    property string reconciledTrackId: ""
+    property real lastSeekTimestamp: 0.0
+    property bool isPendingTrackSwitch: false
+    property var seekDebounceTimer: seekDebounceTimer
+    property var rapidNavDebounceTimer: rapidNavDebounceTimer
     property string toastMessage: ""
     property bool toastVisible: false
     property string localApiUrl: "http://127.0.0.1:17890"
@@ -281,12 +293,11 @@ Scope {
                         }
                     } catch(e) {}
                 }
-                // Fallback to CLI process if auth_server is not reachable
+                // Fallback to native Rust CLI process if auth_server is not reachable
                 if (!songPaletteProc.running) {
                     songPaletteProc.command = [
-                        "python3", "-u",
-                        win.appDir + "/backend/palette_extractor.py",
-                        "song_palette",
+                        win.appDir + "/bin/nutsty-bridge",
+                        "palette",
                         imgUrl
                     ];
                     songPaletteProc.running = true;
@@ -596,7 +607,7 @@ Scope {
 
     Process {
         id: authServerProc
-        command: ["python3", "-u", win.appDir + "/backend/auth_server.py"]
+        command: [win.appDir + "/bin/nutsty-daemon"]
         running: (typeof __NutstyBridge === "undefined")
         onExited: (exitCode, exitStatus) => {
             if (exitCode !== 0 && typeof __NutstyBridge === "undefined") {
@@ -1469,7 +1480,7 @@ Scope {
 
     function refreshLocalAlbums() {
         localAlbumsProc.running = false;
-        localAlbumsProc.command = ["python3", "-u", win.appDir + "/backend/library.py", "albums"];
+        localAlbumsProc.command = [win.appDir + "/bin/nutsty-library", "albums"];
         localAlbumsProc.running = true;
     }
 
@@ -1536,6 +1547,7 @@ Scope {
         } else {
             win.songAccentColor = win.wallpaperAccentColor;
         }
+        win.syncCurrentTrackLiked();
         win.syncNowPlaying(true);
     }
     property bool isPlaying: false
@@ -1558,7 +1570,7 @@ Scope {
         id: smoothProgressTimer
         interval: 40
         repeat: true
-        running: win.isPlaying && !win.isLoadingAudio && win.lastSyncTimestamp > 0
+        running: (win.visible || win.desktopLyricsEnabled) && win.isPlaying && !win.isLoadingAudio && win.lastSyncTimestamp > 0
         onTriggered: {
             var elapsed = (Date.now() - win.lastSyncTimestamp) / 1000.0;
             var newT = win.lastSyncTime + elapsed;
@@ -1616,7 +1628,7 @@ Scope {
 
     Component.onDestruction: {
         win.sendOfflineSignal();
-        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
+        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
     }
 
     // Concentric Window Corner Mask: R_outer = 24px (R_inner = 16px + 8px margin)
@@ -2092,7 +2104,7 @@ Scope {
                             id: mainGrid
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            tracks: (win.currentView === "library" && mainGrid.downloadsSubTab === "tracks") ? win.allTracks : win.browsingTracks
+                            tracks: (win.currentView === "library") ? (mainGrid.downloadsSubTab === "favorites" ? win.likedTracksList : (mainGrid.downloadsSubTab === "tracks" ? win.allTracks : win.browsingTracks)) : win.browsingTracks
                             currentTrack: win.currentTrack
                             isPlaying: win.isPlaying
                             isLoadingAudio: win.isLoadingAudio
@@ -2120,6 +2132,7 @@ Scope {
                                     win.playingPlaylistId = "";
                                     win.playingSourceTitle = (win.currentView === "artist") ? win.mainSectionTitle : "";
                                 }
+                                win.isShuffle = false;
                                 var first = win.currentTracks[0];
                                 if (first) {
                                     if ((first.path && first.path.startsWith("ytdl://")) || first.videoId) {
@@ -2128,7 +2141,6 @@ Scope {
                                         win.playTrack(first);
                                     }
                                 }
-                                win.isNowPlayingOpen = true;
                             }
                             onTrackPlayRequested: trk => {
                                 if (win.isContextMenuActive) return;
@@ -2151,7 +2163,9 @@ Scope {
                                 } else {
                                     win.playTrack(trk);
                                 }
-                                win.isNowPlayingOpen = true;
+                                if (win.currentView !== "library") {
+                                    win.isNowPlayingOpen = true;
+                                }
                             }
                             onTrackDetailsRequested: trk => {
                                 win.currentTrack = trk;
@@ -2159,8 +2173,31 @@ Scope {
                             }
                             onTrackContextMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false)
                             onShufflePlayRequested: {
-                                win.shufflePlayBrowsing();
-                                win.isNowPlayingOpen = true;
+                                if (!mainGrid.sortedTracks || mainGrid.sortedTracks.length === 0) return;
+                                var list = mainGrid.sortedTracks.slice();
+                                for (var i = list.length - 1; i > 0; i--) {
+                                    var j = Math.floor(Math.random() * (i + 1));
+                                    var temp = list[i];
+                                    list[i] = list[j];
+                                    list[j] = temp;
+                                }
+                                win.currentTracks = list;
+                                win.isShuffle = true;
+                                if (win.currentView === "playlist") {
+                                    win.playingPlaylistId = win.activePlaylistId;
+                                    win.playingSourceTitle = win.mainSectionTitle;
+                                } else {
+                                    win.playingPlaylistId = "";
+                                    win.playingSourceTitle = (win.currentView === "artist") ? win.mainSectionTitle : "";
+                                }
+                                var first = list[0];
+                                if (first) {
+                                    if ((first.path && first.path.startsWith("ytdl://")) || first.videoId) {
+                                        win.playOnlineTrack(first, false);
+                                    } else {
+                                        win.playTrack(first);
+                                    }
+                                }
                             }
                             onBatchDeleteRequested: paths => win.batchDeleteTracks(paths)
                             onCreatePlaylistRequested: trks => createPlaylistModal.openCreate(trks)
@@ -2407,7 +2444,7 @@ Scope {
             currentTrack: win.currentTrack
             audioSpecs: win.audioSpecs
             resolvedSquareImage: win.currentResolvedCover
-            isLiked: (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView && ytNowPlayingView.currentLikeStatus === "LIKE")
+            isLiked: win.isCurrentTrackLiked
             isPlaying: win.isPlaying
             isLoadingAudio: win.isLoadingAudio
             currentTime: win.currentTime
@@ -2424,6 +2461,7 @@ Scope {
             listeningAlongFriend: win.listeningAlongFriend
             activeCoListenersDetails: win.activeCoListenersDetails
 
+            onToggleLikeClicked: win.toggleLikeCurrentTrack()
             onPlayPauseClicked: win.togglePlay()
             onNextClicked: win.playNext()
             onPrevClicked: win.playPrev()
@@ -2467,6 +2505,188 @@ Scope {
             onExitListeningAlongRequested: win.exitListeningAlong()
             onOpenCoListenersRequested: (tx, ty) => coListenersPopover.openAt(win.activeCoListenersDetails, tx, ty)
             onSendChatMessageRequested: text => win.sendChatMessage(text)
+        }
+
+        // Click-outside backdrop shield for Volume Popover (Prevents click-through to underlying cards)
+        MouseArea {
+            id: volumeDismissShield
+            anchors.fill: parent
+            z: 90
+            visible: bottomPlayer.isVolumePopupOpen
+            cursorShape: Qt.ArrowCursor
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            preventStealing: true
+
+            onPressed: mouse => {
+                mouse.accepted = true;
+            }
+            onReleased: mouse => {
+                mouse.accepted = true;
+            }
+            onClicked: mouse => {
+                mouse.accepted = true;
+                bottomPlayer.isVolumePopupOpen = false;
+            }
+            onWheel: wheel => {
+                wheel.accepted = true;
+            }
+        }
+
+        // Vertical Volume Popup Capsule (SimpMusic Style - 48px x 180px Capsule, Level z: 91)
+        Rectangle {
+            id: verticalVolPopup
+            z: 91
+            width: 48
+            height: 180
+            radius: 14
+            color: Qt.rgba(0.10, 0.11, 0.15, 0.96)
+            border.width: 0
+            border.color: "transparent"
+
+            opacity: bottomPlayer.isVolumePopupOpen ? 1.0 : 0.0
+            visible: opacity > 0.01
+            scale: bottomPlayer.isVolumePopupOpen ? 1.0 : 0.92
+            transformOrigin: Item.Bottom
+            Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutQuad } }
+            Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+
+            x: {
+                var dummy = bottomPlayer.x + bottomPlayer.width + masterAppSurface.width;
+                if (bottomPlayer.volumeButtonAnchorItem) {
+                    var pt = bottomPlayer.volumeButtonAnchorItem.mapToItem(masterAppSurface, 0, 0);
+                    return Math.round(pt.x + (bottomPlayer.volumeButtonAnchorItem.width - width) / 2);
+                }
+                return Math.round(masterAppSurface.width - 240);
+            }
+            y: {
+                var dummy = bottomPlayer.y + bottomPlayer.height + masterAppSurface.height;
+                if (bottomPlayer.volumeButtonAnchorItem) {
+                    var pt2 = bottomPlayer.volumeButtonAnchorItem.mapToItem(masterAppSurface, 0, 0);
+                    return Math.round(pt2.y - height - 8);
+                }
+                return Math.round(masterAppSurface.height - height - 80);
+            }
+
+            // Touch & Drag MouseArea for 1-click volume tuning
+            MouseArea {
+                id: volPopupMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                preventStealing: true
+
+                function updateFromMouseY(my) {
+                    var topY = 28.0;
+                    var botY = 142.0;
+                    if (trackBg) {
+                        var pt = trackBg.mapToItem(verticalVolPopup, 0, 0);
+                        topY = pt.y;
+                        botY = pt.y + trackBg.height;
+                    }
+                    var clamped = Math.max(topY, Math.min(botY, my));
+                    var frac = (botY > topY) ? (1.0 - ((clamped - topY) / (botY - topY))) : 0.0;
+                    var newVol = Math.round(Math.max(0, Math.min(100, frac * 100)));
+                    win.setVolume(newVol);
+                }
+
+                onPressed: mouse => {
+                    updateFromMouseY(mouse.y);
+                }
+                onPositionChanged: mouse => {
+                    if (pressed) {
+                        updateFromMouseY(mouse.y);
+                    }
+                }
+                onReleased: mouse => {
+                    mouse.accepted = true;
+                }
+                onWheel: wheel => {
+                    var step = wheel.angleDelta.y > 0 ? 5 : -5;
+                    win.setVolume(Math.max(0, Math.min(100, win.volume + step)));
+                }
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.topMargin: 10
+                anchors.bottomMargin: 10
+                spacing: 8
+
+                // 1. Percentage Text (Top)
+                Text {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: Math.round(win.volume)
+                    font.family: "Segoe UI, Inter, monospace"
+                    font.pixelSize: 11
+                    font.bold: true
+                    color: Qt.rgba(1, 1, 1, 0.85)
+                }
+
+                // 2. Vertical Slider Track (Middle)
+                Item {
+                    id: verticalVolSliderBox
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.fillHeight: true
+                    width: 40
+
+                    Rectangle {
+                        id: trackBg
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: 4
+                        radius: 2
+                        color: Qt.rgba(1, 1, 1, 0.25)
+
+                        // Filled from bottom to top with accent color
+                        Rectangle {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.bottom: parent.bottom
+                            width: 4
+                            height: parent.height * (win.volume / 100.0)
+                            radius: 2
+                            color: win.accentColor
+                        }
+
+                        // White Tactile Knob Dot (Shows current volume level clearly)
+                        Rectangle {
+                            width: 10; height: 10; radius: 5
+                            color: "#ffffff"
+                            border.color: Qt.rgba(0, 0, 0, 0.35)
+                            border.width: 1
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            y: Math.max(0, Math.min(trackBg.height - height, trackBg.height * (1.0 - win.volume / 100.0) - height / 2))
+                        }
+                    }
+                }
+
+                // 3. Mini Speaker Icon (Bottom) - Click to Mute / Unmute
+                Item {
+                    Layout.alignment: Qt.AlignHCenter
+                    width: 24; height: 24
+                    z: 10
+
+                    AppIcon {
+                        anchors.centerIn: parent
+                        source: win.volume === 0 ? "../assets/icons/audio-volume-muted-symbolic.svg" : "../assets/icons/audio-volume-high-symbolic.svg"
+                        iconSize: 15
+                        color: win.volume === 0 ? "#ff5252" : Qt.rgba(1, 1, 1, 0.70)
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (win.volume > 0) {
+                                bottomPlayer.prevVolume = win.volume;
+                                win.setVolume(0);
+                            } else {
+                                win.setVolume(bottomPlayer.prevVolume > 0 ? bottomPlayer.prevVolume : 100);
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Google Account / Cloud Settings Modal
@@ -3246,6 +3466,57 @@ Scope {
         watchChanges: false
     }
 
+    property var likedSongsMap: ({})
+    property int likedSongsRevision: 0
+
+    readonly property var likedTracksList: {
+        var dummy = win.likedSongsRevision;
+        var list = [];
+        if (win.likedSongsMap) {
+            var keys = Object.keys(win.likedSongsMap);
+            for (var i = 0; i < keys.length; i++) {
+                var item = win.likedSongsMap[keys[i]];
+                if (item) {
+                    var obj = Object.assign({}, item);
+                    if (!obj.image && obj.videoId) {
+                        obj.image = "https://i.ytimg.com/vi/" + obj.videoId + "/hqdefault.jpg";
+                    }
+                    if (!obj.cover) obj.cover = obj.image || "";
+                    if (!obj.artUrl) obj.artUrl = obj.image || "";
+                    if (!obj.path && obj.videoId) {
+                        obj.path = "ytdl://" + obj.videoId;
+                    }
+                    if (!obj.name && obj.title) {
+                        obj.name = obj.title;
+                    }
+                    list.push(obj);
+                }
+            }
+        }
+        return list;
+    }
+    FileView {
+        id: likedSongsFileView
+        path: Quickshell.env("HOME") + "/.config/noctalia/nutsty_liked_songs" + (Quickshell.env("NUTSTY_PROFILE") ? ("_" + Quickshell.env("NUTSTY_PROFILE").toLowerCase()) : "") + ".json"
+        watchChanges: false
+        onLoadedChanged: {
+            if (loaded) parseLikedSongs();
+        }
+        Component.onCompleted: {
+            if (loaded) parseLikedSongs();
+        }
+
+        function parseLikedSongs() {
+            var raw = text();
+            if (!raw || raw.trim() === "") return;
+            try {
+                win.likedSongsMap = JSON.parse(raw);
+                win.likedSongsRevision++;
+                win.syncCurrentTrackLiked();
+            } catch(e) {}
+        }
+    }
+
     // Library Data Loader
     LibraryLoader {
         id: libLoader
@@ -3259,7 +3530,7 @@ Scope {
             // Queue remains empty until user explicitly clicks a track, album or playlist.
 
             if (!statusProcess.running) {
-                statusProcess.command = ["python3", win.appDir + "/backend/player_daemon.py", "status"];
+                statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
                 statusProcess.running = true;
             }
             win.refreshLocalAlbums();
@@ -3372,7 +3643,179 @@ Scope {
     }
 
     function rateSong(vid, rating) {
+        if (win.currentTrack) {
+            var curVid = win.currentTrack.videoId || (win.currentTrack.path && win.currentTrack.path.startsWith("ytdl://") ? win.currentTrack.path.replace("ytdl://", "") : "");
+            var cleanCurVid = curVid ? String(curVid).replace("ytdl://", "").replace("yt_", "").trim() : "";
+            var cleanVid = vid ? String(vid).replace("ytdl://", "").replace("yt_", "").trim() : "";
+            if (cleanVid && cleanCurVid && cleanVid === cleanCurVid) {
+                if (rating === "LIKE") {
+                    win.addTrackToLiked(win.currentTrack);
+                    return;
+                } else if (rating === "INDIFFERENT" || rating === "DISLIKE") {
+                    win.removeTrackFromLiked(win.currentTrack);
+                    if (rating === "DISLIKE") {
+                        PlaybackEngine.rateSong(win, vid, rating);
+                    }
+                    return;
+                }
+            }
+        }
         return PlaybackEngine.rateSong(win, vid, rating);
+    }
+
+    property bool isCurrentTrackLiked: false
+
+    function syncCurrentTrackLiked() {
+        win.isCurrentTrackLiked = win.isTrackLiked(win.currentTrack, win.likedSongsMap);
+    }
+
+    onLikedSongsRevisionChanged: {
+        win.syncCurrentTrackLiked();
+    }
+
+    function isTrackLiked(trk, map) {
+        if (!trk) return false;
+        var useMap = map || win.likedSongsMap;
+        if (!useMap) return false;
+        var vid = trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
+        var clean = vid ? String(vid).replace("ytdl://", "").replace("yt_", "").trim() : "";
+        if (clean) {
+            if (useMap[clean]) return true;
+            var mapKeys = Object.keys(useMap);
+            for (var k = 0; k < mapKeys.length; k++) {
+                var itm = useMap[mapKeys[k]];
+                if (itm && itm.videoId && itm.videoId === clean) return true;
+            }
+        }
+
+        var title = (trk.title || trk.name || "").trim().toLowerCase();
+        var artist = (trk.artist || "").trim().toLowerCase();
+        if (title) {
+            var key = "title_" + title + "_" + artist;
+            if (useMap[key]) return true;
+            var keys = Object.keys(useMap);
+            for (var i = 0; i < keys.length; i++) {
+                var s = useMap[keys[i]];
+                if (s) {
+                    var st = (s.title || s.name || "").trim().toLowerCase();
+                    var sa = (s.artist || "").trim().toLowerCase();
+                    if (st && st === title) {
+                        if (!artist || !sa || sa === artist || title.length > 5) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    function toggleLikeCurrentTrack() {
+        if (!win.currentTrack) return;
+        var trk = win.currentTrack;
+        // Logic if-else 1-chạm chuẩn xác: nếu đã tim thì huỷ tim, nếu chưa tim thì gắn tim
+        if (win.isCurrentTrackLiked) {
+            win.isCurrentTrackLiked = false;
+            win.removeTrackFromLiked(trk);
+        } else {
+            win.isCurrentTrackLiked = true;
+            win.addTrackToLiked(trk);
+        }
+    }
+
+    function addTrackToLiked(trk) {
+        if (!trk) return;
+        var vid = trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
+        var cleanVid = vid ? String(vid).replace("ytdl://", "").replace("yt_", "").trim() : "";
+        var title = (trk.title || trk.name || "").trim();
+        var artist = (trk.artist || "").trim();
+        var key = cleanVid ? cleanVid : ("title_" + title.toLowerCase() + "_" + artist.toLowerCase());
+
+        var updated = Object.assign({}, win.likedSongsMap || {});
+        // Xoá bản ghi cũ nếu trùng ID hoặc title + artist để tránh trùng lặp
+        if (cleanVid && updated[cleanVid]) delete updated[cleanVid];
+        if (updated[key]) delete updated[key];
+        var allKeys = Object.keys(updated);
+        for (var i = 0; i < allKeys.length; i++) {
+            var item = updated[allKeys[i]];
+            if (item) {
+                var it = (item.title || item.name || "").trim().toLowerCase();
+                var ia = (item.artist || "").trim().toLowerCase();
+                if (it && it === title.toLowerCase()) {
+                    if (!artist || !ia || ia === artist.toLowerCase() || title.length > 5) {
+                        delete updated[allKeys[i]];
+                    }
+                }
+            }
+        }
+
+        var trkImg = trk.image || trk.cover || trk.thumbnail || trk.artUrl || (cleanVid ? ("https://i.ytimg.com/vi/" + cleanVid + "/hqdefault.jpg") : "");
+        var trkDur = String(trk.duration || trk.durationMs || 0);
+        var trkPath = trk.path || (cleanVid ? ("ytdl://" + cleanVid) : "");
+
+        updated[key] = {
+            videoId: cleanVid,
+            title: title,
+            name: title,
+            artist: artist,
+            image: trkImg,
+            cover: trkImg,
+            artUrl: trkImg,
+            path: trkPath,
+            duration: trkDur,
+            timestamp: Math.floor(Date.now() / 1000)
+        };
+
+        win.likedSongsMap = updated;
+        win.likedSongsRevision++;
+        win.isCurrentTrackLiked = true;
+        win.showToast(I18n.tr("Đã thêm vào bài hát yêu thích", "Added to favorite songs"));
+        if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) {
+            ytNowPlayingView.currentLikeStatus = "LIKE";
+        }
+        Quickshell.execDetached([
+            "python3", win.appDir + "/backend/ytmusic_helper.py",
+            "rate_song", cleanVid || key, "LIKE", title, artist, trkImg, trkDur, trkPath
+        ]);
+    }
+
+    function removeTrackFromLiked(trk) {
+        if (!trk) return;
+        var vid = trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
+        var cleanVid = vid ? String(vid).replace("ytdl://", "").replace("yt_", "").trim() : "";
+        var title = (trk.title || trk.name || "").trim().toLowerCase();
+        var artist = (trk.artist || "").trim().toLowerCase();
+        var key = cleanVid ? cleanVid : ("title_" + title + "_" + artist);
+
+        var updated = Object.assign({}, win.likedSongsMap || {});
+        if (cleanVid && updated[cleanVid]) delete updated[cleanVid];
+        if (updated[key]) delete updated[key];
+
+        var keys = Object.keys(updated);
+        for (var i = 0; i < keys.length; i++) {
+            var item = updated[keys[i]];
+            if (item) {
+                var it = (item.title || item.name || "").trim().toLowerCase();
+                var ia = (item.artist || "").trim().toLowerCase();
+                if (it && it === title) {
+                    if (!artist || !ia || ia === artist || title.length > 5) {
+                        delete updated[keys[i]];
+                    }
+                }
+            }
+        }
+
+        win.likedSongsMap = updated;
+        win.likedSongsRevision++;
+        win.isCurrentTrackLiked = false;
+        win.showToast(I18n.tr("Đã xóa khỏi bài hát yêu thích", "Removed from favorite songs"));
+        if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) {
+            ytNowPlayingView.currentLikeStatus = "INDIFFERENT";
+        }
+        Quickshell.execDetached([
+            "python3", win.appDir + "/backend/ytmusic_helper.py",
+            "rate_song", cleanVid || key, "INDIFFERENT", trk.title || trk.name || "", trk.artist || ""
+        ]);
     }
 
     function handleDislikedTrack(trk) {
@@ -3726,6 +4169,33 @@ Scope {
     }
 
     Timer {
+        id: seekDebounceTimer
+        interval: 50
+        repeat: false
+        property real targetSec: 0.0
+        onTriggered: {
+            Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "seek", String(targetSec)]);
+        }
+    }
+
+    Timer {
+        id: rapidNavDebounceTimer
+        interval: 160
+        repeat: false
+        property var pendingTrack: null
+        onTriggered: {
+            var trk = pendingTrack || win.currentTrack;
+            if (trk) {
+                if (PlaybackEngine.isTrackOnline(trk)) {
+                    PlaybackEngine.playOnlineTrack(win, trk, false, radioProc, prewarmTimer, pollTimer);
+                } else {
+                    PlaybackEngine.playTrack(win, trk, pollTimer);
+                }
+            }
+        }
+    }
+
+    Timer {
         id: prewarmTimer
         interval: 4000
         repeat: false
@@ -3739,13 +4209,34 @@ Scope {
 
     Timer {
         id: pollTimer
-        interval: win.isPlaying ? 250 : (win.isLoadingAudio ? 180 : 3000)
+        property var statusXhr: null
+        interval: (!win.visible && !win.desktopLyricsEnabled) ? 3000 : (win.isPlaying ? 250 : (win.isLoadingAudio ? 180 : 2000))
         running: true
         repeat: true
         onTriggered: {
-            if (!statusProcess.running) {
-                statusProcess.command = ["python3", win.appDir + "/backend/player_daemon.py", "status"];
-                statusProcess.running = true;
+            if (!statusXhr) {
+                statusXhr = new XMLHttpRequest();
+                statusXhr.onreadystatechange = function() {
+                    if (statusXhr.readyState === XMLHttpRequest.DONE) {
+                        if (statusXhr.status === 200 && statusXhr.responseText) {
+                            PlaybackEngine.handlePlayerStatus(win, statusXhr.responseText, listenAlongSeekSafetyTimer, sessionFileView);
+                        } else if (!statusProcess.running) {
+                            statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
+                            statusProcess.running = true;
+                        }
+                    }
+                };
+            }
+            if (statusXhr.readyState === XMLHttpRequest.UNSENT || statusXhr.readyState === XMLHttpRequest.DONE) {
+                statusXhr.open("GET", (win.localApiUrl || "http://127.0.0.1:17890") + "/api/player/status", true);
+                try {
+                    statusXhr.send();
+                } catch(e) {
+                    if (!statusProcess.running) {
+                        statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
+                        statusProcess.running = true;
+                    }
+                }
             }
         }
     }
@@ -3839,17 +4330,27 @@ Scope {
         function testPreviewPlaylistModalTrack(index: int) { frostifyIpc.testPreviewPlaylistModalTrack(index); }
         function testAddPlaylistModalTrack(index: int) { frostifyIpc.testAddPlaylistModalTrack(index); }
         function closePlaylistSearchModal() { frostifyIpc.closePlaylistSearchModal(); }
+        function toggleLike() { frostifyIpc.toggleLike(); }
+        function toggleVolumePopup() { frostifyIpc.toggleVolumePopup(); }
+        function testShufflePlay() { frostifyIpc.testShufflePlay(); }
     }
 
     IpcHandler {
         id: frostifyIpc
         target: "frostify"
+        function testShufflePlay() { mainGrid.shufflePlayRequested(); }
+        function toggleLike() { win.toggleLikeCurrentTrack(); }
+        function toggleVolumePopup() { bottomPlayer.isVolumePopupOpen = !bottomPlayer.isVolumePopupOpen; }
         function openWhatsNew() {
             whatsNewModal.openModal(win.updateReleaseNotes);
+        }
+        function closeWhatsNew() {
+            whatsNewModal.closeModal();
         }
         function getAccentColorInfo() {
             console.log("[NutstyAccent]", "accentColor:", win.accentColor, "songAccentColor:", win.songAccentColor, "wallpaperAccentColor:", win.wallpaperAccentColor, "isPlaying:", win.isPlaying, "track:", win.currentTrack ? win.currentTrack.title : "null", "cover:", win.currentTrack ? win.currentTrack.image : "null");
         }
+
         function testSendChatMessage(text: string) {
             win.sendChatMessage(text);
         }
@@ -4005,7 +4506,7 @@ Scope {
         function openWindow() {
             win.visible = true;
             if (!statusProcess.running) {
-                statusProcess.command = ["python3", win.appDir + "/backend/player_daemon.py", "status"];
+                statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
                 statusProcess.running = true;
             }
             Qt.callLater(function() { if (ytNowPlayingView) ytNowPlayingView.updateActiveLyric(true); });
@@ -4017,7 +4518,7 @@ Scope {
             win.visible = !win.visible;
             if (win.visible) {
                 if (!statusProcess.running) {
-                    statusProcess.command = ["python3", win.appDir + "/backend/player_daemon.py", "status"];
+                    statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
                     statusProcess.running = true;
                 }
                 Qt.callLater(function() { if (ytNowPlayingView) ytNowPlayingView.updateActiveLyric(true); });

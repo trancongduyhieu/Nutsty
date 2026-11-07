@@ -41,7 +41,43 @@ ABORT_FILE = os.path.join(TEMP_DIR, f"nutsty_abort_fade{PROFILE_SUFFIX}")
 PLAYBACK_STATE_FILE = os.path.join(TEMP_DIR, f"nutsty_playback_state{PROFILE_SUFFIX}.json")
 PLAYLIST_FILE = os.path.join(TEMP_DIR, f"nutsty_playlist{PROFILE_SUFFIX}.m3u")
 CURRENT_TRACK_FILE = os.path.join(TEMP_DIR, f"nutsty_current_track{PROFILE_SUFFIX}.json")
+PLAY_REQ_FILE = os.path.join(TEMP_DIR, f"nutsty_active_play{PROFILE_SUFFIX}.json")
 MPV_TITLE = f"nutsty-audio{PROFILE_SUFFIX}"
+
+def record_active_play_epoch(epoch, file_path, target_vid):
+    payload = {
+        "epoch": epoch,
+        "pid": os.getpid(),
+        "target_vid": target_vid,
+        "file_path": file_path,
+        "timestamp": time.time()
+    }
+    try:
+        with open(PLAY_REQ_FILE, "w", encoding="utf-8") as f:
+            json.dump(payload, f)
+    except Exception:
+        pass
+
+def get_active_play_epoch():
+    try:
+        if not os.path.exists(PLAY_REQ_FILE):
+            return 0
+        with open(PLAY_REQ_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data.get("epoch", 0)
+    except Exception:
+        return 0
+
+def is_play_epoch_active(my_epoch):
+    if my_epoch <= 0:
+        return True
+    active = get_active_play_epoch()
+    if active <= 0:
+        return True
+    # Prevent dropping play request if active was millisecond timestamp while my_epoch was counter
+    if active > 1e11 and my_epoch < 1e9:
+        return True
+    return my_epoch >= active
 
 YTDL_FORMAT_MAP = {
     "high_opus": "774/251/250/249/141/140/bestaudio/best",
@@ -133,6 +169,8 @@ def ensure_mpv():
             "--force-window=no",
             ipc_arg,
             "--cache=yes",
+            f"--demuxer-cache-dir={safe_cache_dir}",
+            "--cache-on-disk=yes",
             "--demuxer-max-bytes=64M",
             "--demuxer-max-back-bytes=32M",
             "--demuxer-readahead-secs=60",
@@ -140,7 +178,7 @@ def ensure_mpv():
             "--audio-buffer=0.8",
             "--network-timeout=10",
             f"--title={MPV_TITLE}",
-            "--loop-playlist=inf",
+            "--loop-playlist=no",
             "--gapless-audio=yes",
             f"--ytdl-format={ytdl_fmt}",
             "--ytdl-raw-options=extractor-args=youtube:player_client=android",
@@ -239,9 +277,30 @@ def get_mpv_property(prop):
     return res.get("data")
 
 def find_local_downloaded_file(vid="", title="", artist=""):
-    """Check download_state.json and library.json for an already downloaded local audio file (0ms latency)."""
+    """Check audio_cache, download_state.json, and library.json for an already downloaded local audio file (0ms latency)."""
     if vid and vid.startswith("yt_"):
         vid = vid[3:]
+
+    # 0. Priority 0: Check SSD Disk Audio Cache (~/.cache/nutsty/audio_cache/<vid>.opus) -> 0ms local SSD playback!
+    if vid:
+        try:
+            try:
+                from .stream_resolver import find_audio_disk_cache
+            except (ImportError, ValueError):
+                from stream_resolver import find_audio_disk_cache
+            cached_disk = find_audio_disk_cache(vid)
+            if cached_disk and os.path.exists(cached_disk):
+                return cached_disk
+        except Exception:
+            try:
+                import ytmusic_helper
+                if hasattr(ytmusic_helper, "find_audio_disk_cache"):
+                    cached_disk = ytmusic_helper.find_audio_disk_cache(vid)
+                    if cached_disk and os.path.exists(cached_disk):
+                        return cached_disk
+            except Exception:
+                pass
+
     # 1. Check download_state.json
     state_candidates = [
         os.path.expanduser("~/.config/noctalia/download_state.json"),
@@ -285,7 +344,7 @@ def find_local_downloaded_file(vid="", title="", artist=""):
             pass
     return None
 
-def resolve_media_path(file_path, title="", artist="", force_fresh=False):
+def resolve_media_path(file_path, title="", artist="", force_fresh=False, my_epoch=0):
     if not file_path:
         return file_path
     if file_path.startswith("ytdl://") or "youtube.com/watch" in file_path or "youtu.be/" in file_path:
@@ -300,6 +359,10 @@ def resolve_media_path(file_path, title="", artist="", force_fresh=False):
             local_file = find_local_downloaded_file(vid, title, artist)
             if local_file and os.path.exists(local_file):
                 return local_file
+
+            if my_epoch > 0 and not is_play_epoch_active(my_epoch):
+                sys.stderr.write(f"[player_daemon] Early abort resolve for superseded epoch #{my_epoch}\n")
+                return ""
 
             streaming_quality = get_current_streaming_quality()
 
@@ -329,8 +392,16 @@ def resolve_media_path(file_path, title="", artist="", force_fresh=False):
                                 pass
                         return cached.get("stream_url")
 
+            if my_epoch > 0 and not is_play_epoch_active(my_epoch):
+                sys.stderr.write(f"[player_daemon] Early abort before network resolve for superseded epoch #{my_epoch}\n")
+                return ""
+
             # Resolve direct stream URL using authenticated format picker
             res = ytmusic_helper.resolve_stream_url(vid, streaming_quality, force_fresh=force_fresh)
+            if my_epoch > 0 and not is_play_epoch_active(my_epoch):
+                sys.stderr.write(f"[player_daemon] Abort after network resolve for superseded epoch #{my_epoch}\n")
+                return ""
+
             if res and res.get("stream_url"):
                 ua = res.get("user_agent")
                 if ua:
@@ -463,10 +534,10 @@ def get_status_dict():
             with open(PLAYBACK_STATE_FILE, "r", encoding="utf-8") as f:
                 st = json.load(f)
                 loading_ts = st.get("timestamp", 0)
+                target_vid = st.get("target_vid", "")
+                target_path = st.get("path", "")
                 if st.get("state") == "loading" and (time.time() - loading_ts) < 8.0:
                     is_loading = True
-                    target_vid = st.get("target_vid", "")
-                    target_path = st.get("path", "")
         except Exception:
             pass
 
@@ -481,8 +552,8 @@ def get_status_dict():
     vol = batch.get("volume") if batch.get("volume") is not None else 100
     idle = batch.get("idle-active")
 
-    # Detect failed playback / 403 / demux error: MPV is idle and loading was requested > 2.5s ago
-    if is_loading and idle and (time.time() - loading_ts) > 2.5:
+    # Detect failed playback / 403 / demux error: MPV is idle and loading was requested > 6.0s ago
+    if is_loading and idle and (time.time() - loading_ts) > 6.0:
         is_loading = False
         if target_vid:
             try:
@@ -497,8 +568,11 @@ def get_status_dict():
             pass
 
     global _CURRENT_PLAYING_VID, _CURRENT_PLAYING_PATH
+    is_direct_stream = bool(path.startswith("http://") or path.startswith("https://") or "googlevideo.com" in path or filename.startswith("videoplayback"))
     is_target_active = True
-    if target_vid:
+    if is_direct_stream or (time_pos > 0.1 and not idle):
+        is_target_active = True
+    elif target_vid:
         is_target_active = bool((_CURRENT_PLAYING_VID and _CURRENT_PLAYING_VID == target_vid) or (target_vid in path) or (target_vid in filename))
     elif target_path:
         is_target_active = bool((_CURRENT_PLAYING_PATH and _CURRENT_PLAYING_PATH == target_path) or (path == target_path) or (filename and target_path.endswith(filename)))
@@ -525,6 +599,8 @@ def get_status_dict():
         "time_pos": round(time_pos, 1) if (has_file and is_target_active) else 0.0,
         "duration": round(duration, 1) if (has_file and is_target_active) else 0.0,
         "filename": (filename or path) if (has_file and is_target_active) else "",
+        "path": path if (has_file and is_target_active) else "",
+        "target_vid": target_vid,
         "volume": vol,
         "is_loading": is_loading
     }
@@ -574,12 +650,21 @@ def execute_command(args):
     action = args[0].lower()
 
     if action == "play" and len(args) > 1:
-        global _ACTIVE_PLAY_REQ_ID, _CURRENT_PLAYING_VID, _CURRENT_PLAYING_PATH
-        with _PLAY_REQ_LOCK:
-            _ACTIVE_PLAY_REQ_ID += 1
-            my_req_id = _ACTIVE_PLAY_REQ_ID
+        epoch_arg = 0
+        if len(args) > 5:
+            try:
+                epoch_arg = int(args[5])
+            except ValueError:
+                epoch_arg = 0
+        if epoch_arg <= 0:
+            epoch_arg = int(time.time() * 1000)
+
+        my_req_id = epoch_arg
 
         file_path = args[1]
+        if not file_path or file_path in ("undefined", "null", "None"):
+            sys.stderr.write(f"[player_daemon] Aborted invalid file_path: {file_path}\n")
+            return
         title_arg = args[2] if len(args) > 2 else ""
         artist_arg = args[3] if len(args) > 3 else ""
         art_arg = args[4] if len(args) > 4 else ""
@@ -588,6 +673,9 @@ def execute_command(args):
         target_vid = file_path.replace("ytdl://", "") if is_online else ""
         if "watch?v=" in target_vid:
             target_vid = target_vid.split("watch?v=")[1].split("&")[0]
+
+        # Record this request as the active epoch across all OS processes
+        record_active_play_epoch(my_req_id, file_path, target_vid)
 
         # Priority #1: Check if online track is ALREADY downloaded locally on disk
         if is_online:
@@ -599,7 +687,7 @@ def execute_command(args):
         req_ts = time.time()
         initial_state = "loading" if is_online else "playing"
         state_file = PLAYBACK_STATE_FILE
-        state_payload = {"state": initial_state, "path": file_path, "target_vid": target_vid, "timestamp": req_ts}
+        state_payload = {"state": initial_state, "path": file_path, "target_vid": target_vid, "timestamp": req_ts, "epoch": my_req_id}
         try:
             with open(state_file, "w", encoding="utf-8") as f:
                 json.dump(state_payload, f)
@@ -611,16 +699,16 @@ def execute_command(args):
         send_mpv_cmd(["stop"])
 
         meta = update_current_track_metadata(file_path, title_arg, artist_arg, art_arg)
-        stream_target = resolve_media_path(file_path, title_arg, artist_arg) if is_online else file_path
+        stream_target = resolve_media_path(file_path, title_arg, artist_arg, my_epoch=my_req_id) if is_online else file_path
 
-        # Guard against stale concurrent play requests
-        with _PLAY_REQ_LOCK:
-            if my_req_id != _ACTIVE_PLAY_REQ_ID:
-                sys.stderr.write(f"Aborted superseded play request #{my_req_id} (active is #{_ACTIVE_PLAY_REQ_ID}) for: {file_path}\n")
-                return
+        # Guard against stale concurrent play requests across all OS processes
+        if not is_play_epoch_active(my_req_id) or not stream_target:
+            sys.stderr.write(f"[player_daemon] Aborted superseded play request #{my_req_id} (active is #{get_active_play_epoch()}) for: {file_path}\n")
+            return
 
         send_mpv_cmd(["loadfile", stream_target, "replace"])
-        send_mpv_cmd(["set_property", "loop-playlist", "inf"])
+        send_mpv_cmd(["set_property", "loop-playlist", "no"])
+        send_mpv_cmd(["set_property", "loop-file", "no"])
         send_mpv_cmd(["set_property", "pause", False])
 
         _CURRENT_PLAYING_VID = target_vid

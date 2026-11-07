@@ -106,6 +106,29 @@ HOST = "127.0.0.1"
 
 _pending_ui_action = None
 
+def purge_system_memory():
+    """Aggressively release unused heap pages to OS (malloc_trim on Linux, EmptyWorkingSet on Win)."""
+    import gc
+    gc.collect()
+    freed = False
+    if sys.platform.startswith("linux"):
+        try:
+            import ctypes
+            libc = ctypes.CDLL("libc.so.6")
+            if hasattr(libc, "malloc_trim"):
+                libc.malloc_trim(0)
+                freed = True
+        except Exception:
+            pass
+    elif sys.platform == "win32":
+        try:
+            import ctypes
+            res = ctypes.windll.psapi.EmptyWorkingSet(-1)
+            freed = bool(res)
+        except Exception:
+            pass
+    return freed
+
 
 class AuthWebhookHandler(BaseHTTPRequestHandler):
     def _send_cors_headers(self):
@@ -122,6 +145,20 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
     def _send_json(self, data, status_code=200):
         try:
             payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
+            self.send_response(status_code)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+            pass
+        except Exception:
+            pass
+
+    def _send_raw_json(self, raw_str, status_code=200):
+        try:
+            payload = raw_str.encode("utf-8") if isinstance(raw_str, str) else raw_str
             self.send_response(status_code)
             self._send_cors_headers()
             self.send_header("Content-Type", "application/json")
@@ -155,7 +192,16 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
         path = parsed_url.path
         query = parse_qs(parsed_url.query)
 
-        if path == "/api/auth/status":
+        if path == "/api/player/status":
+            try:
+                try:
+                    from . import player_daemon
+                except (ImportError, ValueError):
+                    import player_daemon
+                self._send_raw_json(player_daemon.get_status_json(), 200)
+            except Exception as e:
+                self._send_json({"error": str(e)}, 500)
+        elif path == "/api/auth/status":
             music_routes.handle_get_auth_status(self)
         elif path == "/api/mood":
             music_routes.handle_get_mood(self, query)
@@ -261,6 +307,15 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                 self._send_json(res, 200)
             except Exception as e:
                 self._send_json({"error": str(e)}, 500)
+        elif path in ("/api/system/purge_ram", "/api/purge_ram"):
+            success = purge_system_memory()
+            try:
+                import launcher_win
+                if hasattr(launcher_win, "purge_working_set"):
+                    launcher_win.purge_working_set()
+            except Exception:
+                pass
+            self._send_json({"success": success, "platform": sys.platform}, 200)
         else:
             self.send_response(404)
             self._send_cors_headers()
