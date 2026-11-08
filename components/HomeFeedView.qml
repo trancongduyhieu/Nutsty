@@ -45,18 +45,26 @@ Rectangle {
         root.seenKeys = ({});
     }
 
-    onSelectedMoodChanged: root.clearSeen()
+    onSelectedMoodChanged: {
+        root.clearSeen();
+        // If switching to an uncached mood that has no sections yet, reset reveal state to show clean skeleton wave
+        var hasData = (root.sections && root.sections.length > 0);
+        if (!hasData) {
+            root.hasInitialLoaded = false;
+            root.skeletonOpacity = 1.0;
+        }
+    }
     onSectionsChanged: {
         root.clearSeen();
-        if (!root.hasInitialLoaded) checkRevealTrigger();
+        checkRevealTrigger();
     }
     onQuickPicksChanged: {
         root.clearSeen();
-        if (!root.hasInitialLoaded) checkRevealTrigger();
+        checkRevealTrigger();
     }
     onFeaturedPlaylistsChanged: {
         root.clearSeen();
-        if (!root.hasInitialLoaded) checkRevealTrigger();
+        checkRevealTrigger();
     }
 
     // RevealWhenLoaded (Mochy-Music 3-Beat Staggered Transition & In-Place Swap)
@@ -89,8 +97,7 @@ Rectangle {
     function checkRevealTrigger() {
         if (!root.hasInitialLoaded && !revealWhenLoadedAnim.running) {
             var hasData = (root.sections && root.sections.length > 0) ||
-                          (root.quickPicks && root.quickPicks.length > 0) ||
-                          (root.featuredPlaylists && root.featuredPlaylists.length > 0);
+                          (root.selectedMood === "All" && ((root.quickPicks && root.quickPicks.length > 0) || (root.featuredPlaylists && root.featuredPlaylists.length > 0)));
             if (!root.isLoading && hasData) {
                 revealWhenLoadedAnim.restart();
             }
@@ -165,10 +172,13 @@ Rectangle {
 
     // Dynamic feed sections model with 3-beat RevealWhenLoaded & In-Place Swap
     readonly property var activeFeedSections: {
-        if (root.hasInitialLoaded) {
-            if (root.sections && root.sections.length > 0) {
-                return root.sections;
-            }
+        // 1. If real sections exist and reveal is ready, return real sections
+        if (root.sections && root.sections.length > 0 && root.hasInitialLoaded) {
+            return root.sections;
+        }
+
+        // 2. Fallbacks: ONLY for "All" when not loading (e.g. offline cache)
+        if (root.selectedMood === "All" && !root.isLoading && root.hasInitialLoaded) {
             var fallbacks = [];
             if (root.quickPicks && root.quickPicks.length > 0) {
                 fallbacks.push({
@@ -181,17 +191,27 @@ Rectangle {
             if (root.featuredPlaylists && root.featuredPlaylists.length > 0) {
                 fallbacks.push({
                     type: "fallback_playlists",
-                    title: root.selectedMood === "All" ? I18n.tr("Danh sách phát nổi bật cho bạn", "Featured playlists for you") : (root.formatMoodTitle(root.selectedMood) + I18n.tr(" - Danh sách phát", " Playlists")),
+                    title: I18n.tr("Danh sách phát nổi bật cho bạn", "Featured playlists for you"),
                     items: root.featuredPlaylists
                 });
             }
-            return fallbacks;
+            if (fallbacks.length > 0) return fallbacks;
         }
 
-        // Before initial load is finished: show skeleton placeholder sections
+        // 3. Loading state (Initial boot or uncached mood fetch): BonesHost Skeleton Wave
         return [
-            { type: "skeleton_section", title: I18n.tr("Được đề xuất cho bạn", "Recommended for you"), subtitle: I18n.tr("ĐANG TẢI", "LOADING"), items: [1, 2, 3, 4, 5, 6] },
-            { type: "skeleton_section", title: I18n.tr("Nghe lại", "Listen again"), subtitle: I18n.tr("KHÁM PHÁ", "DISCOVER"), items: [1, 2, 3, 4, 5, 6] }
+            {
+                type: "skeleton_section",
+                title: root.selectedMood === "All" ? I18n.tr("Được đề xuất cho bạn", "Recommended for you") : root.formatMoodTitle(root.selectedMood),
+                subtitle: I18n.tr("ĐANG TẢI", "LOADING"),
+                items: [1, 2, 3, 4, 5, 6]
+            },
+            {
+                type: "skeleton_section",
+                title: I18n.tr("Nghe lại", "Listen again"),
+                subtitle: I18n.tr("KHÁM PHÁ", "DISCOVER"),
+                items: [1, 2, 3, 4, 5, 6]
+            }
         ];
     }
 

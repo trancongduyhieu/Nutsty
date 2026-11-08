@@ -1353,6 +1353,8 @@ Scope {
             return;
         }
         win.homeSections = [];
+        win.homeQuickPicks = [];
+        win.homeFeaturedPlaylists = [];
         if (title === "All" || !params) {
             win.loadHomeFeed();
             return;
