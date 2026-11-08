@@ -37,8 +37,14 @@ Item {
     property color accentColor: "#deb06c"
     property string resolvedSquareImage: ""
     property bool squareFailed: false
-    onResolvedSquareImageChanged: squareFailed = false
-    onCurrentTrackChanged: squareFailed = false
+    onResolvedSquareImageChanged: root.squareFailed = false
+    onCurrentTrackChanged: {
+        root.squareFailed = false;
+        root.triggerBackdropUpdate();
+    }
+    onWidthChanged: root.triggerBackdropUpdate()
+    onIsBarHeldChanged: if (!root.isBarHeld) root.triggerBackdropUpdate()
+    Component.onCompleted: root.triggerBackdropUpdate()
 
     property bool isLiked: false
     property bool isVolumePopupOpen: false
@@ -159,6 +165,7 @@ Item {
             var _dep = root.x + root.y + root.width + root.height + (root.parent ? (root.parent.width + root.parent.height) : 0);
             return root.mapToItem(root.backgroundSourceItem, 0, 0);
         }
+        onCropPosChanged: root.triggerBackdropUpdate()
     }
 
     ShaderEffectSource {
@@ -166,8 +173,21 @@ Item {
         sourceItem: root.backgroundSourceItem
         sourceRect: Qt.rect(cropAnchorHelper.cropPos.x, cropAnchorHelper.cropPos.y, root.width, root.height)
         visible: false
-        live: true
+        live: root.isBarHeld || root.isScrubbingProgress || root.isScrubbingVolume || backdropLiveDebounce.running
         smooth: true
+    }
+
+    Timer {
+        id: backdropLiveDebounce
+        interval: 220
+        repeat: false
+        onTriggered: {
+            backdropCropSource.scheduleUpdate();
+        }
+    }
+
+    function triggerBackdropUpdate() {
+        backdropLiveDebounce.restart();
     }
 
     MultiEffect {

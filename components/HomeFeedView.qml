@@ -159,6 +159,12 @@ Rectangle {
         reuseItems: true
         model: root.activeFeedSections
 
+        onContentYChanged: {
+            if (typeof win !== "undefined" && win && typeof win.triggerBackdropUpdate === "function") {
+                win.triggerBackdropUpdate();
+            }
+        }
+
         ScrollBar.vertical: LiquidScrollBar {
             backgroundSourceItem: root.backgroundSourceItem
         }
@@ -553,6 +559,7 @@ Rectangle {
                         width: 260
                         height: 238
                         radius: 10
+                        clip: true
                         color: vCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.05) : "transparent"
                         border.color: vCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.15) : "transparent"
                         border.width: 1
@@ -995,6 +1002,7 @@ Rectangle {
                         width: 175
                         height: 255
                         radius: 10
+                        clip: true
                         color: aCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.05) : "transparent"
                         border.color: aCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.15) : "transparent"
                         border.width: 1
@@ -1475,6 +1483,7 @@ Rectangle {
                         width: 172
                         height: 245
                         radius: Theme.radiusCard
+                        clip: true
                         color: plMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.06) : Qt.rgba(1.0, 1.0, 1.0, 0.02)
                         border.color: plMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.18) : Qt.rgba(1.0, 1.0, 1.0, 0.06)
                         border.width: 1

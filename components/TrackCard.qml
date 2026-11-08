@@ -8,6 +8,7 @@ Rectangle {
     width: 176
     height: 250
     radius: Theme.radiusCard
+    clip: true
     color: cardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.06) : Qt.rgba(1.0, 1.0, 1.0, 0.02)
     border.color: (root.track && root.isPlaying)
                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)

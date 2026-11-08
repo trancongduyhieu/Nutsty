@@ -4,6 +4,7 @@ import "."
 
 Item {
     id: root
+    clip: true
     Layout.fillWidth: true
     Layout.preferredHeight: isCompact ? 44 : 52
     implicitHeight: isCompact ? 44 : 52

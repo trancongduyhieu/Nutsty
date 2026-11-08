@@ -7,6 +7,7 @@ Rectangle {
     width: 176
     height: 250
     radius: Theme.radiusCard
+    clip: true
     color: Theme.bgCard
 
     property real titleWidth: 120

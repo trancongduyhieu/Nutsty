@@ -307,6 +307,7 @@ Item {
                                 Layout.alignment: Qt.AlignVCenter
                                 spacing: 1.5
                                 height: 8
+                                clip: true
 
                                 Rectangle {
                                     width: 1.8; height: 5; radius: 0.9
@@ -563,9 +564,10 @@ Item {
 
                                 // Audio Waveform Visualizer (Sóng âm 3 cột chuyển động)
                                 Row {
-                                Layout.alignment: Qt.AlignVCenter
-                                spacing: 1.5
-                                height: 8
+                                    Layout.alignment: Qt.AlignVCenter
+                                    spacing: 1.5
+                                    height: 8
+                                    clip: true
 
                                 Rectangle {
                                     width: 1.8; height: 5; radius: 0.9

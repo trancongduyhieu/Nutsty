@@ -3477,6 +3477,12 @@ Scope {
         } catch(e) {}
     }
 
+    function triggerBackdropUpdate() {
+        if (typeof bottomPlayer !== "undefined" && bottomPlayer && typeof bottomPlayer.triggerBackdropUpdate === "function") {
+            bottomPlayer.triggerBackdropUpdate();
+        }
+    }
+
     function saveSettings() {
         var data = JSON.stringify({
             isShuffle: win.isShuffle,

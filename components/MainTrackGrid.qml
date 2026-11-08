@@ -167,6 +167,12 @@ Rectangle {
         clip: true
         boundsBehavior: Flickable.StopAtBounds
 
+        onContentYChanged: {
+            if (typeof win !== "undefined" && win && typeof win.triggerBackdropUpdate === "function") {
+                win.triggerBackdropUpdate();
+            }
+        }
+
         ScrollBar.vertical: LiquidScrollBar {}
 
         ColumnLayout {
