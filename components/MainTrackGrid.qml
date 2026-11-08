@@ -1814,6 +1814,7 @@ Rectangle {
                         TrackCard {
                             track: modelData
                             accentColor: root.accentColor
+                            staggerIndex: index
                             isPlaying: root.currentTrack && root.currentTrack.path === modelData.path && root.isPlaying
                             isSelectionMode: root.isSelectionMode
                             isSelected: root.selectedTrackPaths.indexOf(modelData.path) !== -1

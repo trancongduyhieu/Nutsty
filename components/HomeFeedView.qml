@@ -29,6 +29,27 @@ Rectangle {
     property var friendsNotes: []
     property var myLatestNote: null
 
+    // Staggered Cascade Animation & Seen State Cache (Mochy-Music RevealSeenState)
+    property var seenKeys: ({})
+    function hasSeen(key) {
+        if (!key) return false;
+        return !!root.seenKeys[key];
+    }
+    function markSeen(key) {
+        if (!key) return;
+        if (!root.seenKeys[key]) {
+            root.seenKeys[key] = true;
+        }
+    }
+    function clearSeen() {
+        root.seenKeys = ({});
+    }
+
+    onSelectedMoodChanged: root.clearSeen()
+    onSectionsChanged: root.clearSeen()
+    onQuickPicksChanged: root.clearSeen()
+    onFeaturedPlaylistsChanged: root.clearSeen()
+
     signal moodSelected(string title, string params)
     signal trackPlayRequested(var trk)
     signal playSectionRequested(var trackList)
@@ -538,6 +559,67 @@ Rectangle {
                         Behavior on color { ColorAnimation { duration: 120 } }
                         Behavior on border.color { ColorAnimation { duration: 120 } }
 
+                        readonly property string itemKey: String((modelData ? (modelData.videoId || modelData.path || modelData.title) : "") || "")
+                        property string lastCheckedKey: ""
+                        readonly property int staggerIndex: index
+                        transform: Translate { id: vTrans; y: 0 }
+
+                        function checkReveal() {
+                            if (!itemKey) {
+                                vRevealAnim.stop();
+                                opacity = 1.0;
+                                vTrans.y = 0;
+                                return;
+                            }
+                            if (itemKey === lastCheckedKey) return;
+                            lastCheckedKey = itemKey;
+
+                            if (root.hasSeen(itemKey)) {
+                                vRevealAnim.stop();
+                                opacity = 1.0;
+                                vTrans.y = 0;
+                            } else {
+                                root.markSeen(itemKey);
+                                opacity = 0.0;
+                                vTrans.y = 14;
+                                vRevealAnim.restart();
+                            }
+                        }
+
+                        onItemKeyChanged: checkReveal()
+                        Component.onCompleted: checkReveal()
+
+                        Connections {
+                            target: root
+                            function onSeenKeysChanged() {
+                                vCard.lastCheckedKey = "";
+                                vCard.checkReveal();
+                            }
+                        }
+
+                        SequentialAnimation {
+                            id: vRevealAnim
+                            PauseAnimation { duration: Math.max(0, (vCard.staggerIndex % 8) * 35) }
+                            ParallelAnimation {
+                                NumberAnimation {
+                                    target: vCard
+                                    property: "opacity"
+                                    from: 0.0
+                                    to: 1.0
+                                    duration: 260
+                                    easing.type: Easing.OutCubic
+                                }
+                                NumberAnimation {
+                                    target: vTrans
+                                    property: "y"
+                                    from: 14
+                                    to: 0
+                                    duration: 260
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
+                        }
+
                         ColumnLayout {
                             anchors.fill: parent
                             anchors.margins: 4
@@ -716,6 +798,67 @@ Rectangle {
                                     Behavior on color { ColorAnimation { duration: 100 } }
                                     Behavior on border.color { ColorAnimation { duration: 100 } }
 
+                                    readonly property string itemKey: String((modelData ? (modelData.videoId || modelData.path || modelData.title) : "") || "")
+                                    property string lastCheckedKey: ""
+                                    readonly property int staggerIndex: colWrapper.index * 4 + index
+                                    transform: Translate { id: gridTrans; y: 0 }
+
+                                    function checkReveal() {
+                                        if (!itemKey) {
+                                            gridRevealAnim.stop();
+                                            opacity = 1.0;
+                                            gridTrans.y = 0;
+                                            return;
+                                        }
+                                        if (itemKey === lastCheckedKey) return;
+                                        lastCheckedKey = itemKey;
+
+                                        if (root.hasSeen(itemKey)) {
+                                            gridRevealAnim.stop();
+                                            opacity = 1.0;
+                                            gridTrans.y = 0;
+                                        } else {
+                                            root.markSeen(itemKey);
+                                            opacity = 0.0;
+                                            gridTrans.y = 14;
+                                            gridRevealAnim.restart();
+                                        }
+                                    }
+
+                                    onItemKeyChanged: checkReveal()
+                                    Component.onCompleted: checkReveal()
+
+                                    Connections {
+                                        target: root
+                                        function onSeenKeysChanged() {
+                                            gridItem.lastCheckedKey = "";
+                                            gridItem.checkReveal();
+                                        }
+                                    }
+
+                                    SequentialAnimation {
+                                        id: gridRevealAnim
+                                        PauseAnimation { duration: Math.max(0, (gridItem.staggerIndex % 8) * 35) }
+                                        ParallelAnimation {
+                                            NumberAnimation {
+                                                target: gridItem
+                                                property: "opacity"
+                                                from: 0.0
+                                                to: 1.0
+                                                duration: 260
+                                                easing.type: Easing.OutCubic
+                                            }
+                                            NumberAnimation {
+                                                target: gridTrans
+                                                property: "y"
+                                                from: 14
+                                                to: 0
+                                                duration: 260
+                                                easing.type: Easing.OutCubic
+                                            }
+                                        }
+                                    }
+
                                     RowLayout {
                                         anchors.fill: parent
                                         anchors.margins: 5
@@ -857,6 +1000,67 @@ Rectangle {
                         border.width: 1
                         Behavior on color { ColorAnimation { duration: 120 } }
                         Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                        readonly property string itemKey: String((modelData ? (modelData.browseId || modelData.playlistId || modelData.id || modelData.title) : "") || "")
+                        property string lastCheckedKey: ""
+                        readonly property int staggerIndex: index
+                        transform: Translate { id: aTrans; y: 0 }
+
+                        function checkReveal() {
+                            if (!itemKey) {
+                                aRevealAnim.stop();
+                                opacity = 1.0;
+                                aTrans.y = 0;
+                                return;
+                            }
+                            if (itemKey === lastCheckedKey) return;
+                            lastCheckedKey = itemKey;
+
+                            if (root.hasSeen(itemKey)) {
+                                aRevealAnim.stop();
+                                opacity = 1.0;
+                                aTrans.y = 0;
+                            } else {
+                                root.markSeen(itemKey);
+                                opacity = 0.0;
+                                aTrans.y = 14;
+                                aRevealAnim.restart();
+                            }
+                        }
+
+                        onItemKeyChanged: checkReveal()
+                        Component.onCompleted: checkReveal()
+
+                        Connections {
+                            target: root
+                            function onSeenKeysChanged() {
+                                aCard.lastCheckedKey = "";
+                                aCard.checkReveal();
+                            }
+                        }
+
+                        SequentialAnimation {
+                            id: aRevealAnim
+                            PauseAnimation { duration: Math.max(0, (aCard.staggerIndex % 8) * 35) }
+                            ParallelAnimation {
+                                NumberAnimation {
+                                    target: aCard
+                                    property: "opacity"
+                                    from: 0.0
+                                    to: 1.0
+                                    duration: 260
+                                    easing.type: Easing.OutCubic
+                                }
+                                NumberAnimation {
+                                    target: aTrans
+                                    property: "y"
+                                    from: 14
+                                    to: 0
+                                    duration: 260
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
+                        }
 
                         ColumnLayout {
                             anchors.fill: parent
@@ -1093,6 +1297,67 @@ Rectangle {
                                     Behavior on color { ColorAnimation { duration: 100 } }
                                     Behavior on border.color { ColorAnimation { duration: 100 } }
 
+                                    readonly property string itemKey: String((modelData ? (modelData.videoId || modelData.path || modelData.title) : "") || "")
+                                    property string lastCheckedKey: ""
+                                    readonly property int staggerIndex: qpColWrapper.index * 4 + index
+                                    transform: Translate { id: qpTrans; y: 0 }
+
+                                    function checkReveal() {
+                                        if (!itemKey) {
+                                            qpRevealAnim.stop();
+                                            opacity = 1.0;
+                                            qpTrans.y = 0;
+                                            return;
+                                        }
+                                        if (itemKey === lastCheckedKey) return;
+                                        lastCheckedKey = itemKey;
+
+                                        if (root.hasSeen(itemKey)) {
+                                            qpRevealAnim.stop();
+                                            opacity = 1.0;
+                                            qpTrans.y = 0;
+                                        } else {
+                                            root.markSeen(itemKey);
+                                            opacity = 0.0;
+                                            qpTrans.y = 14;
+                                            qpRevealAnim.restart();
+                                        }
+                                    }
+
+                                    onItemKeyChanged: checkReveal()
+                                    Component.onCompleted: checkReveal()
+
+                                    Connections {
+                                        target: root
+                                        function onSeenKeysChanged() {
+                                            qpCard.lastCheckedKey = "";
+                                            qpCard.checkReveal();
+                                        }
+                                    }
+
+                                    SequentialAnimation {
+                                        id: qpRevealAnim
+                                        PauseAnimation { duration: Math.max(0, (qpCard.staggerIndex % 8) * 35) }
+                                        ParallelAnimation {
+                                            NumberAnimation {
+                                                target: qpCard
+                                                property: "opacity"
+                                                from: 0.0
+                                                to: 1.0
+                                                duration: 260
+                                                easing.type: Easing.OutCubic
+                                            }
+                                            NumberAnimation {
+                                                target: qpTrans
+                                                property: "y"
+                                                from: 14
+                                                to: 0
+                                                duration: 260
+                                                easing.type: Easing.OutCubic
+                                            }
+                                        }
+                                    }
+
                                     RowLayout {
                                         anchors.fill: parent
                                         anchors.margins: 6
@@ -1215,6 +1480,67 @@ Rectangle {
                         border.width: 1
                         Behavior on color { ColorAnimation { duration: 120 } }
                         Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                        readonly property string itemKey: String((modelData ? (modelData.browseId || modelData.playlistId || modelData.id || modelData.title) : "") || "")
+                        property string lastCheckedKey: ""
+                        readonly property int staggerIndex: index
+                        transform: Translate { id: plTrans; y: 0 }
+
+                        function checkReveal() {
+                            if (!itemKey) {
+                                plRevealAnim.stop();
+                                opacity = 1.0;
+                                plTrans.y = 0;
+                                return;
+                            }
+                            if (itemKey === lastCheckedKey) return;
+                            lastCheckedKey = itemKey;
+
+                            if (root.hasSeen(itemKey)) {
+                                plRevealAnim.stop();
+                                opacity = 1.0;
+                                plTrans.y = 0;
+                            } else {
+                                root.markSeen(itemKey);
+                                opacity = 0.0;
+                                plTrans.y = 14;
+                                plRevealAnim.restart();
+                            }
+                        }
+
+                        onItemKeyChanged: checkReveal()
+                        Component.onCompleted: checkReveal()
+
+                        Connections {
+                            target: root
+                            function onSeenKeysChanged() {
+                                plCard.lastCheckedKey = "";
+                                plCard.checkReveal();
+                            }
+                        }
+
+                        SequentialAnimation {
+                            id: plRevealAnim
+                            PauseAnimation { duration: Math.max(0, (plCard.staggerIndex % 8) * 35) }
+                            ParallelAnimation {
+                                NumberAnimation {
+                                    target: plCard
+                                    property: "opacity"
+                                    from: 0.0
+                                    to: 1.0
+                                    duration: 260
+                                    easing.type: Easing.OutCubic
+                                }
+                                NumberAnimation {
+                                    target: plTrans
+                                    property: "y"
+                                    from: 14
+                                    to: 0
+                                    duration: 260
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
+                        }
 
                         ColumnLayout {
                             anchors.fill: parent

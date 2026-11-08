@@ -22,6 +22,73 @@ Rectangle {
     property bool isSelectionMode: false
     property bool isSelected: false
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
+    property string seenKey: ""
+    property int staggerIndex: 0
+    property var seenSet: null
+    readonly property string itemKey: seenKey ? seenKey : (trackVideoId || (track ? (track.path || track.id || track.title) : "") || "")
+    property string lastCheckedKey: ""
+    transform: Translate { id: tcTrans; y: 0 }
+
+    function checkReveal() {
+        if (!itemKey) {
+            tcAnim.stop();
+            opacity = 1.0;
+            tcTrans.y = 0;
+            return;
+        }
+        if (itemKey === lastCheckedKey) return;
+        lastCheckedKey = itemKey;
+
+        if (seenSet && typeof seenSet.hasSeen === "function") {
+            if (seenSet.hasSeen(itemKey)) {
+                tcAnim.stop();
+                opacity = 1.0;
+                tcTrans.y = 0;
+                return;
+            }
+            seenSet.markSeen(itemKey);
+        }
+
+        opacity = 0.0;
+        tcTrans.y = 14;
+        tcAnim.restart();
+    }
+
+    onItemKeyChanged: checkReveal()
+    Component.onCompleted: checkReveal()
+
+    Connections {
+        target: (seenSet && typeof seenSet.seenKeysChanged !== "undefined") ? seenSet : null
+        ignoreUnknownSignals: true
+        function onSeenKeysChanged() {
+            root.lastCheckedKey = "";
+            root.checkReveal();
+        }
+    }
+
+    SequentialAnimation {
+        id: tcAnim
+        PauseAnimation { duration: Math.max(0, (root.staggerIndex % 8) * 35) }
+        ParallelAnimation {
+            NumberAnimation {
+                target: root
+                property: "opacity"
+                from: 0.0
+                to: 1.0
+                duration: 260
+                easing.type: Easing.OutCubic
+            }
+            NumberAnimation {
+                target: tcTrans
+                property: "y"
+                from: 14
+                to: 0
+                duration: 260
+                easing.type: Easing.OutCubic
+            }
+        }
+    }
+
     signal playRequested(var trk)
     signal detailsRequested(var trk)
     signal selectionToggled(var trk)
