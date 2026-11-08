@@ -260,6 +260,13 @@ function fetchFriendsDataFast(win, callback) {
 
     var xhr = new XMLHttpRequest();
     xhr.open("GET", apiUrl, true);
+    xhr.timeout = 8000;
+    xhr.ontimeout = function() {
+        if (typeof callback === "function") callback();
+    };
+    xhr.onerror = function() {
+        if (typeof callback === "function") callback();
+    };
     xhr.onreadystatechange = function() {
         if (xhr.readyState === XMLHttpRequest.DONE) {
             if (xhr.status === 200) {
@@ -292,11 +299,17 @@ function fetchFriendsNotesFast(win) {
     var friendsParam = (win.friendsList && win.friendsList.length > 0)
         ? win.friendsList.join(",")
         : "";
-
     var url = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/notes?friends=" + encodeURIComponent(friendsParam) + (email ? ("&user_email=" + encodeURIComponent(email)) : "") + (profile ? ("&profile=" + encodeURIComponent(profile)) : "");
 
     var xhr = new XMLHttpRequest();
     xhr.open("GET", url, true);
+    xhr.timeout = 8000;
+    xhr.ontimeout = function() {
+        win.isFetchingNotesFast = false;
+    };
+    xhr.onerror = function() {
+        win.isFetchingNotesFast = false;
+    };
     xhr.onreadystatechange = function() {
         if (xhr.readyState === XMLHttpRequest.DONE) {
             win.isFetchingNotesFast = false;

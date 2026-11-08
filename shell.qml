@@ -82,6 +82,12 @@ Scope {
     property string authAccountName: ""
     property string authAccountThumb: ""
     property string authAccountEmail: ""
+    onAuthAccountEmailChanged: {
+        if (win.authAccountEmail && win.authAccountEmail.includes("@")) {
+            win.fetchFriendsDataFast();
+            win.fetchFriendsNotesFast();
+        }
+    }
     property bool syncHistoryToGoogle: true
     property bool desktopLyricsEnabled: true
     property bool taskbarLyricsEnabled: Qt.platform.os === "windows"
@@ -145,6 +151,67 @@ Scope {
     property var friendsNotes: []
     property var friendsList: []
     property var friendsDetails: []
+
+    readonly property var mergedFriendsList: {
+        var notes = win.friendsNotes || [];
+        var details = win.friendsDetails || [];
+        if (!details || details.length === 0) return notes;
+        if (!notes || notes.length === 0) {
+            return details.map(function(f) {
+                return {
+                    user_id: f.id || f.user_id || "",
+                    tag: f.tag || f.email || "",
+                    email: f.email || f.tag || "",
+                    name: f.name || f.username || "Friend",
+                    user_name: f.name || f.username || "Friend",
+                    avatar: f.avatar || f.avatar_url || "",
+                    avatar_url: f.avatar || f.avatar_url || "",
+                    is_online: Boolean(f.is_online),
+                    now_playing: f.now_playing || null,
+                    note_text: (f.note && f.note.note_text) ? f.note.note_text : "",
+                    track: (f.note && f.note.track) ? f.note.track : null,
+                    created_at: (f.note && f.note.created_at) ? f.note.created_at : 0,
+                    is_friend: true
+                };
+            });
+        }
+
+        var result = notes.slice();
+        var seenIds = {};
+        for (var i = 0; i < notes.length; i++) {
+            var n = notes[i];
+            var nid = (n.user_id || n.id || "").toLowerCase();
+            var ntag = (n.tag || n.email || n.user_email || "").toLowerCase();
+            if (nid) seenIds[nid] = true;
+            if (ntag) seenIds[ntag] = true;
+        }
+
+        for (var j = 0; j < details.length; j++) {
+            var f = details[j];
+            var fid = (f.id || f.user_id || "").toLowerCase();
+            var ftag = (f.tag || f.email || "").toLowerCase();
+            if ((!fid || !seenIds[fid]) && (!ftag || !seenIds[ftag])) {
+                result.push({
+                    user_id: f.id || f.user_id || "",
+                    tag: f.tag || f.email || "",
+                    email: f.email || f.tag || "",
+                    name: f.name || f.username || "Friend",
+                    user_name: f.name || f.username || "Friend",
+                    avatar: f.avatar || f.avatar_url || "",
+                    avatar_url: f.avatar || f.avatar_url || "",
+                    is_online: Boolean(f.is_online),
+                    now_playing: f.now_playing || null,
+                    note_text: (f.note && f.note.note_text) ? f.note.note_text : "",
+                    track: (f.note && f.note.track) ? f.note.track : null,
+                    created_at: (f.note && f.note.created_at) ? f.note.created_at : 0,
+                    is_friend: true
+                });
+                if (fid) seenIds[fid] = true;
+                if (ftag) seenIds[ftag] = true;
+            }
+        }
+        return result;
+    }
     property var pendingFriendRequests: []
     property int unreadFriendRequestsCount: 0
     property var myLatestNote: null
@@ -743,6 +810,8 @@ Scope {
                     win.authAccountEmail = s.email || "";
                     if (win.isAuthLoggedIn && win.authAccountName) {
                         win.fetchCurrentUserProfile();
+                        win.fetchFriendsDataFast();
+                        win.fetchFriendsNotesFast();
                     }
                 } catch(e) {}
             }
@@ -2104,7 +2173,7 @@ Scope {
                             accentColor: win.accentColor
                             accountName: win.authAccountName
                             accountThumb: win.currentUserAvatar
-                            friendsNotes: win.friendsNotes
+                            friendsNotes: win.mergedFriendsList
                             myLatestNote: win.myLatestNote
 
                             onMoodSelected: (title, params) => win.selectMood(title, params)
@@ -3047,7 +3116,7 @@ Scope {
         FriendStoryModal {
             id: friendStoryModal
             backgroundSourceItem: masterBackdropStack
-            friendsNotes: win.friendsNotes
+            friendsNotes: win.mergedFriendsList
             accentColor: win.accentColor
             onListenAlongRequested: friendData => {
                 win.startListeningAlong(friendData);
@@ -3122,6 +3191,7 @@ Scope {
             }
             onRefreshFriendsRequested: {
                 win.fetchFriendsDataFast();
+                win.fetchFriendsNotesFast();
                 win.fetchCurrentUserProfile();
             }
             onRegeneratePinRequested: {

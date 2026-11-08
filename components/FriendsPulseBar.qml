@@ -645,9 +645,9 @@ Item {
                             anchors.fill: parent
                             anchors.margins: 2
                             radius: 22
-                            source: modelData.avatar_url || ""
+                            source: (modelData.avatar_url || modelData.avatar || "")
                             fillMode: Image.PreserveAspectCrop
-                            initialsText: modelData.user_name || "F"
+                            initialsText: (modelData.user_name || modelData.name || "F")
                             placeholderColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
                             asynchronous: true
                         }
@@ -669,7 +669,7 @@ Item {
                         anchors.top: friendAvatarWrapper.bottom
                         anchors.topMargin: 2
                         anchors.horizontalCenter: friendAvatarWrapper.horizontalCenter
-                        text: modelData.user_name || "Friend"
+                        text: (modelData.user_name || modelData.name || "Friend")
                         color: friendArea.containsMouse ? "#ffffff" : Qt.rgba(1, 1, 1, 0.6)
                         font.family: Theme.fontFamily
                         font.pixelSize: 9

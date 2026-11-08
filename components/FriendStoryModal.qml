@@ -199,8 +199,8 @@ Item {
                             Layout.preferredWidth: 32
                             Layout.preferredHeight: 32
                             radius: 16
-                            source: root.currentFriend ? (root.currentFriend.avatar_url || "") : ""
-                            initialsText: root.currentFriend ? (root.currentFriend.user_name || "") : ""
+                            source: root.currentFriend ? (root.currentFriend.avatar_url || root.currentFriend.avatar || "") : ""
+                            initialsText: root.currentFriend ? (root.currentFriend.user_name || root.currentFriend.name || "") : ""
                             fallbackIcon: "../assets/icons/contact-new-symbolic.svg"
                             fallbackIconColor: root.accentColor
                         }
@@ -209,7 +209,7 @@ Item {
                             spacing: 1
 
                             Text {
-                                text: root.currentFriend ? (root.currentFriend.user_name || I18n.tr("Bạn bè", "Friend")) : ""
+                                text: root.currentFriend ? (root.currentFriend.user_name || root.currentFriend.name || I18n.tr("Bạn bè", "Friend")) : ""
                                 color: Theme.textPrimary
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 14
