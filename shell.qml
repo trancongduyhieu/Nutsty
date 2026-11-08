@@ -994,28 +994,6 @@ Scope {
         activeBoostTimer.restart();
     }
 
-    // Dynamic Backdrop On-Demand Tracking (Liquid Glass PlayerBar)
-    property bool isBackdropLive: true
-
-    Timer {
-        id: backdropSettleTimer
-        interval: 600
-        repeat: false
-        onTriggered: {
-            win.isBackdropLive = false;
-        }
-    }
-
-    function triggerLiveBackdrop() {
-        win.isBackdropLive = true;
-        backdropSettleTimer.restart();
-    }
-
-    onCurrentViewChanged: win.triggerLiveBackdrop()
-    onIsNowPlayingOpenChanged: win.triggerLiveBackdrop()
-    onWidthChanged: win.triggerLiveBackdrop()
-    onHeightChanged: win.triggerLiveBackdrop()
-
     function fetchCurrentUserProfile() { SocialEngine.fetchCurrentUserProfile(win); }
     function updateUserProfile(newUsername, newDiscriminator, callback) { SocialEngine.updateUserProfile(win, newUsername, newDiscriminator, callback); }
     function regenerateUserPin() { SocialEngine.regenerateUserPin(win); }
@@ -1564,7 +1542,6 @@ Scope {
         }
     }
     onCurrentTrackChanged: {
-        win.triggerLiveBackdrop();
         win.currentResolvedCover = "";
         win.triggerUserActiveBoost();
         var coverUrl = win.getTrackCoverUrl(win.currentTrack);
@@ -1650,7 +1627,6 @@ Scope {
         win.refreshLocalAlbums();
         win.fetchFriendsDataFast();
         win.fetchCurrentUserProfile();
-        win.triggerLiveBackdrop();
     }
 
     Component.onDestruction: {
@@ -1700,28 +1676,6 @@ Scope {
             hoverEnabled: true
             acceptedButtons: Qt.NoButton
             onPositionChanged: win.triggerUserActiveBoost()
-        }
-
-        WheelHandler {
-            id: masterWheelHandler
-            target: null
-            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-            onWheel: (event) => {
-                win.triggerLiveBackdrop();
-            }
-        }
-
-        DragHandler {
-            id: masterDragHandler
-            target: null
-            acceptedButtons: Qt.LeftButton
-            grabPermissions: PointerHandler.TakeOverForbidden
-            onActiveChanged: {
-                if (active) win.triggerLiveBackdrop();
-            }
-            onTranslationChanged: {
-                if (active) win.triggerLiveBackdrop();
-            }
         }
         layer.enabled: !(win.maximized || win.fullscreen)
         layer.smooth: true
@@ -2513,7 +2467,6 @@ Scope {
             height: 60
             z: 50
             backgroundSourceItem: masterAppSurface
-            isLiveBackdrop: win.isBackdropLive
 
             currentTrack: win.currentTrack
             audioSpecs: win.audioSpecs

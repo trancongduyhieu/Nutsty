@@ -34,7 +34,6 @@ Item {
     property bool isChatInputOpen: false
     readonly property bool isCoListeningActive: (root.listeningAlongFriend !== null && root.listeningAlongFriend !== undefined) || (root.activeCoListenersDetails && root.activeCoListenersDetails.length > 0)
     property int sleepTimerRemainingSeconds: 0
-    property bool isLiveBackdrop: false
     property color accentColor: "#deb06c"
     property string resolvedSquareImage: ""
     property bool squareFailed: false
@@ -167,7 +166,7 @@ Item {
         sourceItem: root.backgroundSourceItem
         sourceRect: Qt.rect(cropAnchorHelper.cropPos.x, cropAnchorHelper.cropPos.y, root.width, root.height)
         visible: false
-        live: root.isLiveBackdrop || root.isBarHeld
+        live: true
         smooth: true
     }
 
