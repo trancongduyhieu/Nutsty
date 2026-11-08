@@ -1033,28 +1033,34 @@ Rectangle {
                 }
 
                 // Skeleton Lazy Loading Grid (Pure Visual Shimmer, Matching TrackCard 176x250 Grid)
-                Flow {
+                BonesHost {
                     Layout.fillWidth: true
-                    spacing: 16
                     visible: root.isLoading
+                    implicitHeight: skeletonFlow.implicitHeight
 
-                    Repeater {
-                        model: [
-                            { tw: 120, sw: 80 },
-                            { tw: 140, sw: 95 },
-                            { tw: 110, sw: 75 },
-                            { tw: 130, sw: 85 },
-                            { tw: 125, sw: 90 },
-                            { tw: 135, sw: 80 },
-                            { tw: 115, sw: 70 },
-                            { tw: 145, sw: 100 },
-                            { tw: 120, sw: 85 },
-                            { tw: 130, sw: 75 }
-                        ]
+                    Flow {
+                        id: skeletonFlow
+                        width: parent.width
+                        spacing: 16
 
-                        SkeletonTrackCard {
-                            titleWidth: modelData.tw
-                            subtitleWidth: modelData.sw
+                        Repeater {
+                            model: [
+                                { tw: 120, sw: 80 },
+                                { tw: 140, sw: 95 },
+                                { tw: 110, sw: 75 },
+                                { tw: 130, sw: 85 },
+                                { tw: 125, sw: 90 },
+                                { tw: 135, sw: 80 },
+                                { tw: 115, sw: 70 },
+                                { tw: 145, sw: 100 },
+                                { tw: 120, sw: 85 },
+                                { tw: 130, sw: 75 }
+                            ]
+
+                            SkeletonTrackCard {
+                                titleWidth: modelData.tw
+                                subtitleWidth: modelData.sw
+                            }
                         }
                     }
                 }

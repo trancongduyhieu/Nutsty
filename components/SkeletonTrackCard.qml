@@ -13,13 +13,9 @@ Rectangle {
     property real titleWidth: 120
     property real subtitleWidth: 80
 
-    // Smooth pulsing shimmer animation
-    SequentialAnimation on opacity {
-        running: root.visible && root.opacity > 0.01 && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive))
-        loops: Animation.Infinite
-        NumberAnimation { from: 0.25; to: 0.70; duration: 750; easing.type: Easing.InOutQuad }
-        NumberAnimation { from: 0.70; to: 0.25; duration: 750; easing.type: Easing.InOutQuad }
-    }
+    opacity: 0.65
+    border.width: 1
+    border.color: Qt.rgba(255, 255, 255, 0.05)
 
     ColumnLayout {
         anchors.fill: parent
@@ -31,7 +27,7 @@ Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: width
             radius: 6
-            color: "#282828"
+            color: Qt.rgba(255, 255, 255, 0.08)
         }
 
         // 2. Title Placeholder Bar
@@ -39,7 +35,7 @@ Rectangle {
             Layout.preferredWidth: Math.min(root.titleWidth, parent.width)
             Layout.preferredHeight: 14
             radius: 4
-            color: "#383838"
+            color: Qt.rgba(255, 255, 255, 0.12)
         }
 
         // 3. Subtitle / Artist Placeholder Bar
@@ -47,7 +43,7 @@ Rectangle {
             Layout.preferredWidth: Math.min(root.subtitleWidth, parent.width * 0.7)
             Layout.preferredHeight: 12
             radius: 4
-            color: "#282828"
+            color: Qt.rgba(255, 255, 255, 0.06)
         }
 
         Item { Layout.fillHeight: true }

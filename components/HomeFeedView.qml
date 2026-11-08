@@ -46,9 +46,59 @@ Rectangle {
     }
 
     onSelectedMoodChanged: root.clearSeen()
-    onSectionsChanged: root.clearSeen()
-    onQuickPicksChanged: root.clearSeen()
-    onFeaturedPlaylistsChanged: root.clearSeen()
+    onSectionsChanged: {
+        root.clearSeen();
+        if (!root.hasInitialLoaded) checkRevealTrigger();
+    }
+    onQuickPicksChanged: {
+        root.clearSeen();
+        if (!root.hasInitialLoaded) checkRevealTrigger();
+    }
+    onFeaturedPlaylistsChanged: {
+        root.clearSeen();
+        if (!root.hasInitialLoaded) checkRevealTrigger();
+    }
+
+    // RevealWhenLoaded (Mochy-Music 3-Beat Staggered Transition & In-Place Swap)
+    property bool hasInitialLoaded: false
+    property real skeletonOpacity: 1.0
+
+    SequentialAnimation {
+        id: revealWhenLoadedAnim
+        // Nhịp 1: Khung xương BonesHost mờ dần (opacity -> 0 trong 200ms)
+        NumberAnimation {
+            target: root
+            property: "skeletonOpacity"
+            to: 0.0
+            duration: 200
+            easing.type: Easing.OutQuad
+        }
+        // Nhịp 2: Khoảng đệm quang học ngắn 50ms
+        PauseAnimation {
+            duration: 50
+        }
+        // Nhịp 3: Chuyển cờ hasInitialLoaded = true -> Dữ liệu thật xuất hiện với Staggered Cascade
+        ScriptAction {
+            script: {
+                root.hasInitialLoaded = true;
+                root.skeletonOpacity = 1.0;
+            }
+        }
+    }
+
+    function checkRevealTrigger() {
+        if (!root.hasInitialLoaded && !revealWhenLoadedAnim.running) {
+            var hasData = (root.sections && root.sections.length > 0) ||
+                          (root.quickPicks && root.quickPicks.length > 0) ||
+                          (root.featuredPlaylists && root.featuredPlaylists.length > 0);
+            if (!root.isLoading && hasData) {
+                revealWhenLoadedAnim.restart();
+            }
+        }
+    }
+
+    onIsLoadingChanged: checkRevealTrigger()
+    Component.onCompleted: checkRevealTrigger()
 
     signal moodSelected(string title, string params)
     signal trackPlayRequested(var trk)
@@ -113,34 +163,36 @@ Rectangle {
         return res;
     }
 
-    // Dynamic feed sections model with fallbacks
+    // Dynamic feed sections model with 3-beat RevealWhenLoaded & In-Place Swap
     readonly property var activeFeedSections: {
-        if (root.sections && root.sections.length > 0) {
-            return root.sections;
+        if (root.hasInitialLoaded) {
+            if (root.sections && root.sections.length > 0) {
+                return root.sections;
+            }
+            var fallbacks = [];
+            if (root.quickPicks && root.quickPicks.length > 0) {
+                fallbacks.push({
+                    type: "fallback_quick_picks",
+                    title: I18n.tr("Tuyển tập nhanh", "Quick picks"),
+                    subtitle: I18n.tr("BẮT ĐẦU VỚI MỘT ĐÀI PHÁT", "LET'S START WITH A RADIO"),
+                    items: root.quickPicks
+                });
+            }
+            if (root.featuredPlaylists && root.featuredPlaylists.length > 0) {
+                fallbacks.push({
+                    type: "fallback_playlists",
+                    title: root.selectedMood === "All" ? I18n.tr("Danh sách phát nổi bật cho bạn", "Featured playlists for you") : (root.formatMoodTitle(root.selectedMood) + I18n.tr(" - Danh sách phát", " Playlists")),
+                    items: root.featuredPlaylists
+                });
+            }
+            return fallbacks;
         }
-        if (root.isLoading) {
-            return [
-                { type: "skeleton_section", title: I18n.tr("Được đề xuất cho bạn", "Recommended for you"), subtitle: I18n.tr("ĐANG TẢI", "LOADING"), items: [1, 2, 3, 4, 5, 6] },
-                { type: "skeleton_section", title: I18n.tr("Nghe lại", "Listen again"), subtitle: I18n.tr("KHÁM PHÁ", "DISCOVER"), items: [1, 2, 3, 4, 5, 6] }
-            ];
-        }
-        var fallbacks = [];
-        if (root.quickPicks && root.quickPicks.length > 0) {
-            fallbacks.push({
-                type: "fallback_quick_picks",
-                title: I18n.tr("Tuyển tập nhanh", "Quick picks"),
-                subtitle: I18n.tr("BẮT ĐẦU VỚI MỘT ĐÀI PHÁT", "LET'S START WITH A RADIO"),
-                items: root.quickPicks
-            });
-        }
-        if (root.featuredPlaylists && root.featuredPlaylists.length > 0) {
-            fallbacks.push({
-                type: "fallback_playlists",
-                title: root.selectedMood === "All" ? I18n.tr("Danh sách phát nổi bật cho bạn", "Featured playlists for you") : (root.formatMoodTitle(root.selectedMood) + I18n.tr(" - Danh sách phát", " Playlists")),
-                items: root.featuredPlaylists
-            });
-        }
-        return fallbacks;
+
+        // Before initial load is finished: show skeleton placeholder sections
+        return [
+            { type: "skeleton_section", title: I18n.tr("Được đề xuất cho bạn", "Recommended for you"), subtitle: I18n.tr("ĐANG TẢI", "LOADING"), items: [1, 2, 3, 4, 5, 6] },
+            { type: "skeleton_section", title: I18n.tr("Nghe lại", "Listen again"), subtitle: I18n.tr("KHÁM PHÁ", "DISCOVER"), items: [1, 2, 3, 4, 5, 6] }
+        ];
     }
 
     // =========================================================================
@@ -487,6 +539,7 @@ Rectangle {
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 12
+                    opacity: (secDelegate.sectionData && secDelegate.sectionData.type === "skeleton_section") ? root.skeletonOpacity : 1.0
 
                     ColumnLayout {
                         Layout.fillWidth: true
@@ -1668,30 +1721,36 @@ Rectangle {
                 // =============================================================
                 // Case E: Skeleton Placeholder Row (Initial Loading State)
                 // =============================================================
-                ListView {
+                BonesHost {
+                    id: skeletonBonesHost
                     Layout.fillWidth: true
                     height: 250
                     visible: secDelegate.sectionData && secDelegate.sectionData.type === "skeleton_section"
-                    orientation: ListView.Horizontal
-                    boundsBehavior: Flickable.StopAtBounds
-                    flickableDirection: Flickable.HorizontalFlick
-                    clip: true
-                    interactive: false
-                    spacing: 16
-                    model: [
-                        { tw: 120, sw: 80 },
-                        { tw: 140, sw: 95 },
-                        { tw: 110, sw: 75 },
-                        { tw: 130, sw: 85 },
-                        { tw: 125, sw: 90 },
-                        { tw: 135, sw: 80 }
-                    ]
+                    opacity: root.skeletonOpacity
 
-                    delegate: SkeletonTrackCard {
-                        width: 160
-                        height: 230
-                        titleWidth: modelData.tw
-                        subtitleWidth: modelData.sw
+                    ListView {
+                        anchors.fill: parent
+                        orientation: ListView.Horizontal
+                        boundsBehavior: Flickable.StopAtBounds
+                        flickableDirection: Flickable.HorizontalFlick
+                        clip: true
+                        interactive: false
+                        spacing: 16
+                        model: [
+                            { tw: 120, sw: 80 },
+                            { tw: 140, sw: 95 },
+                            { tw: 110, sw: 75 },
+                            { tw: 130, sw: 85 },
+                            { tw: 125, sw: 90 },
+                            { tw: 135, sw: 80 }
+                        ]
+
+                        delegate: SkeletonTrackCard {
+                            width: 160
+                            height: 230
+                            titleWidth: modelData.tw
+                            subtitleWidth: modelData.sw
+                        }
                     }
                 }
 

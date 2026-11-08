@@ -15,24 +15,7 @@ Item {
     property int titleWidth: isCompact ? 110 : 200
     property int subtitleWidth: isCompact ? 75 : 120
 
-    opacity: 0.40
-
-    SequentialAnimation on opacity {
-        loops: Animation.Infinite
-        running: root.visible && root.opacity > 0.01 && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive))
-        NumberAnimation {
-            from: 0.25
-            to: 0.70
-            duration: 800
-            easing.type: Easing.InOutQuad
-        }
-        NumberAnimation {
-            from: 0.70
-            to: 0.25
-            duration: 800
-            easing.type: Easing.InOutQuad
-        }
-    }
+    opacity: 0.60
 
     RowLayout {
         anchors.fill: parent
