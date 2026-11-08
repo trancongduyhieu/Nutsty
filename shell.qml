@@ -32,7 +32,7 @@ Scope {
                     if (typeof desktopMusicWidget.hide === "function") desktopMusicWidget.hide();
                 }
                 if (!statusProcess.running) {
-                    statusProcess.command = [win.nutstyBridgePath, "status"];
+                    statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
                     statusProcess.running = true;
                 }
                 Qt.callLater(function() { if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) ytNowPlayingView.updateActiveLyric(true); });
@@ -54,10 +54,6 @@ Scope {
         property var audioSpecs: null
 
     readonly property string appDir: Quickshell.env("NUTSTY_APP_DIR") || (Quickshell.env("HOME") + "/Applications/FrostifyLocal")
-    readonly property string binExt: (Qt.platform.os === "windows") ? ".exe" : ""
-    readonly property string nutstyBridgePath: win.appDir + "/bin/nutsty-bridge" + win.binExt
-    readonly property string nutstyDaemonPath: win.appDir + "/bin/nutsty-daemon" + win.binExt
-    readonly property string nutstyLibraryPath: win.appDir + "/bin/nutsty-library" + win.binExt
 
     property string currentView: "home" // "home", "library", "playlist", "search"
     property string previousView: "home"
@@ -88,6 +84,25 @@ Scope {
     property string authAccountEmail: ""
     property bool syncHistoryToGoogle: true
     property bool desktopLyricsEnabled: true
+    property bool taskbarLyricsEnabled: Qt.platform.os === "windows"
+    property string taskbarLyricsPlacement: "above" // "above" | "taskbar"
+    property string taskbarLyricsAlign: "center"      // "center" | "left" | "right"
+    property string taskbarLyricsVPos: "bottom"       // "bottom" | "top"
+    onTaskbarLyricsEnabledChanged: {
+        if (Qt.platform.os === "windows" && typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.notifyTaskbarLyricsState === "function") {
+            __NutstyBridge.notifyTaskbarLyricsState(win.taskbarLyricsEnabled);
+        }
+    }
+    onTaskbarLyricsPlacementChanged: {
+        if (Qt.platform.os === "windows" && typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.setTaskbarLyricsPlacement === "function") {
+            __NutstyBridge.setTaskbarLyricsPlacement(win.taskbarLyricsPlacement);
+        }
+    }
+    onTaskbarLyricsAlignChanged: {
+        if (Qt.platform.os === "windows" && typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.setTaskbarLyricsAlign === "function") {
+            __NutstyBridge.setTaskbarLyricsAlign(win.taskbarLyricsAlign);
+        }
+    }
     property bool lyricsRomanizationEnabled: true
     property bool animatedCoverEnabled: true
     property int desktopLyricsPreset: 2 // 1: Cinematic Serif, 2: Apple Music 5-Line Parametric, 3: Minimal Glide, 4: Motion Typography
@@ -209,6 +224,9 @@ Scope {
         if (!path || typeof path !== "string" || path.trim() === "") return "";
         if (path.startsWith("file:") || path.startsWith("http:") || path.startsWith("https:") || path.startsWith("qrc:")) return path;
         var clean = path.trim().replace(/\\/g, "/");
+        if (!clean.startsWith("/") && !/^[A-Za-z]:\//.test(clean)) {
+            clean = win.appDir + "/" + clean;
+        }
         return clean.startsWith("/") ? ("file://" + clean) : ("file:///" + clean);
     }
 
@@ -281,7 +299,7 @@ Scope {
                 // Fallback to native Rust CLI process if auth_server is not reachable
                 if (!songPaletteProc.running) {
                     songPaletteProc.command = [
-                        win.nutstyBridgePath,
+                        win.appDir + "/bin/nutsty-bridge",
                         "palette",
                         imgUrl
                     ];
@@ -592,7 +610,7 @@ Scope {
 
     Process {
         id: authServerProc
-        command: [win.nutstyDaemonPath]
+        command: [win.appDir + "/bin/nutsty-daemon"]
         running: (typeof __NutstyBridge === "undefined")
         onExited: (exitCode, exitStatus) => {
             if (exitCode !== 0 && typeof __NutstyBridge === "undefined") {
@@ -976,6 +994,28 @@ Scope {
         activeBoostTimer.restart();
     }
 
+    // Dynamic Backdrop On-Demand Tracking (Liquid Glass PlayerBar)
+    property bool isBackdropLive: true
+
+    Timer {
+        id: backdropSettleTimer
+        interval: 600
+        repeat: false
+        onTriggered: {
+            win.isBackdropLive = false;
+        }
+    }
+
+    function triggerLiveBackdrop() {
+        win.isBackdropLive = true;
+        backdropSettleTimer.restart();
+    }
+
+    onCurrentViewChanged: win.triggerLiveBackdrop()
+    onIsNowPlayingOpenChanged: win.triggerLiveBackdrop()
+    onWidthChanged: win.triggerLiveBackdrop()
+    onHeightChanged: win.triggerLiveBackdrop()
+
     function fetchCurrentUserProfile() { SocialEngine.fetchCurrentUserProfile(win); }
     function updateUserProfile(newUsername, newDiscriminator, callback) { SocialEngine.updateUserProfile(win, newUsername, newDiscriminator, callback); }
     function regenerateUserPin() { SocialEngine.regenerateUserPin(win); }
@@ -987,7 +1027,7 @@ Scope {
 
     Timer {
         id: socialEventsFastTimer
-        interval: win.isCoListeningActive ? 800 : (!win.visible ? 30000 : (win.isUserActiveBoost ? 5000 : 20000))
+        interval: win.isCoListeningActive ? 800 : (win.isUserActiveBoost ? 1000 : 10000)
         repeat: true
         running: true
         triggeredOnStart: true
@@ -998,7 +1038,7 @@ Scope {
 
     Timer {
         id: friendsNotesTimer
-        interval: win.isCoListeningActive ? 2000 : (!win.visible ? 60000 : (win.isUserActiveBoost ? 20000 : 45000))
+        interval: win.isCoListeningActive ? 2000 : 10000
         repeat: true
         running: true
         triggeredOnStart: true
@@ -1010,7 +1050,7 @@ Scope {
 
     Timer {
         id: friendsSyncTimer
-        interval: win.isCoListeningActive ? 4000 : (!win.visible ? 90000 : (win.isUserActiveBoost ? 30000 : 60000))
+        interval: win.isCoListeningActive ? 4000 : 15000
         repeat: true
         running: true
         triggeredOnStart: true
@@ -1071,7 +1111,7 @@ Scope {
         id: uiActionPollTimer
         interval: 2000
         repeat: true
-        running: Qt.platform.os !== "windows"
+        running: true
         onTriggered: {
             var xhr = new XMLHttpRequest();
             xhr.open("GET", (win.localApiUrl || "http://127.0.0.1:17890") + "/api/ui/pending_action", true);
@@ -1465,7 +1505,7 @@ Scope {
 
     function refreshLocalAlbums() {
         localAlbumsProc.running = false;
-        localAlbumsProc.command = [win.nutstyLibraryPath, "albums"];
+        localAlbumsProc.command = [win.appDir + "/bin/nutsty-library", "albums"];
         localAlbumsProc.running = true;
     }
 
@@ -1524,6 +1564,7 @@ Scope {
         }
     }
     onCurrentTrackChanged: {
+        win.triggerLiveBackdrop();
         win.currentResolvedCover = "";
         win.triggerUserActiveBoost();
         var coverUrl = win.getTrackCoverUrl(win.currentTrack);
@@ -1609,11 +1650,12 @@ Scope {
         win.refreshLocalAlbums();
         win.fetchFriendsDataFast();
         win.fetchCurrentUserProfile();
+        win.triggerLiveBackdrop();
     }
 
     Component.onDestruction: {
         win.sendOfflineSignal();
-        Quickshell.execDetached([win.nutstyBridgePath, "pause"]);
+        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
     }
 
     // Concentric Window Corner Mask: R_outer = 24px (R_inner = 16px + 8px margin)
@@ -1621,7 +1663,7 @@ Scope {
         id: windowCornerMask
         anchors.fill: parent
         visible: false
-        layer.enabled: false
+        layer.enabled: !(win.maximized || win.fullscreen)
         layer.smooth: true
 
         Rectangle {
@@ -1659,7 +1701,29 @@ Scope {
             acceptedButtons: Qt.NoButton
             onPositionChanged: win.triggerUserActiveBoost()
         }
-        layer.enabled: false
+
+        WheelHandler {
+            id: masterWheelHandler
+            target: null
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+            onWheel: (event) => {
+                win.triggerLiveBackdrop();
+            }
+        }
+
+        DragHandler {
+            id: masterDragHandler
+            target: null
+            acceptedButtons: Qt.LeftButton
+            grabPermissions: PointerHandler.TakeOverForbidden
+            onActiveChanged: {
+                if (active) win.triggerLiveBackdrop();
+            }
+            onTranslationChanged: {
+                if (active) win.triggerLiveBackdrop();
+            }
+        }
+        layer.enabled: !(win.maximized || win.fullscreen)
         layer.smooth: true
         layer.effect: MultiEffect {
             maskEnabled: true
@@ -1711,55 +1775,79 @@ Scope {
                     color: "#0a0b0e"
                 }
 
-                // 2. Desktop Wallpaper Atmosphere (Zero-Cost Bilinear Haze)
+                // 2. Desktop Wallpaper Atmosphere Wrapper (when paused / idle)
                 Item {
                     id: wallpaperAtmosphereWrapper
                     anchors.fill: parent
                     clip: true
+                    visible: false
+
+                    Image {
+                        id: wallpaperAtmosphereImg
+                        anchors.centerIn: parent
+                        width: parent.width * 1.15
+                        height: parent.height * 1.15
+                        source: win.formatFileUrl(win.currentWallpaperPath)
+                        sourceSize: Qt.size(960, 540)
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        cache: false
+                    }
+                }
+
+                MultiEffect {
+                    id: wallpaperAtmosphereEffect
+                    anchors.fill: parent
+                    source: wallpaperAtmosphereWrapper
                     visible: wallpaperAtmosphereImg.status === Image.Ready && opacity > 0.01
-                    opacity: (win.currentTrack && win.isPlaying) ? 0.0 : 0.85
+                    blurEnabled: true
+                    blur: 1.0
+                    blurMax: 48
+                    saturation: 1.55
+                    brightness: 0.02
+                    opacity: (win.currentTrack && win.isPlaying) ? 0.0 : 0.88
                     Behavior on opacity {
                         NumberAnimation {
                             duration: 400
                             easing.type: Easing.InOutQuad
                         }
                     }
-
-                    Image {
-                        id: wallpaperAtmosphereImg
-                        anchors.fill: parent
-                        source: win.formatFileUrl(win.currentWallpaperPath)
-                        sourceSize: Qt.size(80, 45) // Ultra-fast hardware bilinear optical blur
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        smooth: true
-                        cache: true
-                    }
                 }
 
-                // 3. Song Artwork Atmosphere (Zero-Cost Bilinear Haze)
+                // 3. Song Artwork Atmosphere Wrapper (when playing music)
                 Item {
                     id: songAtmosphereWrapper
                     anchors.fill: parent
                     clip: true
+                    visible: false
+
+                    Image {
+                        id: songAtmosphereImg
+                        anchors.fill: parent
+                        source: win.getTrackCoverUrl(win.currentTrack)
+                        sourceSize: Qt.size(480, 480)
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        cache: false
+                    }
+                }
+
+                MultiEffect {
+                    id: songAtmosphereEffect
+                    anchors.fill: parent
+                    source: songAtmosphereWrapper
                     visible: songAtmosphereImg.status === Image.Ready && opacity > 0.01
+                    blurEnabled: true
+                    blur: 1.0
+                    blurMax: 40
+                    saturation: 1.65
+                    brightness: -0.05
                     opacity: (win.currentTrack && win.isPlaying) ? 0.85 : 0.0
                     Behavior on opacity {
                         NumberAnimation {
                             duration: 400
                             easing.type: Easing.InOutQuad
                         }
-                    }
-
-                    Image {
-                        id: songAtmosphereImg
-                        anchors.fill: parent
-                        source: win.getTrackCoverUrl(win.currentTrack)
-                        sourceSize: Qt.size(64, 64) // Ultra-fast hardware bilinear optical blur
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        smooth: true
-                        cache: true
                     }
                 }
             }
@@ -1772,17 +1860,17 @@ Scope {
                 gradient: Gradient {
                     GradientStop {
                         position: 0.0
-                        color: win.isNowPlayingOpen ? Qt.rgba(0.02, 0.02, 0.04, 0.79) : Qt.rgba(0.02, 0.02, 0.04, 0.70)
+                        color: win.isPlaying ? (win.isNowPlayingOpen ? Qt.rgba(0.02, 0.02, 0.04, 0.79) : Qt.rgba(0.02, 0.02, 0.04, 0.70)) : Qt.rgba(0.02, 0.02, 0.04, 0.52)
                         Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
                     }
                     GradientStop {
                         position: 0.40
-                        color: win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.65) : Qt.rgba(0.01, 0.01, 0.02, 0.55)
+                        color: win.isPlaying ? (win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.65) : Qt.rgba(0.01, 0.01, 0.02, 0.55)) : Qt.rgba(0.01, 0.01, 0.02, 0.38)
                         Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
                     }
                     GradientStop {
                         position: 1.0
-                        color: win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.38) : Qt.rgba(0.01, 0.01, 0.02, 0.32)
+                        color: win.isPlaying ? (win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.38) : Qt.rgba(0.01, 0.01, 0.02, 0.32)) : Qt.rgba(0.01, 0.01, 0.02, 0.22)
                         Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
                     }
                 }
@@ -2425,6 +2513,7 @@ Scope {
             height: 60
             z: 50
             backgroundSourceItem: masterAppSurface
+            isLiveBackdrop: win.isBackdropLive
 
             currentTrack: win.currentTrack
             audioSpecs: win.audioSpecs
@@ -2685,6 +2774,9 @@ Scope {
             accountEmail: win.authAccountEmail
             syncHistoryToGoogle: win.syncHistoryToGoogle
             desktopLyricsEnabled: win.desktopLyricsEnabled
+            taskbarLyricsEnabled: win.taskbarLyricsEnabled
+            taskbarLyricsPlacement: win.taskbarLyricsPlacement
+            taskbarLyricsAlign: win.taskbarLyricsAlign
             lyricsRomanizationEnabled: win.lyricsRomanizationEnabled
             animatedCoverEnabled: win.animatedCoverEnabled
             canvasPreference: win.canvasPreference
@@ -2750,6 +2842,18 @@ Scope {
             }
             onToggleDesktopLyricsRequested: enabled => {
                 win.desktopLyricsEnabled = enabled;
+                win.saveSettings();
+            }
+            onToggleTaskbarLyricsRequested: enabled => {
+                win.taskbarLyricsEnabled = enabled;
+                win.saveSettings();
+            }
+            onChangeTaskbarLyricsPlacementRequested: placement => {
+                win.taskbarLyricsPlacement = placement;
+                win.saveSettings();
+            }
+            onChangeTaskbarLyricsAlignRequested: align => {
+                win.taskbarLyricsAlign = align;
                 win.saveSettings();
             }
             onToggleLyricsRomanizationRequested: enabled => {
@@ -3144,8 +3248,6 @@ Scope {
         }
     }
 
-    property real lastSettingsSaveTime: 0
-
     Timer {
         id: delayedSettingsRead
         interval: 100
@@ -3161,7 +3263,6 @@ Scope {
         path: Quickshell.env("HOME") + "/.config/noctalia/nutsty_settings" + (Quickshell.env("NUTSTY_PROFILE") ? ("_" + Quickshell.env("NUTSTY_PROFILE").toLowerCase()) : "") + ".json"
         watchChanges: true
         onFileChanged: {
-            if (Date.now() - win.lastSettingsSaveTime < 1500) return;
             reload();
             delayedSettingsRead.restart();
         }
@@ -3212,6 +3313,22 @@ Scope {
     }
 
     FileView {
+        id: assetsPaletteFileView
+        path: win.appDir + "/assets/nutsty_palette.json"
+        watchChanges: false
+        onLoadedChanged: {
+            if (loaded && (!paletteFileView.text() || paletteFileView.text().trim() === "")) {
+                paletteFileView.parsePalette();
+            }
+        }
+        Component.onCompleted: {
+            if (loaded && (!paletteFileView.text() || paletteFileView.text().trim() === "")) {
+                paletteFileView.parsePalette();
+            }
+        }
+    }
+
+    FileView {
         id: paletteFileView
 
         path: Quickshell.env("HOME") + "/.config/noctalia/nutsty_palette.json"
@@ -3229,6 +3346,9 @@ Scope {
 
         function parsePalette() {
             var raw = text();
+            if (!raw || raw.trim() === "") {
+                raw = assetsPaletteFileView.text();
+            }
             if (!raw || raw.trim() === "") return;
             try {
                 var p = JSON.parse(raw);
@@ -3267,6 +3387,9 @@ Scope {
             if (obj.widgetX !== undefined) win.widgetX = Number(obj.widgetX);
             if (obj.widgetY !== undefined) win.widgetY = Number(obj.widgetY);
             if (obj.desktopLyricsEnabled !== undefined) win.desktopLyricsEnabled = !!obj.desktopLyricsEnabled;
+            if (obj.taskbarLyricsEnabled !== undefined) win.taskbarLyricsEnabled = !!obj.taskbarLyricsEnabled;
+            if (obj.taskbarLyricsPlacement !== undefined && typeof obj.taskbarLyricsPlacement === "string") win.taskbarLyricsPlacement = obj.taskbarLyricsPlacement;
+            if (obj.taskbarLyricsAlign !== undefined && typeof obj.taskbarLyricsAlign === "string") win.taskbarLyricsAlign = obj.taskbarLyricsAlign;
             if (obj.lyricsRomanizationEnabled !== undefined) win.lyricsRomanizationEnabled = !!obj.lyricsRomanizationEnabled;
             if (obj.canvasPreference !== undefined && typeof obj.canvasPreference === "string") {
                 win.canvasPreference = obj.canvasPreference;
@@ -3332,7 +3455,6 @@ Scope {
     }
 
     function saveSettings() {
-        win.lastSettingsSaveTime = Date.now();
         var data = JSON.stringify({
             isShuffle: win.isShuffle,
             isRepeat: win.isRepeat,
@@ -3342,6 +3464,9 @@ Scope {
             widgetX: win.widgetX,
             widgetY: win.widgetY,
             desktopLyricsEnabled: win.desktopLyricsEnabled,
+            taskbarLyricsEnabled: win.taskbarLyricsEnabled,
+            taskbarLyricsPlacement: win.taskbarLyricsPlacement,
+            taskbarLyricsAlign: win.taskbarLyricsAlign,
             lyricsRomanizationEnabled: win.lyricsRomanizationEnabled,
             animatedCoverEnabled: win.animatedCoverEnabled,
             canvasPreference: win.canvasPreference,
@@ -3494,7 +3619,7 @@ Scope {
             // Queue remains empty until user explicitly clicks a track, album or playlist.
 
             if (!statusProcess.running) {
-                statusProcess.command = [win.nutstyBridgePath, "status"];
+                statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
                 statusProcess.running = true;
             }
             win.refreshLocalAlbums();
@@ -4138,7 +4263,7 @@ Scope {
         repeat: false
         property real targetSec: 0.0
         onTriggered: {
-            Quickshell.execDetached([win.nutstyBridgePath, "seek", String(targetSec)]);
+            Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "seek", String(targetSec)]);
         }
     }
 
@@ -4174,7 +4299,7 @@ Scope {
     Timer {
         id: pollTimer
         property var statusXhr: null
-        interval: (!win.visible && !win.desktopLyricsEnabled) ? 3000 : (win.isPlaying ? 250 : (win.isLoadingAudio ? 180 : 2000))
+        interval: (!win.visible && !win.desktopLyricsEnabled) ? 2000 : (win.isPlaying ? 250 : (win.isLoadingAudio ? 180 : 800))
         running: true
         repeat: true
         onTriggered: {
@@ -4185,7 +4310,7 @@ Scope {
                         if (statusXhr.status === 200 && statusXhr.responseText) {
                             PlaybackEngine.handlePlayerStatus(win, statusXhr.responseText, listenAlongSeekSafetyTimer, sessionFileView);
                         } else if (!statusProcess.running) {
-                            statusProcess.command = [win.nutstyBridgePath, "status"];
+                            statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
                             statusProcess.running = true;
                         }
                     }
@@ -4197,7 +4322,7 @@ Scope {
                     statusXhr.send();
                 } catch(e) {
                     if (!statusProcess.running) {
-                        statusProcess.command = [win.nutstyBridgePath, "status"];
+                        statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
                         statusProcess.running = true;
                     }
                 }
@@ -4470,7 +4595,7 @@ Scope {
         function openWindow() {
             win.visible = true;
             if (!statusProcess.running) {
-                statusProcess.command = [win.nutstyBridgePath, "status"];
+                statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
                 statusProcess.running = true;
             }
             Qt.callLater(function() { if (ytNowPlayingView) ytNowPlayingView.updateActiveLyric(true); });
@@ -4482,7 +4607,7 @@ Scope {
             win.visible = !win.visible;
             if (win.visible) {
                 if (!statusProcess.running) {
-                    statusProcess.command = [win.nutstyBridgePath, "status"];
+                    statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
                     statusProcess.running = true;
                 }
                 Qt.callLater(function() { if (ytNowPlayingView) ytNowPlayingView.updateActiveLyric(true); });
@@ -4827,7 +4952,7 @@ Scope {
     // =========================================================================
     DesktopLyricsWidget {
         id: desktopLyrics
-        visible: win.desktopLyricsEnabled && win.currentTrack !== null
+        visible: win.desktopLyricsEnabled
         activeLyrics: win.activeLyrics
         currentTime: win.currentTime
         isPlaying: win.isPlaying
@@ -4853,6 +4978,39 @@ Scope {
         }
     }
 
+    // =========================================================================
+    // Windows Taskbar Lyrics (Powered by native kamol1dn/spicy-taskbar TaskbarLyrics.exe)
+    // Synchronized via high-speed WebSocket bridge to ws://localhost:9012/
+    // =========================================================================
+    Timer {
+        id: taskbarLyricsPushTimer
+        interval: 1000
+        repeat: true
+        running: Qt.platform.os === "windows" && win.taskbarLyricsEnabled && win.currentTrack !== null
+        onTriggered: {
+            if (typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.updateTaskbarPlayback === "function") {
+                __NutstyBridge.updateTaskbarPlayback(win.isPlaying, win.currentTime, win.totalDuration, win.currentTrack, null);
+            }
+        }
+    }
+    Connections {
+        target: win
+        function onCurrentTrackChanged() {
+            if (Qt.platform.os === "windows" && typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.updateTaskbarPlayback === "function") {
+                __NutstyBridge.updateTaskbarPlayback(win.isPlaying, win.currentTime, win.totalDuration, win.currentTrack, null);
+            }
+        }
+        function onIsPlayingChanged() {
+            if (Qt.platform.os === "windows" && typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.updateTaskbarPlayback === "function") {
+                __NutstyBridge.updateTaskbarPlayback(win.isPlaying, win.currentTime, win.totalDuration, win.currentTrack, null);
+            }
+        }
+        function onActiveLyricsChanged() {
+            if (Qt.platform.os === "windows" && typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.updateTaskbarLyrics === "function") {
+                __NutstyBridge.updateTaskbarLyrics(win.activeLyrics);
+            }
+        }
+    }
 
     // =========================================================================
     // Nutsty Desktop Music Mini Controller Widget (Layer Bottom)

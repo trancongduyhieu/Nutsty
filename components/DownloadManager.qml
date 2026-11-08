@@ -155,7 +155,7 @@ Item {
 
         // 2. Call nutsty-library to delete file, .lrc and update library.json
         Quickshell.execDetached([
-            (win.nutstyLibraryPath || (win.appDir + "/bin/nutsty-library")), "delete",
+            win.appDir + "/bin/nutsty-library", "delete",
             filePath, "", songTitle
         ]);
 
@@ -333,12 +333,14 @@ Item {
 
     Timer {
         id: statusPollTimer
-        interval: 1000
+        interval: root.activeTasksCount > 0 ? 250 : 5000
         repeat: true
-        running: root.activeTasksCount > 0
+        running: true
         onTriggered: {
-            statusFileView.reload();
-            root.syncFromStatusFile();
+            if (root.activeTasksCount > 0 || statusFileView.exists) {
+                statusFileView.reload();
+                root.syncFromStatusFile();
+            }
         }
     }
 

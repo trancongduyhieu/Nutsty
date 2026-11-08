@@ -26,6 +26,9 @@ Rectangle {
     property string canvasPreference: "apple_first"
     property int currentTab: 0 // 0: Google Account, 1: Desktop Lyrics
     property bool desktopLyricsEnabled: true
+    property bool taskbarLyricsEnabled: true
+    property string taskbarLyricsPlacement: "taskbar"
+    property string taskbarLyricsAlign: "center"
     property bool lyricsRomanizationEnabled: true
     property int lyricsPreset: 2 // 1: Gacha, 2: Apple Music 5-Line, 3: Minimalist Blur, 4: Anime MV Kinetic
     property int customX: -1
@@ -303,6 +306,9 @@ Rectangle {
     signal toggleAnimatedCoverRequested(bool enabled)
     signal saveCanvasPreferenceRequested(string pref)
     signal toggleDesktopLyricsRequested(bool enabled)
+    signal toggleTaskbarLyricsRequested(bool enabled)
+    signal changeTaskbarLyricsPlacementRequested(string placement)
+    signal changeTaskbarLyricsAlignRequested(string align)
     signal toggleLyricsRomanizationRequested(bool enabled)
     signal selectLyricsPresetRequested(int preset)
     signal resetLyricsPositionRequested()
@@ -358,6 +364,16 @@ Rectangle {
         return I18n.tr("Cao - Opus (256 kbps)", "High - Opus (256 kbps)");
     }
 
+    function getTaskbarPlacementLabel(p) {
+        if (p === "above") return I18n.tr("Nổi phía trên Taskbar", "Above Taskbar");
+        return I18n.tr("Trên thanh Taskbar", "On Taskbar");
+    }
+
+    function getTaskbarAlignLabel(a) {
+        if (a === "left") return I18n.tr("Bên trái", "Left");
+        if (a === "right") return I18n.tr("Bên phải", "Right");
+        return I18n.tr("Căn giữa", "Center");
+    }
 
     function closeAllDropdowns() {
         if (typeof langRowItem !== "undefined" && langRowItem) langRowItem.menuOpen = false;
@@ -365,6 +381,8 @@ Rectangle {
         if (typeof downloadQualityRowItem !== "undefined" && downloadQualityRowItem) downloadQualityRowItem.menuOpen = false;
         if (typeof canvasPrefRowItem !== "undefined" && canvasPrefRowItem) canvasPrefRowItem.menuOpen = false;
         if (typeof lyricsSourceRowItem !== "undefined" && lyricsSourceRowItem) lyricsSourceRowItem.menuOpen = false;
+        if (typeof placementRowItem !== "undefined" && placementRowItem) placementRowItem.menuOpen = false;
+        if (typeof alignRowItem !== "undefined" && alignRowItem) alignRowItem.menuOpen = false;
     }
 
     function toggleStreamingQualityMenu() {
@@ -2381,6 +2399,459 @@ Rectangle {
                     }
                 }
 
+                // Windows Taskbar Lyrics Switch (Spicy Taskbar)
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 46
+                    visible: Qt.platform.os === "windows"
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: toggleTaskbarLyrics.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            text: I18n.tr("Hiển thị lời bài hát trên Taskbar", "Taskbar Lyrics Display")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 14
+                            font.bold: true
+                            color: Theme.textPrimary
+                        }
+
+                        Text {
+                            text: I18n.tr("Hiển thị lời bài hát karaoke quét âm tiết trên thanh tác vụ Windows (Spicy Taskbar)", "Display syllable karaoke lyrics directly on the Windows taskbar (Spicy Taskbar style)")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                        }
+                    }
+
+                    // Toggle Switch Pill (Pinned to Right)
+                    Rectangle {
+                        id: toggleTaskbarLyrics
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 44
+                        height: 24
+                        radius: 12
+                        opacity: 1.0
+                        color: root.taskbarLyricsEnabled ? root.accentColor : Qt.rgba(255, 255, 255, 0.14)
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        Rectangle {
+                            width: 18
+                            height: 18
+                            radius: 9
+                            color: "#ffffff"
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: root.taskbarLyricsEnabled ? parent.width - width - 3 : 3
+                            Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            preventStealing: false
+                            enabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                root.toggleTaskbarLyricsRequested(!root.taskbarLyricsEnabled);
+                            }
+                        }
+                    }
+                }
+
+                // Windows Taskbar Placement Row
+                Item {
+                    id: placementRowItem
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 46
+                    visible: Qt.platform.os === "windows" && root.taskbarLyricsEnabled
+                    z: menuOpen ? 95 : 1
+                    property bool menuOpen: false
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: placementDropdownBtn.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            text: I18n.tr("Vị trí hiển thị trên màn hình", "Screen Placement")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                        }
+
+                        Text {
+                            text: I18n.tr("Nằm lọt lòng thanh Taskbar hoặc nổi phía trên Taskbar", "Position inside Taskbar band or floating above it")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                        }
+                    }
+
+                    // Dropdown Trigger Button
+                    Rectangle {
+                        id: placementDropdownBtn
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        height: 28
+                        width: placementBtnRow.implicitWidth + 16
+                        radius: 6
+                        color: (placementBtnMouse.containsMouse || placementRowItem.menuOpen)
+                               ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
+                               : "transparent"
+                        border.width: 0
+
+                        Behavior on color { ColorAnimation { duration: 120 } }
+
+                        Row {
+                            id: placementBtnRow
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            Text {
+                                text: root.getTaskbarPlacementLabel(root.taskbarLyricsPlacement)
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: (placementBtnMouse.containsMouse || placementRowItem.menuOpen) ? "#ffffff" : Qt.rgba(255, 255, 255, 0.85)
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                            }
+
+                            AppIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                source: "../assets/icons/go-down-symbolic.svg"
+                                iconSize: 10
+                                color: root.accentColor
+                                rotation: placementRowItem.menuOpen ? 180 : 0
+                                Behavior on rotation { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                            }
+                        }
+
+                        MouseArea {
+                            id: placementBtnMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                var next = !placementRowItem.menuOpen;
+                                root.closeAllDropdowns();
+                                placementRowItem.menuOpen = next;
+                            }
+                        }
+                    }
+
+                    // Popover Menu
+                    Rectangle {
+                        id: placementDropdownMenu
+                        visible: placementRowItem.menuOpen
+                        anchors.top: placementDropdownBtn.bottom
+                        anchors.topMargin: 6
+                        anchors.right: placementDropdownBtn.right
+                        width: 240
+                        height: placementCol.implicitHeight + 10
+                        radius: 10
+                        color: Qt.rgba(0.06 + root.accentColor.r * 0.08, 0.06 + root.accentColor.g * 0.08, 0.08 + root.accentColor.b * 0.12, 0.96)
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                        border.width: 1
+                        z: 100
+
+                        Column {
+                            id: placementCol
+                            anchors.top: parent.top
+                            anchors.topMargin: 5
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            spacing: 3
+
+                            readonly property var placementOptions: [
+                                {
+                                    key: "taskbar",
+                                    name: I18n.tr("Trên thanh Taskbar", "On Taskbar"),
+                                    desc: I18n.tr("Nằm lọt lòng trong thanh Taskbar Windows", "Position inside the Windows taskbar")
+                                },
+                                {
+                                    key: "above",
+                                    name: I18n.tr("Nổi phía trên Taskbar", "Above Taskbar"),
+                                    desc: I18n.tr("Nổi lơ lửng phía trên thanh Taskbar 8px", "Float 8px above the taskbar")
+                                }
+                            ]
+
+                            Repeater {
+                                model: placementCol.placementOptions
+                                delegate: Rectangle {
+                                    width: placementCol.width - 10
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    height: 38
+                                    radius: 7
+                                    color: (root.taskbarLyricsPlacement === modelData.key)
+                                           ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.26)
+                                           : (plItemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.14) : "transparent")
+                                    border.color: (root.taskbarLyricsPlacement === modelData.key)
+                                                  ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                                                  : (plItemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25) : "transparent")
+                                    border.width: 1
+
+                                    Behavior on color { ColorAnimation { duration: 100 } }
+                                    Behavior on border.color { ColorAnimation { duration: 100 } }
+
+                                    Item {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+
+                                        Column {
+                                            anchors.left: parent.left
+                                            anchors.right: plCheckIcon.left
+                                            anchors.rightMargin: 8
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            spacing: 1
+
+                                            Text {
+                                                text: modelData.name
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 12
+                                                font.bold: root.taskbarLyricsPlacement === modelData.key
+                                                color: (root.taskbarLyricsPlacement === modelData.key) ? "#ffffff" : (plItemMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.85))
+                                            }
+
+                                            Text {
+                                                text: modelData.desc
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 10
+                                                color: (root.taskbarLyricsPlacement === modelData.key) ? Qt.rgba(255, 255, 255, 0.80) : Theme.textSecondary
+                                            }
+                                        }
+
+                                        AppIcon {
+                                            id: plCheckIcon
+                                            anchors.right: parent.right
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            source: "../assets/icons/emblem-ok-symbolic.svg"
+                                            iconSize: 12
+                                            color: root.accentColor
+                                            visible: root.taskbarLyricsPlacement === modelData.key
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: plItemMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            root.changeTaskbarLyricsPlacementRequested(modelData.key);
+                                            placementRowItem.menuOpen = false;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Windows Taskbar Alignment Row
+                Item {
+                    id: alignRowItem
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 46
+                    visible: Qt.platform.os === "windows" && root.taskbarLyricsEnabled
+                    z: menuOpen ? 90 : 1
+                    property bool menuOpen: false
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: alignDropdownBtn.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            text: I18n.tr("Căn lề lời bài hát", "Lyrics Alignment")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                        }
+
+                        Text {
+                            text: I18n.tr("Căn giữa màn hình hoặc lệch trái / phải theo ý muốn", "Center horizontally or align to left / right side")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                        }
+                    }
+
+                    // Dropdown Trigger Button
+                    Rectangle {
+                        id: alignDropdownBtn
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        height: 28
+                        width: alignBtnRow.implicitWidth + 16
+                        radius: 6
+                        color: (alignBtnMouse.containsMouse || alignRowItem.menuOpen)
+                               ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
+                               : "transparent"
+                        border.width: 0
+
+                        Behavior on color { ColorAnimation { duration: 120 } }
+
+                        Row {
+                            id: alignBtnRow
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            Text {
+                                text: root.getTaskbarAlignLabel(root.taskbarLyricsAlign)
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: (alignBtnMouse.containsMouse || alignRowItem.menuOpen) ? "#ffffff" : Qt.rgba(255, 255, 255, 0.85)
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                            }
+
+                            AppIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                source: "../assets/icons/go-down-symbolic.svg"
+                                iconSize: 10
+                                color: root.accentColor
+                                rotation: alignRowItem.menuOpen ? 180 : 0
+                                Behavior on rotation { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                            }
+                        }
+
+                        MouseArea {
+                            id: alignBtnMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                var next = !alignRowItem.menuOpen;
+                                root.closeAllDropdowns();
+                                alignRowItem.menuOpen = next;
+                            }
+                        }
+                    }
+
+                    // Popover Menu
+                    Rectangle {
+                        id: alignDropdownMenu
+                        visible: alignRowItem.menuOpen
+                        anchors.top: alignDropdownBtn.bottom
+                        anchors.topMargin: 6
+                        anchors.right: alignDropdownBtn.right
+                        width: 220
+                        height: alignCol.implicitHeight + 10
+                        radius: 10
+                        color: Qt.rgba(0.06 + root.accentColor.r * 0.08, 0.06 + root.accentColor.g * 0.08, 0.08 + root.accentColor.b * 0.12, 0.96)
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                        border.width: 1
+                        z: 100
+
+                        Column {
+                            id: alignCol
+                            anchors.top: parent.top
+                            anchors.topMargin: 5
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            spacing: 3
+
+                            readonly property var alignOptions: [
+                                {
+                                    key: "center",
+                                    name: I18n.tr("Căn giữa", "Center"),
+                                    desc: I18n.tr("Căn giữa màn hình", "Center on screen")
+                                },
+                                {
+                                    key: "left",
+                                    name: I18n.tr("Bên trái", "Left"),
+                                    desc: I18n.tr("Căn lệch phía bên trái", "Align to the left")
+                                },
+                                {
+                                    key: "right",
+                                    name: I18n.tr("Bên phải", "Right"),
+                                    desc: I18n.tr("Căn lệch phía bên phải", "Align to the right")
+                                }
+                            ]
+
+                            Repeater {
+                                model: alignCol.alignOptions
+                                delegate: Rectangle {
+                                    width: alignCol.width - 10
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    height: 38
+                                    radius: 7
+                                    color: (root.taskbarLyricsAlign === modelData.key)
+                                           ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.26)
+                                           : (alItemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.14) : "transparent")
+                                    border.color: (root.taskbarLyricsAlign === modelData.key)
+                                                  ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                                                  : (alItemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25) : "transparent")
+                                    border.width: 1
+
+                                    Behavior on color { ColorAnimation { duration: 100 } }
+                                    Behavior on border.color { ColorAnimation { duration: 100 } }
+
+                                    Item {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+
+                                        Column {
+                                            anchors.left: parent.left
+                                            anchors.right: alCheckIcon.left
+                                            anchors.rightMargin: 8
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            spacing: 1
+
+                                            Text {
+                                                text: modelData.name
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 12
+                                                font.bold: root.taskbarLyricsAlign === modelData.key
+                                                color: (root.taskbarLyricsAlign === modelData.key) ? "#ffffff" : (alItemMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.85))
+                                            }
+
+                                            Text {
+                                                text: modelData.desc
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 10
+                                                color: (root.taskbarLyricsAlign === modelData.key) ? Qt.rgba(255, 255, 255, 0.80) : Theme.textSecondary
+                                            }
+                                        }
+
+                                        AppIcon {
+                                            id: alCheckIcon
+                                            anchors.right: parent.right
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            source: "../assets/icons/emblem-ok-symbolic.svg"
+                                            iconSize: 12
+                                            color: root.accentColor
+                                            visible: root.taskbarLyricsAlign === modelData.key
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: alItemMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            root.changeTaskbarLyricsAlignRequested(modelData.key);
+                                            alignRowItem.menuOpen = false;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
 
                 // Secondary Switch: Romanization (Romaji / Romaja / Pinyin)
                 Item {

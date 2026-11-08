@@ -26,6 +26,9 @@ else
     python3 "$DIR/backend/auth_server.py" >/dev/null 2>&1 &
 fi
 
+# Automatically sync wallpaper palette for dynamic desktop atmosphere
+python3 "$DIR/backend/palette_extractor.py" >/dev/null 2>&1 &
+
 # If git commit changed (e.g. after git pull) or --restart flag passed, restart running Quickshell instance
 if [ "$1" == "--restart" ] || { [ -n "$LAST_COMMIT" ] && [ "$CURRENT_COMMIT" != "$LAST_COMMIT" ]; }; then
     echo "Detected updated version ($CURRENT_COMMIT), restarting Nutsty UI..."

@@ -104,7 +104,11 @@ Item {
             return raw.replace(/\d+x\d+bb/, "1200x1200bb");
         }
         if (raw.indexOf("i.ytimg.com") !== -1) {
-            return raw.replace(/(hqdefault|mqdefault|default|sddefault)\.jpg/, "maxresdefault.jpg");
+            if (raw.indexOf("maxresdefault.jpg") !== -1) {
+                return raw.split("?")[0];
+            }
+            var clean = raw.split("?")[0];
+            return clean.replace(/\/(hqdefault|mqdefault|default|sddefault|hq720)\.jpg/, "/maxresdefault.jpg");
         }
         return raw;
     }
@@ -260,7 +264,7 @@ Item {
             fillMode: Image.PreserveAspectCrop
             autoCropBlackBars: root.autoCropBlackBars
             asynchronous: true
-            sourceSize: Qt.size(1000, 1000)
+            sourceSize: Qt.size(1200, 1200)
             useInitialsFallback: false
             fallbackIcon: "../assets/icons/media-optical-audio-symbolic.svg"
             fallbackIconSize: 48

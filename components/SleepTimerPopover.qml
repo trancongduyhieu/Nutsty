@@ -96,15 +96,36 @@ Item {
             preventStealing: true
         }
 
-        // Liquid Glass Container (matching PlayerBarBottom optical formula)
+        // Deep Obsidian Frosted Foundation: Blocks text bleed-through from Up Next queue
+        Rectangle {
+            anchors.fill: parent
+            radius: 18
+            color: Qt.rgba(0.05, 0.06, 0.09, 0.90)
+            z: 1
+        }
+
+        // Keo 502 Optical LiquidGlass Resin Container (Liquid Glass Spec)
         LiquidGlass {
             id: popoverGlass
             anchors.fill: parent
             radius: 18
-            tintColor: Qt.rgba(0.08, 0.09, 0.12, 0.52)
-            borderColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+            displacement: 16.0
+            aberration: 0.03
+            bevelWidth: 20.0
+            tintColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
             backgroundSourceItem: root.backgroundSourceItem
             z: 2
+
+            // 1px Concentric Hairline Accent Border
+            Rectangle {
+                anchors.fill: parent
+                radius: 18
+                color: "transparent"
+                border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                border.width: 1
+                z: 20
+                Behavior on border.color { ColorAnimation { duration: 250 } }
+            }
 
             // Subtle Frosted Scrim Underlay: Enhances contrast and text legibility
             Rectangle {

@@ -34,14 +34,12 @@ Item {
     property bool isChatInputOpen: false
     readonly property bool isCoListeningActive: (root.listeningAlongFriend !== null && root.listeningAlongFriend !== undefined) || (root.activeCoListenersDetails && root.activeCoListenersDetails.length > 0)
     property int sleepTimerRemainingSeconds: 0
+    property bool isLiveBackdrop: false
     property color accentColor: "#deb06c"
     property string resolvedSquareImage: ""
     property bool squareFailed: false
     onResolvedSquareImageChanged: squareFailed = false
-    onCurrentTrackChanged: {
-        squareFailed = false;
-        Qt.callLater(refreshBackdrop);
-    }
+    onCurrentTrackChanged: squareFailed = false
 
     property bool isLiked: false
     property bool isVolumePopupOpen: false
@@ -164,22 +162,12 @@ Item {
         }
     }
 
-    function refreshBackdrop() {
-        if (backdropCropSource) backdropCropSource.scheduleUpdate();
-    }
-
-    onWidthChanged: Qt.callLater(refreshBackdrop)
-    onHeightChanged: Qt.callLater(refreshBackdrop)
-    onXChanged: Qt.callLater(refreshBackdrop)
-    onYChanged: Qt.callLater(refreshBackdrop)
-    Component.onCompleted: Qt.callLater(refreshBackdrop)
-
     ShaderEffectSource {
         id: backdropCropSource
         sourceItem: root.backgroundSourceItem
         sourceRect: Qt.rect(cropAnchorHelper.cropPos.x, cropAnchorHelper.cropPos.y, root.width, root.height)
         visible: false
-        live: root.isBarHeld
+        live: root.isLiveBackdrop || root.isBarHeld
         smooth: true
     }
 
@@ -457,7 +445,7 @@ Item {
                         }
                         fillMode: Image.PreserveAspectCrop
                         autoCropBlackBars: true
-                        sourceSize: Qt.size(64, 64)
+                        sourceSize: Qt.size(128, 128)
                         fallbackIcon: "../assets/icons/folder-music-symbolic.svg"
                         fallbackIconSize: 16
                         onStatusChanged: {

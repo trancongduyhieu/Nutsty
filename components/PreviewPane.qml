@@ -28,9 +28,7 @@ Rectangle {
                 id: albumImg
                 anchors.fill: parent
                 source: root.item && root.item.image ? root.item.image : ""
-                sourceSize: Qt.size(400, 400)
                 fillMode: Image.PreserveAspectCrop
-                smooth: true
                 asynchronous: true
                 visible: status === Image.Ready
             }

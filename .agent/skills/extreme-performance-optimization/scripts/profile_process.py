@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 """
 profile_process.py - Real-time process resource sampler & performance benchmark tool.
+Supports both Windows (PSAPI) and Linux (/proc & pgrep).
 Usage:
     python profile_process.py --pid <PID> --duration 10 --interval 0.5
-    python profile_process.py --name "python" --duration 5
+    python profile_process.py --name "quickshell" --duration 5
 """
 
 import sys
 import time
 import argparse
 import subprocess
+import os
 
 def get_process_metrics(pid):
-    """Fetch process metrics using Win32 API or tasklist fallback."""
+    """Fetch process metrics using Win32 API or Linux /proc."""
     if sys.platform == "win32":
         try:
             import ctypes
@@ -60,20 +62,61 @@ def get_process_metrics(pid):
                 kernel32.GetProcessTimes(h_proc, ctypes.byref(ct), ctypes.byref(et), ctypes.byref(kt), ctypes.byref(ut))
                 k_time = (kt.dwHighDateTime << 32) + kt.dwLowDateTime
                 u_time = (ut.dwHighDateTime << 32) + ut.dwLowDateTime
-                total_time = k_time + u_time
+                total_time_sec = (k_time + u_time) / 10000000.0
 
                 return {
                     'rss_mb': mem_mb,
                     'private_mb': private_mb,
-                    'cpu_time_raw': total_time,
+                    'cpu_time_sec': total_time_sec,
                     'timestamp': time.time()
                 }
             finally:
                 kernel32.CloseHandle(h_proc)
         except Exception:
-            pass
+            return None
 
-    # Generic fallback using tasklist/ps
+    elif sys.platform.startswith("linux"):
+        try:
+            clk_tck = os.sysconf(os.sysconf_names['SC_CLK_TCK'])
+            stat_path = f"/proc/{pid}/stat"
+            if not os.path.exists(stat_path):
+                return None
+
+            with open(stat_path, "r") as f:
+                content = f.read()
+                # Find the closing paren of comm field to safely handle process names with spaces
+                rparen = content.rfind(")")
+                if rparen != -1:
+                    rest = content[rparen + 1:].split()
+                    # rest[11] is utime (14th field), rest[12] is stime (15th field)
+                    utime = int(rest[11])
+                    stime = int(rest[12])
+                else:
+                    parts = content.split()
+                    utime = int(parts[13])
+                    stime = int(parts[14])
+                total_time_sec = (utime + stime) / clk_tck
+
+            rss_mb = 0.0
+            private_mb = 0.0
+            status_path = f"/proc/{pid}/status"
+            if os.path.exists(status_path):
+                with open(status_path, "r") as f:
+                    for line in f:
+                        if line.startswith("VmRSS:"):
+                            rss_mb = float(line.split()[1]) / 1024.0
+                        elif line.startswith("RssAnon:"):
+                            private_mb = float(line.split()[1]) / 1024.0
+
+            return {
+                'rss_mb': rss_mb,
+                'private_mb': private_mb,
+                'cpu_time_sec': total_time_sec,
+                'timestamp': time.time()
+            }
+        except Exception:
+            return None
+
     return None
 
 def profile(pid, duration=10.0, interval=0.5):
@@ -94,9 +137,8 @@ def profile(pid, duration=10.0, interval=0.5):
             break
 
         dt = curr_metric['timestamp'] - last_metric['timestamp']
-        d_cpu = (curr_metric['cpu_time_raw'] - last_metric['cpu_time_raw']) / 10000000.0  # 100ns units to seconds
+        d_cpu = curr_metric['cpu_time_sec'] - last_metric['cpu_time_sec']
         # Multi-core normalized CPU %
-        import os
         cpu_count = os.cpu_count() or 1
         cpu_pct = max(0.0, min(100.0, (d_cpu / dt / cpu_count) * 100.0))
 
@@ -141,16 +183,37 @@ def main():
 
     pid = args.pid
     if not pid and args.name:
-        import subprocess
-        out = subprocess.check_output(f'tasklist /fi "imagename eq {args.name}*" /fo csv /nh', shell=True, text=True)
-        lines = [line.strip() for line in out.strip().splitlines() if line.strip()]
-        if lines and not "No tasks are running" in lines[0]:
-            first_line = lines[0].replace('"', '').split(',')
-            pid = int(first_line[1])
-            print(f"Discovered matching process '{first_line[0]}' with PID: {pid}")
+        if sys.platform == "win32":
+            out = subprocess.check_output(f'tasklist /fi "imagename eq {args.name}*" /fo csv /nh', shell=True, text=True)
+            lines = [line.strip() for line in out.strip().splitlines() if line.strip()]
+            if lines and not "No tasks are running" in lines[0]:
+                first_line = lines[0].replace('"', '').split(',')
+                pid = int(first_line[1])
+                print(f"Discovered matching process '{first_line[0]}' with PID: {pid}")
+            else:
+                print(f"No active process found matching name pattern: {args.name}")
+                return 1
         else:
-            print(f"No active process found matching name pattern: {args.name}")
-            return 1
+            try:
+                out = subprocess.check_output(["pgrep", "-f", args.name], text=True)
+                pids = [int(p.strip()) for p in out.strip().splitlines() if p.strip()]
+                # Exclude self PID
+                pids = [p for p in pids if p != os.getpid()]
+                if pids:
+                    pid = pids[0]
+                    # Read command line for clarity
+                    try:
+                        with open(f"/proc/{pid}/cmdline", "r") as f:
+                            cmd = f.read().replace('\0', ' ').strip()
+                    except Exception:
+                        cmd = str(pid)
+                    print(f"Discovered matching process (PID: {pid}): {cmd[:80]}")
+                else:
+                    print(f"No active process found matching name pattern: {args.name}")
+                    return 1
+            except subprocess.CalledProcessError:
+                print(f"No active process found matching name pattern: {args.name}")
+                return 1
 
     if not pid:
         print("Please provide --pid <PID> or --name <process_name>")

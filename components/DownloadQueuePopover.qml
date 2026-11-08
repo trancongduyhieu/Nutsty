@@ -64,15 +64,36 @@ Item {
             onClicked: mouse => mouse.accepted = true
         }
 
-        // Liquid Glass Container (matching PlayerBarBottom optical formula)
+        // Deep Obsidian Frosted Foundation: Blocks text bleed-through
+        Rectangle {
+            anchors.fill: parent
+            radius: 16
+            color: Qt.rgba(0.05, 0.06, 0.09, 0.90)
+            z: 1
+        }
+
+        // Liquid Glass Container (matching PlayerBarBottom)
         LiquidGlass {
             id: popoverGlass
             anchors.fill: parent
             radius: 16
-            tintColor: Qt.rgba(0.08, 0.09, 0.12, 0.52)
-            borderColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+            displacement: 16.0
+            aberration: 0.03
+            bevelWidth: 20.0
+            tintColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
             backgroundSourceItem: root.backgroundSourceItem
             z: 2
+
+            // 1px Hairline Accent Border for Liquid Glass Popover
+            Rectangle {
+                anchors.fill: parent
+                radius: 16
+                color: "transparent"
+                border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.30)
+                border.width: 1
+                z: 20
+                Behavior on border.color { ColorAnimation { duration: 250 } }
+            }
 
             ColumnLayout {
                 id: cardContent
@@ -295,10 +316,7 @@ Item {
                                         Image {
                                             anchors.fill: parent
                                             source: modelData.thumbnail || ""
-                                            sourceSize: Qt.size(76, 76)
                                             fillMode: Image.PreserveAspectCrop
-                                            smooth: true
-                                            asynchronous: true
                                             visible: status === Image.Ready
                                         }
 
