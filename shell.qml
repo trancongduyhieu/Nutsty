@@ -21,12 +21,70 @@ Scope {
         color: "transparent"
         visible: true
 
+        property bool isWindowActive: true
+        readonly property bool isWindowEffectivelyActive: win.visible && (typeof win.minimized !== "undefined" ? !win.minimized : true) && win.isWindowActive
+
+        Connections {
+            target: Qt.application
+            function onStateChanged() {
+                win.isWindowActive = (Qt.application.state === Qt.ApplicationActive);
+            }
+        }
+
+        Connections {
+            target: win
+            ignoreUnknownSignals: true
+            function onActiveChanged() {
+                if (typeof win.active !== "undefined") {
+                    win.isWindowActive = Boolean(win.active);
+                }
+            }
+        }
+
+        onIsWindowEffectivelyActiveChanged: {
+            if (!win.isWindowEffectivelyActive) {
+                unfocusedPurgeTimer.restart();
+            } else {
+                unfocusedPurgeTimer.stop();
+                win.triggerUserActiveBoost();
+                if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) {
+                    ytNowPlayingView.updateActiveLyric(true);
+                }
+            }
+        }
+
         onClosed: {
             win.visible = false;
         }
 
+        Timer {
+            id: unfocusedPurgeTimer
+            interval: 15000
+            repeat: false
+            onTriggered: {
+                if (!win.isWindowEffectivelyActive) {
+                    var purgeXhr = new XMLHttpRequest();
+                    purgeXhr.open("GET", (win.localApiUrl || "http://127.0.0.1:17890") + "/api/system/purge_ram", true);
+                    try { purgeXhr.send(); } catch(e) {}
+                    if (typeof gc === "function") {
+                        try { gc(); } catch(e) {}
+                    }
+                    if (typeof __NutstyBridge !== "undefined" && __NutstyBridge) {
+                        if (typeof __NutstyBridge.trimMemory === "function") {
+                            try { __NutstyBridge.trimMemory(); } catch(e) {}
+                        }
+                        if (typeof __NutstyBridge.purge_working_set === "function") {
+                            try { __NutstyBridge.purge_working_set(); } catch(e) {}
+                        }
+                    }
+                }
+            }
+        }
+
         onVisibleChanged: {
             if (win.visible) {
+                unfocusedPurgeTimer.stop();
+                win.triggerUserActiveBoost();
                 if (typeof desktopMusicWidget !== "undefined" && desktopMusicWidget) {
                     desktopMusicWidget.visible = false;
                     if (typeof desktopMusicWidget.hide === "function") desktopMusicWidget.hide();
@@ -37,6 +95,7 @@ Scope {
                 }
                 Qt.callLater(function() { if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) ytNowPlayingView.updateActiveLyric(true); });
             } else {
+                unfocusedPurgeTimer.restart();
                 if (typeof desktopMusicWidget !== "undefined" && desktopMusicWidget) {
                     desktopMusicWidget.visible = true;
                     if (typeof desktopMusicWidget.show === "function") desktopMusicWidget.show();
@@ -46,6 +105,9 @@ Scope {
                 try { purgeXhr.send(); } catch(e) {}
                 if (typeof gc === "function") {
                     try { gc(); } catch(e) {}
+                }
+                if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && typeof __NutstyBridge.trimMemory === "function") {
+                    try { __NutstyBridge.trimMemory(); } catch(e) {}
                 }
             }
         }
@@ -1638,9 +1700,10 @@ Scope {
     property double lastSyncTimestamp: 0
 
     // High-precision drift-free 25 FPS clock interpolator for buttery smooth lyrics & progress (cuts CPU load by 60%)
+    // Adaptive Throttling: 40ms (25 FPS) when active or desktop lyrics enabled; 250ms (4 FPS) when unfocused
     Timer {
         id: smoothProgressTimer
-        interval: 40
+        interval: (win.isWindowEffectivelyActive || win.desktopLyricsEnabled) ? 40 : 250
         repeat: true
         running: (win.visible || win.desktopLyricsEnabled) && win.isPlaying && !win.isLoadingAudio && win.lastSyncTimestamp > 0
         onTriggered: {

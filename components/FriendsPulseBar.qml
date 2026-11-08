@@ -314,7 +314,7 @@ Item {
                                     color: userNoteItem.effectiveUserNoteAccent
                                     anchors.bottom: parent.bottom
                                     SequentialAnimation on height {
-                                        running: root.visible && userNoteItem.hasTrack
+                                        running: root.visible && userNoteItem.hasTrack && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive))
                                         loops: Animation.Infinite
                                         NumberAnimation { to: 8; duration: 340; easing.type: Easing.InOutQuad }
                                         NumberAnimation { to: 3; duration: 340; easing.type: Easing.InOutQuad }
@@ -325,7 +325,7 @@ Item {
                                     color: userNoteItem.effectiveUserNoteAccent
                                     anchors.bottom: parent.bottom
                                     SequentialAnimation on height {
-                                        running: root.visible && userNoteItem.hasTrack
+                                        running: root.visible && userNoteItem.hasTrack && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive))
                                         loops: Animation.Infinite
                                         NumberAnimation { to: 3.5; duration: 260; easing.type: Easing.InOutQuad }
                                         NumberAnimation { to: 8; duration: 260; easing.type: Easing.InOutQuad }
@@ -336,7 +336,7 @@ Item {
                                     color: userNoteItem.effectiveUserNoteAccent
                                     anchors.bottom: parent.bottom
                                     SequentialAnimation on height {
-                                        running: root.visible && userNoteItem.hasTrack
+                                        running: root.visible && userNoteItem.hasTrack && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive))
                                         loops: Animation.Infinite
                                         NumberAnimation { to: 7.5; duration: 400; easing.type: Easing.InOutQuad }
                                         NumberAnimation { to: 2.5; duration: 400; easing.type: Easing.InOutQuad }
@@ -574,7 +574,7 @@ Item {
                                     color: friendDelegateItem.effectiveFriendNoteAccent
                                     anchors.bottom: parent.bottom
                                     SequentialAnimation on height {
-                                        running: root.visible && friendDelegateItem.hasFriendTrack
+                                        running: root.visible && friendDelegateItem.hasFriendTrack && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive))
                                         loops: Animation.Infinite
                                         NumberAnimation { to: 8; duration: 340; easing.type: Easing.InOutQuad }
                                         NumberAnimation { to: 3; duration: 340; easing.type: Easing.InOutQuad }
@@ -585,7 +585,7 @@ Item {
                                     color: friendDelegateItem.effectiveFriendNoteAccent
                                     anchors.bottom: parent.bottom
                                     SequentialAnimation on height {
-                                        running: root.visible && friendDelegateItem.hasFriendTrack
+                                        running: root.visible && friendDelegateItem.hasFriendTrack && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive))
                                         loops: Animation.Infinite
                                         NumberAnimation { to: 3.5; duration: 260; easing.type: Easing.InOutQuad }
                                         NumberAnimation { to: 8; duration: 260; easing.type: Easing.InOutQuad }
@@ -596,7 +596,7 @@ Item {
                                     color: friendDelegateItem.effectiveFriendNoteAccent
                                     anchors.bottom: parent.bottom
                                     SequentialAnimation on height {
-                                        running: root.visible && friendDelegateItem.hasFriendTrack
+                                        running: root.visible && friendDelegateItem.hasFriendTrack && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive))
                                         loops: Animation.Infinite
                                         NumberAnimation { to: 7.5; duration: 400; easing.type: Easing.InOutQuad }
                                         NumberAnimation { to: 2.5; duration: 400; easing.type: Easing.InOutQuad }

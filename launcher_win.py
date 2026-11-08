@@ -460,6 +460,11 @@ class NutstyBridge(QObject):
         """Allows QML to request working set flush after large operations."""
         trim_working_set()
 
+    @Slot()
+    def purge_working_set(self):
+        """Allows QML to request working set flush."""
+        trim_working_set()
+
     @Slot(bool)
     def notifyTaskbarLyricsState(self, enabled: bool):
         pass
@@ -1570,6 +1575,14 @@ def main():
                     except Exception:
                         pass
                 win_obj.visibilityChanged.connect(_on_vis_trim)
+            if hasattr(win_obj, "activeChanged"):
+                def _on_active_trim():
+                    try:
+                        if not bool(win_obj.property("active")):
+                            QTimer.singleShot(15000, trim_working_set)
+                    except Exception:
+                        pass
+                win_obj.activeChanged.connect(_on_active_trim)
         except Exception as e:
             sys.stderr.write(f"_setup_frameless_window error: {e}\n")
 
