@@ -83,6 +83,15 @@ Rectangle {
         return s;
     }
 
+    function chunkArray(arr, size) {
+        if (!arr || !arr.length) return [];
+        var res = [];
+        for (var i = 0; i < arr.length; i += size) {
+            res.push(arr.slice(i, i + size));
+        }
+        return res;
+    }
+
     // Dynamic feed sections model with fallbacks
     readonly property var activeFeedSections: {
         if (root.sections && root.sections.length > 0) {
@@ -409,10 +418,15 @@ Rectangle {
             width: feedListView.width
             height: sectionCol.implicitHeight
 
+            readonly property var sectionData: modelData
+
             property var activeFlickable: {
-                if (modelData.type === "video_carousel") return videoFlick;
-                if (modelData.type === "track_grid") return trackGridFlick;
-                if (modelData.type === "album_carousel" || modelData.type === "card_carousel") return albumFlick;
+                if (!sectionData) return null;
+                if (sectionData.type === "video_carousel") return videoFlick;
+                if (sectionData.type === "track_grid") return trackGridFlick;
+                if (sectionData.type === "album_carousel" || sectionData.type === "card_carousel") return albumFlick;
+                if (sectionData.type === "fallback_quick_picks") return fallbackQuickPicksFlick;
+                if (sectionData.type === "fallback_playlists") return fallbackPlaylistFlick;
                 return null;
             }
 
@@ -451,7 +465,7 @@ Rectangle {
                         Layout.fillWidth: true
                         spacing: 2
                         Text {
-                            text: root.formatSectionSubtitle(modelData.subtitle)
+                            text: root.formatSectionSubtitle(secDelegate.sectionData ? secDelegate.sectionData.subtitle : "")
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             font.bold: true
@@ -461,7 +475,7 @@ Rectangle {
 
                         Text {
                             Layout.fillWidth: true
-                            text: root.formatSectionTitle(modelData.title)
+                            text: root.formatSectionTitle(secDelegate.sectionData ? secDelegate.sectionData.title : "")
                             font.family: Theme.fontFamily
                             font.pixelSize: 22
                             font.bold: true
@@ -498,162 +512,157 @@ Rectangle {
                 // =============================================================
                 // Archetype 1: Video Carousel (16:9 Landscape Video Cards - Image 1 & 2)
                 // =============================================================
-                Flickable {
+                ListView {
                     id: videoFlick
                     Layout.fillWidth: true
                     height: 245
-                    visible: modelData.type === "video_carousel"
-                    contentWidth: videoRow.implicitWidth
+                    visible: secDelegate.sectionData && secDelegate.sectionData.type === "video_carousel"
+                    orientation: ListView.Horizontal
                     boundsBehavior: Flickable.StopAtBounds
                     flickableDirection: Flickable.HorizontalFlick
                     pixelAligned: true
+                    reuseItems: true
+                    cacheBuffer: 500
                     clip: true
+                    spacing: 16
+                    model: (secDelegate.sectionData && secDelegate.sectionData.type === "video_carousel") ? (secDelegate.sectionData.items || []) : []
 
-                    RowLayout {
-                        id: videoRow
-                        spacing: 16
+                    delegate: Rectangle {
+                        id: vCard
+                        width: 260
+                        height: 238
+                        radius: 10
+                        color: vCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.05) : "transparent"
+                        border.color: vCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.15) : "transparent"
+                        border.width: 1
+                        Behavior on color { ColorAnimation { duration: 120 } }
+                        Behavior on border.color { ColorAnimation { duration: 120 } }
 
-                        Repeater {
-                            model: modelData.type === "video_carousel" ? modelData.items : []
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 4
+                            spacing: 8
 
-                            Rectangle {
-                                id: vCard
-                                width: 260
-                                height: 238
-                                radius: 10
-                                color: vCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.05) : "transparent"
-                                border.color: vCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.15) : "transparent"
-                                border.width: 1
-                                Behavior on color { ColorAnimation { duration: 120 } }
-                                Behavior on border.color { ColorAnimation { duration: 120 } }
+                            // 16:9 Widescreen Artwork Container
+                            Item {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: Math.round(width * 9 / 16) // ~142px
 
-                                ColumnLayout {
+                                RoundedImage {
+                                    id: vCoverImg
                                     anchors.fill: parent
-                                    anchors.margins: 4
-                                    spacing: 8
-
-                                    // 16:9 Widescreen Artwork Container
-                                    Item {
-                                        Layout.fillWidth: true
-                                        Layout.preferredHeight: Math.round(width * 9 / 16) // ~142px
-
-                                        RoundedImage {
-                                            id: vCoverImg
-                                            anchors.fill: parent
-                                            radius: 10
-                                            source: {
-                                                var u = modelData.image || "";
-                                                if (u.indexOf("i.ytimg.com") !== -1) return u.split("?")[0];
-                                                if (u.indexOf("googleusercontent.com") !== -1 || u.indexOf("ggpht.com") !== -1) {
-                                                    return u.replace(/=w\d+-h\d+[^=]*$/, "=w540-h304-l90-rj");
-                                                }
-                                                return u;
-                                            }
-                                            fillMode: Image.PreserveAspectCrop
-                                            autoCropBlackBars: false
-                                            sourceSize: Qt.size(360, 202)
-                                            asynchronous: true
+                                    radius: 10
+                                    source: {
+                                        var u = modelData.image || "";
+                                        if (u.indexOf("i.ytimg.com") !== -1) return u.split("?")[0];
+                                        if (u.indexOf("googleusercontent.com") !== -1 || u.indexOf("ggpht.com") !== -1) {
+                                            return u.replace(/=w\d+-h\d+[^=]*$/, "=w540-h304-l90-rj");
                                         }
-
-                                        // 1px Subtle Border Overlay
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            radius: 10
-                                            color: "transparent"
-                                            border.color: vCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.30) : Qt.rgba(1.0, 1.0, 1.0, 0.10)
-                                            border.width: 1
-                                            z: 1
-                                            Behavior on border.color { ColorAnimation { duration: 120 } }
-                                        }
-
-                                        // Centered Play Button (Image 1 & 2)
-                                        Rectangle {
-                                            width: 44
-                                            height: 44
-                                            radius: 22
-                                            anchors.centerIn: parent
-                                            color: Qt.rgba(0, 0, 0, 0.55)
-                                            border.color: Qt.rgba(1, 1, 1, 0.25)
-                                            border.width: 1
-                                            opacity: vCardMouse.containsMouse ? 1.0 : 0.85
-                                            scale: vCardMouse.containsMouse ? 1.08 : 1.0
-                                            z: 2
-                                            Behavior on opacity { NumberAnimation { duration: 120 } }
-                                            Behavior on scale { NumberAnimation { duration: 120 } }
-
-                                            readonly property bool isThisTrack: !!(root.currentTrack && modelData && (root.currentTrack.path === modelData.path || (modelData.videoId && root.currentTrack.videoId === modelData.videoId)))
-                                            readonly property bool isThisLoading: isThisTrack && root.isLoadingAudio
-
-                                            CircularSpinner {
-                                                anchors.centerIn: parent
-                                                size: 22
-                                                strokeWidth: 2.5
-                                                color: "#ffffff"
-                                                visible: parent.isThisLoading
-                                                running: parent.isThisLoading
-                                            }
-
-                                            AppIcon {
-                                                anchors.centerIn: parent
-                                                anchors.horizontalCenterOffset: 1
-                                                visible: !parent.isThisLoading
-                                                source: (parent.isThisTrack && root.isPlaying)
-                                                        ? "../assets/icons/media-playback-pause-symbolic.svg"
-                                                        : "../assets/icons/media-playback-start-symbolic.svg"
-                                                iconSize: 20
-                                                color: "#ffffff"
-                                            }
-                                        }
+                                        return u;
                                     }
-
-                                    // Metadata Text
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        Layout.fillHeight: true
-                                        spacing: 3
-
-                                        Text {
-                                            Layout.fillWidth: true
-                                            text: modelData.title || modelData.name || ""
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: 13
-                                            font.bold: true
-                                            color: (root.currentTrack && root.currentTrack.path === modelData.path) ? root.accentColor : Theme.textPrimary
-                                            elide: Text.ElideRight
-                                            maximumLineCount: 2
-                                            wrapMode: Text.Wrap
-                                            lineHeight: 1.15
-                                        }
-
-                                        Text {
-                                            Layout.fillWidth: true
-                                            text: modelData.subtitle || ((modelData.artist || "") + (modelData.views ? " • " + modelData.views : "")) || "YouTube Music"
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: 12
-                                            color: Theme.textSecondary
-                                            elide: Text.ElideRight
-                                            maximumLineCount: 1
-                                        }
-
-                                        Item { Layout.fillHeight: true }
-                                    }
+                                    fillMode: Image.PreserveAspectCrop
+                                    autoCropBlackBars: false
+                                    sourceSize: Qt.size(360, 202)
+                                    asynchronous: true
                                 }
 
-                                MouseArea {
-                                    id: vCardMouse
+                                // 1px Subtle Border Overlay
+                                Rectangle {
                                     anchors.fill: parent
-                                    hoverEnabled: true
-                                    preventStealing: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                    onClicked: mouse => {
-                                        if (mouse.button === Qt.RightButton) {
-                                            var pt = vCard.mapToItem(null, mouse.x, mouse.y);
-                                            root.trackContextMenuRequested(modelData, pt.x, pt.y);
-                                        } else {
-                                            root.trackPlayRequested(modelData);
-                                        }
+                                    radius: 10
+                                    color: "transparent"
+                                    border.color: vCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.30) : Qt.rgba(1.0, 1.0, 1.0, 0.10)
+                                    border.width: 1
+                                    z: 1
+                                    Behavior on border.color { ColorAnimation { duration: 120 } }
+                                }
+
+                                // Centered Play Button (Image 1 & 2)
+                                Rectangle {
+                                    width: 44
+                                    height: 44
+                                    radius: 22
+                                    anchors.centerIn: parent
+                                    color: Qt.rgba(0, 0, 0, 0.55)
+                                    border.color: Qt.rgba(1, 1, 1, 0.25)
+                                    border.width: 1
+                                    opacity: vCardMouse.containsMouse ? 1.0 : 0.85
+                                    scale: vCardMouse.containsMouse ? 1.08 : 1.0
+                                    z: 2
+                                    Behavior on opacity { NumberAnimation { duration: 120 } }
+                                    Behavior on scale { NumberAnimation { duration: 120 } }
+
+                                    readonly property bool isThisTrack: !!(root.currentTrack && modelData && (root.currentTrack.path === modelData.path || (modelData.videoId && root.currentTrack.videoId === modelData.videoId)))
+                                    readonly property bool isThisLoading: isThisTrack && root.isLoadingAudio
+
+                                    CircularSpinner {
+                                        anchors.centerIn: parent
+                                        size: 22
+                                        strokeWidth: 2.5
+                                        color: "#ffffff"
+                                        visible: parent.isThisLoading
+                                        running: parent.isThisLoading
                                     }
+
+                                    AppIcon {
+                                        anchors.centerIn: parent
+                                        anchors.horizontalCenterOffset: 1
+                                        visible: !parent.isThisLoading
+                                        source: (parent.isThisTrack && root.isPlaying)
+                                                ? "../assets/icons/media-playback-pause-symbolic.svg"
+                                                : "../assets/icons/media-playback-start-symbolic.svg"
+                                        iconSize: 20
+                                        color: "#ffffff"
+                                    }
+                                }
+                            }
+
+                            // Metadata Text
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                spacing: 3
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: modelData.title || modelData.name || ""
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 13
+                                    font.bold: true
+                                    color: (root.currentTrack && root.currentTrack.path === modelData.path) ? root.accentColor : Theme.textPrimary
+                                    elide: Text.ElideRight
+                                    maximumLineCount: 2
+                                    wrapMode: Text.Wrap
+                                    lineHeight: 1.15
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: modelData.subtitle || ((modelData.artist || "") + (modelData.views ? " • " + modelData.views : "")) || "YouTube Music"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 12
+                                    color: Theme.textSecondary
+                                    elide: Text.ElideRight
+                                    maximumLineCount: 1
+                                }
+
+                                Item { Layout.fillHeight: true }
+                            }
+                        }
+
+                        MouseArea {
+                            id: vCardMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            preventStealing: true
+                            cursorShape: Qt.PointingHandCursor
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+                            onClicked: mouse => {
+                                if (mouse.button === Qt.RightButton) {
+                                    var pt = vCard.mapToItem(null, mouse.x, mouse.y);
+                                    root.trackContextMenuRequested(modelData, pt.x, pt.y);
+                                } else {
+                                    root.trackPlayRequested(modelData);
                                 }
                             }
                         }
@@ -663,147 +672,155 @@ Rectangle {
                 // =============================================================
                 // Archetype 2: Multi-row Track Grid (4 Rows per Column - Image 2)
                 // =============================================================
-                Flickable {
+                ListView {
                     id: trackGridFlick
                     Layout.fillWidth: true
                     height: 248
-                    visible: modelData.type === "track_grid"
-                    contentWidth: trackGridFlow.implicitWidth
+                    visible: secDelegate.sectionData && secDelegate.sectionData.type === "track_grid"
+                    orientation: ListView.Horizontal
                     boundsBehavior: Flickable.StopAtBounds
                     flickableDirection: Flickable.HorizontalFlick
                     pixelAligned: true
+                    reuseItems: true
+                    cacheBuffer: 500
                     clip: true
+                    spacing: 14
+                    model: (secDelegate.sectionData && secDelegate.sectionData.type === "track_grid") ? root.chunkArray(secDelegate.sectionData.items, 4) : []
 
-                    Grid {
-                        id: trackGridFlow
-                        rows: 4
-                        flow: Grid.TopToBottom
-                        rowSpacing: 8
-                        columnSpacing: 14
+                    delegate: Item {
+                        id: colWrapper
+                        width: Math.max(300, Math.min(380, Math.floor((feedListView.width - 48 - 28) / (root.width > 1100 ? 3 : 2))))
+                        height: 240
+                        readonly property var chunkTracks: modelData
 
-                        Repeater {
-                            model: modelData.type === "track_grid" ? modelData.items : []
+                        Column {
+                            anchors.fill: parent
+                            spacing: 8
 
-                            Rectangle {
-                                id: gridItem
-                                width: Math.max(300, Math.min(380, Math.floor((feedListView.width - 48 - 28) / (root.width > 1100 ? 3 : 2))))
-                                height: 54
-                                radius: 6
-                                clip: true
-                                color: (root.currentTrack && root.currentTrack.path === modelData.path)
-                                       ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.14)
-                                       : (rowMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.07) : Qt.rgba(1.0, 1.0, 1.0, 0.02))
-                                border.color: (root.currentTrack && root.currentTrack.path === modelData.path)
-                                              ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
-                                              : (rowMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.18) : Qt.rgba(1.0, 1.0, 1.0, 0.06))
-                                border.width: 1
-                                Behavior on color { ColorAnimation { duration: 100 } }
-                                Behavior on border.color { ColorAnimation { duration: 100 } }
+                            Repeater {
+                                model: colWrapper.chunkTracks
 
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.margins: 5
-                                    spacing: 10
+                                Rectangle {
+                                    id: gridItem
+                                    width: colWrapper.width
+                                    height: 54
+                                    radius: 6
+                                    clip: true
+                                    color: (root.currentTrack && root.currentTrack.path === modelData.path)
+                                           ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.14)
+                                           : (rowMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.07) : Qt.rgba(1.0, 1.0, 1.0, 0.02))
+                                    border.color: (root.currentTrack && root.currentTrack.path === modelData.path)
+                                                  ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                                                  : (rowMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.18) : Qt.rgba(1.0, 1.0, 1.0, 0.06))
+                                    border.width: 1
+                                    Behavior on color { ColorAnimation { duration: 100 } }
+                                    Behavior on border.color { ColorAnimation { duration: 100 } }
 
-                                    Item {
-                                        width: 44
-                                        height: 44
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 5
+                                        spacing: 10
 
-                                        RoundedImage {
-                                            id: rowImg
-                                            anchors.fill: parent
-                                            radius: 6
-                                            source: {
-                                                var u = modelData.image || "";
-                                                if (u.indexOf("i.ytimg.com") !== -1) return u.split("?")[0];
-                                                if (u.indexOf("googleusercontent.com") !== -1 || u.indexOf("ggpht.com") !== -1) {
-                                                    return u.replace(/=w\d+-h\d+[^=]*$/, "=w120-h120-l90-rj");
+                                        Item {
+                                            width: 44
+                                            height: 44
+
+                                            RoundedImage {
+                                                id: rowImg
+                                                anchors.fill: parent
+                                                radius: 6
+                                                source: {
+                                                    var u = modelData.image || "";
+                                                    if (u.indexOf("i.ytimg.com") !== -1) return u.split("?")[0];
+                                                    if (u.indexOf("googleusercontent.com") !== -1 || u.indexOf("ggpht.com") !== -1) {
+                                                        return u.replace(/=w\d+-h\d+[^=]*$/, "=w120-h120-l90-rj");
+                                                    }
+                                                    return u;
                                                 }
-                                                return u;
+                                                fillMode: Image.PreserveAspectCrop
+                                                sourceSize: Qt.size(88, 88)
+                                                asynchronous: true
                                             }
-                                            fillMode: Image.PreserveAspectCrop
-                                            sourceSize: Qt.size(88, 88)
-                                            asynchronous: true
+
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                radius: 6
+                                                color: Qt.rgba(0, 0, 0, 0.45)
+                                                visible: !!(rowMouse.containsMouse || (root.currentTrack && modelData && (root.currentTrack.path === modelData.path || (modelData.videoId && root.currentTrack.videoId === modelData.videoId))))
+
+                                                readonly property bool isThisTrack: !!(root.currentTrack && modelData && (root.currentTrack.path === modelData.path || (modelData.videoId && root.currentTrack.videoId === modelData.videoId)))
+                                                readonly property bool isThisLoading: isThisTrack && root.isLoadingAudio
+
+                                                CircularSpinner {
+                                                    anchors.centerIn: parent
+                                                    size: 18
+                                                    strokeWidth: 2.2
+                                                    color: root.accentColor
+                                                    visible: parent.isThisLoading
+                                                    running: parent.isThisLoading
+                                                }
+
+                                                AppIcon {
+                                                    anchors.centerIn: parent
+                                                    visible: !parent.isThisLoading
+                                                    source: (parent.isThisTrack && root.isPlaying)
+                                                            ? "../assets/icons/media-playback-pause-symbolic.svg"
+                                                            : "../assets/icons/media-playback-start-symbolic.svg"
+                                                    iconSize: 18
+                                                    color: root.accentColor
+                                                }
+                                            }
+
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                radius: 6
+                                                color: "transparent"
+                                                border.color: Qt.rgba(1, 1, 1, 0.12)
+                                                border.width: 1
+                                            }
                                         }
 
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            radius: 6
-                                            color: Qt.rgba(0, 0, 0, 0.45)
-                                            visible: !!(rowMouse.containsMouse || (root.currentTrack && modelData && (root.currentTrack.path === modelData.path || (modelData.videoId && root.currentTrack.videoId === modelData.videoId))))
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 2
 
-                                            readonly property bool isThisTrack: !!(root.currentTrack && modelData && (root.currentTrack.path === modelData.path || (modelData.videoId && root.currentTrack.videoId === modelData.videoId)))
-                                            readonly property bool isThisLoading: isThisTrack && root.isLoadingAudio
-
-                                            CircularSpinner {
-                                                anchors.centerIn: parent
-                                                size: 18
-                                                strokeWidth: 2.2
-                                                color: root.accentColor
-                                                visible: parent.isThisLoading
-                                                running: parent.isThisLoading
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: modelData.title || modelData.name || ""
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 13
+                                                font.bold: true
+                                                color: (root.currentTrack && root.currentTrack.path === modelData.path) ? root.accentColor : Theme.textPrimary
+                                                elide: Text.ElideRight
+                                                maximumLineCount: 1
                                             }
 
-                                            AppIcon {
-                                                anchors.centerIn: parent
-                                                visible: !parent.isThisLoading
-                                                source: (parent.isThisTrack && root.isPlaying)
-                                                        ? "../assets/icons/media-playback-pause-symbolic.svg"
-                                                        : "../assets/icons/media-playback-start-symbolic.svg"
-                                                iconSize: 18
-                                                color: root.accentColor
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: (modelData.subtitle || modelData.artist || "Cloud Stream").split("\n")[0]
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 12
+                                                color: Theme.textSecondary
+                                                elide: Text.ElideRight
+                                                maximumLineCount: 1
                                             }
-                                        }
-
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            radius: 6
-                                            color: "transparent"
-                                            border.color: Qt.rgba(1, 1, 1, 0.12)
-                                            border.width: 1
                                         }
                                     }
 
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 2
-
-                                        Text {
-                                            Layout.fillWidth: true
-                                            text: modelData.title || modelData.name || ""
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: 13
-                                            font.bold: true
-                                            color: (root.currentTrack && root.currentTrack.path === modelData.path) ? root.accentColor : Theme.textPrimary
-                                            elide: Text.ElideRight
-                                            maximumLineCount: 1
-                                        }
-
-                                        Text {
-                                            Layout.fillWidth: true
-                                            text: (modelData.subtitle || modelData.artist || "Cloud Stream").split("\n")[0]
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: 12
-                                            color: Theme.textSecondary
-                                            elide: Text.ElideRight
-                                            maximumLineCount: 1
-                                        }
-                                    }
-                                }
-
-                                MouseArea {
-                                    id: rowMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    preventStealing: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                    onClicked: mouse => {
-                                        if (mouse.button === Qt.RightButton) {
-                                            var pt = gridItem.mapToItem(null, mouse.x, mouse.y);
-                                            root.trackContextMenuRequested(modelData, pt.x, pt.y);
-                                        } else {
-                                            root.trackPlayRequested(modelData);
+                                    MouseArea {
+                                        id: rowMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        preventStealing: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                        onClicked: mouse => {
+                                            if (mouse.button === Qt.RightButton) {
+                                                var pt = gridItem.mapToItem(null, mouse.x, mouse.y);
+                                                root.trackContextMenuRequested(modelData, pt.x, pt.y);
+                                            } else {
+                                                root.trackPlayRequested(modelData);
+                                            }
                                         }
                                     }
                                 }
@@ -815,450 +832,174 @@ Rectangle {
                 // =============================================================
                 // Archetype 3: Large Square Album & Playlist Carousel (Image 3)
                 // =============================================================
-                Flickable {
+                ListView {
                     id: albumFlick
                     Layout.fillWidth: true
                     height: 265
-                    visible: modelData.type === "album_carousel" || modelData.type === "card_carousel"
-                    contentWidth: albumRow.implicitWidth
+                    visible: secDelegate.sectionData && (secDelegate.sectionData.type === "album_carousel" || secDelegate.sectionData.type === "card_carousel")
+                    orientation: ListView.Horizontal
                     boundsBehavior: Flickable.StopAtBounds
                     flickableDirection: Flickable.HorizontalFlick
                     pixelAligned: true
+                    reuseItems: true
+                    cacheBuffer: 500
                     clip: true
+                    spacing: 16
+                    model: (secDelegate.sectionData && (secDelegate.sectionData.type === "album_carousel" || secDelegate.sectionData.type === "card_carousel")) ? (secDelegate.sectionData.items || []) : []
 
-                    RowLayout {
-                        id: albumRow
-                        spacing: 16
+                    delegate: Rectangle {
+                        id: aCard
+                        width: 175
+                        height: 255
+                        radius: 10
+                        color: aCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.05) : "transparent"
+                        border.color: aCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.15) : "transparent"
+                        border.width: 1
+                        Behavior on color { ColorAnimation { duration: 120 } }
+                        Behavior on border.color { ColorAnimation { duration: 120 } }
 
-                        Repeater {
-                            model: (modelData.type === "album_carousel" || modelData.type === "card_carousel") ? modelData.items : []
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 4
+                            spacing: 8
 
-                            Rectangle {
-                                id: aCard
-                                width: 175
-                                height: 255
-                                radius: 10
-                                color: aCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.05) : "transparent"
-                                border.color: aCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.15) : "transparent"
-                                border.width: 1
-                                Behavior on color { ColorAnimation { duration: 120 } }
-                                Behavior on border.color { ColorAnimation { duration: 120 } }
-
-                                ColumnLayout {
-                                    anchors.fill: parent
-                                    anchors.margins: 4
-                                    spacing: 8
-
-                                    // 1:1 Large Square Artwork
-                                    Item {
-                                        Layout.fillWidth: true
-                                        Layout.preferredHeight: width // 1:1 square! (~167px)
-
-                                        RoundedImage {
-                                            id: aCoverImg
-                                            anchors.fill: parent
-                                            radius: 10
-                                            source: {
-                                                var u = modelData.image || "";
-                                                if (u.indexOf("i.ytimg.com") !== -1) return u.split("?")[0];
-                                                if (u.indexOf("googleusercontent.com") !== -1 || u.indexOf("ggpht.com") !== -1) {
-                                                    return u.replace(/=w\d+-h\d+[^=]*$/, "=w360-h360-l90-rj");
-                                                }
-                                                return u;
-                                            }
-                                            fillMode: Image.PreserveAspectCrop
-                                            autoCropBlackBars: true
-                                            sourceSize: Qt.size(240, 240)
-                                            asynchronous: true
-                                        }
-
-                                        // 1px Subtle Border Overlay
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            radius: 10
-                                            color: "transparent"
-                                            border.color: aCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.35) : Qt.rgba(1.0, 1.0, 1.0, 0.12)
-                                            border.width: 1
-                                            z: 1
-                                            Behavior on border.color { ColorAnimation { duration: 120 } }
-                                        }
-
-                                        // Creator Avatar Badge for Community Playlists (Image 3)
-                                        Rectangle {
-                                            id: creatorBadge
-                                            width: 26
-                                            height: 26
-                                            radius: 13
-                                            anchors.left: parent.left
-                                            anchors.bottom: parent.bottom
-                                            anchors.margins: 8
-                                            z: 2
-                                            visible: Boolean(modelData && modelData.creatorInitial && modelData.creatorInitial.length > 0)
-                                            color: modelData.creatorColor || "#00bcd4"
-                                            border.color: "#121214"
-                                            border.width: 2
-
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: modelData.creatorInitial || ""
-                                                font.family: Theme.fontFamily
-                                                font.pixelSize: 12
-                                                font.bold: true
-                                                color: "#ffffff"
-                                            }
-                                        }
-
-                                        // Bottom-Right Hover Play Circle
-                                        Rectangle {
-                                            width: 38
-                                            height: 38
-                                            radius: 19
-                                            color: root.accentColor
-                                            anchors.right: parent.right
-                                            anchors.bottom: parent.bottom
-                                            anchors.margins: 8
-                                            visible: aCardMouse.containsMouse
-                                            scale: aCardMouse.containsMouse ? 1.0 : 0.8
-                                            z: 3
-                                            Behavior on scale { NumberAnimation { duration: 120 } }
-
-                                            AppIcon {
-                                                anchors.centerIn: parent
-                                                anchors.horizontalCenterOffset: 1
-                                                source: "../assets/icons/media-playback-start-symbolic.svg"
-                                                iconSize: 16
-                                                color: "#000000"
-                                            }
-                                        }
-
-                                        // Top-Right Favorite Heart Button
-                                        Rectangle {
-                                            id: aFavBtn
-                                            readonly property string plKey: String((modelData ? (modelData.id || modelData.playlistId || modelData.browseId) : "") || "")
-                                            readonly property bool isFav: (typeof win !== "undefined" && win.isPlaylistFavorite && plKey)
-                                                                          ? win.isPlaylistFavorite(aFavBtn.plKey)
-                                                                          : false
-                                            width: 32
-                                            height: 32
-                                            radius: 16
-                                            color: isFav ? Qt.rgba(0, 0, 0, 0.65) : (aFavArea.containsMouse ? Qt.rgba(0, 0, 0, 0.75) : Qt.rgba(0, 0, 0, 0.45))
-                                            border.color: isFav ? root.accentColor : Qt.rgba(255, 255, 255, 0.2)
-                                            border.width: 1
-                                            anchors.right: parent.right
-                                            anchors.top: parent.top
-                                            anchors.margins: 8
-                                            visible: aFavBtn.isFav || aCardMouse.containsMouse
-                                            scale: aFavArea.containsMouse ? 1.1 : 1.0
-                                            z: 4
-                                            Behavior on scale { NumberAnimation { duration: 120 } }
-                                            Behavior on color { ColorAnimation { duration: 120 } }
-
-                                            AppIcon {
-                                                anchors.centerIn: parent
-                                                source: "../assets/icons/emblem-favorite-symbolic.svg"
-                                                iconSize: 15
-                                                color: aFavBtn.isFav ? root.accentColor : "#ffffff"
-                                            }
-
-                                            MouseArea {
-                                                id: aFavArea
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: mouse => {
-                                                    mouse.accepted = true;
-                                                    if (typeof win !== "undefined" && win.toggleFavoritePlaylist) {
-                                                        win.toggleFavoritePlaylist(modelData);
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // Text Metadata
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        Layout.fillHeight: true
-                                        spacing: 3
-
-                                        Text {
-                                            Layout.fillWidth: true
-                                            text: modelData.title || modelData.name || ""
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: 14
-                                            font.bold: true
-                                            color: Theme.textPrimary
-                                            elide: Text.ElideRight
-                                            maximumLineCount: 1
-                                        }
-
-                                        Text {
-                                            Layout.fillWidth: true
-                                            text: modelData.subtitle || modelData.artist || "Playlist"
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: 12
-                                            color: Theme.textSecondary
-                                            elide: Text.ElideRight
-                                            maximumLineCount: 2
-                                            wrapMode: Text.Wrap
-                                        }
-
-                                        Item { Layout.fillHeight: true }
-                                    }
-                                }
-
-                                MouseArea {
-                                    id: aCardMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    preventStealing: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                    onClicked: mouse => {
-                                        if (mouse.button === Qt.RightButton) {
-                                            var pt = aCard.mapToItem(null, mouse.x, mouse.y);
-                                            root.trackContextMenuRequested(modelData, pt.x, pt.y);
-                                        } else {
-                                            if (modelData.type === "album" || (modelData.browseId && String(modelData.browseId).startsWith("MPREb_")) || (modelData.playlistId && String(modelData.playlistId).startsWith("MPREb_"))) {
-                                                root.playlistSelected(modelData);
-                                            } else if (modelData.type === "track" || (modelData.path && modelData.path.indexOf("ytdl://") === 0) || modelData.videoId) {
-                                                root.trackPlayRequested(modelData);
-                                            } else {
-                                                root.playlistSelected(modelData);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // =============================================================
-                // Case C: Fallback Quick Picks Grid
-                // =============================================================
-                GridLayout {
-                    Layout.fillWidth: true
-                    visible: modelData.type === "fallback_quick_picks"
-                    columns: root.width > 900 ? 3 : 2
-                    rowSpacing: 8
-                    columnSpacing: 12
-
-                    Repeater {
-                        model: modelData.type === "fallback_quick_picks" ? modelData.items.slice(0, 18) : []
-
-                        Rectangle {
-                            id: qpCard
-                            Layout.fillWidth: true
-                            height: 56
-                            radius: 6
-                            clip: true
-                            color: (root.currentTrack && root.currentTrack.path === modelData.path)
-                                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
-                                   : (qpMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.07) : Qt.rgba(1.0, 1.0, 1.0, 0.02))
-                            border.color: (root.currentTrack && root.currentTrack.path === modelData.path)
-                                          ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
-                                          : (qpMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.18) : Qt.rgba(1.0, 1.0, 1.0, 0.06))
-                            border.width: 1
-                            Behavior on color { ColorAnimation { duration: 100 } }
-                            Behavior on border.color { ColorAnimation { duration: 100 } }
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.margins: 6
-                                spacing: 12
+                            // 1:1 Large Square Artwork
+                            Item {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: width // 1:1 square! (~167px)
 
                                 RoundedImage {
-                                    id: qpImg
-                                    width: 44
-                                    height: 44
-                                    radius: 4
-                                    source: modelData.image || ""
-                                    fillMode: Image.PreserveAspectCrop
-                                    sourceSize: Qt.size(64, 64)
-                                    asynchronous: true
-
-                                    Rectangle {
-                                        anchors.fill: parent
-                                        radius: 4
-                                        color: Qt.rgba(0, 0, 0, 0.4)
-                                        visible: qpMouse.containsMouse || (root.currentTrack && modelData && (root.currentTrack.path === modelData.path || (modelData.videoId && root.currentTrack.videoId === modelData.videoId)))
-
-                                        readonly property bool isThisTrack: !!(root.currentTrack && modelData && (root.currentTrack.path === modelData.path || (modelData.videoId && root.currentTrack.videoId === modelData.videoId)))
-                                        readonly property bool isThisLoading: isThisTrack && root.isLoadingAudio
-
-                                        CircularSpinner {
-                                            anchors.centerIn: parent
-                                            size: 18
-                                            strokeWidth: 2.2
-                                            color: root.accentColor
-                                            visible: parent.isThisLoading
-                                            running: parent.isThisLoading
+                                    id: aCoverImg
+                                    anchors.fill: parent
+                                    radius: 10
+                                    source: {
+                                        var u = modelData.image || "";
+                                        if (u.indexOf("i.ytimg.com") !== -1) return u.split("?")[0];
+                                        if (u.indexOf("googleusercontent.com") !== -1 || u.indexOf("ggpht.com") !== -1) {
+                                            return u.replace(/=w\d+-h\d+[^=]*$/, "=w360-h360-l90-rj");
                                         }
-
-                                        AppIcon {
-                                            anchors.centerIn: parent
-                                            visible: !parent.isThisLoading
-                                            source: (parent.isThisTrack && root.isPlaying)
-                                                    ? "../assets/icons/media-playback-pause-symbolic.svg"
-                                                    : "../assets/icons/media-playback-start-symbolic.svg"
-                                            iconSize: 18
-                                            color: root.accentColor
-                                        }
+                                        return u;
                                     }
+                                    fillMode: Image.PreserveAspectCrop
+                                    autoCropBlackBars: true
+                                    sourceSize: Qt.size(240, 240)
+                                    asynchronous: true
                                 }
 
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 2
+                                // 1px Subtle Border Overlay
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: 10
+                                    color: "transparent"
+                                    border.color: aCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.35) : Qt.rgba(1.0, 1.0, 1.0, 0.12)
+                                    border.width: 1
+                                    z: 1
+                                    Behavior on border.color { ColorAnimation { duration: 120 } }
+                                }
+
+                                // Creator Avatar Badge for Community Playlists (Image 3)
+                                Rectangle {
+                                    id: creatorBadge
+                                    width: 26
+                                    height: 26
+                                    radius: 13
+                                    anchors.left: parent.left
+                                    anchors.bottom: parent.bottom
+                                    anchors.margins: 8
+                                    z: 2
+                                    visible: Boolean(modelData && modelData.creatorInitial && modelData.creatorInitial.length > 0)
+                                    color: modelData.creatorColor || "#00bcd4"
+                                    border.color: "#121214"
+                                    border.width: 2
 
                                     Text {
-                                        Layout.fillWidth: true
-                                        text: modelData.title || modelData.name || ""
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 13
-                                        font.bold: true
-                                        color: (root.currentTrack && root.currentTrack.path === modelData.path) ? root.accentColor : Theme.textPrimary
-                                        elide: Text.ElideRight
-                                        maximumLineCount: 1
-                                    }
-
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: (modelData.artist || "Cloud Stream").split("\n")[0]
+                                        anchors.centerIn: parent
+                                        text: modelData.creatorInitial || ""
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 12
-                                        color: Theme.textSecondary
-                                        elide: Text.ElideRight
-                                        maximumLineCount: 1
+                                        font.bold: true
+                                        color: "#ffffff"
                                     }
                                 }
-                            }
 
-                            MouseArea {
-                                id: qpMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                preventStealing: true
-                                cursorShape: Qt.PointingHandCursor
-                                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                onClicked: mouse => {
-                                    if (mouse.button === Qt.RightButton) {
-                                        var pt = qpCard.mapToItem(null, mouse.x, mouse.y);
-                                        root.trackContextMenuRequested(modelData, pt.x, pt.y);
-                                    } else {
-                                        root.trackPlayRequested(modelData);
+                                // Bottom-Right Hover Play Circle
+                                Rectangle {
+                                    width: 38
+                                    height: 38
+                                    radius: 19
+                                    color: root.accentColor
+                                    anchors.right: parent.right
+                                    anchors.bottom: parent.bottom
+                                    anchors.margins: 8
+                                    visible: aCardMouse.containsMouse
+                                    scale: aCardMouse.containsMouse ? 1.0 : 0.8
+                                    z: 3
+                                    Behavior on scale { NumberAnimation { duration: 120 } }
+
+                                    AppIcon {
+                                        anchors.centerIn: parent
+                                        anchors.horizontalCenterOffset: 1
+                                        source: "../assets/icons/media-playback-start-symbolic.svg"
+                                        iconSize: 16
+                                        color: "#000000"
                                     }
                                 }
-                            }
-                        }
-                    }
-                }
 
-                // =============================================================
-                // Case D: Fallback Featured Playlists Flow
-                // =============================================================
-                Flow {
-                    Layout.fillWidth: true
-                    spacing: 16
-                    visible: modelData.type === "fallback_playlists"
+                                // Top-Right Favorite Heart Button
+                                Rectangle {
+                                    id: aFavBtn
+                                    readonly property string plKey: String((modelData ? (modelData.id || modelData.playlistId || modelData.browseId) : "") || "")
+                                    readonly property bool isFav: (typeof win !== "undefined" && win.isPlaylistFavorite && plKey)
+                                                                  ? win.isPlaylistFavorite(aFavBtn.plKey)
+                                                                  : false
+                                    width: 32
+                                    height: 32
+                                    radius: 16
+                                    color: isFav ? Qt.rgba(0, 0, 0, 0.65) : (aFavArea.containsMouse ? Qt.rgba(0, 0, 0, 0.75) : Qt.rgba(0, 0, 0, 0.45))
+                                    border.color: isFav ? root.accentColor : Qt.rgba(255, 255, 255, 0.2)
+                                    border.width: 1
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    anchors.margins: 8
+                                    visible: aFavBtn.isFav || aCardMouse.containsMouse
+                                    scale: aFavArea.containsMouse ? 1.1 : 1.0
+                                    z: 4
+                                    Behavior on scale { NumberAnimation { duration: 120 } }
+                                    Behavior on color { ColorAnimation { duration: 120 } }
 
-                    Repeater {
-                        model: modelData.type === "fallback_playlists" ? modelData.items : []
-
-                        Rectangle {
-                            width: 172
-                            height: 240
-                            radius: Theme.radiusCard
-                            color: plMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.06) : Qt.rgba(1.0, 1.0, 1.0, 0.02)
-                            border.color: plMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.18) : Qt.rgba(1.0, 1.0, 1.0, 0.06)
-                            border.width: 1
-                            Behavior on color { ColorAnimation { duration: 120 } }
-                            Behavior on border.color { ColorAnimation { duration: 120 } }
-
-                            ColumnLayout {
-                                anchors.fill: parent
-                                anchors.margins: 12
-                                spacing: 10
-
-                                RoundedImage {
-                                    id: plImg
-                                    Layout.fillWidth: true
-                                    Layout.preferredHeight: width
-                                    radius: 6
-                                    source: modelData.image || ""
-                                    fillMode: Image.PreserveAspectCrop
-                                    sourceSize: Qt.size(200, 200)
-                                    asynchronous: true
-
-                                    Rectangle {
-                                        width: 40
-                                        height: 40
-                                        radius: 20
-                                        color: root.accentColor
-                                        anchors.right: parent.right
-                                        anchors.bottom: parent.bottom
-                                        anchors.margins: 8
-                                        visible: plMouse.containsMouse
-
-                                        AppIcon {
-                                            anchors.centerIn: parent
-                                            anchors.horizontalCenterOffset: 1
-                                            source: "../assets/icons/media-playback-start-symbolic.svg"
-                                            iconSize: 18
-                                            color: "#000000"
-                                        }
+                                    AppIcon {
+                                        anchors.centerIn: parent
+                                        source: "../assets/icons/emblem-favorite-symbolic.svg"
+                                        iconSize: 15
+                                        color: aFavBtn.isFav ? root.accentColor : "#ffffff"
                                     }
 
-                                    // Top-Right Favorite Heart Button
-                                    Rectangle {
-                                        id: dFavBtn
-                                        readonly property string plKey: String((modelData ? (modelData.id || modelData.playlistId || modelData.browseId) : "") || "")
-                                        readonly property bool isFav: (typeof win !== "undefined" && win.isPlaylistFavorite && plKey)
-                                                                      ? win.isPlaylistFavorite(dFavBtn.plKey)
-                                                                      : false
-                                        width: 32
-                                        height: 32
-                                        radius: 16
-                                        color: isFav ? Qt.rgba(0, 0, 0, 0.65) : (dFavArea.containsMouse ? Qt.rgba(0, 0, 0, 0.75) : Qt.rgba(0, 0, 0, 0.45))
-                                        border.color: isFav ? root.accentColor : Qt.rgba(255, 255, 255, 0.2)
-                                        border.width: 1
-                                        anchors.right: parent.right
-                                        anchors.top: parent.top
-                                        anchors.margins: 8
-                                        visible: dFavBtn.isFav || plMouse.containsMouse
-                                        scale: dFavArea.containsMouse ? 1.1 : 1.0
-                                        z: 4
-                                        Behavior on scale { NumberAnimation { duration: 120 } }
-                                        Behavior on color { ColorAnimation { duration: 120 } }
-
-                                        AppIcon {
-                                            anchors.centerIn: parent
-                                            source: "../assets/icons/emblem-favorite-symbolic.svg"
-                                            iconSize: 15
-                                            color: dFavBtn.isFav ? root.accentColor : "#ffffff"
-                                        }
-
-                                        MouseArea {
-                                            id: dFavArea
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: mouse => {
-                                                mouse.accepted = true;
-                                                if (typeof win !== "undefined" && win.toggleFavoritePlaylist) {
-                                                    win.toggleFavoritePlaylist(modelData);
-                                                }
+                                    MouseArea {
+                                        id: aFavArea
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: mouse => {
+                                            mouse.accepted = true;
+                                            if (typeof win !== "undefined" && win.toggleFavoritePlaylist) {
+                                                win.toggleFavoritePlaylist(modelData);
                                             }
                                         }
                                     }
                                 }
+                            }
+
+                            // Text Metadata
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                spacing: 3
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: modelData.title || ""
+                                    text: modelData.title || modelData.name || ""
                                     font.family: Theme.fontFamily
-                                    font.pixelSize: 13
+                                    font.pixelSize: 14
                                     font.bold: true
                                     color: Theme.textPrimary
                                     elide: Text.ElideRight
@@ -1267,7 +1008,7 @@ Rectangle {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: modelData.subtitle || "Playlist"
+                                    text: modelData.subtitle || modelData.artist || "Playlist"
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 12
                                     color: Theme.textSecondary
@@ -1278,15 +1019,313 @@ Rectangle {
 
                                 Item { Layout.fillHeight: true }
                             }
+                        }
 
-                            MouseArea {
-                                id: plMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                preventStealing: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.playlistSelected(modelData)
+                        MouseArea {
+                            id: aCardMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            preventStealing: true
+                            cursorShape: Qt.PointingHandCursor
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+                            onClicked: mouse => {
+                                if (mouse.button === Qt.RightButton) {
+                                    var pt = aCard.mapToItem(null, mouse.x, mouse.y);
+                                    root.trackContextMenuRequested(modelData, pt.x, pt.y);
+                                } else {
+                                    if (modelData.type === "album" || (modelData.browseId && String(modelData.browseId).startsWith("MPREb_")) || (modelData.playlistId && String(modelData.playlistId).startsWith("MPREb_"))) {
+                                        root.playlistSelected(modelData);
+                                    } else if (modelData.type === "track" || (modelData.path && modelData.path.indexOf("ytdl://") === 0) || modelData.videoId) {
+                                        root.trackPlayRequested(modelData);
+                                    } else {
+                                        root.playlistSelected(modelData);
+                                    }
+                                }
                             }
+                        }
+                    }
+                }
+
+                // =============================================================
+                // Case C: Fallback Quick Picks (Virtualized Multi-Row Carousel)
+                // =============================================================
+                ListView {
+                    id: fallbackQuickPicksFlick
+                    Layout.fillWidth: true
+                    height: 248
+                    visible: secDelegate.sectionData && secDelegate.sectionData.type === "fallback_quick_picks"
+                    orientation: ListView.Horizontal
+                    boundsBehavior: Flickable.StopAtBounds
+                    flickableDirection: Flickable.HorizontalFlick
+                    pixelAligned: true
+                    reuseItems: true
+                    cacheBuffer: 500
+                    clip: true
+                    spacing: 14
+                    model: (secDelegate.sectionData && secDelegate.sectionData.type === "fallback_quick_picks") ? root.chunkArray(secDelegate.sectionData.items, 4) : []
+
+                    delegate: Item {
+                        id: qpColWrapper
+                        width: Math.max(300, Math.min(380, Math.floor((feedListView.width - 48 - 28) / (root.width > 1100 ? 3 : 2))))
+                        height: 240
+                        readonly property var chunkTracks: modelData
+
+                        Column {
+                            anchors.fill: parent
+                            spacing: 8
+
+                            Repeater {
+                                model: qpColWrapper.chunkTracks
+
+                                Rectangle {
+                                    id: qpCard
+                                    width: qpColWrapper.width
+                                    height: 54
+                                    radius: 6
+                                    clip: true
+                                    color: (root.currentTrack && root.currentTrack.path === modelData.path)
+                                           ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
+                                           : (qpMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.07) : Qt.rgba(1.0, 1.0, 1.0, 0.02))
+                                    border.color: (root.currentTrack && root.currentTrack.path === modelData.path)
+                                                  ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                                                  : (qpMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.18) : Qt.rgba(1.0, 1.0, 1.0, 0.06))
+                                    border.width: 1
+                                    Behavior on color { ColorAnimation { duration: 100 } }
+                                    Behavior on border.color { ColorAnimation { duration: 100 } }
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 6
+                                        spacing: 12
+
+                                        RoundedImage {
+                                            id: qpImg
+                                            width: 44
+                                            height: 44
+                                            radius: 4
+                                            source: modelData.image || ""
+                                            fillMode: Image.PreserveAspectCrop
+                                            sourceSize: Qt.size(64, 64)
+                                            asynchronous: true
+
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                radius: 4
+                                                color: Qt.rgba(0, 0, 0, 0.4)
+                                                visible: qpMouse.containsMouse || (root.currentTrack && modelData && (root.currentTrack.path === modelData.path || (modelData.videoId && root.currentTrack.videoId === modelData.videoId)))
+
+                                                readonly property bool isThisTrack: !!(root.currentTrack && modelData && (root.currentTrack.path === modelData.path || (modelData.videoId && root.currentTrack.videoId === modelData.videoId)))
+                                                readonly property bool isThisLoading: isThisTrack && root.isLoadingAudio
+
+                                                CircularSpinner {
+                                                    anchors.centerIn: parent
+                                                    size: 18
+                                                    strokeWidth: 2.2
+                                                    color: root.accentColor
+                                                    visible: parent.isThisLoading
+                                                    running: parent.isThisLoading
+                                                }
+
+                                                AppIcon {
+                                                    anchors.centerIn: parent
+                                                    visible: !parent.isThisLoading
+                                                    source: (parent.isThisTrack && root.isPlaying)
+                                                            ? "../assets/icons/media-playback-pause-symbolic.svg"
+                                                            : "../assets/icons/media-playback-start-symbolic.svg"
+                                                    iconSize: 18
+                                                    color: root.accentColor
+                                                }
+                                            }
+                                        }
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 2
+
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: modelData.title || modelData.name || ""
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 13
+                                                font.bold: true
+                                                color: (root.currentTrack && root.currentTrack.path === modelData.path) ? root.accentColor : Theme.textPrimary
+                                                elide: Text.ElideRight
+                                                maximumLineCount: 1
+                                            }
+
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: (modelData.artist || "Cloud Stream").split("\n")[0]
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 12
+                                                color: Theme.textSecondary
+                                                elide: Text.ElideRight
+                                                maximumLineCount: 1
+                                            }
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: qpMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        preventStealing: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                        onClicked: mouse => {
+                                            if (mouse.button === Qt.RightButton) {
+                                                var pt = qpCard.mapToItem(null, mouse.x, mouse.y);
+                                                root.trackContextMenuRequested(modelData, pt.x, pt.y);
+                                            } else {
+                                                root.trackPlayRequested(modelData);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // =============================================================
+                // Case D: Fallback Featured Playlists (Virtualized Horizontal Carousel)
+                // =============================================================
+                ListView {
+                    id: fallbackPlaylistFlick
+                    Layout.fillWidth: true
+                    height: 255
+                    visible: secDelegate.sectionData && secDelegate.sectionData.type === "fallback_playlists"
+                    orientation: ListView.Horizontal
+                    boundsBehavior: Flickable.StopAtBounds
+                    flickableDirection: Flickable.HorizontalFlick
+                    pixelAligned: true
+                    reuseItems: true
+                    cacheBuffer: 500
+                    clip: true
+                    spacing: 16
+                    model: (secDelegate.sectionData && secDelegate.sectionData.type === "fallback_playlists") ? (secDelegate.sectionData.items || []) : []
+
+                    delegate: Rectangle {
+                        id: plCard
+                        width: 172
+                        height: 245
+                        radius: Theme.radiusCard
+                        color: plMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.06) : Qt.rgba(1.0, 1.0, 1.0, 0.02)
+                        border.color: plMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.18) : Qt.rgba(1.0, 1.0, 1.0, 0.06)
+                        border.width: 1
+                        Behavior on color { ColorAnimation { duration: 120 } }
+                        Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 10
+
+                            RoundedImage {
+                                id: plImg
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: width
+                                radius: 6
+                                source: modelData.image || ""
+                                fillMode: Image.PreserveAspectCrop
+                                sourceSize: Qt.size(200, 200)
+                                asynchronous: true
+
+                                Rectangle {
+                                    width: 40
+                                    height: 40
+                                    radius: 20
+                                    color: root.accentColor
+                                    anchors.right: parent.right
+                                    anchors.bottom: parent.bottom
+                                    anchors.margins: 8
+                                    visible: plMouse.containsMouse
+
+                                    AppIcon {
+                                        anchors.centerIn: parent
+                                        anchors.horizontalCenterOffset: 1
+                                        source: "../assets/icons/media-playback-start-symbolic.svg"
+                                        iconSize: 18
+                                        color: "#000000"
+                                    }
+                                }
+
+                                // Top-Right Favorite Heart Button
+                                Rectangle {
+                                    id: dFavBtn
+                                    readonly property string plKey: String((modelData ? (modelData.id || modelData.playlistId || modelData.browseId) : "") || "")
+                                    readonly property bool isFav: (typeof win !== "undefined" && win.isPlaylistFavorite && plKey)
+                                                                  ? win.isPlaylistFavorite(dFavBtn.plKey)
+                                                                  : false
+                                    width: 32
+                                    height: 32
+                                    radius: 16
+                                    color: isFav ? Qt.rgba(0, 0, 0, 0.65) : (dFavArea.containsMouse ? Qt.rgba(0, 0, 0, 0.75) : Qt.rgba(0, 0, 0, 0.45))
+                                    border.color: isFav ? root.accentColor : Qt.rgba(255, 255, 255, 0.2)
+                                    border.width: 1
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    anchors.margins: 8
+                                    visible: dFavBtn.isFav || plMouse.containsMouse
+                                    scale: dFavArea.containsMouse ? 1.1 : 1.0
+                                    z: 4
+                                    Behavior on scale { NumberAnimation { duration: 120 } }
+                                    Behavior on color { ColorAnimation { duration: 120 } }
+
+                                    AppIcon {
+                                        anchors.centerIn: parent
+                                        source: "../assets/icons/emblem-favorite-symbolic.svg"
+                                        iconSize: 15
+                                        color: dFavBtn.isFav ? root.accentColor : "#ffffff"
+                                    }
+
+                                    MouseArea {
+                                        id: dFavArea
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: mouse => {
+                                            mouse.accepted = true;
+                                            if (typeof win !== "undefined" && win.toggleFavoritePlaylist) {
+                                                win.toggleFavoritePlaylist(modelData);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: modelData.title || ""
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 13
+                                font.bold: true
+                                color: Theme.textPrimary
+                                elide: Text.ElideRight
+                                maximumLineCount: 1
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: modelData.subtitle || "Playlist"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                color: Theme.textSecondary
+                                elide: Text.ElideRight
+                                maximumLineCount: 2
+                                wrapMode: Text.Wrap
+                            }
+
+                            Item { Layout.fillHeight: true }
+                        }
+
+                        MouseArea {
+                            id: plMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            preventStealing: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.playlistSelected(modelData)
                         }
                     }
                 }
@@ -1294,37 +1333,30 @@ Rectangle {
                 // =============================================================
                 // Case E: Skeleton Placeholder Row (Initial Loading State)
                 // =============================================================
-                Flickable {
+                ListView {
                     Layout.fillWidth: true
                     height: 250
-                    visible: modelData.type === "skeleton_section"
-                    contentWidth: skelRow.implicitWidth
+                    visible: secDelegate.sectionData && secDelegate.sectionData.type === "skeleton_section"
+                    orientation: ListView.Horizontal
                     boundsBehavior: Flickable.StopAtBounds
                     flickableDirection: Flickable.HorizontalFlick
                     clip: true
                     interactive: false
+                    spacing: 16
+                    model: [
+                        { tw: 120, sw: 80 },
+                        { tw: 140, sw: 95 },
+                        { tw: 110, sw: 75 },
+                        { tw: 130, sw: 85 },
+                        { tw: 125, sw: 90 },
+                        { tw: 135, sw: 80 }
+                    ]
 
-                    RowLayout {
-                        id: skelRow
-                        spacing: 16
-
-                        Repeater {
-                            model: [
-                                { tw: 120, sw: 80 },
-                                { tw: 140, sw: 95 },
-                                { tw: 110, sw: 75 },
-                                { tw: 130, sw: 85 },
-                                { tw: 125, sw: 90 },
-                                { tw: 135, sw: 80 }
-                            ]
-
-                            SkeletonTrackCard {
-                                width: 160
-                                height: 230
-                                titleWidth: modelData.tw
-                                subtitleWidth: modelData.sw
-                            }
-                        }
+                    delegate: SkeletonTrackCard {
+                        width: 160
+                        height: 230
+                        titleWidth: modelData.tw
+                        subtitleWidth: modelData.sw
                     }
                 }
 
