@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Effects
+import "."
 
 Item {
     id: root
@@ -260,7 +261,7 @@ Item {
             layer.effect: MultiEffect {
                 blurEnabled: true
                 blur: root.exitBlurVal
-                blurMax: 24
+                blurMax: Theme.blurMedium
                 shadowEnabled: true
                 shadowColor: root.colShadowAmb
                 shadowBlur: 0.35
@@ -389,7 +390,7 @@ Item {
                             layer.effect: MultiEffect {
                                 blurEnabled: true
                                 blur: wordItem1.wordBlur
-                                blurMax: 22
+                                blurMax: Theme.blurMedium
                                 shadowEnabled: true
                                 shadowColor: root.colShadowAmb
                                 shadowBlur: 0.35
@@ -511,7 +512,7 @@ Item {
                             layer.effect: MultiEffect {
                                 blurEnabled: true
                                 blur: wordItem2.wordBlur2
-                                blurMax: 22
+                                blurMax: Theme.blurMedium
                                 shadowEnabled: true
                                 shadowColor: root.colShadowAmb
                                 shadowBlur: 0.35

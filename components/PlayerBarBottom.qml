@@ -193,9 +193,9 @@ Item {
     MultiEffect {
         anchors.fill: parent
         source: backdropCropSource
-        blurEnabled: true
+        blurEnabled: (root.backgroundSourceItem !== null) && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive))
         blur: 1.0
-        blurMax: 48
+        blurMax: Theme.blurAtmosphere
         saturation: 1.55
         brightness: -0.05
         maskEnabled: true
@@ -243,9 +243,9 @@ Item {
 
             layer.enabled: true
             layer.effect: MultiEffect {
-                blurEnabled: true
+                blurEnabled: root.holdIntensity > 0.001 && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive))
                 blur: 0.95
-                blurMax: 48
+                blurMax: Theme.blurAtmosphere
             }
 
             Shape {

@@ -1876,7 +1876,7 @@ Scope {
                         width: parent.width * 1.15
                         height: parent.height * 1.15
                         source: win.formatFileUrl(win.currentWallpaperPath)
-                        sourceSize: Qt.size(960, 540)
+                        sourceSize: Qt.size(360, 200)
                         fillMode: Image.PreserveAspectCrop
                         asynchronous: true
                         cache: false
@@ -1887,10 +1887,10 @@ Scope {
                     id: wallpaperAtmosphereEffect
                     anchors.fill: parent
                     source: wallpaperAtmosphereWrapper
-                    visible: wallpaperAtmosphereImg.status === Image.Ready && opacity > 0.01
-                    blurEnabled: true
+                    visible: wallpaperAtmosphereImg.status === Image.Ready && opacity > 0.02 && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive))
+                    blurEnabled: opacity > 0.02 && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive))
                     blur: 1.0
-                    blurMax: 48
+                    blurMax: Theme.blurAtmosphere
                     saturation: 1.55
                     brightness: 0.02
                     opacity: (win.currentTrack && win.isPlaying) ? 0.0 : 0.88
@@ -1913,7 +1913,7 @@ Scope {
                         id: songAtmosphereImg
                         anchors.fill: parent
                         source: win.getTrackCoverUrl(win.currentTrack)
-                        sourceSize: Qt.size(480, 480)
+                        sourceSize: Qt.size(200, 200)
                         fillMode: Image.PreserveAspectCrop
                         asynchronous: true
                         cache: false
@@ -1924,10 +1924,10 @@ Scope {
                     id: songAtmosphereEffect
                     anchors.fill: parent
                     source: songAtmosphereWrapper
-                    visible: songAtmosphereImg.status === Image.Ready && opacity > 0.01
-                    blurEnabled: true
+                    visible: songAtmosphereImg.status === Image.Ready && opacity > 0.02 && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive))
+                    blurEnabled: opacity > 0.02 && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive))
                     blur: 1.0
-                    blurMax: 40
+                    blurMax: Theme.blurAtmosphere
                     saturation: 1.65
                     brightness: -0.05
                     opacity: (win.currentTrack && win.isPlaying) ? 0.85 : 0.0

@@ -351,6 +351,8 @@ Rectangle {
             id: bgArtworkImg
             anchors.fill: parent
             source: root.track && root.track.image ? root.track.image : ""
+            sourceSize: Qt.size(240, 240)
+            asynchronous: true
             fillMode: Image.PreserveAspectCrop
             visible: false
         }
@@ -360,9 +362,9 @@ Rectangle {
             anchors.fill: parent
             source: bgArtworkImg
             visible: bgArtworkImg.status === Image.Ready
-            blurEnabled: true
+            blurEnabled: root.visible && bgArtworkImg.status === Image.Ready && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive))
             blur: 1.0
-            blurMax: 64
+            blurMax: Theme.blurAtmosphere
             saturation: 1.5
             brightness: 0.0
             opacity: 0.52

@@ -34,6 +34,12 @@ QtObject {
     readonly property int radiusPill: 16
     readonly property int radiusSm: 4
 
+    // Quantized Blur Radii Buckets (Mochy-Music BlurEffectCache Architecture)
+    readonly property int blurSubtle: 16
+    readonly property int blurMedium: 24
+    readonly property int blurAtmosphere: 48
+    readonly property int blurDeep: 64
+
     // Contrast Utility
     function isColorDark(c) {
         if (!c) return true;
