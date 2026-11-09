@@ -341,45 +341,14 @@ Rectangle {
         onTriggered: fetchAudioSpecs()
     }
 
-    // Deep Velvet Bokeh Ambient Artwork Background (SimpMusic Style)
-    Item {
+    // Fluid 2D Chromatic Liquid Warp Artwork Background (Mochy-Music Port)
+    LiquidWarpBackdrop {
         id: bgArtworkContainer
         anchors.fill: parent
-        clip: true
-
-        Image {
-            id: bgArtworkImg
-            anchors.fill: parent
-            source: root.track && root.track.image ? root.track.image : ""
-            sourceSize: Qt.size(240, 240)
-            asynchronous: true
-            cache: false
-            fillMode: Image.PreserveAspectCrop
-            visible: false
-        }
-
-        MultiEffect {
-            id: bgArtworkBlur
-            anchors.fill: parent
-            source: bgArtworkImg
-            visible: bgArtworkImg.status === Image.Ready
-            blurEnabled: root.visible && bgArtworkImg.status === Image.Ready && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive))
-            blur: 1.0
-            blurMax: Theme.blurAtmosphere
-            saturation: 1.5
-            brightness: 0.0
-            opacity: 0.52
-        }
-
-        // Deep warm tint overlay to enhance text readability while letting warm album tones shine through
-        Rectangle {
-            anchors.fill: parent
-            gradient: Gradient {
-                GradientStop { position: 0.0; color: Qt.rgba(0.02, 0.02, 0.04, 0.45) }
-                GradientStop { position: 0.45; color: Qt.rgba(0.01, 0.01, 0.02, 0.60) }
-                GradientStop { position: 1.0; color: Qt.rgba(0.01, 0.01, 0.02, 0.78) }
-            }
-        }
+        source: root.track && root.track.image ? root.track.image : ""
+        running: root.visible && root.isPlaying && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive))
+        darkScrim: 0.28
+        zoom: 1.6
     }
 
     Rectangle {
@@ -1532,18 +1501,22 @@ Rectangle {
                         readonly property bool isHovered: rowMouse.pressed && !isCurrent
 
                         readonly property bool isPlainLine: !modelData.hasWords || modelData.isSynthetic || !modelData.words || modelData.words.length === 0
-                        readonly property real targetBlur: (isCurrent || lyricsView.isUserScrolling || isHovered) ? 0.0 : (dist === 1 ? 0.20 : (dist === 2 ? 0.42 : (dist === 3 ? 0.65 : 0.85)))
-                        readonly property real targetOpacity: isCurrent ? 1.0 : (lyricsView.isUserScrolling ? 0.85 : (isHovered ? 0.90 : (dist === 1 ? 0.46 : (dist === 2 ? 0.22 : (dist === 3 ? 0.10 : 0.04)))))
-                        readonly property int targetFontSize: isPlainLine ? 28 : (isCurrent ? 28 : (dist === 1 ? 24 : (dist === 2 ? 20 : (dist === 3 ? 17 : 15))))
+                        readonly property real targetOpacity: isCurrent ? 1.0 : (lyricsView.isUserScrolling ? 0.85 : (isHovered ? 0.90 : (dist === 1 ? 0.55 : 0.26)))
+                        readonly property int targetFontSize: 28
 
                         opacity: targetOpacity
                         transformOrigin: Item.Left
-                        scale: isPlainLine ? 1.0 : (isCurrent ? 1.0 : 0.97)
+                        scale: isCurrent ? 1.0 : 0.98
                         Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
                         Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
 
-                        // High-performance depth-of-field: pure typography opacity and scale falloff (0 FBO overhead, zero thermal load)
-                        layer.enabled: false
+                        // Mochy-Music / Apple Music Camera DoF Optical Blur (Max 4 closest adjacent lines)
+                        layer.enabled: !lyricsView.isUserScrolling && !lyricRow.isHovered && (dist === 1 || dist === 2)
+                        layer.effect: MultiEffect {
+                            blurEnabled: true
+                            blur: lyricRow.dist === 1 ? 0.20 : 0.55
+                            blurMax: lyricRow.dist === 1 ? 8 : 16
+                        }
 
 
                         Column {
@@ -1658,17 +1631,14 @@ Rectangle {
                                     textFormat: Text.PlainText
                                     text: modelData.text || ""
                                     font.family: Theme.fontFamily
-                                    font.pixelSize: lyricRow.targetFontSize
-                                    font.weight: Font.Bold
+                                    font.pixelSize: 28
+                                    font.weight: lyricRow.isCurrent ? Font.Bold : Font.DemiBold
                                     color: lyricRow.isCurrent ? "#ffffff" : "#d8dce8"
                                     wrapMode: Text.Wrap
                                     lineHeight: 1.28
 
                                     Behavior on color {
                                         ColorAnimation { duration: 180 }
-                                    }
-                                    Behavior on font.pixelSize {
-                                        NumberAnimation { duration: 180; easing.type: Easing.OutQuad }
                                     }
                                 }
                             }
@@ -1681,7 +1651,7 @@ Rectangle {
                                 textFormat: Text.PlainText
                                 text: (modelData && modelData.romanized) ? modelData.romanized : ""
                                 font.family: Theme.fontFamily
-                                font.pixelSize: Math.max(13, Math.round(lyricRow.targetFontSize * 0.54))
+                                font.pixelSize: 15
                                 font.weight: Font.DemiBold
                                 font.italic: true
                                 color: lyricRow.isCurrent ? Qt.rgba(255, 255, 255, 0.82) : Qt.rgba(216, 220, 232, 0.50)
@@ -1690,9 +1660,6 @@ Rectangle {
 
                                 Behavior on color {
                                     ColorAnimation { duration: 180 }
-                                }
-                                Behavior on font.pixelSize {
-                                    NumberAnimation { duration: 180; easing.type: Easing.OutQuad }
                                 }
                             }
                         }

@@ -1948,17 +1948,17 @@ Scope {
                 gradient: Gradient {
                     GradientStop {
                         position: 0.0
-                        color: win.isPlaying ? (win.isNowPlayingOpen ? Qt.rgba(0.02, 0.02, 0.04, 0.79) : Qt.rgba(0.02, 0.02, 0.04, 0.70)) : Qt.rgba(0.02, 0.02, 0.04, 0.52)
+                        color: win.isPlaying ? (win.isNowPlayingOpen ? Qt.rgba(0.02, 0.02, 0.04, 0.28) : Qt.rgba(0.02, 0.02, 0.04, 0.70)) : Qt.rgba(0.02, 0.02, 0.04, 0.52)
                         Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
                     }
                     GradientStop {
                         position: 0.40
-                        color: win.isPlaying ? (win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.65) : Qt.rgba(0.01, 0.01, 0.02, 0.55)) : Qt.rgba(0.01, 0.01, 0.02, 0.38)
+                        color: win.isPlaying ? (win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.22) : Qt.rgba(0.01, 0.01, 0.02, 0.55)) : Qt.rgba(0.01, 0.01, 0.02, 0.38)
                         Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
                     }
                     GradientStop {
                         position: 1.0
-                        color: win.isPlaying ? (win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.38) : Qt.rgba(0.01, 0.01, 0.02, 0.32)) : Qt.rgba(0.01, 0.01, 0.02, 0.22)
+                        color: win.isPlaying ? (win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.16) : Qt.rgba(0.01, 0.01, 0.02, 0.32)) : Qt.rgba(0.01, 0.01, 0.02, 0.22)
                         Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
                     }
                 }

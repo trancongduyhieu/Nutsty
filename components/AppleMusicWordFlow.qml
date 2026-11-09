@@ -179,6 +179,14 @@ Item {
                             }
                             onWordProgressChanged: smoothProg = wordProgress
 
+                            // Lagged Phosphor Bloom reader head: trails behind smoothProg to create a comet glow effect
+                            property real bloomProg: 0.0
+                            Behavior on bloomProg {
+                                SmoothedAnimation { duration: 240; reversingMode: SmoothedAnimation.Immediate }
+                            }
+                            onSmoothProgChanged: bloomProg = smoothProg
+                            readonly property real bloomLagDelta: wordRoot.isSinging ? (wordRoot.smoothProg - wordRoot.bloomProg) : 0.0
+
                             property real flareGate: isSinging ? 1.0 : 0.0
                             Behavior on flareGate {
                                 NumberAnimation {
@@ -224,7 +232,7 @@ Item {
                                         readonly property real charProgress: wordRoot.isPast ? 1.0 :
                                             (wordRoot.isSinging ? Math.max(0.0, Math.min(1.0, (wordRoot.smoothProg - charFrom) / Math.max(0.001, charTo - charFrom))) : 0.0)
 
-                                        // Apple Wave Lift: Rises by -2.0px when light touches, and STAYS LIFTED!
+                                        // Apple Wave Lift: Hermite curve w * w * (3.0 - 2.0 * w) for smooth -2.5px lift
                                         property real liftProgress: (charProgress > 0.0 || wordRoot.isPast) ? 1.0 : 0.0
                                         Behavior on liftProgress {
                                             NumberAnimation {
@@ -233,17 +241,21 @@ Item {
                                                 easing.bezierCurve: [0.4, 0.0, 0.2, 1.0]
                                             }
                                         }
+                                        readonly property real hermiteLift: {
+                                            var w = Math.max(0.0, Math.min(1.0, liftProgress));
+                                            return w * w * (3.0 - 2.0 * w);
+                                        }
 
                                         width: charText.implicitWidth
                                         height: charText.implicitHeight
 
                                         transform: [
-                                            Translate { y: -liftProgress * 2.0 },
+                                            Translate { y: -charItem.hermiteLift * 2.5 },
                                             Scale {
-                                                xScale: wordRoot.waveScale
-                                                yScale: wordRoot.waveScale
+                                                xScale: 1.0 + (wordRoot.waveScale - 1.0) * 0.5
+                                                yScale: 1.0 + (wordRoot.isHeld ? 0.06 : 0.04) * wordRoot.yCurve
                                                 origin.x: charItem.width / 2
-                                                origin.y: charItem.height / 2
+                                                origin.y: charItem.height
                                             }
                                         ]
 
@@ -267,7 +279,7 @@ Item {
                                 }
                             }
 
-                            // Layer 2: True Hardware Gaussian MultiEffect Glow on Singing Word
+                            // Layer 2: True Hardware Gaussian MultiEffect Glow on Singing Word with Lagged Phosphor Bloom
                             // Optimization: Only instantiated on the single singing word to eliminate GPU FBO thrashing (60fps guaranteed)
                             Loader {
                                 id: glowLoader
@@ -282,9 +294,9 @@ Item {
                                         shadowColor: "#ffffff"
                                         shadowBlur: 0.95
                                         shadowOpacity: wordRoot.isSinging ? (0.92 * wordRoot.flareGate * Math.sin(Math.PI * wordRoot.smoothProg)) : 0.0
-                                        shadowHorizontalOffset: 0
+                                        shadowHorizontalOffset: -wordRoot.bloomLagDelta * charRow.width * 0.45
                                         shadowVerticalOffset: 0
-                                        shadowScale: 1.08
+                                        shadowScale: 1.12
                                         visible: shadowOpacity > 0.01
                                     }
                                 }
