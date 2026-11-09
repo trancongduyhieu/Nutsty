@@ -121,14 +121,14 @@ Item {
         visible: img.status !== Image.Ready && !root.hasInitials && root.fallbackIcon !== ""
     }
 
-    // 4. Rounded Mask Item (Active only when radius > 0 and image is ready)
+    // 4. Rounded Mask Item (Active only when radius > 0 and image is ready and visible)
     Rectangle {
         id: maskRect
         anchors.fill: parent
         anchors.margins: root.borderWidth > 0 ? (root.borderWidth * 0.5) : 0
         radius: Math.max(0, root.radius - (root.borderWidth > 0 ? (root.borderWidth * 0.5) : 0))
         color: "#ffffff"
-        layer.enabled: true
+        layer.enabled: root.radius > 0 && img.status === Image.Ready && root.visible && root.opacity > 0.01
         visible: false
     }
 
@@ -140,9 +140,9 @@ Item {
         visible: img.status === Image.Ready
         clip: true
 
-        layer.enabled: root.radius > 0 && img.status === Image.Ready
+        layer.enabled: root.radius > 0 && img.status === Image.Ready && root.visible && root.opacity > 0.01
         layer.effect: MultiEffect {
-            maskEnabled: true
+            maskEnabled: root.radius > 0 && root.visible
             maskSource: maskRect
             autoPaddingEnabled: false
         }

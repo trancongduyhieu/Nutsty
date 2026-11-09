@@ -353,6 +353,7 @@ Rectangle {
             source: root.track && root.track.image ? root.track.image : ""
             sourceSize: Qt.size(240, 240)
             asynchronous: true
+            cache: false
             fillMode: Image.PreserveAspectCrop
             visible: false
         }
@@ -821,9 +822,11 @@ Rectangle {
                             anchors.top: parent.top
                             height: 108
                             source: (root.songDetails && root.songDetails.authorThumbnail) ? root.songDetails.authorThumbnail : root.cachedArtistAvatar
+                            sourceSize: Qt.size(360, 108)
                             fillMode: Image.PreserveAspectCrop
                             clip: true
                             asynchronous: true
+                            cache: false
                         }
 
                         // Smooth gradient scrim on top of photo

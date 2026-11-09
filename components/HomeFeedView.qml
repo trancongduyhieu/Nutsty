@@ -227,7 +227,7 @@ Rectangle {
         pixelAligned: true
         maximumFlickVelocity: 6000
         flickDeceleration: 1500
-        cacheBuffer: 800
+        cacheBuffer: 260
         reuseItems: true
         model: root.activeFeedSections
 
@@ -622,7 +622,7 @@ Rectangle {
                     flickableDirection: Flickable.HorizontalFlick
                     pixelAligned: true
                     reuseItems: true
-                    cacheBuffer: 500
+                    cacheBuffer: 160
                     clip: true
                     spacing: 16
                     model: (secDelegate.sectionData && secDelegate.sectionData.type === "video_carousel") ? (secDelegate.sectionData.items || []) : []
@@ -844,7 +844,7 @@ Rectangle {
                     flickableDirection: Flickable.HorizontalFlick
                     pixelAligned: true
                     reuseItems: true
-                    cacheBuffer: 500
+                    cacheBuffer: 160
                     clip: true
                     spacing: 14
                     model: (secDelegate.sectionData && secDelegate.sectionData.type === "track_grid") ? root.chunkArray(secDelegate.sectionData.items, 4) : []
@@ -1065,7 +1065,7 @@ Rectangle {
                     flickableDirection: Flickable.HorizontalFlick
                     pixelAligned: true
                     reuseItems: true
-                    cacheBuffer: 500
+                    cacheBuffer: 160
                     clip: true
                     spacing: 16
                     model: (secDelegate.sectionData && (secDelegate.sectionData.type === "album_carousel" || secDelegate.sectionData.type === "card_carousel")) ? (secDelegate.sectionData.items || []) : []
@@ -1344,7 +1344,7 @@ Rectangle {
                     flickableDirection: Flickable.HorizontalFlick
                     pixelAligned: true
                     reuseItems: true
-                    cacheBuffer: 500
+                    cacheBuffer: 160
                     clip: true
                     spacing: 14
                     model: (secDelegate.sectionData && secDelegate.sectionData.type === "fallback_quick_picks") ? root.chunkArray(secDelegate.sectionData.items, 4) : []
@@ -1546,7 +1546,7 @@ Rectangle {
                     flickableDirection: Flickable.HorizontalFlick
                     pixelAligned: true
                     reuseItems: true
-                    cacheBuffer: 500
+                    cacheBuffer: 160
                     clip: true
                     spacing: 16
                     model: (secDelegate.sectionData && secDelegate.sectionData.type === "fallback_playlists") ? (secDelegate.sectionData.items || []) : []
