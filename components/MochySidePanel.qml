@@ -768,52 +768,20 @@ Item {
         }
 
         // =====================================================================
-        // LAYER D: COMPACT METADATA CREDITS (BOTTOM)
-        // Authentic Mochy Poster Typography (AlternatePlayerStyles.kt & StyleKit.kt):
-        // - Top: Artist Name (Inter SemiBold, 13.5px, letterSpacing -0.2px, color mochyInkSoft)
-        // - Bottom: Song Title (Inter Bold, 18.5px, letterSpacing -0.45px, color mochyInk)
+        // LAYER D: BOTTOM DOCK CONTAINER (RESERVED FOR ACTION BUTTONS)
+        // Fixed at the bottom margin: anchors.bottom: parent.bottom, bottomMargin: 20
+        // Song Title and Artist removed as requested to prepare for future buttons.
         // =====================================================================
-        Column {
-            id: creditsColumn
+        Item {
+            id: bottomDock
             anchors.left: parent.left
             anchors.bottom: parent.bottom
             anchors.right: parent.right
             anchors.leftMargin: 24
             anchors.rightMargin: 24
-            anchors.bottomMargin: 22
-            spacing: 4
+            anchors.bottomMargin: 20
+            height: 0
             z: 10
-
-            // Artist Name (Mochy CreditLine: r.sp(0.034f, 12f, 15f), FontWeight.SemiBold, color = tones.inkSoft)
-            Text {
-                width: parent.width
-                text: {
-                    if (!root.currentTrack) return I18n.tr("Sẵn sàng phát", "Ready to play");
-                    var raw = String(root.currentTrack.artist || "").trim();
-                    var clean = raw.split(/\s*•\s*/)[0].replace(/\s*\d+([.,]\d+)?[KMBkmb]?\s*(views|plays|lượt xem|lượt nghe).*/i, "").trim();
-                    return clean || raw || "Nutsty Desktop";
-                }
-                font.family: root.mochyFont
-                font.pixelSize: 14
-                font.weight: Font.DemiBold
-                font.letterSpacing: -0.2
-                color: root.mochyInkSoft
-                elide: Text.ElideRight
-                maximumLineCount: 1
-            }
-
-            // Song Title (Mochy SmallTitle: smallTitle, FontWeight.Bold, color = tones.ink)
-            Text {
-                width: parent.width
-                text: root.currentTrack ? (root.currentTrack.title || root.currentTrack.name || "Nutsty Track") : "Nutsty Music"
-                font.family: root.mochyFont
-                font.pixelSize: 19
-                font.weight: Font.Bold
-                font.letterSpacing: -0.45
-                color: root.mochyInk
-                elide: Text.ElideRight
-                maximumLineCount: 1
-            }
         }
 
         // =====================================================================
@@ -830,7 +798,7 @@ Item {
             id: expressiveCanvas
             anchors.top: parent.top
             anchors.topMargin: Math.round(circleCover.cw * 0.88 + 10)
-            anchors.bottom: creditsColumn.top
+            anchors.bottom: bottomDock.top
             anchors.bottomMargin: 14
             anchors.left: parent.left
             anchors.leftMargin: 24
