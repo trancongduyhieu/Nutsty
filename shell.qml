@@ -1930,35 +1930,16 @@ Scope {
                     }
                 }
 
-                // 3. Song Artwork Atmosphere Wrapper (when playing music)
-                Item {
-                    id: songAtmosphereWrapper
-                    anchors.fill: parent
-                    clip: true
-                    visible: false
-
-                    Image {
-                        id: songAtmosphereImg
-                        anchors.fill: parent
-                        source: win.getTrackCoverUrl(win.currentTrack)
-                        sourceSize: Qt.size(200, 200)
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        cache: false
-                    }
-                }
-
-                MultiEffect {
+                // 3. Fluid 2D Chromatic Liquid Warp Artwork Background (1:1 Mochy-Music DirectWarp)
+                LiquidWarpBackdrop {
                     id: songAtmosphereEffect
                     anchors.fill: parent
-                    source: songAtmosphereWrapper
-                    visible: songAtmosphereImg.status === Image.Ready && opacity > 0.02 && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive))
-                    blurEnabled: opacity > 0.02 && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive))
-                    blur: 1.0
-                    blurMax: Theme.blurAtmosphere
-                    saturation: 1.65
-                    brightness: -0.05
-                    opacity: (win.currentTrack && win.isPlaying) ? 0.85 : 0.0
+                    source: win.getTrackCoverUrl(win.currentTrack)
+                    running: Boolean(win.isPlaying && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive)))
+                    zoom: 1.6
+                    darkScrim: 0.0
+                    opacity: (win.currentTrack && win.isPlaying) ? 0.88 : 0.0
+                    visible: opacity > 0.02
                     Behavior on opacity {
                         NumberAnimation {
                             duration: 400
@@ -1976,17 +1957,17 @@ Scope {
                 gradient: Gradient {
                     GradientStop {
                         position: 0.0
-                        color: win.isPlaying ? (win.isNowPlayingOpen ? Qt.rgba(0.02, 0.02, 0.04, 0.28) : Qt.rgba(0.02, 0.02, 0.04, 0.70)) : Qt.rgba(0.02, 0.02, 0.04, 0.52)
+                        color: win.isPlaying ? Qt.rgba(0.02, 0.02, 0.04, 0.70) : Qt.rgba(0.02, 0.02, 0.04, 0.52)
                         Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
                     }
                     GradientStop {
                         position: 0.40
-                        color: win.isPlaying ? (win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.22) : Qt.rgba(0.01, 0.01, 0.02, 0.55)) : Qt.rgba(0.01, 0.01, 0.02, 0.38)
+                        color: win.isPlaying ? Qt.rgba(0.01, 0.01, 0.02, 0.55) : Qt.rgba(0.01, 0.01, 0.02, 0.38)
                         Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
                     }
                     GradientStop {
                         position: 1.0
-                        color: win.isPlaying ? (win.isNowPlayingOpen ? Qt.rgba(0.01, 0.01, 0.02, 0.16) : Qt.rgba(0.01, 0.01, 0.02, 0.32)) : Qt.rgba(0.01, 0.01, 0.02, 0.22)
+                        color: win.isPlaying ? Qt.rgba(0.01, 0.01, 0.02, 0.35) : Qt.rgba(0.01, 0.01, 0.02, 0.22)
                         Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
                     }
                 }

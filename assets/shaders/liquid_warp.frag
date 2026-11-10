@@ -14,12 +14,12 @@ layout(std140, binding = 0) uniform buf {
 layout(binding = 1) uniform sampler2D source;
 
 void main() {
-    // 1:1 Mochy-Music DirectWarp: center zoom + ultra-serene fluid 2D breathing wave
+    // 1:1 Mochy-Music DirectWarp: center zoom + fluid 2D breathing wave (reduced speed by additional 20%)
     vec2 p = (qt_TexCoord0 - 0.5) / u_zoom + 0.5;
-    float t = u_time * 0.15;
+    float t = u_time * 0.20;
     vec2 warp = vec2(
-        sin(p.y * 2.8 + t) * 0.030 + cos(p.x * 1.8 - t * 0.5) * 0.022,
-        cos(p.x * 2.6 + t * 0.6) * 0.030 + sin(p.y * 2.2 + t * 0.8) * 0.022
+        sin(p.y * 3.0 + t) * 0.050 + cos(p.x * 2.0 - t * 0.6) * 0.040,
+        cos(p.x * 3.0 + t * 0.7) * 0.050 + sin(p.y * 2.5 + t * 0.9) * 0.040
     );
     vec2 uv = clamp(p + warp, 0.0, 1.0);
 

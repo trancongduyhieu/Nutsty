@@ -113,7 +113,6 @@ Item {
     PointHandler {
         id: barPointer
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen | PointerDevice.Stylus
-        cursorShape: Qt.ArrowCursor
         onActiveChanged: {
             if (active) {
                 root.spotlightX = point.position.x;
@@ -128,7 +127,7 @@ Item {
         }
     }
 
-    // Background Drag & Body Click MouseArea
+    // Background Drag & Body Click MouseArea: Strictly distinguishes Click (toggle Mochy) vs Hold (Spotlight)
     MouseArea {
         id: backgroundDragArea
         anchors.fill: parent
@@ -136,21 +135,50 @@ Item {
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton
+
+        property real pressStartTime: 0
+        property real pressStartX: 0
+        property real pressStartY: 0
+        property bool isDragOrHoldDetected: false
+
         onPressed: mouse => {
+            if (mouse.button !== Qt.LeftButton) return;
+            pressStartTime = Date.now();
+            pressStartX = mouse.x;
+            pressStartY = mouse.y;
+            isDragOrHoldDetected = false;
             root.isMousePressed = true;
             root.spotlightX = mouse.x;
             root.spotlightY = mouse.y;
         }
+
         onPositionChanged: mouse => {
             if (pressed) {
                 root.spotlightX = Math.max(0, Math.min(root.width, mouse.x));
                 root.spotlightY = Math.max(0, Math.min(root.height, mouse.y));
+                var dx = mouse.x - pressStartX;
+                var dy = mouse.y - pressStartY;
+                if ((dx * dx + dy * dy) > 25) {
+                    isDragOrHoldDetected = true;
+                }
             }
         }
-        onReleased: root.isMousePressed = false
-        onCanceled: root.isMousePressed = false
-        onClicked: mouse => {
-            root.barClicked();
+
+        onReleased: mouse => {
+            var elapsed = Date.now() - pressStartTime;
+            var wasHoldOrDrag = isDragOrHoldDetected || (elapsed >= 220);
+            root.isMousePressed = false;
+            isDragOrHoldDetected = false;
+
+            // Only fire barClicked if it was a genuine short click without dragging/holding
+            if (!wasHoldOrDrag && elapsed < 220) {
+                root.barClicked();
+            }
+        }
+
+        onCanceled: {
+            root.isMousePressed = false;
+            isDragOrHoldDetected = false;
         }
     }
 
@@ -532,15 +560,6 @@ Item {
                         font.bold: true
                         color: "#ffffff"
                         elide: Text.ElideRight
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: mouse => {
-                                mouse.accepted = true;
-                                root.barClicked();
-                            }
-                        }
                     }
 
                     Text {
@@ -555,15 +574,6 @@ Item {
                         font.pixelSize: 11
                         color: Qt.rgba(1, 1, 1, 0.70)
                         elide: Text.ElideRight
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: mouse => {
-                                mouse.accepted = true;
-                                root.barClicked();
-                            }
-                        }
                     }
                 }
             }
@@ -575,15 +585,6 @@ Item {
                 anchors.bottomMargin: 10
                 opacity: 1.0 - centerSectionBox.infoAlpha
                 visible: opacity > 0.01
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: mouse => {
-                        mouse.accepted = true;
-                        root.barClicked();
-                    }
-                }
 
                 // Elapsed Time (Left)
                 Text {
