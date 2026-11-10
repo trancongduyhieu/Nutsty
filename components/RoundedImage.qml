@@ -10,7 +10,7 @@ Item {
     property real radius: 8
     property int fillMode: Image.PreserveAspectCrop
     property bool asynchronous: true
-    property bool cache: false
+    property bool cache: true
     property size sourceSize: Qt.size(0, 0)
     property real zoomFactor: 1.0
     property bool autoCropBlackBars: true
@@ -158,8 +158,12 @@ Item {
                 }
                 var w = root.width > 0 ? root.width : root.implicitWidth;
                 var h = root.height > 0 ? root.height : root.implicitHeight;
+                if (w <= 0 || h <= 0) return Qt.size(0, 0);
                 var zoom = root.effectiveZoom;
-                return Qt.size(Math.max(16, Math.round(w * 2 * zoom)), Math.max(16, Math.round(h * 2 * zoom)));
+                // Quantize to steps of 100px so subpixel resizing animations never thrash Qt Image texture decoding
+                var qw = Math.ceil(Math.max(16, w * 2 * zoom) / 100) * 100;
+                var qh = Math.ceil(Math.max(16, h * 2 * zoom) / 100) * 100;
+                return Qt.size(qw, qh);
             }
             asynchronous: root.asynchronous
             cache: root.cache

@@ -659,17 +659,22 @@ Rectangle {
 
             // Video Carousel (16:9 Landscape cards - "Nghe lại")
             readonly property int cardVideoCount: Math.max(2, Math.round((availableWidth + 16) / (250 + 16)))
-            readonly property real cardVideoWidth: (availableWidth - (cardVideoCount - 1) * 16) / cardVideoCount
-            readonly property real cardVideoHeight: Math.round((cardVideoWidth - 8) * 9 / 16) + 78
+            property real cardVideoWidth: (availableWidth - (cardVideoCount - 1) * 16) / cardVideoCount
+            Behavior on cardVideoWidth { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+            property real cardVideoHeight: Math.round((cardVideoWidth - 8) * 9 / 16) + 78
+            Behavior on cardVideoHeight { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
 
             // Square Carousel (1:1 Album/Playlist cards)
             readonly property int cardSquareCount: Math.max(3, Math.round((availableWidth + 16) / (172 + 16)))
-            readonly property real cardSquareWidth: (availableWidth - (cardSquareCount - 1) * 16) / cardSquareCount
-            readonly property real cardSquareHeight: Math.round(cardSquareWidth - 8) + 78
+            property real cardSquareWidth: (availableWidth - (cardSquareCount - 1) * 16) / cardSquareCount
+            Behavior on cardSquareWidth { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+            property real cardSquareHeight: Math.round(cardSquareWidth - 8) + 78
+            Behavior on cardSquareHeight { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
 
             // Multi-row Track Grid (4 rows per column)
             readonly property int cardGridColCount: Math.max(1, Math.round((availableWidth + 14) / (320 + 14)))
-            readonly property real cardGridColWidth: (availableWidth - (cardGridColCount - 1) * 14) / cardGridColCount
+            property real cardGridColWidth: (availableWidth - (cardGridColCount - 1) * 14) / cardGridColCount
+            Behavior on cardGridColWidth { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
             readonly property real cardGridColHeight: 240
 
             property var activeFlickable: {
@@ -824,7 +829,7 @@ Rectangle {
                             if (itemKey === lastCheckedKey) return;
                             lastCheckedKey = itemKey;
 
-                            if (root.hasSeen(itemKey)) {
+                            if (root.hasSeen(itemKey) || root.hasInitialLoaded) {
                                 vRevealAnim.stop();
                                 revealOpacity = 1.0;
                                 vTrans.y = 0;
@@ -842,8 +847,10 @@ Rectangle {
                         Connections {
                             target: root
                             function onSeenKeysChanged() {
-                                vCard.lastCheckedKey = "";
-                                vCard.checkReveal();
+                                if (!root.hasInitialLoaded) {
+                                    vCard.lastCheckedKey = "";
+                                    vCard.checkReveal();
+                                }
                             }
                         }
 
@@ -1066,7 +1073,7 @@ Rectangle {
                                         if (itemKey === lastCheckedKey) return;
                                         lastCheckedKey = itemKey;
 
-                                        if (root.hasSeen(itemKey)) {
+                                        if (root.hasSeen(itemKey) || root.hasInitialLoaded) {
                                             gridRevealAnim.stop();
                                             opacity = 1.0;
                                             gridTrans.y = 0;
@@ -1084,8 +1091,10 @@ Rectangle {
                                     Connections {
                                         target: root
                                         function onSeenKeysChanged() {
-                                            gridItem.lastCheckedKey = "";
-                                            gridItem.checkReveal();
+                                            if (!root.hasInitialLoaded) {
+                                                gridItem.lastCheckedKey = "";
+                                                gridItem.checkReveal();
+                                            }
                                         }
                                     }
 
@@ -1277,7 +1286,7 @@ Rectangle {
                             if (itemKey === lastCheckedKey) return;
                             lastCheckedKey = itemKey;
 
-                            if (root.hasSeen(itemKey)) {
+                            if (root.hasSeen(itemKey) || root.hasInitialLoaded) {
                                 aRevealAnim.stop();
                                 revealOpacity = 1.0;
                                 aTrans.y = 0;
@@ -1295,8 +1304,10 @@ Rectangle {
                         Connections {
                             target: root
                             function onSeenKeysChanged() {
-                                aCard.lastCheckedKey = "";
-                                aCard.checkReveal();
+                                if (!root.hasInitialLoaded) {
+                                    aCard.lastCheckedKey = "";
+                                    aCard.checkReveal();
+                                }
                             }
                         }
 
@@ -1576,7 +1587,7 @@ Rectangle {
                                         if (itemKey === lastCheckedKey) return;
                                         lastCheckedKey = itemKey;
 
-                                        if (root.hasSeen(itemKey)) {
+                                        if (root.hasSeen(itemKey) || root.hasInitialLoaded) {
                                             qpRevealAnim.stop();
                                             opacity = 1.0;
                                             qpTrans.y = 0;
@@ -1594,8 +1605,10 @@ Rectangle {
                                     Connections {
                                         target: root
                                         function onSeenKeysChanged() {
-                                            qpCard.lastCheckedKey = "";
-                                            qpCard.checkReveal();
+                                            if (!root.hasInitialLoaded) {
+                                                qpCard.lastCheckedKey = "";
+                                                qpCard.checkReveal();
+                                            }
                                         }
                                     }
 
@@ -1768,7 +1781,7 @@ Rectangle {
                             if (itemKey === lastCheckedKey) return;
                             lastCheckedKey = itemKey;
 
-                            if (root.hasSeen(itemKey)) {
+                            if (root.hasSeen(itemKey) || root.hasInitialLoaded) {
                                 plRevealAnim.stop();
                                 revealOpacity = 1.0;
                                 plTrans.y = 0;
@@ -1786,8 +1799,10 @@ Rectangle {
                         Connections {
                             target: root
                             function onSeenKeysChanged() {
-                                plCard.lastCheckedKey = "";
-                                plCard.checkReveal();
+                                if (!root.hasInitialLoaded) {
+                                    plCard.lastCheckedKey = "";
+                                    plCard.checkReveal();
+                                }
                             }
                         }
 
