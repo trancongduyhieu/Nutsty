@@ -654,12 +654,22 @@ Rectangle {
 
             readonly property var sectionData: modelData
 
-            // Stable Metric Tokens (Rock-solid 60/144 FPS without layout thrashing)
-            readonly property real cardSquareWidth: 172
-            readonly property real cardSquareHeight: 252
-            readonly property real cardVideoWidth: 250
-            readonly property real cardVideoHeight: 228
-            readonly property real cardGridColWidth: 320
+            // Responsive Metric Engine: Flush-fit 100% width, zero edge gaps ("không thiếu không dư")
+            readonly property real availableWidth: Math.max(300, secDelegate.width - 48)
+
+            // Video Carousel (16:9 Landscape cards - "Nghe lại")
+            readonly property int cardVideoCount: Math.max(2, Math.round((availableWidth + 16) / (250 + 16)))
+            readonly property real cardVideoWidth: (availableWidth - (cardVideoCount - 1) * 16) / cardVideoCount
+            readonly property real cardVideoHeight: Math.round((cardVideoWidth - 8) * 9 / 16) + 78
+
+            // Square Carousel (1:1 Album/Playlist cards)
+            readonly property int cardSquareCount: Math.max(3, Math.round((availableWidth + 16) / (172 + 16)))
+            readonly property real cardSquareWidth: (availableWidth - (cardSquareCount - 1) * 16) / cardSquareCount
+            readonly property real cardSquareHeight: Math.round(cardSquareWidth - 8) + 78
+
+            // Multi-row Track Grid (4 rows per column)
+            readonly property int cardGridColCount: Math.max(1, Math.round((availableWidth + 14) / (320 + 14)))
+            readonly property real cardGridColWidth: (availableWidth - (cardGridColCount - 1) * 14) / cardGridColCount
             readonly property real cardGridColHeight: 240
 
             property var activeFlickable: {
@@ -739,8 +749,9 @@ Rectangle {
                             iconSize: 14
                             canScroll: (secDelegate.activeFlickable && secDelegate.activeFlickable.contentX > 2)
                             onClicked: {
-                                var cardStep = (secDelegate.sectionData && secDelegate.sectionData.type === "video_carousel") ? 266 : ((secDelegate.sectionData && (secDelegate.sectionData.type === "track_grid" || secDelegate.sectionData.type === "fallback_quick_picks")) ? 334 : 188);
-                                var step = secDelegate.activeFlickable ? (Math.max(1, Math.floor(secDelegate.activeFlickable.width / cardStep)) * cardStep) : 564;
+                                var spacing = (secDelegate.sectionData && (secDelegate.sectionData.type === "track_grid" || secDelegate.sectionData.type === "fallback_quick_picks")) ? 14 : 16;
+                                var cardStep = (secDelegate.sectionData && secDelegate.sectionData.type === "video_carousel") ? (secDelegate.cardVideoWidth + spacing) : ((secDelegate.sectionData && (secDelegate.sectionData.type === "track_grid" || secDelegate.sectionData.type === "fallback_quick_picks")) ? (secDelegate.cardGridColWidth + spacing) : (secDelegate.cardSquareWidth + spacing));
+                                var step = secDelegate.activeFlickable ? (Math.max(1, Math.round((secDelegate.activeFlickable.width + spacing) / cardStep)) * cardStep) : 564;
                                 secDelegate.scrollBy(-step);
                             }
                         }
@@ -752,8 +763,9 @@ Rectangle {
                             iconSize: 14
                             canScroll: (secDelegate.activeFlickable && secDelegate.activeFlickable.contentX < (secDelegate.activeFlickable.contentWidth - secDelegate.activeFlickable.width - 10))
                             onClicked: {
-                                var cardStep = (secDelegate.sectionData && secDelegate.sectionData.type === "video_carousel") ? 266 : ((secDelegate.sectionData && (secDelegate.sectionData.type === "track_grid" || secDelegate.sectionData.type === "fallback_quick_picks")) ? 334 : 188);
-                                var step = secDelegate.activeFlickable ? (Math.max(1, Math.floor(secDelegate.activeFlickable.width / cardStep)) * cardStep) : 564;
+                                var spacing = (secDelegate.sectionData && (secDelegate.sectionData.type === "track_grid" || secDelegate.sectionData.type === "fallback_quick_picks")) ? 14 : 16;
+                                var cardStep = (secDelegate.sectionData && secDelegate.sectionData.type === "video_carousel") ? (secDelegate.cardVideoWidth + spacing) : ((secDelegate.sectionData && (secDelegate.sectionData.type === "track_grid" || secDelegate.sectionData.type === "fallback_quick_picks")) ? (secDelegate.cardGridColWidth + spacing) : (secDelegate.cardSquareWidth + spacing));
+                                var step = secDelegate.activeFlickable ? (Math.max(1, Math.round((secDelegate.activeFlickable.width + spacing) / cardStep)) * cardStep) : 564;
                                 secDelegate.scrollBy(step);
                             }
                         }
@@ -766,11 +778,12 @@ Rectangle {
                 ListView {
                     id: videoFlick
                     Layout.fillWidth: true
-                    height: 236
+                    height: secDelegate.cardVideoHeight + 8
                     visible: secDelegate.sectionData && secDelegate.sectionData.type === "video_carousel"
                     orientation: ListView.Horizontal
                     boundsBehavior: Flickable.StopAtBounds
                     flickableDirection: Flickable.HorizontalFlick
+                    snapMode: ListView.SnapToItem
                     pixelAligned: true
                     reuseItems: true
                     cacheBuffer: 160
@@ -792,14 +805,7 @@ Rectangle {
 
                         property real revealOpacity: 1.0
 
-                        // Smart Edge Culling: Hide truncated card at right edge to eliminate awkward cut line
-                        readonly property bool isRightEdgeTruncated: {
-                            if (!videoFlick) return false;
-                            var viewRight = videoFlick.contentX + videoFlick.width;
-                            return (vCard.x < viewRight) && ((vCard.x + vCard.width) > (viewRight + 4));
-                        }
-
-                        opacity: isRightEdgeTruncated ? 0.0 : revealOpacity
+                        opacity: revealOpacity
                         visible: opacity > 0.01
                         Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
@@ -1006,6 +1012,7 @@ Rectangle {
                     orientation: ListView.Horizontal
                     boundsBehavior: Flickable.StopAtBounds
                     flickableDirection: Flickable.HorizontalFlick
+                    snapMode: ListView.SnapToItem
                     pixelAligned: true
                     reuseItems: true
                     cacheBuffer: 160
@@ -1019,16 +1026,7 @@ Rectangle {
                         height: secDelegate.cardGridColHeight
                         readonly property var chunkTracks: modelData
 
-                        // Smart Edge Culling: Hide truncated column at right edge
-                        readonly property bool isRightEdgeTruncated: {
-                            if (!trackGridFlick) return false;
-                            var viewRight = trackGridFlick.contentX + trackGridFlick.width;
-                            return (colWrapper.x < viewRight) && ((colWrapper.x + colWrapper.width) > (viewRight + 4));
-                        }
-
-                        opacity: isRightEdgeTruncated ? 0.0 : 1.0
-                        visible: opacity > 0.01
-                        Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                        opacity: 1.0
 
                         Column {
                             anchors.fill: parent
@@ -1233,11 +1231,12 @@ Rectangle {
                 ListView {
                     id: albumFlick
                     Layout.fillWidth: true
-                    height: 260
+                    height: secDelegate.cardSquareHeight + 8
                     visible: secDelegate.sectionData && (secDelegate.sectionData.type === "album_carousel" || secDelegate.sectionData.type === "card_carousel")
                     orientation: ListView.Horizontal
                     boundsBehavior: Flickable.StopAtBounds
                     flickableDirection: Flickable.HorizontalFlick
+                    snapMode: ListView.SnapToItem
                     pixelAligned: true
                     reuseItems: true
                     cacheBuffer: 160
@@ -1259,14 +1258,7 @@ Rectangle {
 
                         property real revealOpacity: 1.0
 
-                        // Smart Edge Culling: Hide truncated card at right edge to eliminate awkward cut line
-                        readonly property bool isRightEdgeTruncated: {
-                            if (!albumFlick) return false;
-                            var viewRight = albumFlick.contentX + albumFlick.width;
-                            return (aCard.x < viewRight) && ((aCard.x + aCard.width) > (viewRight + 4));
-                        }
-
-                        opacity: isRightEdgeTruncated ? 0.0 : revealOpacity
+                        opacity: revealOpacity
                         visible: opacity > 0.01
                         Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
@@ -1530,6 +1522,7 @@ Rectangle {
                     orientation: ListView.Horizontal
                     boundsBehavior: Flickable.StopAtBounds
                     flickableDirection: Flickable.HorizontalFlick
+                    snapMode: ListView.SnapToItem
                     pixelAligned: true
                     reuseItems: true
                     cacheBuffer: 160
@@ -1543,16 +1536,7 @@ Rectangle {
                         height: secDelegate.cardGridColHeight
                         readonly property var chunkTracks: modelData
 
-                        // Smart Edge Culling: Hide truncated column at right edge
-                        readonly property bool isRightEdgeTruncated: {
-                            if (!fallbackQuickPicksFlick) return false;
-                            var viewRight = fallbackQuickPicksFlick.contentX + fallbackQuickPicksFlick.width;
-                            return (qpColWrapper.x < viewRight) && ((qpColWrapper.x + qpColWrapper.width) > (viewRight + 4));
-                        }
-
-                        opacity: isRightEdgeTruncated ? 0.0 : 1.0
-                        visible: opacity > 0.01
-                        Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                        opacity: 1.0
 
                         Column {
                             anchors.fill: parent
@@ -1738,11 +1722,12 @@ Rectangle {
                 ListView {
                     id: fallbackPlaylistFlick
                     Layout.fillWidth: true
-                    height: 255
+                    height: secDelegate.cardSquareHeight + 8
                     visible: secDelegate.sectionData && secDelegate.sectionData.type === "fallback_playlists"
                     orientation: ListView.Horizontal
                     boundsBehavior: Flickable.StopAtBounds
                     flickableDirection: Flickable.HorizontalFlick
+                    snapMode: ListView.SnapToItem
                     pixelAligned: true
                     reuseItems: true
                     cacheBuffer: 160
@@ -1764,14 +1749,7 @@ Rectangle {
 
                         property real revealOpacity: 1.0
 
-                        // Smart Edge Culling: Hide truncated card at right edge to eliminate awkward cut line
-                        readonly property bool isRightEdgeTruncated: {
-                            if (!fallbackPlaylistFlick) return false;
-                            var viewRight = fallbackPlaylistFlick.contentX + fallbackPlaylistFlick.width;
-                            return (plCard.x < viewRight) && ((plCard.x + plCard.width) > (viewRight + 4));
-                        }
-
-                        opacity: isRightEdgeTruncated ? 0.0 : revealOpacity
+                        opacity: revealOpacity
                         visible: opacity > 0.01
                         Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 

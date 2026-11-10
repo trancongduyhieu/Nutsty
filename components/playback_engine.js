@@ -186,13 +186,6 @@ function playOnlineTrack(win, trk, startRadio, radioProc, prewarmTimer, pollTime
     var localMatch = win.findLocalDownloadedTrack(trk);
     var hasLocalFile = Boolean(localMatch && localMatch.path);
 
-    if (hasLocalFile && localMatch && localMatch.path) {
-        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "play", localMatch.path]);
-    } else if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.stopImmediate) {
-        __NutstyBridge.stopImmediate();
-    } else {
-        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "stop"]);
-    }
     win.trackChangeTimestamp = Date.now();
     win.postLoadGraceTimestamp = Date.now();
     win.currentTrack = trk;
@@ -295,13 +288,6 @@ function playTrack(win, trk, pollTimer) {
     win.playEpoch = Math.max(Date.now(), (win.playEpoch || 0) + 1);
     var currentEpoch = win.playEpoch;
 
-    if (trk.path && !trk.path.startsWith("ytdl://") && !trk.path.startsWith("http://") && !trk.path.startsWith("https://")) {
-        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "play", trk.path]);
-    } else if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.stopImmediate) {
-        __NutstyBridge.stopImmediate();
-    } else {
-        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "stop"]);
-    }
     win.trackChangeTimestamp = Date.now();
     win.postLoadGraceTimestamp = Date.now();
     win.currentTrack = trk;
@@ -400,10 +386,10 @@ function togglePlay(win, pollTimer) {
 
 function triggerRapidTrackSwitch(win, targetTrack) {
     if (!targetTrack) return;
-    if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.stopImmediate) {
-        __NutstyBridge.stopImmediate();
+    if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.pauseImmediate) {
+        __NutstyBridge.pauseImmediate();
     } else {
-        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "stop"]);
+        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
     }
     win.currentTrack = targetTrack;
     win.currentTime = 0.0;
@@ -850,7 +836,10 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
                     if (!s.is_paused && (s.filename || seekGrace || win.isPlaying)) {
                         // Maintain playing intent while buffering
                     } else if (!s.filename && !s.path) {
-                        win.isPlaying = false;
+                        var switchElapsed = Date.now() - (win.trackChangeTimestamp || 0);
+                        if (switchElapsed > 6000 && !win.isLoadingAudio) {
+                            win.isPlaying = false;
+                        }
                     }
                 }
             }
@@ -975,8 +964,8 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
 
         // Auto-advance / Repeat khi het bai
         var seekGraceAdv = Date.now() - (win.lastSeekTimestamp || 0) < 2500;
-        var isNearEnd = !seekGraceAdv && win.totalDuration > 3 && win.currentTime >= (win.totalDuration - 0.6);
-        var isEofStopped = !seekGraceAdv && (!s.is_playing && !s.is_paused && win.totalDuration > 3 && win.currentTime >= (win.totalDuration - 2.5));
+        var isNearEnd = !seekGraceAdv && win.totalDuration > 3 && win.currentTime >= (win.totalDuration - 1.0);
+        var isEofStopped = !seekGraceAdv && (!s.is_playing && !s.is_paused && win.totalDuration > 3 && win.currentTime >= (win.totalDuration - 4.0));
         if (!win.isLoadingAudio && (win.isPlaying || isEofStopped) && (isNearEnd || isEofStopped)) {
             if (win.isSleepTimerActive && win.sleepTimerMode === "end_of_track") {
                 win.isSleepTimerActive = false;
