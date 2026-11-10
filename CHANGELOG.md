@@ -2,6 +2,12 @@
 
 Tất cả các tính năng mới và cải tiến của Nutsty được lưu trữ tại đây.
 
+## [1.0.8] - 2026-11-10
+
+### Added
+- **Đảo thể loại thông minh tại trung tâm thanh điều hướng (Dynamic Mood Island)**: Toàn bộ 11 thể loại cảm xúc được tích hợp tinh tế vào chính giữa thanh công cụ trên cùng. Ở trạng thái nghỉ, toàn bộ thể loại được thu gọn thành một viên ngọc nhỏ nhắn `[ Tất cả ]` ngay tại tâm màn hình. Khi nhấp chuột, thanh dock kính mờ nhẹ nhàng bung mở hiển thị trọn vẹn 11 thể loại cảm xúc kèm viên ngọc lướt êm ái theo thể loại được chọn, và tự động thu gọn lại sau 4.5 giây hoặc ngay khi chọn xong thể loại, giải phóng không gian trang chủ luôn rộng mở và thanh thoát.
+- **Khôi phục hoạt ảnh gợn sóng nhịp nhàng cho bài hát (Mochy Ripple Wave Animation)**: Khôi phục trọn vẹn hiệu ứng gợn sóng xếp tầng khi tải trang chủ hoặc đổi thể loại cảm xúc. Từng thẻ bài hát lướt nhẹ từ dưới lên với độ trễ 35 mili-giây nhịp nhàng tạo chiều sâu thị giác sống động và nghệ thuật. Hiệu ứng chỉ xuất hiện một lần duy nhất khi nạp mới hoặc đổi thể loại, khi cuộn trang xem lại các bài hát đã tải sẽ hoàn toàn cố định và mượt mà.
+
 ## [1.0.7] - 2026-11-10
 
 ### Added

@@ -290,9 +290,9 @@ Scope {
     property bool toastVisible: false
     property string localApiUrl: "http://127.0.0.1:17890"
     property string notesApiUrl: Quickshell.env("NUTSTY_WORKER_URL") || "http://127.0.0.1:17890"
-    property string appVersion: "1.0.7"
-    property string latestVersion: "1.0.7"
-    property string lastSeenVersion: "1.0.7"
+    property string appVersion: "1.0.8"
+    property string latestVersion: "1.0.8"
+    property string lastSeenVersion: "1.0.8"
     property bool hasAppUpdate: false
     property bool isCheckingUpdate: false
     property string updateUrl: ""
@@ -2049,6 +2049,9 @@ Scope {
                 Layout.fillWidth: true
                 currentTab: win.currentTab
                 currentView: win.currentView
+                moods: win.homeMoods
+                selectedMood: win.selectedMood
+                onMoodSelected: (title, params) => win.selectMood(title, params)
                 isSidebarVisible: win.showSidebar
                 isMaximized: Boolean(win.visibility === 4 || win.maximized)
                 accentColor: win.accentColor
@@ -4604,8 +4607,8 @@ Scope {
             console.log("[MochyPanel] Style set to:", win.mochyPanelStyle);
         }
         function toggleMoodIsland() {
-            if (typeof homeView !== "undefined" && homeView) {
-                homeView.toggleMoodIsland();
+            if (typeof topHeader !== "undefined" && topHeader) {
+                topHeader.isMoodIslandExpanded = !topHeader.isMoodIslandExpanded;
             }
         }
         function togglePlayerBar() { bottomPlayer.barClicked(); }

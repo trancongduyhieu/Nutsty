@@ -28,7 +28,6 @@ Rectangle {
 
     property var friendsNotes: []
     property var myLatestNote: null
-    property bool isMoodIslandExpanded: false
 
     readonly property var activeMoodList: (root.moods && root.moods.length > 0) ? root.moods : [
         { "title": "All", "params": "" },
@@ -70,15 +69,12 @@ Rectangle {
         }
     }
     onSectionsChanged: {
-        root.clearSeen();
         checkRevealTrigger();
     }
     onQuickPicksChanged: {
-        root.clearSeen();
         checkRevealTrigger();
     }
     onFeaturedPlaylistsChanged: {
-        root.clearSeen();
         checkRevealTrigger();
     }
 
@@ -156,11 +152,6 @@ Rectangle {
 
     function formatMoodTitle(title) {
         return I18n.formatMoodChipTitle(title);
-    }
-
-    function toggleMoodIsland() {
-        root.isMoodIslandExpanded = !root.isMoodIslandExpanded;
-        console.log("[DynamicMoodIsland] toggleMoodIsland: isExpanded =", root.isMoodIslandExpanded);
     }
 
     function formatSectionTitle(title) {
@@ -278,335 +269,7 @@ Rectangle {
                 anchors.rightMargin: 24
                 spacing: 16
 
-                // 1. Dynamic Island Mood Dock: Positioned under top navigation icons and above Greeting
-                Item {
-                    id: moodDockContainer
-                    Layout.fillWidth: true
-                    height: 38
-                    z: 20
-
-                    // Ambient drop shadow for the Dynamic Island
-                    Rectangle {
-                        anchors.horizontalCenter: dynamicMoodIsland.horizontalCenter
-                        anchors.verticalCenter: dynamicMoodIsland.verticalCenter
-                        anchors.verticalCenterOffset: 2
-                        width: dynamicMoodIsland.width
-                        height: dynamicMoodIsland.height
-                        radius: dynamicMoodIsland.radius
-                        color: "#55000000"
-                        visible: dynamicMoodIsland.width > 0
-                        z: 1
-                        Behavior on width {
-                            NumberAnimation {
-                                duration: 320
-                                easing.type: Easing.BezierSpline
-                                easing.bezierCurve: [0.08, 0.72, 0.15, 1.0]
-                            }
-                        }
-                    }
-
-                    // Main Dynamic Island Morphing Capsule
-                    Rectangle {
-                        id: dynamicMoodIsland
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.verticalCenter: parent.verticalCenter
-                        height: 34
-                        radius: 17
-                        z: 2
-                        clip: true
-                        readonly property bool isExpanded: root.isMoodIslandExpanded
-                        readonly property real compactWidth: compactTxt.implicitWidth + 28
-                        readonly property real expandedTargetWidth: Math.min(moodDockContainer.width, moodRow.width + 24)
-                        width: isExpanded ? expandedTargetWidth : compactWidth
-
-                        Behavior on width {
-                            NumberAnimation {
-                                duration: 320
-                                easing.type: Easing.BezierSpline
-                                easing.bezierCurve: [0.08, 0.72, 0.15, 1.0]
-                            }
-                        }
-
-                        // Background & Border Morph: Vibrant Accent Pill when idle, Refined Dark Glass Dock when expanded
-                        color: isExpanded 
-                            ? Qt.rgba(0.08, 0.08, 0.10, 0.82) 
-                            : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.95)
-                        border.width: 1
-                        border.color: isExpanded 
-                            ? Qt.rgba(1.0, 1.0, 1.0, 0.14) 
-                            : Qt.rgba(root.accentColor.r * 1.15, root.accentColor.g * 1.15, root.accentColor.b * 1.15, 0.95)
-
-                        Behavior on color { ColorAnimation { duration: 240 } }
-                        Behavior on border.color { ColorAnimation { duration: 240 } }
-
-                        // Micro-interaction scale affordance when hovering over collapsed island
-                        scale: (!isExpanded && compactMouse.containsMouse) ? 1.05 : 1.0
-                        Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutQuad } }
-
-                        // Inner Specular Rim (Tension highlight)
-                        Rectangle {
-                            anchors.fill: parent
-                            anchors.margins: 1
-                            radius: 16
-                            color: "transparent"
-                            border.color: Qt.rgba(1.0, 1.0, 1.0, dynamicMoodIsland.isExpanded ? 0.08 : (homeMoodFlickable.accentLuminance > 0.55 ? 0.35 : 0.22))
-                            border.width: 1
-                            Behavior on border.color { ColorAnimation { duration: 200 } }
-                        }
-
-                        // -------------------------------------------------------------
-                        // Layer 1: Compact View (Single Active Mood Pill in Center)
-                        // -------------------------------------------------------------
-                        Text {
-                            id: compactTxt
-                            anchors.centerIn: parent
-                            text: root.formatMoodTitle(root.selectedMood)
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: homeMoodFlickable.accentLuminance > 0.55 ? "#0f0f11" : "#ffffff"
-                            visible: opacity > 0.01
-                            opacity: dynamicMoodIsland.isExpanded ? 0.0 : 1.0
-                            Behavior on opacity { NumberAnimation { duration: 160 } }
-                        }
-
-                        MouseArea {
-                            id: compactMouse
-                            anchors.fill: parent
-                            enabled: !dynamicMoodIsland.isExpanded
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                root.isMoodIslandExpanded = true;
-                                autoCollapseTimer.restart();
-                            }
-                        }
-
-                        // -------------------------------------------------------------
-                        // Layer 2: Expanded View (Full Moods Palette with Liquid Tint Glass)
-                        // -------------------------------------------------------------
-                        Flickable {
-                            id: homeMoodFlickable
-                            anchors.fill: parent
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 8
-                            contentWidth: moodRow.width + 8
-                            contentHeight: height
-                            boundsBehavior: Flickable.StopAtBounds
-                            flickableDirection: Flickable.HorizontalFlick
-                            pixelAligned: true
-                            clip: true
-                            interactive: contentWidth > width
-                            visible: opacity > 0.01
-                            opacity: dynamicMoodIsland.isExpanded ? 1.0 : 0.0
-                            Behavior on opacity { NumberAnimation { duration: 200 } }
-
-                            readonly property real accentLuminance: (0.299 * root.accentColor.r + 0.587 * root.accentColor.g + 0.114 * root.accentColor.b)
-
-                            // Sliding Keo 502 Glossy Gel Capsule
-                            Rectangle {
-                                id: activeMoodIndicator
-                                height: 26
-                                radius: 13
-                                y: (homeMoodFlickable.height - height) / 2
-                                z: 2
-                                color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.95)
-                                border.color: Qt.rgba(1.0, 1.0, 1.0, 0.45)
-                                border.width: 1
-                                visible: width > 0
-
-                                Rectangle {
-                                    anchors.fill: parent
-                                    anchors.margins: 1
-                                    radius: 12
-                                    color: "transparent"
-                                    border.color: Qt.rgba(1.0, 1.0, 1.0, homeMoodFlickable.accentLuminance > 0.55 ? 0.35 : 0.25)
-                                    border.width: 1
-                                }
-
-                                Behavior on x { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-                                Behavior on width { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-                            }
-
-                            Row {
-                                id: moodRow
-                                spacing: (moodDockContainer.width < 820) ? 5 : 7
-                                anchors.verticalCenter: parent.verticalCenter
-                                x: Math.max(4, (homeMoodFlickable.width - width) / 2)
-                                z: 5
-                                onWidthChanged: Qt.callLater(homeMoodFlickable.updateActiveIndicator)
-
-                                Repeater {
-                                    id: moodRepeater
-                                    model: root.activeMoodList
-
-                                    delegate: Item {
-                                        id: pillItem
-                                        height: 26
-                                        width: pillTxt.implicitWidth + 14
-                                        readonly property bool isSelected: root.selectedMood === modelData.title
-                                        readonly property bool isHovered: pillMouse.containsMouse
-
-                                        onXChanged: {
-                                            if (isSelected) activeMoodIndicator.x = pillItem.x;
-                                        }
-                                        onWidthChanged: {
-                                            if (isSelected) activeMoodIndicator.width = pillItem.width;
-                                        }
-                                        onIsSelectedChanged: {
-                                            if (isSelected) {
-                                                activeMoodIndicator.x = pillItem.x;
-                                                activeMoodIndicator.width = pillItem.width;
-                                            }
-                                        }
-
-                                        // Refined Dark Glass Pill Frame (Matching reference image)
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            radius: 13
-                                            color: pillItem.isHovered 
-                                                ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20) 
-                                                : Qt.rgba(0.16, 0.16, 0.19, 0.85)
-                                            border.width: 1
-                                            border.color: pillItem.isHovered 
-                                                ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45) 
-                                                : Qt.rgba(1.0, 1.0, 1.0, 0.08)
-                                            opacity: pillItem.isSelected ? 0.0 : 1.0
-                                            scale: (pillItem.isHovered && !pillItem.isSelected) ? 1.04 : 1.0
-
-                                            Behavior on opacity { NumberAnimation { duration: 150 } }
-                                            Behavior on color { ColorAnimation { duration: 150 } }
-                                            Behavior on border.color { ColorAnimation { duration: 150 } }
-                                            Behavior on scale { NumberAnimation { duration: 120 } }
-                                        }
-
-                                        Text {
-                                            id: pillTxt
-                                            anchors.centerIn: parent
-                                            text: root.formatMoodTitle(modelData.title)
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: 11
-                                            font.weight: pillItem.isSelected ? Font.Bold : Font.DemiBold
-                                            color: pillItem.isSelected 
-                                                   ? (homeMoodFlickable.accentLuminance > 0.55 ? "#0f0f11" : "#ffffff") 
-                                                   : (pillItem.isHovered ? "#ffffff" : Qt.rgba(0.92, 0.92, 0.94, 0.90))
-                                            Behavior on color { ColorAnimation { duration: 120 } }
-                                        }
-
-                                        MouseArea {
-                                            id: pillMouse
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: {
-                                                root.selectedMood = modelData.title;
-                                                root.moodSelected(modelData.title, modelData.params || "");
-                                                root.isMoodIslandExpanded = false;
-                                            }
-                                            onPositionChanged: autoCollapseTimer.restart()
-                                        }
-                                    }
-                                }
-                            }
-
-                            function updateActiveIndicator() {
-                                for (var i = 0; i < moodRepeater.count; ++i) {
-                                    var itm = moodRepeater.itemAt(i);
-                                    if (itm && itm.isSelected) {
-                                        activeMoodIndicator.x = itm.x;
-                                        activeMoodIndicator.width = itm.width;
-                                        return;
-                                    }
-                                }
-                            }
-
-                            Component.onCompleted: Qt.callLater(updateActiveIndicator)
-                        }
-
-                        // Optical Edge Fade Overlays (Smooth transition at scroll edges)
-                        Rectangle {
-                            anchors.left: parent.left
-                            anchors.top: parent.top
-                            anchors.bottom: parent.bottom
-                            width: 28
-                            z: 10
-                            visible: dynamicMoodIsland.isExpanded && homeMoodFlickable.contentWidth > homeMoodFlickable.width && homeMoodFlickable.contentX > 4
-                            gradient: Gradient {
-                                orientation: Gradient.Horizontal
-                                GradientStop { position: 0.0; color: dynamicMoodIsland.color }
-                                GradientStop { position: 1.0; color: "transparent" }
-                            }
-                        }
-
-                        Rectangle {
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            anchors.bottom: parent.bottom
-                            width: 28
-                            z: 10
-                            visible: dynamicMoodIsland.isExpanded && homeMoodFlickable.contentWidth > homeMoodFlickable.width && (homeMoodFlickable.contentX < homeMoodFlickable.contentWidth - homeMoodFlickable.width - 4)
-                            gradient: Gradient {
-                                orientation: Gradient.Horizontal
-                                GradientStop { position: 0.0; color: "transparent" }
-                                GradientStop { position: 1.0; color: dynamicMoodIsland.color }
-                            }
-                        }
-
-                        // Smart Auto-Collapse Timer: 4500ms idle timer
-                        Timer {
-                            id: autoCollapseTimer
-                            interval: 4500
-                            repeat: false
-                            running: false
-                            onTriggered: {
-                                if (root.isMoodIslandExpanded) {
-                                    root.isMoodIslandExpanded = false;
-                                }
-                            }
-                        }
-
-                        Connections {
-                            target: root
-                            function onIsMoodIslandExpandedChanged() {
-                                if (root.isMoodIslandExpanded) {
-                                    autoCollapseTimer.restart();
-                                    homeMoodFlickable.updateActiveIndicator();
-                                } else {
-                                    autoCollapseTimer.stop();
-                                }
-                            }
-                        }
-                    }
-
-                    Connections {
-                        target: root
-                        function onSelectedMoodChanged() {
-                            homeMoodFlickable.updateActiveIndicator();
-                        }
-                        function onMoodsChanged() {
-                            Qt.callLater(homeMoodFlickable.updateActiveIndicator);
-                        }
-                    }
-
-                    Connections {
-                        target: I18n
-                        function onLocaleChanged() {
-                            Qt.callLater(homeMoodFlickable.updateActiveIndicator);
-                        }
-                    }
-
-                    // Auto-collapse when user scrolls the feed
-                    Connections {
-                        target: feedListView
-                        function onContentYChanged() {
-                            if (root.isMoodIslandExpanded) {
-                                root.isMoodIslandExpanded = false;
-                            }
-                        }
-                    }
-                }
-
-                // 2. Greeting Text
+                // 1. Greeting Text
                 Text {
                     text: root.getGreeting()
                     font.family: Theme.fontFamily
@@ -829,7 +492,7 @@ Rectangle {
                             if (itemKey === lastCheckedKey) return;
                             lastCheckedKey = itemKey;
 
-                            if (root.hasSeen(itemKey) || root.hasInitialLoaded) {
+                            if (root.hasSeen(itemKey)) {
                                 vRevealAnim.stop();
                                 revealOpacity = 1.0;
                                 vTrans.y = 0;
@@ -847,10 +510,8 @@ Rectangle {
                         Connections {
                             target: root
                             function onSeenKeysChanged() {
-                                if (!root.hasInitialLoaded) {
-                                    vCard.lastCheckedKey = "";
-                                    vCard.checkReveal();
-                                }
+                                vCard.lastCheckedKey = "";
+                                vCard.checkReveal();
                             }
                         }
 
@@ -1073,7 +734,7 @@ Rectangle {
                                         if (itemKey === lastCheckedKey) return;
                                         lastCheckedKey = itemKey;
 
-                                        if (root.hasSeen(itemKey) || root.hasInitialLoaded) {
+                                        if (root.hasSeen(itemKey)) {
                                             gridRevealAnim.stop();
                                             opacity = 1.0;
                                             gridTrans.y = 0;
@@ -1091,10 +752,8 @@ Rectangle {
                                     Connections {
                                         target: root
                                         function onSeenKeysChanged() {
-                                            if (!root.hasInitialLoaded) {
-                                                gridItem.lastCheckedKey = "";
-                                                gridItem.checkReveal();
-                                            }
+                                            gridItem.lastCheckedKey = "";
+                                            gridItem.checkReveal();
                                         }
                                     }
 
@@ -1286,7 +945,7 @@ Rectangle {
                             if (itemKey === lastCheckedKey) return;
                             lastCheckedKey = itemKey;
 
-                            if (root.hasSeen(itemKey) || root.hasInitialLoaded) {
+                            if (root.hasSeen(itemKey)) {
                                 aRevealAnim.stop();
                                 revealOpacity = 1.0;
                                 aTrans.y = 0;
@@ -1304,10 +963,8 @@ Rectangle {
                         Connections {
                             target: root
                             function onSeenKeysChanged() {
-                                if (!root.hasInitialLoaded) {
-                                    aCard.lastCheckedKey = "";
-                                    aCard.checkReveal();
-                                }
+                                aCard.lastCheckedKey = "";
+                                aCard.checkReveal();
                             }
                         }
 
@@ -1587,7 +1244,7 @@ Rectangle {
                                         if (itemKey === lastCheckedKey) return;
                                         lastCheckedKey = itemKey;
 
-                                        if (root.hasSeen(itemKey) || root.hasInitialLoaded) {
+                                        if (root.hasSeen(itemKey)) {
                                             qpRevealAnim.stop();
                                             opacity = 1.0;
                                             qpTrans.y = 0;
@@ -1605,10 +1262,8 @@ Rectangle {
                                     Connections {
                                         target: root
                                         function onSeenKeysChanged() {
-                                            if (!root.hasInitialLoaded) {
-                                                qpCard.lastCheckedKey = "";
-                                                qpCard.checkReveal();
-                                            }
+                                            qpCard.lastCheckedKey = "";
+                                            qpCard.checkReveal();
                                         }
                                     }
 
@@ -1781,7 +1436,7 @@ Rectangle {
                             if (itemKey === lastCheckedKey) return;
                             lastCheckedKey = itemKey;
 
-                            if (root.hasSeen(itemKey) || root.hasInitialLoaded) {
+                            if (root.hasSeen(itemKey)) {
                                 plRevealAnim.stop();
                                 revealOpacity = 1.0;
                                 plTrans.y = 0;
@@ -1799,10 +1454,8 @@ Rectangle {
                         Connections {
                             target: root
                             function onSeenKeysChanged() {
-                                if (!root.hasInitialLoaded) {
-                                    plCard.lastCheckedKey = "";
-                                    plCard.checkReveal();
-                                }
+                                plCard.lastCheckedKey = "";
+                                plCard.checkReveal();
                             }
                         }
 

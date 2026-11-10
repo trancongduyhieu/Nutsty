@@ -22,7 +22,7 @@ Item {
     property bool closingGuard: false
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
     property Item backgroundSourceItem: null
-    property string versionString: (typeof win !== "undefined" && win.appVersion) ? win.appVersion : "1.0.7"
+    property string versionString: (typeof win !== "undefined" && win.appVersion) ? win.appVersion : "1.0.8"
     property string customReleaseNotes: ""
     property var changelogItems: []
 
