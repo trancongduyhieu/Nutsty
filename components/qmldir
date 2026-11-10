@@ -35,6 +35,7 @@ MediaCoverSurface 1.0 MediaCoverSurface.qml
 ManageFriendsModal 1.0 ManageFriendsModal.qml
 MarqueeText 1.0 MarqueeText.qml
 MinimalistLyricsView 1.0 MinimalistLyricsView.qml
+MochySidePanel 1.0 MochySidePanel.qml
 NavArrowButton 1.0 NavArrowButton.qml
 NavSidebar 1.0 NavSidebar.qml
 ParticleBackground 1.0 ParticleBackground.qml

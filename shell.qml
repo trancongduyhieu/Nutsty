@@ -1724,6 +1724,21 @@ Scope {
     property bool isRepeat: false
     property bool isNowPlayingOpen: false
     property alias showAmberolDetails: win.isNowPlayingOpen
+    property bool isMochySidePanelOpen: false
+    property int mochyPanelStyle: 2 // 1: Flush Split-Rail, 2: Bento Glass Island (User Choice)
+    onIsNowPlayingOpenChanged: {
+        if (win.isNowPlayingOpen) {
+            win.isMochySidePanelOpen = false;
+        }
+        if (typeof bottomPlayer !== "undefined" && bottomPlayer) {
+            bottomPlayer.triggerBackdropUpdate();
+        }
+    }
+    onIsMochySidePanelOpenChanged: {
+        if (typeof bottomPlayer !== "undefined" && bottomPlayer) {
+            bottomPlayer.triggerBackdropUpdate();
+        }
+    }
     property real widgetX: 60
     property real widgetY: 820
 
@@ -1739,6 +1754,19 @@ Scope {
         sequences: ["F11", "Shift+F11"]
         context: Qt.ApplicationShortcut
         onActivated: win.maximized = !win.maximized
+    }
+
+    Shortcut {
+        sequence: "Escape"
+        context: Qt.ApplicationShortcut
+        enabled: win.isMochySidePanelOpen || win.isNowPlayingOpen
+        onActivated: {
+            if (win.isMochySidePanelOpen) {
+                win.isMochySidePanelOpen = false;
+            } else if (win.isNowPlayingOpen) {
+                win.isNowPlayingOpen = false;
+            }
+        }
     }
 
     Shortcut {
@@ -2204,13 +2232,19 @@ Scope {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.leftMargin: 8
-                Layout.rightMargin: 8
+                Layout.rightMargin: (win.isMochySidePanelOpen && win.mochyPanelStyle === 1) ? 0 : 8
                 clip: true
 
                 // 1. Browsing Area (Home Feed, Local Library/Downloads, or Artist Page)
                 Item {
                     id: browsingContainer
-                    anchors.fill: parent
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    width: (win.isMochySidePanelOpen && !win.isNowPlayingOpen)
+                        ? (parent.width - mochySidePanel.width - (win.mochyPanelStyle === 1 ? 0 : 16))
+                        : parent.width
+                    Behavior on width { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
                     visible: opacity > 0.01
                     opacity: win.isNowPlayingOpen ? 0.0 : 1.0
                     enabled: !win.isNowPlayingOpen
@@ -2324,9 +2358,6 @@ Scope {
                                 } else {
                                     win.playTrack(trk);
                                 }
-                                if (win.currentView !== "library") {
-                                    win.isNowPlayingOpen = true;
-                                }
                             }
                             onTrackDetailsRequested: trk => {
                                 win.currentTrack = trk;
@@ -2392,12 +2423,10 @@ Scope {
                                         win.playTrack(trk);
                                     }
                                 }
-                                win.isNowPlayingOpen = true;
                             }
                             onStartRadioRequested: item => {
                                 if (item && item.id) {
                                     win.startRadioFromTrack(item);
-                                    win.isNowPlayingOpen = true;
                                 }
                             }
                             onShuffleArtistRequested: artistObj => {
@@ -2518,7 +2547,6 @@ Scope {
                                         win.playTrack(trk);
                                     }
                                 }
-                                win.isNowPlayingOpen = true;
                             }
                             onRemoveTrackRequested: (plId, trk) => win.removeTrackFromCustomPlaylist(plId, trk)
                             onAddTracksRequested: pl => playlistTrackSearchModal.openModal(pl)
@@ -2528,7 +2556,49 @@ Scope {
                     }
                 }
 
-                // 2. YouTube Music Split-Screen Now Playing View (Full-Width Experience)
+                // 2. Mochy Signature Side Panel (Poster & Expressive Typography)
+                MochySidePanel {
+                    id: mochySidePanel
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    anchors.right: parent.right
+                    anchors.topMargin: win.mochyPanelStyle === 1 ? 0 : 8
+                    anchors.bottomMargin: win.mochyPanelStyle === 1 ? 0 : 16
+                    anchors.rightMargin: win.mochyPanelStyle === 1 ? 0 : 8
+                    panelStyle: win.mochyPanelStyle
+                    width: Math.max(380, Math.min(460, Math.round(parent.width * 0.34)))
+                    visible: opacity > 0.01 && !win.isNowPlayingOpen
+                    opacity: (win.isMochySidePanelOpen && !win.isNowPlayingOpen) ? 1.0 : 0.0
+                    enabled: win.isMochySidePanelOpen && !win.isNowPlayingOpen
+                    Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+                    z: 10
+
+                    isEffectivelyActive: win.isWindowEffectivelyActive && win.isMochySidePanelOpen && !win.isNowPlayingOpen
+
+                    currentTrack: win.currentTrack
+                    currentTime: win.currentTime
+                    totalDuration: win.totalDuration
+                    isPlaying: win.isPlaying
+                    accentColor: win.accentColor
+                    activeLyrics: win.activeLyrics
+                    resolvedSquareImage: win.currentResolvedCover
+                    backgroundSourceItem: masterBackdropStack
+
+                    isLiked: win.isCurrentTrackLiked
+
+                    onCloseRequested: win.isMochySidePanelOpen = false
+                    onOpenDetailsRequested: {
+                        win.isMochySidePanelOpen = false;
+                        win.isNowPlayingOpen = true;
+                    }
+                    onSeekRequested: sec => win.seekAudio(sec)
+                    onPlayPauseRequested: win.togglePlay()
+                    onNextRequested: win.playNext()
+                    onPreviousRequested: win.playPrev()
+                    onToggleLikeRequested: win.toggleLikeCurrentTrack()
+                }
+
+                // 3. YouTube Music Split-Screen Now Playing View (Full-Width Experience)
                 YTMusicNowPlayingView {
                     id: ytNowPlayingView
                     objectName: "ytMusicNowPlayingView"
@@ -2596,8 +2666,16 @@ Scope {
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 16
             anchors.horizontalCenter: parent.horizontalCenter
-            width: Math.min(win.isCoListeningActive ? 850 : 790, parent.width - 32)
-            Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
+            readonly property real targetCenterOffset: (win.isMochySidePanelOpen && !win.isNowPlayingOpen)
+                ? -Math.round((mochySidePanel.width + (win.mochyPanelStyle === 1 ? 0 : 16)) / 2)
+                : 0
+            anchors.horizontalCenterOffset: targetCenterOffset
+            Behavior on anchors.horizontalCenterOffset { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+            readonly property real targetMaxAvailableWidth: (win.isMochySidePanelOpen && !win.isNowPlayingOpen)
+                ? (parent.width - mochySidePanel.width - (win.mochyPanelStyle === 1 ? 0 : 16) - 40)
+                : (parent.width - 32)
+            width: Math.min(win.isCoListeningActive ? 850 : 790, targetMaxAvailableWidth)
+            Behavior on width { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
             height: 60
             z: 50
             backgroundSourceItem: masterAppSurface
@@ -2613,7 +2691,7 @@ Scope {
             volume: win.volume
             isShuffle: win.isShuffle
             isRepeat: win.isRepeat
-            isLyricsActive: win.isNowPlayingOpen
+            isLyricsActive: win.isNowPlayingOpen || win.isMochySidePanelOpen
             isNowPlayingOpen: win.isNowPlayingOpen
             isQueueActive: false
             isSleepTimerActive: win.isSleepTimerActive
@@ -2622,17 +2700,27 @@ Scope {
             listeningAlongFriend: win.listeningAlongFriend
             activeCoListenersDetails: win.activeCoListenersDetails
 
+            property real lastBarClickTime: 0
+            onBarClicked: {
+                var now = Date.now();
+                if (now - lastBarClickTime < 220) return;
+                lastBarClickTime = now;
+                if (win.isNowPlayingOpen) win.isNowPlayingOpen = false;
+                win.isMochySidePanelOpen = !win.isMochySidePanelOpen;
+            }
             onToggleLikeClicked: win.toggleLikeCurrentTrack()
             onPlayPauseClicked: win.togglePlay()
             onNextClicked: win.playNext()
             onPrevClicked: win.playPrev()
             onOpenDetailsRequested: {
+                win.isMochySidePanelOpen = false;
                 win.isNowPlayingOpen = true;
                 if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) {
                     ytNowPlayingView.activeTab = "lyrics";
                 }
             }
             onQueueClicked: {
+                win.isMochySidePanelOpen = false;
                 win.isNowPlayingOpen = true;
                 if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) {
                     ytNowPlayingView.activeTab = "up_next";
@@ -2652,6 +2740,7 @@ Scope {
             onSeekRequested: sec => win.seekAudio(sec)
             onReqVolumeChange: vol => win.setVolume(vol)
             onCloseClicked: {
+                win.isMochySidePanelOpen = false;
                 win.isPlaying = false;
                 win.currentTrack = null;
                 win.currentTime = 0.0;
@@ -4262,7 +4351,6 @@ Scope {
                 win.playTrack(first);
             }
         }
-        win.isNowPlayingOpen = true;
     }
 
     function togglePreviewTrack(trk) {
@@ -4515,7 +4603,9 @@ Scope {
         function closePlaylistSearchModal() { frostifyIpc.closePlaylistSearchModal(); }
         function toggleLike() { frostifyIpc.toggleLike(); }
         function toggleVolumePopup() { frostifyIpc.toggleVolumePopup(); }
-        function testShufflePlay() { frostifyIpc.testShufflePlay(); }
+        function toggleMochyPanel() { frostifyIpc.toggleMochyPanel(); }
+        function setMochyPanelStyle(s: int) { frostifyIpc.setMochyPanelStyle(s); }
+        function toggleMoodIsland() { frostifyIpc.toggleMoodIsland(); }
     }
 
     IpcHandler {
@@ -4524,6 +4614,20 @@ Scope {
         function testShufflePlay() { mainGrid.shufflePlayRequested(); }
         function toggleLike() { win.toggleLikeCurrentTrack(); }
         function toggleVolumePopup() { bottomPlayer.isVolumePopupOpen = !bottomPlayer.isVolumePopupOpen; }
+        function toggleMochyPanel() {
+            if (win.isNowPlayingOpen) win.isNowPlayingOpen = false;
+            win.isMochySidePanelOpen = !win.isMochySidePanelOpen;
+        }
+        function setMochyPanelStyle(s: int) {
+            win.mochyPanelStyle = s;
+            console.log("[MochyPanel] Style set to:", win.mochyPanelStyle);
+        }
+        function toggleMoodIsland() {
+            if (typeof homeView !== "undefined" && homeView) {
+                homeView.toggleMoodIsland();
+            }
+        }
+        function togglePlayerBar() { bottomPlayer.barClicked(); }
         function openWhatsNew() {
             whatsNewModal.openModal(win.updateReleaseNotes);
         }

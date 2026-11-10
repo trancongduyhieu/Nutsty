@@ -28,6 +28,21 @@ Rectangle {
 
     property var friendsNotes: []
     property var myLatestNote: null
+    property bool isMoodIslandExpanded: false
+
+    readonly property var activeMoodList: (root.moods && root.moods.length > 0) ? root.moods : [
+        { "title": "All", "params": "" },
+        { "title": "Relax", "params": "ggM8SgQIBxADSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
+        { "title": "Sleep", "params": "ggM8SgQIBxABSgQIBRADSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
+        { "title": "Energize", "params": "ggM8SgQIBxABSgQIBRABSgQICRADSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
+        { "title": "Sad", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChADSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
+        { "title": "Romance", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRADSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
+        { "title": "Party", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhADSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
+        { "title": "Commute", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxADSgQICBABSgQIBhABSgQIBBAB" },
+        { "title": "Feel good", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBADSgQIBhABSgQIBBAB" },
+        { "title": "Focus", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhADSgQIBBAB" },
+        { "title": "Workout", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAD" }
+    ]
 
     // Staggered Cascade Animation & Seen State Cache (Mochy-Music RevealSeenState)
     property var seenKeys: ({})
@@ -143,6 +158,11 @@ Rectangle {
         return I18n.formatMoodChipTitle(title);
     }
 
+    function toggleMoodIsland() {
+        root.isMoodIslandExpanded = !root.isMoodIslandExpanded;
+        console.log("[DynamicMoodIsland] toggleMoodIsland: isExpanded =", root.isMoodIslandExpanded);
+    }
+
     function formatSectionTitle(title) {
         return I18n.formatSectionTitle(title);
     }
@@ -251,234 +271,311 @@ Rectangle {
             ColumnLayout {
                 id: headerCol
                 anchors.top: parent.top
-                anchors.topMargin: 16
+                anchors.topMargin: 12
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.leftMargin: 24
                 anchors.rightMargin: 24
-                spacing: 14
+                spacing: 16
 
-                Text {
-                    text: root.getGreeting()
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 28
-                    font.bold: true
-                    color: Theme.textPrimary
-                }
-
-                // Friends Pulse: 24h Ephemeral Music Notes Bar (Stories Style)
-                FriendsPulseBar {
-                    id: friendsPulseBar
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: height
-                    friendsNotes: root.friendsNotes
-                    myLatestNote: root.myLatestNote
-                    currentTrack: root.currentTrack
-                    isPlaying: root.isPlaying
-                    accentColor: root.accentColor
-                    userAvatar: root.accountThumb
-                    userName: root.accountName
-                    onPostNoteClicked: root.postNoteRequested()
-                    onUserNoteDetailClicked: root.userNoteDetailRequested()
-                    onOpenStoryRequested: (friendData, idx) => root.openStoryRequested(friendData, idx)
-                    onPlayTrackRequested: track => root.playFriendTrackRequested(track)
-                    onAddFriendClicked: root.addFriendRequested()
-                }
-
-                // Separated Mood Filter Pills with Sliding Liquid Glass Lens (True Keo 502 Refraction)
+                // 1. Dynamic Island Mood Dock: Positioned under top navigation icons and above Greeting
                 Item {
                     id: moodDockContainer
                     Layout.fillWidth: true
                     height: 38
+                    z: 20
 
-                    // Horizontal Scrollable Mood Items
-                    Flickable {
-                        id: homeMoodFlickable
-                        anchors.fill: parent
-                        anchors.leftMargin: 24
-                        anchors.rightMargin: 24
-                        contentWidth: moodRow.width + 16
-                        contentHeight: height
-                        boundsBehavior: Flickable.StopAtBounds
-                        flickableDirection: Flickable.HorizontalFlick
-                        pixelAligned: true
+                    // Ambient drop shadow for the Dynamic Island
+                    Rectangle {
+                        anchors.horizontalCenter: dynamicMoodIsland.horizontalCenter
+                        anchors.verticalCenter: dynamicMoodIsland.verticalCenter
+                        anchors.verticalCenterOffset: 2
+                        width: dynamicMoodIsland.width
+                        height: dynamicMoodIsland.height
+                        radius: dynamicMoodIsland.radius
+                        color: "#55000000"
+                        visible: dynamicMoodIsland.width > 0
+                        z: 1
+                        Behavior on width {
+                            NumberAnimation {
+                                duration: 320
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: [0.08, 0.72, 0.15, 1.0]
+                            }
+                        }
+                    }
+
+                    // Main Dynamic Island Morphing Capsule
+                    Rectangle {
+                        id: dynamicMoodIsland
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.verticalCenter: parent.verticalCenter
+                        height: 34
+                        radius: 17
+                        z: 2
                         clip: true
+                        readonly property bool isExpanded: root.isMoodIslandExpanded
+                        readonly property real compactWidth: compactTxt.implicitWidth + 28
+                        readonly property real expandedTargetWidth: Math.min(moodDockContainer.width, moodRow.width + 24)
+                        width: isExpanded ? expandedTargetWidth : compactWidth
 
-                        DragHandler {
-                            target: null
-                            xAxis.enabled: true
-                            yAxis.enabled: false
-                            cursorShape: Qt.OpenHandCursor
-                            property real startContentX: 0
-                            onActiveChanged: {
-                                if (active) {
-                                    startContentX = homeMoodFlickable.contentX;
-                                }
-                            }
-                            onTranslationChanged: {
-                                if (active) {
-                                    var maxScroll = Math.max(0, homeMoodFlickable.contentWidth - homeMoodFlickable.width);
-                                    homeMoodFlickable.contentX = Math.max(0, Math.min(maxScroll, startContentX - translation.x));
-                                }
+                        Behavior on width {
+                            NumberAnimation {
+                                duration: 320
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: [0.08, 0.72, 0.15, 1.0]
                             }
                         }
 
-                        WheelHandler {
-                            target: homeMoodFlickable
-                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                            onWheel: event => {
-                                var delta = (event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x);
-                                homeMoodFlickable.contentX = Math.max(0, Math.min(homeMoodFlickable.contentWidth - homeMoodFlickable.width, homeMoodFlickable.contentX - delta));
-                            }
-                        }
+                        // Background & Border Morph: Vibrant Accent Pill when idle, Refined Dark Glass Dock when expanded
+                        color: isExpanded 
+                            ? Qt.rgba(0.08, 0.08, 0.10, 0.82) 
+                            : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.95)
+                        border.width: 1
+                        border.color: isExpanded 
+                            ? Qt.rgba(1.0, 1.0, 1.0, 0.14) 
+                            : Qt.rgba(root.accentColor.r * 1.15, root.accentColor.g * 1.15, root.accentColor.b * 1.15, 0.95)
 
-                        readonly property real accentLuminance: (0.299 * root.accentColor.r + 0.587 * root.accentColor.g + 0.114 * root.accentColor.b)
+                        Behavior on color { ColorAnimation { duration: 240 } }
+                        Behavior on border.color { ColorAnimation { duration: 240 } }
 
-                        // Ambient drop shadow for the sliding active Keo 502 gel capsule
+                        // Micro-interaction scale affordance when hovering over collapsed island
+                        scale: (!isExpanded && compactMouse.containsMouse) ? 1.05 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutQuad } }
+
+                        // Inner Specular Rim (Tension highlight)
                         Rectangle {
-                            x: activeMoodIndicator.x
-                            y: activeMoodIndicator.y + 2
-                            width: activeMoodIndicator.width
-                            height: activeMoodIndicator.height
-                            radius: activeMoodIndicator.radius
-                            color: "#50000000"
-                            visible: activeMoodIndicator.width > 0
-                            z: 1
-                        }
-
-                        // Sliding Keo 502 Glossy Gel Capsule (Fluid Meniscus, Rich Solid-Glass Contrast, ZERO glare streaks!)
-                        Rectangle {
-                            id: activeMoodIndicator
-                            height: 30
-                            radius: 15
-                            y: (homeMoodFlickable.height - height) / 2
-                            z: 2
-                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.90)
-                            border.color: Qt.rgba(root.accentColor.r * 1.15, root.accentColor.g * 1.15, root.accentColor.b * 1.15, 0.95)
+                            anchors.fill: parent
+                            anchors.margins: 1
+                            radius: 16
+                            color: "transparent"
+                            border.color: Qt.rgba(1.0, 1.0, 1.0, dynamicMoodIsland.isExpanded ? 0.08 : (homeMoodFlickable.accentLuminance > 0.55 ? 0.35 : 0.22))
                             border.width: 1
-                            visible: width > 0
-
-                            // Inner Meniscus Specular Rim (Tension highlight without bleaching text)
-                            Rectangle {
-                                anchors.fill: parent
-                                anchors.margins: 1
-                                radius: 14
-                                color: "transparent"
-                                border.color: Qt.rgba(1.0, 1.0, 1.0, homeMoodFlickable.accentLuminance > 0.55 ? 0.35 : 0.22)
-                                border.width: 1
-                            }
-
-                            Behavior on x { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
-                            Behavior on width { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
-                            Behavior on color { ColorAnimation { duration: 200 } }
                             Behavior on border.color { ColorAnimation { duration: 200 } }
                         }
 
-                        // Separated Mood Pills Row
-                        Row {
-                            id: moodRow
-                            spacing: 8
-                            anchors.verticalCenter: parent.verticalCenter
-                            z: 5
-                            onWidthChanged: Qt.callLater(homeMoodFlickable.updateActiveIndicator)
+                        // -------------------------------------------------------------
+                        // Layer 1: Compact View (Single Active Mood Pill in Center)
+                        // -------------------------------------------------------------
+                        Text {
+                            id: compactTxt
+                            anchors.centerIn: parent
+                            text: root.formatMoodTitle(root.selectedMood)
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 12
+                            font.bold: true
+                            color: homeMoodFlickable.accentLuminance > 0.55 ? "#0f0f11" : "#ffffff"
+                            visible: opacity > 0.01
+                            opacity: dynamicMoodIsland.isExpanded ? 0.0 : 1.0
+                            Behavior on opacity { NumberAnimation { duration: 160 } }
+                        }
 
-                            Repeater {
-                                id: moodRepeater
-                                model: root.moods.length > 0 ? root.moods : [
-                                    { "title": "All", "params": "" },
-                                    { "title": "Relax", "params": "ggM8SgQIBxADSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
-                                    { "title": "Sleep", "params": "ggM8SgQIBxABSgQIBRADSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
-                                    { "title": "Energize", "params": "ggM8SgQIBxABSgQIBRABSgQICRADSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
-                                    { "title": "Sad", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChADSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
-                                    { "title": "Romance", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRADSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
-                                    { "title": "Party", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhADSgQIAxABSgQICBABSgQIBhABSgQIBBAB" },
-                                    { "title": "Commute", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxADSgQICBABSgQIBhABSgQIBBAB" },
-                                    { "title": "Feel good", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBADSgQIBhABSgQIBBAB" },
-                                    { "title": "Focus", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhADSgQIBBAB" },
-                                    { "title": "Workout", "params": "ggM8SgQIBxABSgQIBRABSgQICRABSgQIChABSgQIDRABSgQIDhABSgQIAxABSgQICBABSgQIBhABSgQIBBAD" }
-                                ]
+                        MouseArea {
+                            id: compactMouse
+                            anchors.fill: parent
+                            enabled: !dynamicMoodIsland.isExpanded
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                root.isMoodIslandExpanded = true;
+                                autoCollapseTimer.restart();
+                            }
+                        }
 
-                                delegate: Item {
-                                    id: pillItem
-                                    height: 30
-                                    width: pillTxt.implicitWidth + 24
-                                    readonly property bool isSelected: root.selectedMood === modelData.title
-                                    readonly property bool isHovered: pillMouse.containsMouse
+                        // -------------------------------------------------------------
+                        // Layer 2: Expanded View (Full Moods Palette with Liquid Tint Glass)
+                        // -------------------------------------------------------------
+                        Flickable {
+                            id: homeMoodFlickable
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            contentWidth: moodRow.width + 8
+                            contentHeight: height
+                            boundsBehavior: Flickable.StopAtBounds
+                            flickableDirection: Flickable.HorizontalFlick
+                            pixelAligned: true
+                            clip: true
+                            interactive: contentWidth > width
+                            visible: opacity > 0.01
+                            opacity: dynamicMoodIsland.isExpanded ? 1.0 : 0.0
+                            Behavior on opacity { NumberAnimation { duration: 200 } }
 
-                                    onXChanged: {
-                                        if (isSelected) activeMoodIndicator.x = pillItem.x;
-                                    }
-                                    onWidthChanged: {
-                                        if (isSelected) activeMoodIndicator.width = pillItem.width;
-                                    }
-                                    onIsSelectedChanged: {
-                                        if (isSelected) {
-                                            activeMoodIndicator.x = pillItem.x;
-                                            activeMoodIndicator.width = pillItem.width;
+                            readonly property real accentLuminance: (0.299 * root.accentColor.r + 0.587 * root.accentColor.g + 0.114 * root.accentColor.b)
+
+                            // Sliding Keo 502 Glossy Gel Capsule
+                            Rectangle {
+                                id: activeMoodIndicator
+                                height: 26
+                                radius: 13
+                                y: (homeMoodFlickable.height - height) / 2
+                                z: 2
+                                color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.95)
+                                border.color: Qt.rgba(1.0, 1.0, 1.0, 0.45)
+                                border.width: 1
+                                visible: width > 0
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    anchors.margins: 1
+                                    radius: 12
+                                    color: "transparent"
+                                    border.color: Qt.rgba(1.0, 1.0, 1.0, homeMoodFlickable.accentLuminance > 0.55 ? 0.35 : 0.25)
+                                    border.width: 1
+                                }
+
+                                Behavior on x { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                                Behavior on width { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                            }
+
+                            Row {
+                                id: moodRow
+                                spacing: (moodDockContainer.width < 820) ? 5 : 7
+                                anchors.verticalCenter: parent.verticalCenter
+                                x: Math.max(4, (homeMoodFlickable.width - width) / 2)
+                                z: 5
+                                onWidthChanged: Qt.callLater(homeMoodFlickable.updateActiveIndicator)
+
+                                Repeater {
+                                    id: moodRepeater
+                                    model: root.activeMoodList
+
+                                    delegate: Item {
+                                        id: pillItem
+                                        height: 26
+                                        width: pillTxt.implicitWidth + 14
+                                        readonly property bool isSelected: root.selectedMood === modelData.title
+                                        readonly property bool isHovered: pillMouse.containsMouse
+
+                                        onXChanged: {
+                                            if (isSelected) activeMoodIndicator.x = pillItem.x;
                                         }
-                                    }
-                                    Component.onCompleted: {
-                                        if (isSelected) {
-                                            activeMoodIndicator.x = pillItem.x;
-                                            activeMoodIndicator.width = pillItem.width;
+                                        onWidthChanged: {
+                                            if (isSelected) activeMoodIndicator.width = pillItem.width;
                                         }
-                                    }
+                                        onIsSelectedChanged: {
+                                            if (isSelected) {
+                                                activeMoodIndicator.x = pillItem.x;
+                                                activeMoodIndicator.width = pillItem.width;
+                                            }
+                                        }
 
-                                    // Standalone Inactive Dark Glass Capsule (Zero white glare streaks, clean optical glass)
-                                    Rectangle {
-                                        anchors.fill: parent
-                                        radius: 15
-                                        color: pillItem.isHovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16) : Qt.rgba(1.0, 1.0, 1.0, 0.06)
-                                        border.width: 1
-                                        border.color: pillItem.isHovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35) : Qt.rgba(1.0, 1.0, 1.0, 0.10)
-                                        opacity: pillItem.isSelected ? 0.0 : 1.0
-                                        scale: (pillItem.isHovered && !pillItem.isSelected) ? 1.03 : 1.0
+                                        // Refined Dark Glass Pill Frame (Matching reference image)
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            radius: 13
+                                            color: pillItem.isHovered 
+                                                ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20) 
+                                                : Qt.rgba(0.16, 0.16, 0.19, 0.85)
+                                            border.width: 1
+                                            border.color: pillItem.isHovered 
+                                                ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45) 
+                                                : Qt.rgba(1.0, 1.0, 1.0, 0.08)
+                                            opacity: pillItem.isSelected ? 0.0 : 1.0
+                                            scale: (pillItem.isHovered && !pillItem.isSelected) ? 1.04 : 1.0
 
-                                        Behavior on opacity { NumberAnimation { duration: 150 } }
-                                        Behavior on color { ColorAnimation { duration: 150 } }
-                                        Behavior on border.color { ColorAnimation { duration: 150 } }
-                                        Behavior on scale { NumberAnimation { duration: 120 } }
-                                    }
+                                            Behavior on opacity { NumberAnimation { duration: 150 } }
+                                            Behavior on color { ColorAnimation { duration: 150 } }
+                                            Behavior on border.color { ColorAnimation { duration: 150 } }
+                                            Behavior on scale { NumberAnimation { duration: 120 } }
+                                        }
 
-                                    Text {
-                                        id: pillTxt
-                                        anchors.centerIn: parent
-                                        text: root.formatMoodTitle(modelData.title)
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 12
-                                        font.weight: pillItem.isSelected ? Font.Bold : Font.DemiBold
-                                        color: pillItem.isSelected 
-                                               ? (homeMoodFlickable.accentLuminance > 0.55 ? "#0f0f11" : "#ffffff") 
-                                               : (pillItem.isHovered ? "#ffffff" : Qt.rgba(1.0, 1.0, 1.0, 0.70))
-                                        Behavior on color { ColorAnimation { duration: 120 } }
-                                    }
+                                        Text {
+                                            id: pillTxt
+                                            anchors.centerIn: parent
+                                            text: root.formatMoodTitle(modelData.title)
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 11
+                                            font.weight: pillItem.isSelected ? Font.Bold : Font.DemiBold
+                                            color: pillItem.isSelected 
+                                                   ? (homeMoodFlickable.accentLuminance > 0.55 ? "#0f0f11" : "#ffffff") 
+                                                   : (pillItem.isHovered ? "#ffffff" : Qt.rgba(0.92, 0.92, 0.94, 0.90))
+                                            Behavior on color { ColorAnimation { duration: 120 } }
+                                        }
 
-                                    MouseArea {
-                                        id: pillMouse
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            root.selectedMood = modelData.title;
-                                            root.moodSelected(modelData.title, modelData.params || "");
+                                        MouseArea {
+                                            id: pillMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                root.selectedMood = modelData.title;
+                                                root.moodSelected(modelData.title, modelData.params || "");
+                                                root.isMoodIslandExpanded = false;
+                                            }
+                                            onPositionChanged: autoCollapseTimer.restart()
                                         }
                                     }
                                 }
                             }
+
+                            function updateActiveIndicator() {
+                                for (var i = 0; i < moodRepeater.count; ++i) {
+                                    var itm = moodRepeater.itemAt(i);
+                                    if (itm && itm.isSelected) {
+                                        activeMoodIndicator.x = itm.x;
+                                        activeMoodIndicator.width = itm.width;
+                                        return;
+                                    }
+                                }
+                            }
+
+                            Component.onCompleted: Qt.callLater(updateActiveIndicator)
                         }
 
-                        function updateActiveIndicator() {
-                            for (var i = 0; i < moodRepeater.count; ++i) {
-                                var itm = moodRepeater.itemAt(i);
-                                if (itm && itm.isSelected) {
-                                    activeMoodIndicator.x = itm.x;
-                                    activeMoodIndicator.width = itm.width;
-                                    return;
+                        // Optical Edge Fade Overlays (Smooth transition at scroll edges)
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            width: 28
+                            z: 10
+                            visible: dynamicMoodIsland.isExpanded && homeMoodFlickable.contentWidth > homeMoodFlickable.width && homeMoodFlickable.contentX > 4
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0.0; color: dynamicMoodIsland.color }
+                                GradientStop { position: 1.0; color: "transparent" }
+                            }
+                        }
+
+                        Rectangle {
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            width: 28
+                            z: 10
+                            visible: dynamicMoodIsland.isExpanded && homeMoodFlickable.contentWidth > homeMoodFlickable.width && (homeMoodFlickable.contentX < homeMoodFlickable.contentWidth - homeMoodFlickable.width - 4)
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0.0; color: "transparent" }
+                                GradientStop { position: 1.0; color: dynamicMoodIsland.color }
+                            }
+                        }
+
+                        // Smart Auto-Collapse Timer: 4500ms idle timer
+                        Timer {
+                            id: autoCollapseTimer
+                            interval: 4500
+                            repeat: false
+                            running: false
+                            onTriggered: {
+                                if (root.isMoodIslandExpanded) {
+                                    root.isMoodIslandExpanded = false;
                                 }
                             }
                         }
 
-                        Component.onCompleted: Qt.callLater(updateActiveIndicator)
+                        Connections {
+                            target: root
+                            function onIsMoodIslandExpandedChanged() {
+                                if (root.isMoodIslandExpanded) {
+                                    autoCollapseTimer.restart();
+                                    homeMoodFlickable.updateActiveIndicator();
+                                } else {
+                                    autoCollapseTimer.stop();
+                                }
+                            }
+                        }
                     }
 
                     Connections {
@@ -497,6 +594,44 @@ Rectangle {
                             Qt.callLater(homeMoodFlickable.updateActiveIndicator);
                         }
                     }
+
+                    // Auto-collapse when user scrolls the feed
+                    Connections {
+                        target: feedListView
+                        function onContentYChanged() {
+                            if (root.isMoodIslandExpanded) {
+                                root.isMoodIslandExpanded = false;
+                            }
+                        }
+                    }
+                }
+
+                // 2. Greeting Text
+                Text {
+                    text: root.getGreeting()
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 28
+                    font.bold: true
+                    color: Theme.textPrimary
+                }
+
+                // 3. Friends Pulse: 24h Ephemeral Music Notes Bar (Stories Style)
+                FriendsPulseBar {
+                    id: friendsPulseBar
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: height
+                    friendsNotes: root.friendsNotes
+                    myLatestNote: root.myLatestNote
+                    currentTrack: root.currentTrack
+                    isPlaying: root.isPlaying
+                    accentColor: root.accentColor
+                    userAvatar: root.accountThumb
+                    userName: root.accountName
+                    onPostNoteClicked: root.postNoteRequested()
+                    onUserNoteDetailClicked: root.userNoteDetailRequested()
+                    onOpenStoryRequested: (friendData, idx) => root.openStoryRequested(friendData, idx)
+                    onPlayTrackRequested: track => root.playFriendTrackRequested(track)
+                    onAddFriendClicked: root.addFriendRequested()
                 }
             }
         }
@@ -518,6 +653,14 @@ Rectangle {
             height: sectionCol.implicitHeight
 
             readonly property var sectionData: modelData
+
+            // Stable Metric Tokens (Rock-solid 60/144 FPS without layout thrashing)
+            readonly property real cardSquareWidth: 172
+            readonly property real cardSquareHeight: 252
+            readonly property real cardVideoWidth: 250
+            readonly property real cardVideoHeight: 228
+            readonly property real cardGridColWidth: 320
+            readonly property real cardGridColHeight: 240
 
             property var activeFlickable: {
                 if (!sectionData) return null;
@@ -595,7 +738,11 @@ Rectangle {
                             btnSize: 32
                             iconSize: 14
                             canScroll: (secDelegate.activeFlickable && secDelegate.activeFlickable.contentX > 2)
-                            onClicked: secDelegate.scrollBy(-540)
+                            onClicked: {
+                                var cardStep = (secDelegate.sectionData && secDelegate.sectionData.type === "video_carousel") ? 266 : ((secDelegate.sectionData && (secDelegate.sectionData.type === "track_grid" || secDelegate.sectionData.type === "fallback_quick_picks")) ? 334 : 188);
+                                var step = secDelegate.activeFlickable ? (Math.max(1, Math.floor(secDelegate.activeFlickable.width / cardStep)) * cardStep) : 564;
+                                secDelegate.scrollBy(-step);
+                            }
                         }
 
                         NavArrowButton {
@@ -604,7 +751,11 @@ Rectangle {
                             btnSize: 32
                             iconSize: 14
                             canScroll: (secDelegate.activeFlickable && secDelegate.activeFlickable.contentX < (secDelegate.activeFlickable.contentWidth - secDelegate.activeFlickable.width - 10))
-                            onClicked: secDelegate.scrollBy(540)
+                            onClicked: {
+                                var cardStep = (secDelegate.sectionData && secDelegate.sectionData.type === "video_carousel") ? 266 : ((secDelegate.sectionData && (secDelegate.sectionData.type === "track_grid" || secDelegate.sectionData.type === "fallback_quick_picks")) ? 334 : 188);
+                                var step = secDelegate.activeFlickable ? (Math.max(1, Math.floor(secDelegate.activeFlickable.width / cardStep)) * cardStep) : 564;
+                                secDelegate.scrollBy(step);
+                            }
                         }
                     }
                 }
@@ -615,7 +766,7 @@ Rectangle {
                 ListView {
                     id: videoFlick
                     Layout.fillWidth: true
-                    height: 245
+                    height: 236
                     visible: secDelegate.sectionData && secDelegate.sectionData.type === "video_carousel"
                     orientation: ListView.Horizontal
                     boundsBehavior: Flickable.StopAtBounds
@@ -629,8 +780,8 @@ Rectangle {
 
                     delegate: Rectangle {
                         id: vCard
-                        width: 260
-                        height: 238
+                        width: secDelegate.cardVideoWidth
+                        height: secDelegate.cardVideoHeight
                         radius: 10
                         clip: true
                         color: vCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.05) : "transparent"
@@ -638,6 +789,19 @@ Rectangle {
                         border.width: 1
                         Behavior on color { ColorAnimation { duration: 120 } }
                         Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                        property real revealOpacity: 1.0
+
+                        // Smart Edge Culling: Hide truncated card at right edge to eliminate awkward cut line
+                        readonly property bool isRightEdgeTruncated: {
+                            if (!videoFlick) return false;
+                            var viewRight = videoFlick.contentX + videoFlick.width;
+                            return (vCard.x < viewRight) && ((vCard.x + vCard.width) > (viewRight + 4));
+                        }
+
+                        opacity: isRightEdgeTruncated ? 0.0 : revealOpacity
+                        visible: opacity > 0.01
+                        Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
                         readonly property string itemKey: String((modelData ? (modelData.videoId || modelData.path || modelData.title) : "") || "")
                         property string lastCheckedKey: ""
@@ -647,7 +811,7 @@ Rectangle {
                         function checkReveal() {
                             if (!itemKey) {
                                 vRevealAnim.stop();
-                                opacity = 1.0;
+                                revealOpacity = 1.0;
                                 vTrans.y = 0;
                                 return;
                             }
@@ -656,11 +820,11 @@ Rectangle {
 
                             if (root.hasSeen(itemKey)) {
                                 vRevealAnim.stop();
-                                opacity = 1.0;
+                                revealOpacity = 1.0;
                                 vTrans.y = 0;
                             } else {
                                 root.markSeen(itemKey);
-                                opacity = 0.0;
+                                revealOpacity = 0.0;
                                 vTrans.y = 14;
                                 vRevealAnim.restart();
                             }
@@ -683,7 +847,7 @@ Rectangle {
                             ParallelAnimation {
                                 NumberAnimation {
                                     target: vCard
-                                    property: "opacity"
+                                    property: "revealOpacity"
                                     from: 0.0
                                     to: 1.0
                                     duration: 260
@@ -851,9 +1015,20 @@ Rectangle {
 
                     delegate: Item {
                         id: colWrapper
-                        width: Math.max(300, Math.min(380, Math.floor((feedListView.width - 48 - 28) / (root.width > 1100 ? 3 : 2))))
-                        height: 240
+                        width: secDelegate.cardGridColWidth
+                        height: secDelegate.cardGridColHeight
                         readonly property var chunkTracks: modelData
+
+                        // Smart Edge Culling: Hide truncated column at right edge
+                        readonly property bool isRightEdgeTruncated: {
+                            if (!trackGridFlick) return false;
+                            var viewRight = trackGridFlick.contentX + trackGridFlick.width;
+                            return (colWrapper.x < viewRight) && ((colWrapper.x + colWrapper.width) > (viewRight + 4));
+                        }
+
+                        opacity: isRightEdgeTruncated ? 0.0 : 1.0
+                        visible: opacity > 0.01
+                        Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
                         Column {
                             anchors.fill: parent
@@ -1058,7 +1233,7 @@ Rectangle {
                 ListView {
                     id: albumFlick
                     Layout.fillWidth: true
-                    height: 265
+                    height: 260
                     visible: secDelegate.sectionData && (secDelegate.sectionData.type === "album_carousel" || secDelegate.sectionData.type === "card_carousel")
                     orientation: ListView.Horizontal
                     boundsBehavior: Flickable.StopAtBounds
@@ -1072,8 +1247,8 @@ Rectangle {
 
                     delegate: Rectangle {
                         id: aCard
-                        width: 175
-                        height: 255
+                        width: secDelegate.cardSquareWidth
+                        height: secDelegate.cardSquareHeight
                         radius: 10
                         clip: true
                         color: aCardMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.05) : "transparent"
@@ -1081,6 +1256,19 @@ Rectangle {
                         border.width: 1
                         Behavior on color { ColorAnimation { duration: 120 } }
                         Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                        property real revealOpacity: 1.0
+
+                        // Smart Edge Culling: Hide truncated card at right edge to eliminate awkward cut line
+                        readonly property bool isRightEdgeTruncated: {
+                            if (!albumFlick) return false;
+                            var viewRight = albumFlick.contentX + albumFlick.width;
+                            return (aCard.x < viewRight) && ((aCard.x + aCard.width) > (viewRight + 4));
+                        }
+
+                        opacity: isRightEdgeTruncated ? 0.0 : revealOpacity
+                        visible: opacity > 0.01
+                        Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
                         readonly property string itemKey: String((modelData ? (modelData.browseId || modelData.playlistId || modelData.id || modelData.title) : "") || "")
                         property string lastCheckedKey: ""
@@ -1090,7 +1278,7 @@ Rectangle {
                         function checkReveal() {
                             if (!itemKey) {
                                 aRevealAnim.stop();
-                                opacity = 1.0;
+                                revealOpacity = 1.0;
                                 aTrans.y = 0;
                                 return;
                             }
@@ -1099,11 +1287,11 @@ Rectangle {
 
                             if (root.hasSeen(itemKey)) {
                                 aRevealAnim.stop();
-                                opacity = 1.0;
+                                revealOpacity = 1.0;
                                 aTrans.y = 0;
                             } else {
                                 root.markSeen(itemKey);
-                                opacity = 0.0;
+                                revealOpacity = 0.0;
                                 aTrans.y = 14;
                                 aRevealAnim.restart();
                             }
@@ -1126,7 +1314,7 @@ Rectangle {
                             ParallelAnimation {
                                 NumberAnimation {
                                     target: aCard
-                                    property: "opacity"
+                                    property: "revealOpacity"
                                     from: 0.0
                                     to: 1.0
                                     duration: 260
@@ -1351,9 +1539,20 @@ Rectangle {
 
                     delegate: Item {
                         id: qpColWrapper
-                        width: Math.max(300, Math.min(380, Math.floor((feedListView.width - 48 - 28) / (root.width > 1100 ? 3 : 2))))
-                        height: 240
+                        width: secDelegate.cardGridColWidth
+                        height: secDelegate.cardGridColHeight
                         readonly property var chunkTracks: modelData
+
+                        // Smart Edge Culling: Hide truncated column at right edge
+                        readonly property bool isRightEdgeTruncated: {
+                            if (!fallbackQuickPicksFlick) return false;
+                            var viewRight = fallbackQuickPicksFlick.contentX + fallbackQuickPicksFlick.width;
+                            return (qpColWrapper.x < viewRight) && ((qpColWrapper.x + qpColWrapper.width) > (viewRight + 4));
+                        }
+
+                        opacity: isRightEdgeTruncated ? 0.0 : 1.0
+                        visible: opacity > 0.01
+                        Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
                         Column {
                             anchors.fill: parent
@@ -1553,8 +1752,8 @@ Rectangle {
 
                     delegate: Rectangle {
                         id: plCard
-                        width: 172
-                        height: 245
+                        width: secDelegate.cardSquareWidth
+                        height: secDelegate.cardSquareHeight
                         radius: Theme.radiusCard
                         clip: true
                         color: plMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.06) : Qt.rgba(1.0, 1.0, 1.0, 0.02)
@@ -1562,6 +1761,19 @@ Rectangle {
                         border.width: 1
                         Behavior on color { ColorAnimation { duration: 120 } }
                         Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                        property real revealOpacity: 1.0
+
+                        // Smart Edge Culling: Hide truncated card at right edge to eliminate awkward cut line
+                        readonly property bool isRightEdgeTruncated: {
+                            if (!fallbackPlaylistFlick) return false;
+                            var viewRight = fallbackPlaylistFlick.contentX + fallbackPlaylistFlick.width;
+                            return (plCard.x < viewRight) && ((plCard.x + plCard.width) > (viewRight + 4));
+                        }
+
+                        opacity: isRightEdgeTruncated ? 0.0 : revealOpacity
+                        visible: opacity > 0.01
+                        Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
                         readonly property string itemKey: String((modelData ? (modelData.browseId || modelData.playlistId || modelData.id || modelData.title) : "") || "")
                         property string lastCheckedKey: ""
@@ -1571,7 +1783,7 @@ Rectangle {
                         function checkReveal() {
                             if (!itemKey) {
                                 plRevealAnim.stop();
-                                opacity = 1.0;
+                                revealOpacity = 1.0;
                                 plTrans.y = 0;
                                 return;
                             }
@@ -1580,11 +1792,11 @@ Rectangle {
 
                             if (root.hasSeen(itemKey)) {
                                 plRevealAnim.stop();
-                                opacity = 1.0;
+                                revealOpacity = 1.0;
                                 plTrans.y = 0;
                             } else {
                                 root.markSeen(itemKey);
-                                opacity = 0.0;
+                                revealOpacity = 0.0;
                                 plTrans.y = 14;
                                 plRevealAnim.restart();
                             }
@@ -1607,7 +1819,7 @@ Rectangle {
                             ParallelAnimation {
                                 NumberAnimation {
                                     target: plCard
-                                    property: "opacity"
+                                    property: "revealOpacity"
                                     from: 0.0
                                     to: 1.0
                                     duration: 260
@@ -1766,8 +1978,8 @@ Rectangle {
                         ]
 
                         delegate: SkeletonTrackCard {
-                            width: 160
-                            height: 230
+                            width: secDelegate.cardSquareWidth
+                            height: secDelegate.cardSquareHeight
                             titleWidth: modelData.tw
                             subtitleWidth: modelData.sw
                         }

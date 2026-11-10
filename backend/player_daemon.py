@@ -694,9 +694,10 @@ def execute_command(args):
         except Exception:
             pass
 
-        # Stop MPV immediately before resolving media path to clear previous audio with 0ms delay
-        send_mpv_cmd(["set_property", "pause", True])
-        send_mpv_cmd(["stop"])
+        # Only stop MPV immediately if online to clear previous audio while network resolves
+        if is_online:
+            send_mpv_cmd(["set_property", "pause", True])
+            send_mpv_cmd(["stop"])
 
         meta = update_current_track_metadata(file_path, title_arg, artist_arg, art_arg)
         stream_target = resolve_media_path(file_path, title_arg, artist_arg, my_epoch=my_req_id) if is_online else file_path

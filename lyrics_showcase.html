@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nutsty — Bảng So Sánh 9 Thế Hệ Animation Lyric</title>
+    <style>
+        :root {
+            --bg: #090a0f;
+            --surface: rgba(255, 255, 255, 0.035);
+            --surface-hover: rgba(255, 255, 255, 0.06);
+            --border: rgba(255, 255, 255, 0.08);
+            --accent: #deb06c;
+            --accent-glow: rgba(222, 176, 108, 0.35);
+            --text: #f4f4f5;
+            --text-muted: #71717a;
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: var(--font-family);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(ellipse 60% 40% at 50% -10%, rgba(222, 176, 108, 0.12), transparent),
+                radial-gradient(circle 500px at 15% 40%, rgba(59, 130, 246, 0.05), transparent),
+                radial-gradient(circle 500px at 85% 60%, rgba(236, 72, 153, 0.05), transparent);
+        }
+
+        /* ── Header ────────────────────────────────────────── */
+        header {
+            padding: 24px 32px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+            backdrop-filter: blur(24px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(9, 10, 15, 0.85);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-badge {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #deb06c, #b38236);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 16px;
+            color: #090a0f;
+            box-shadow: 0 4px 16px var(--accent-glow);
+        }
+
+        .brand-title {
+            font-size: 17px;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+        }
+
+        .brand-subtitle {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 1px;
+        }
+
+        /* ── Controls Bar ──────────────────────────────────── */
+        .controls-bar {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 8px 16px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn:hover {
+            background: var(--surface-hover);
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #090a0f;
+            border-color: var(--accent);
+            font-weight: 600;
+            box-shadow: 0 2px 12px var(--accent-glow);
+        }
+
+        .btn-primary:hover {
+            background: #e5ba79;
+            border-color: #e5ba79;
+            color: #090a0f;
+        }
+
+        .pill-group {
+            display: flex;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            padding: 3px;
+            gap: 2px;
+        }
+
+        .pill-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 600;
+            padding: 5px 12px;
+            border-radius: 999px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .pill-btn.active {
+            background: rgba(255, 255, 255, 0.12);
+            color: #fff;
+        }
+
+        .timeline-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+            min-width: 200px;
+            max-width: 380px;
+        }
+
+        .timeline-slider {
+            flex: 1;
+            -webkit-appearance: none;
+            height: 4px;
+            border-radius: 2px;
+            background: rgba(255, 255, 255, 0.15);
+            outline: none;
+            cursor: pointer;
+        }
+
+        .timeline-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--accent);
+            box-shadow: 0 0 8px var(--accent-glow);
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        .timeline-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.3);
+        }
+
+        .time-display {
+            font-size: 12px;
+            font-variant-numeric: tabular-nums;
+            color: var(--text-muted);
+            width: 48px;
+            text-align: right;
+        }
+
+        /* ── Main Layout ───────────────────────────────────── */
+        main {
+            padding: 24px 32px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .section-title {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            font-weight: 700;
+        }
+
+        /* ── Grid Container ────────────────────────────────── */
+        .gen-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(440px, 1fr));
+            gap: 20px;
+        }
+
+        .gen-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 20px 22px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            position: relative;
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            backdrop-filter: blur(12px);
+            overflow: hidden;
+        }
+
+        .gen-card:hover {
+            border-color: rgba(255, 255, 255, 0.18);
+            transform: translateY(-2px);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        .gen-card.featured {
+            border-color: rgba(222, 176, 108, 0.3);
+            background: linear-gradient(180deg, rgba(222, 176, 108, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+        }
+
+        .card-top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .gen-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .gen-title-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .gen-tag {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.08);
+            color: #d4d4d8;
+            letter-spacing: 0.5px;
+        }
+
+        .gen-tag.star {
+            background: rgba(222, 176, 108, 0.15);
+            color: var(--accent);
+            border: 1px solid rgba(222, 176, 108, 0.3);
+        }
+
+        .gen-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .gen-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        .btn-apply {
+            font-size: 11px;
+            padding: 5px 12px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--border);
+            color: #d4d4d8;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn-apply:hover {
+            background: var(--accent);
+            color: #090a0f;
+            border-color: var(--accent);
+            font-weight: 600;
+        }
+
+        /* ── Lyric Display Stage ───────────────────────────── */
+        .stage-box {
+            background: rgba(0, 0, 0, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 14px;
+            padding: 24px 20px;
+            min-height: 110px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stage-box::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 50%;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.04);
+            pointer-events: none;
+        }
+
+        .lyric-line {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            row-gap: 8px;
+            column-gap: 8px;
+            font-size: 24px;
+            font-weight: 700;
+            position: relative;
+            z-index: 2;
+        }
+
+        .word-node {
+            display: inline-flex;
+            align-items: baseline;
+            position: relative;
+            transform-origin: center bottom;
+            transition: color 0.1s;
+        }
+
+        .char-node {
+            display: inline-block;
+            position: relative;
+            transform-origin: center bottom;
+        }
+
+        /* ── Physics Badge & Formula ───────────────────────── */
+        .card-bottom {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            padding-top: 12px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .formula-tag {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            background: rgba(255, 255, 255, 0.04);
+            padding: 3px 8px;
+            border-radius: 6px;
+            color: #a1a1aa;
+        }
+
+        .indicator-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #52525b;
+            display: inline-block;
+            margin-right: 5px;
+            transition: all 0.2s;
+        }
+
+        .indicator-dot.active {
+            background: #22c55e;
+            box-shadow: 0 0 8px #22c55e;
+        }
+
+        /* ── Toast Notification ────────────────────────────── */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: #18181b;
+            border: 1px solid var(--accent);
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 500;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            z-index: 999;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ── Header ────────────────────────────────────────── -->
+    <header>
+        <div class="brand">
+            <div class="brand-badge">N</div>
+            <div>
+                <div class="brand-title">Nutsty — Bảng So Sánh 9 Thế Hệ Animation Lyric</div>
+                <div class="brand-subtitle">Mô phỏng vật lý 60fps trực quan từ SimpMusic đến Mochy-Music</div>
+            </div>
+        </div>
+
+        <div class="controls-bar">
+            <!-- Play / Pause -->
+            <button class="btn btn-primary" id="playBtn" onclick="togglePlay()">
+                <span id="playIcon">⏸</span> <span id="playText">Tạm dừng</span>
+            </button>
+            <button class="btn" onclick="restart()">
+                <span>↺</span> Bắt đầu lại
+            </button>
+
+            <!-- Speed Pills -->
+            <div class="pill-group">
+                <button class="pill-btn" onclick="setSpeed(0.25)">0.25x (Soi chậm)</button>
+                <button class="pill-btn" onclick="setSpeed(0.5)">0.5x</button>
+                <button class="pill-btn active" id="spd1" onclick="setSpeed(1.0)">1.0x Chuẩn</button>
+                <button class="pill-btn" onclick="setSpeed(1.5)">1.5x</button>
+            </div>
+
+            <!-- Timeline Scrubber -->
+            <div class="timeline-container">
+                <input type="range" id="scrubber" class="timeline-slider" min="0" max="4.8" step="0.01" value="0" oninput="onScrub(this.value)">
+                <div class="time-display" id="timeDisplay">0.00s</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- ── Main Grid ─────────────────────────────────────── -->
+    <main>
+        <div class="section-header">
+            <div class="section-title">9 Thế Hệ Animation — Chạy Song Song Cùng Lúc</div>
+            <div style="font-size: 12px; color: var(--text-muted);">
+                Nhấn phím <kbd style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">Space</kbd> để Play/Pause • Kéo thanh trượt để soi từng frame
+            </div>
+        </div>
+
+        <div class="gen-grid" id="genGrid">
+            <!-- Cards will be populated dynamically -->
+        </div>
+    </main>
+
+    <div class="toast" id="toast">Đã chọn Gen thành công!</div>
+
+    <script>
+        // ── Lyrics Data & Word Timestamps (Tìm Em - Hngle) ─────────────────────
+        // "Có đôi lần khẽ cười vì anh chợt nhớ người làm anh say"
+        const LYRIC_WORDS = [
+            { text: "Có",     start: 0.20, end: 0.50, isHeld: false },
+            { text: "đôi",    start: 0.52, end: 0.85, isHeld: false },
+            { text: "lần",    start: 0.88, end: 1.25, isHeld: false },
+            { text: "khẽ",    start: 1.28, end: 1.65, isHeld: false },
+            { text: "cười",   start: 1.68, end: 2.10, isHeld: false },
+            { text: "vì",     start: 2.12, end: 2.45, isHeld: false },
+            { text: "anh",    start: 2.48, end: 2.95, isHeld: false },
+            { text: "chợt",   start: 2.98, end: 3.25, isHeld: false },
+            { text: "nhớ",    start: 3.28, end: 3.70, isHeld: false },
+            { text: "người",  start: 3.72, end: 4.05, isHeld: false },
+            { text: "làm",    start: 4.08, end: 4.35, isHeld: false },
+            { text: "anh",    start: 4.38, end: 4.70, isHeld: false },
+            { text: "say...", start: 4.72, end: 5.80, isHeld: true  } // Held note
+        ];
+        const TOTAL_DURATION = 6.2;
+
+        // ── 9 Generations Definitions ─────────────────────────────────────────
+        const GENERATIONS = [
+            {
+                id: "gen1",
+                commit: "2a13e40",
+                tag: "GEN 1",
+                name: "SimpMusic Pure HTML Karaoke",
+                desc: "Baseline phẳng tuyệt đối (y = 0px). Quét màu RichText HTML xám → trắng tức thì khi chạm từ.",
+                formula: "y: 0px | color: #757a88 → #ffffff",
+                featured: false,
+                render: renderGen1
+            },
+            {
+                id: "gen2",
+                commit: "04a1e91",
+                tag: "GEN 2",
+                name: "Minimalist Motion Push",
+                desc: "Khi hát từ bị đẩy trượt sang trái X và nhấc nhẹ lên Y kèm gia tốc rồi trôi về vị trí cũ.",
+                formula: "dx: -6px*sin(πp) | dy: -1.5px*sin(πp)",
+                featured: false,
+                render: renderGen2
+            },
+            {
+                id: "gen3",
+                commit: "efe33ed",
+                tag: "GEN 3",
+                name: "Single-Glyph Phosphorescent",
+                desc: "Tách từng chữ cái, tỏa ánh sáng lân tinh trắng mờ cô lập trên đúng glyph đơn lẻ đang hát.",
+                formula: "mist: 0 0 10px rgba(255,255,255, 0.8)",
+                featured: false,
+                render: renderGen3
+            },
+            {
+                id: "gen4",
+                commit: "ecbeaa0",
+                tag: "GEN 4",
+                name: "Spatial Traveling Wave",
+                desc: "Mô phỏng sóng cơ học dao động dọc theo câu hát sin(kx - ωt) kèm lực đàn hồi lò xo.",
+                formula: "dy: -2.5px * sin(kx - ωt) | spring 60fps",
+                featured: false,
+                render: renderGen4
+            },
+            {
+                id: "gen5",
+                commit: "fabc502",
+                tag: "GEN 5",
+                name: "AMLL Dual-Layer Sweep",
+                desc: "Chuẩn desktop AMLL gốc: Mặt nạ 2 lớp phủ quét ngang, baseline phẳng lì chống rung lắc.",
+                formula: "clip-path: inset(0 (1-p)*100% 0 0)",
+                featured: false,
+                render: renderGen5
+            },
+            {
+                id: "gen6",
+                commit: "4a87d6f",
+                tag: "GEN 6",
+                star: true,
+                name: "Classic AMLL Sine Lift (Đề xuất ⭐)",
+                desc: "Cả từ cùng nhấc lên -1.2px (held: -2.0px) theo hình sin mềm rồi êm ái đáp xuống. 0% lỗi xếp tầng.",
+                formula: "dy: -1.2px * sin(πp) | Smoothed C¹ 160ms",
+                featured: true,
+                render: renderGen6
+            },
+            {
+                id: "gen7",
+                commit: "edcff10",
+                tag: "GEN 7",
+                star: true,
+                name: "Held-Note Overlap Breath",
+                desc: "Kế thừa Gen 6, nhưng từ ngân dài giữ nguyên trên cao -2.0px thở bằng Bezier và giữ quầng sáng rực rỡ.",
+                formula: "isHeld ? float(-2px, Bezier) : sin(πp)",
+                featured: true,
+                render: renderGen7
+            },
+            {
+                id: "gen8",
+                commit: "be5d4dc",
+                tag: "GEN 8",
+                name: "Apple Rolling Wave Lift",
+                desc: "Chữ cái nhấc -2.0px qua Bezier 750ms và Ở LẠI TRÊN CAO LUÔN (sóng cuộn đi qua câu hát).",
+                formula: "dy: -2.0px * Bezier750ms (Stay Lifted)",
+                featured: false,
+                render: renderGen8
+            },
+            {
+                id: "gen9",
+                commit: "b07f446",
+                tag: "GEN 9",
+                name: "Mochy Lagged Comet Bloom (Hiện tại)",
+                desc: "Nâng chữ Hermite w²(3-2w) -2.5px. Quầng sáng sao chổi quét sau tạo vệt đuôi trễ 240ms.",
+                formula: "dy: -2.5px * Hermite | comet lag 240ms",
+                featured: false,
+                render: renderGen9
+            }
+        ];
+
+        // ── State ─────────────────────────────────────────────────────────────
+        let currentTime = 0.0;
+        let isPlaying = true;
+        let playbackSpeed = 1.0;
+        let lastFrameTime = performance.now();
+
+        // ── DOM Initialization ────────────────────────────────────────────────
+        const grid = document.getElementById("genGrid");
+        const scrubber = document.getElementById("scrubber");
+        scrubber.max = TOTAL_DURATION;
+        const timeDisplay = document.getElementById("timeDisplay");
+        const playBtn = document.getElementById("playBtn");
+        const playIcon = document.getElementById("playIcon");
+        const playText = document.getElementById("playText");
+
+        // Build DOM Nodes
+        GENERATIONS.forEach(gen => {
+            const card = document.createElement("div");
+            card.className = `gen-card ${gen.featured ? 'featured' : ''}`;
+            card.id = `card-${gen.id}`;
+
+            card.innerHTML = `
+                <div class="card-top">
+                    <div class="gen-meta">
+                        <div class="gen-title-row">
+                            <span class="gen-tag ${gen.star ? 'star' : ''}">${gen.tag}</span>
+                            <span style="font-family: monospace; font-size: 11px; color: #71717a;">${gen.commit}</span>
+                        </div>
+                        <div class="gen-name">${gen.name}</div>
+                        <div class="gen-desc">${gen.desc}</div>
+                    </div>
+                    <button class="btn-apply" onclick="applyGen('${gen.id}', '${gen.commit}', '${gen.name}')">Áp dụng bản này</button>
+                </div>
+
+                <div class="stage-box">
+                    <div class="lyric-line" id="stage-${gen.id}">
+                        ${buildWordsMarkup(gen.id)}
+                    </div>
+                </div>
+
+                <div class="card-bottom">
+                    <span class="formula-tag">${gen.formula}</span>
+                    <div>
+                        <span class="indicator-dot" id="dot-${gen.id}"></span>
+                        <span id="status-${gen.id}">Đang chờ</span>
+                    </div>
+                </div>
+            `;
+            grid.appendChild(card);
+        });
+
+        function buildWordsMarkup(genId) {
+            return LYRIC_WORDS.map((w, wIdx) => {
+                const chars = w.text.split("").map((c, cIdx) => 
+                    `<span class="char-node" id="${genId}-w${wIdx}-c${cIdx}">${c}</span>`
+                ).join("");
+                return `<span class="word-node" id="${genId}-w${wIdx}">${chars}</span>`;
+            }).join("");
+        }
+
+        // ── Mathematical Render Engines for All 9 Generations ────────────────
+        function updateAll(time) {
+            GENERATIONS.forEach(gen => {
+                let anyActive = false;
+                LYRIC_WORDS.forEach((w, wIdx) => {
+                    const wordEl = document.getElementById(`${gen.id}-w${wIdx}`);
+                    if (!wordEl) return;
+
+                    const isPast = time >= w.end;
+                    const isSinging = time >= w.start && time < w.end;
+                    const dur = Math.max(0.05, w.end - w.start);
+                    const rawP = isPast ? 1.0 : (isSinging ? Math.max(0, Math.min(1, (time - w.start) / dur)) : 0.0);
+
+                    if (isSinging) anyActive = true;
+                    gen.render(gen.id, w, wIdx, wordEl, rawP, isSinging, isPast, time);
+                });
+
+                // Update status indicator
+                const dot = document.getElementById(`dot-${gen.id}`);
+                const status = document.getElementById(`status-${gen.id}`);
+                if (dot && status) {
+                    dot.className = `indicator-dot ${anyActive ? 'active' : ''}`;
+                    status.textContent = anyActive ? 'Đang hát' : 'Nghỉ';
+                }
+            });
+        }
+
+        // 1. Gen 1: SimpMusic Pure HTML Karaoke (Instant color swap, flat baseline)
+        function renderGen1(genId, w, wIdx, wordEl, p, isSinging, isPast) {
+            wordEl.style.transform = `translate(0, 0) scale(1)`;
+            wordEl.style.color = (isPast || isSinging) ? '#ffffff' : '#757a88';
+            wordEl.style.textShadow = 'none';
+        }
+
+        // 2. Gen 2: Minimalist Motion Push (Left X push & Up Y push)
+        function renderGen2(genId, w, wIdx, wordEl, p, isSinging, isPast) {
+            const wave = isSinging ? Math.sin(Math.PI * p) : 0;
+            const dx = -6.0 * wave;
+            const dy = -1.5 * wave;
+            const scale = 1.0 + 0.02 * wave;
+            wordEl.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
+            wordEl.style.color = (isPast || isSinging) ? '#ffffff' : '#757a88';
+            wordEl.style.textShadow = isSinging ? `0 0 12px rgba(255,255,255, ${0.4 * wave})` : 'none';
+        }
+
+        // 3. Gen 3: Single-Glyph Phosphor (Glyph by glyph mist)
+        function renderGen3(genId, w, wIdx, wordEl, p, isSinging, isPast) {
+            const charCount = w.text.length;
+            wordEl.style.transform = `translate(0, 0)`;
+            for (let i = 0; i < charCount; i++) {
+                const cEl = document.getElementById(`${genId}-w${wIdx}-c${i}`);
+                if (!cEl) continue;
+                const cStart = i / charCount;
+                const cEnd = (i + 1) / charCount;
+                const isCharPast = isPast || (isSinging && p >= cEnd);
+                const isCharSinging = isSinging && p >= cStart && p < cEnd;
+
+                cEl.style.transform = isCharSinging ? `translateY(-1.0px)` : `translateY(0)`;
+                cEl.style.color = (isCharPast || isCharSinging) ? '#ffffff' : 'rgba(255,255,255,0.4)';
+                cEl.style.textShadow = isCharSinging ? `0 0 10px rgba(255,255,255, 0.85)` : 'none';
+            }
+        }
+
+        // 4. Gen 4: Spatial Traveling Wave (Spring wave)
+        function renderGen4(genId, w, wIdx, wordEl, p, isSinging, isPast, time) {
+            const dy = isSinging ? (-2.5 * Math.sin(Math.PI * p)) : 0;
+            const springBounce = isSinging ? (1.0 + 0.045 * Math.sin(Math.PI * p)) : 1.0;
+            wordEl.style.transform = `translateY(${dy}px) scale(${springBounce})`;
+            wordEl.style.color = (isPast || isSinging) ? '#ffffff' : '#71717a';
+            wordEl.style.textShadow = isSinging ? `0 0 10px rgba(255,255,255, 0.5)` : 'none';
+        }
+
+        // 5. Gen 5: AMLL Dual-Layer Sweep (Clip path flat)
+        function renderGen5(genId, w, wIdx, wordEl, p, isSinging, isPast) {
+            wordEl.style.transform = `translate(0, 0) scale(1)`;
+            const charCount = w.text.length;
+            for (let i = 0; i < charCount; i++) {
+                const cEl = document.getElementById(`${genId}-w${wIdx}-c${i}`);
+                if (!cEl) continue;
+                const charProgress = isPast ? 1.0 : (isSinging ? Math.max(0, Math.min(1, p * charCount - i)) : 0.0);
+                const alpha = 0.38 + (1.0 - 0.38) * charProgress;
+                cEl.style.color = `rgba(255, 255, 255, ${alpha})`;
+                cEl.style.textShadow = 'none';
+            }
+        }
+
+        // 6. Gen 6: Classic AMLL Sine Lift (The Golden Standard - Smooth & Silky)
+        function renderGen6(genId, w, wIdx, wordEl, p, isSinging, isPast) {
+            const sinCurve = isSinging ? Math.sin(Math.PI * p) : 0.0;
+            const dy = -1.2 * sinCurve; // Entire word lifts up together
+            const scale = 1.0 + 0.010 * sinCurve;
+            wordEl.style.transform = `translateY(${dy}px) scale(${scale})`;
+            wordEl.style.color = (isPast || isSinging) ? '#ffffff' : 'rgba(255, 255, 255, 0.38)';
+            wordEl.style.textShadow = isSinging ? `0 0 12px rgba(255, 255, 255, ${0.55 * sinCurve})` : 'none';
+            
+            // Clean baseline for all child chars
+            const charCount = w.text.length;
+            for (let i = 0; i < charCount; i++) {
+                const cEl = document.getElementById(`${genId}-w${wIdx}-c${i}`);
+                if (cEl) {
+                    cEl.style.transform = 'none';
+                    cEl.style.color = 'inherit';
+                }
+            }
+        }
+
+        // 7. Gen 7: Sustained Held-Note Overlap & Bezier Breathing
+        function renderGen7(genId, w, wIdx, wordEl, p, isSinging, isPast) {
+            let dy = 0.0;
+            let scale = 1.0;
+            let glow = 0.0;
+
+            if (isSinging) {
+                if (w.isHeld) {
+                    // Floating breath held note
+                    dy = -2.0;
+                    scale = 1.0 + 0.035 * Math.sin(Math.PI * p);
+                    glow = 0.85;
+                } else {
+                    const sinCurve = Math.sin(Math.PI * p);
+                    dy = -1.2 * sinCurve;
+                    scale = 1.0 + 0.010 * sinCurve;
+                    glow = 0.50 * sinCurve;
+                }
+            }
+
+            wordEl.style.transform = `translateY(${dy}px) scale(${scale})`;
+            wordEl.style.color = (isPast || isSinging) ? '#ffffff' : 'rgba(255, 255, 255, 0.38)';
+            wordEl.style.textShadow = glow > 0.01 ? `0 0 16px rgba(255, 255, 255, ${glow})` : 'none';
+        }
+
+        // 8. Gen 8: Apple Rolling Wave Lift (Stay Lifted -2.0px)
+        function renderGen8(genId, w, wIdx, wordEl, p, isSinging, isPast) {
+            const charCount = w.text.length;
+            wordEl.style.transform = 'none';
+            for (let i = 0; i < charCount; i++) {
+                const cEl = document.getElementById(`${genId}-w${wIdx}-c${i}`);
+                if (!cEl) continue;
+                const charStart = i / charCount;
+                const hasReached = isPast || (isSinging && p >= charStart);
+                const lift = hasReached ? -2.0 : 0.0; // Stays lifted!
+                cEl.style.transform = `translateY(${lift}px)`;
+                cEl.style.color = hasReached ? '#ffffff' : 'rgba(255,255,255,0.38)';
+            }
+            wordEl.style.textShadow = isSinging ? `0 0 16px rgba(255,255,255, 0.85)` : 'none';
+        }
+
+        // 9. Gen 9: Mochy Lagged Comet Bloom (Current - Hermite & Lagged Trail)
+        function renderGen9(genId, w, wIdx, wordEl, p, isSinging, isPast) {
+            const charCount = w.text.length;
+            wordEl.style.transform = 'none';
+            for (let i = 0; i < charCount; i++) {
+                const cEl = document.getElementById(`${genId}-w${wIdx}-c${i}`);
+                if (!cEl) continue;
+                const charStart = i / charCount;
+                const hasReached = isPast || (isSinging && p >= charStart);
+                const t = Math.max(0, Math.min(1, p));
+                const hermite = t * t * (3.0 - 2.0 * t);
+                const lift = hasReached ? -2.5 * hermite : 0.0;
+                cEl.style.transform = `translateY(${lift}px)`;
+                cEl.style.color = hasReached ? '#ffffff' : 'rgba(255,255,255,0.38)';
+            }
+            // Lagged comet trail
+            const cometLag = isSinging ? (p * 0.7) : 0;
+            wordEl.style.textShadow = isSinging ? `-${cometLag * 10}px 0 16px rgba(255,255,255, 0.9)` : 'none';
+        }
+
+        // ── Animation Loop ────────────────────────────────────────────────────
+        function loop(timestamp) {
+            const dt = (timestamp - lastFrameTime) / 1000;
+            lastFrameTime = timestamp;
+
+            if (isPlaying) {
+                currentTime += dt * playbackSpeed;
+                if (currentTime > TOTAL_DURATION) {
+                    currentTime = 0.0; // Loop seamlessly
+                }
+                scrubber.value = currentTime;
+                timeDisplay.textContent = currentTime.toFixed(2) + "s";
+            }
+
+            updateAll(currentTime);
+            requestAnimationFrame(loop);
+        }
+        requestAnimationFrame(loop);
+
+        // ── Controls Handlers ─────────────────────────────────────────────────
+        function togglePlay() {
+            isPlaying = !isPlaying;
+            playIcon.textContent = isPlaying ? "⏸" : "▶";
+            playText.textContent = isPlaying ? "Tạm dừng" : "Tiếp tục";
+        }
+
+        function restart() {
+            currentTime = 0.0;
+            scrubber.value = 0;
+            timeDisplay.textContent = "0.00s";
+        }
+
+        function setSpeed(spd) {
+            playbackSpeed = spd;
+            document.querySelectorAll(".pill-btn").forEach(b => b.classList.remove("active"));
+            if (event && event.target) event.target.classList.add("active");
+        }
+
+        function onScrub(val) {
+            currentTime = parseFloat(val);
+            timeDisplay.textContent = currentTime.toFixed(2) + "s";
+            updateAll(currentTime);
+        }
+
+        // Keyboard Shortcut: Spacebar to toggle
+        window.addEventListener("keydown", (e) => {
+            if (e.code === "Space") {
+                e.preventDefault();
+                togglePlay();
+            } else if (e.code === "KeyR") {
+                restart();
+            }
+        });
+
+        // ── Apply Action ──────────────────────────────────────────────────────
+        function applyGen(id, commit, name) {
+            const toast = document.getElementById("toast");
+            toast.textContent = `Đã chọn: ${name} (Commit: ${commit})`;
+            toast.classList.add("show");
+            setTimeout(() => toast.classList.remove("show"), 3200);
+
+            // Highlight card
+            document.querySelectorAll(".gen-card").forEach(c => c.style.outline = "none");
+            const activeCard = document.getElementById(`card-${id}`);
+            if (activeCard) {
+                activeCard.style.outline = "2px solid var(--accent)";
+            }
+
+            // Write selection to localStorage
+            localStorage.setItem("nutsty_selected_gen", JSON.stringify({ id, commit, name }));
+        }
+    </script>
+</body>
+</html>

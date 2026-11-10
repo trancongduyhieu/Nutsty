@@ -1,7 +1,7 @@
 # ADR 0004: Apple Music Phrase-Level Spatial Traveling Wave Engine
 
-- **Status**: Accepted
-- **Date**: 2026-09-26
+- **Status**: Superseded by [ADR 0006](file:///home/apple/Applications/FrostifyLocal/docs/adr/0006-apple-music-character-sweep-and-rolling-wave-engine.md)
+- **Date**: 2026-09-26 (Superseded on 2026-11-03)
 - **Deciders**: User, Antigravity AI Assistant
 
 ## Context

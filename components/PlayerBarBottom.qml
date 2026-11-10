@@ -44,6 +44,14 @@ Item {
     }
     onWidthChanged: root.triggerBackdropUpdate()
     onIsBarHeldChanged: if (!root.isBarHeld) root.triggerBackdropUpdate()
+    onIsNowPlayingOpenChanged: {
+        backdropCropSource.scheduleUpdate();
+        root.triggerBackdropUpdate();
+    }
+    onIsLyricsActiveChanged: {
+        backdropCropSource.scheduleUpdate();
+        root.triggerBackdropUpdate();
+    }
     Component.onCompleted: root.triggerBackdropUpdate()
 
     property bool isLiked: false
@@ -63,6 +71,7 @@ Item {
     signal seekRequested(real seconds)
     signal reqVolumeChange(real newVol)
     signal openDetailsRequested()
+    signal barClicked()
     signal queueClicked()
     signal openArtistRequested(string artistName, string channelId)
     signal closeClicked()
@@ -71,6 +80,8 @@ Item {
     signal sendChatMessageRequested(string messageText)
     signal toggleLikeClicked()
     signal openVolumePopoverRequested()
+
+    readonly property bool isBodyHovered: (backgroundDragArea.containsMouse || centerHover.hovered) && !miniCoverMouse.containsMouse && !root.isScrubbingProgress && !miniProgressBarMouse.containsMouse
 
     property alias volumeButtonAnchorItem: volumeButtonAnchor
 
@@ -117,11 +128,13 @@ Item {
         }
     }
 
-    // Background Drag MouseArea
+    // Background Drag & Body Click MouseArea
     MouseArea {
         id: backgroundDragArea
         anchors.fill: parent
         z: 1
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton
         onPressed: mouse => {
             root.isMousePressed = true;
@@ -136,6 +149,9 @@ Item {
         }
         onReleased: root.isMousePressed = false
         onCanceled: root.isMousePressed = false
+        onClicked: mouse => {
+            root.barClicked();
+        }
     }
 
     // =========================================================================
@@ -179,7 +195,7 @@ Item {
 
     Timer {
         id: backdropLiveDebounce
-        interval: 220
+        interval: 260
         repeat: false
         onTriggered: {
             backdropCropSource.scheduleUpdate();
@@ -210,7 +226,7 @@ Item {
         anchors.fill: parent
         radius: root.radius
         color: Qt.rgba(0.08, 0.09, 0.12, 0.48)
-        border.color: root.isBarHeld ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40) : Qt.rgba(1, 1, 1, 0.18)
+        border.color: root.isBarHeld ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40) : (root.isBodyHovered ? Qt.rgba(1, 1, 1, 0.32) : Qt.rgba(1, 1, 1, 0.18))
         border.width: 1
         Behavior on border.color { ColorAnimation { duration: 200 } }
         z: 2
@@ -274,7 +290,7 @@ Item {
         radius: root.radius
         color: "transparent"
         border.width: 1
-        border.color: root.isBarHeld ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40) : Qt.rgba(1, 1, 1, 0.12)
+        border.color: root.isBarHeld ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40) : (root.isBodyHovered ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(1, 1, 1, 0.12))
         Behavior on border.color { ColorAnimation { duration: 200 } }
         z: 4
     }
@@ -305,15 +321,17 @@ Item {
                 Item {
                     width: 40; height: parent.height
                     HoverHandler { id: shufH }
+                    scale: shufH.hovered ? 1.08 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 120 } }
                     AppIcon {
                         anchors.centerIn: parent
                         source: "../assets/icons/media-playlist-shuffle-symbolic.svg"
                         iconSize: 20
-                        color: shufH.hovered ? "#ffffff" : (root.isShuffle ? "#ffffff" : "#b3b3b3")
+                        color: root.isShuffle ? root.accentColor : "#ffffff"
                     }
                     Rectangle {
                         width: 3; height: 3; radius: 1.5
-                        color: "#ffffff"
+                        color: root.accentColor
                         anchors.bottom: parent.bottom
                         anchors.bottomMargin: 8
                         anchors.horizontalCenter: parent.horizontalCenter
@@ -330,11 +348,13 @@ Item {
                 Item {
                     width: 40; height: parent.height
                     HoverHandler { id: prevH }
+                    scale: prevH.hovered ? 1.08 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 120 } }
                     AppIcon {
                         anchors.centerIn: parent
                         source: "../assets/icons/media-skip-backward-symbolic.svg"
                         iconSize: 22
-                        color: prevH.hovered ? "#ffffff" : "#b3b3b3"
+                        color: "#ffffff"
                     }
                     MouseArea {
                         anchors.fill: parent
@@ -366,11 +386,13 @@ Item {
                 Item {
                     width: 40; height: parent.height
                     HoverHandler { id: nextH }
+                    scale: nextH.hovered ? 1.08 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 120 } }
                     AppIcon {
                         anchors.centerIn: parent
                         source: "../assets/icons/media-skip-forward-symbolic.svg"
                         iconSize: 22
-                        color: nextH.hovered ? "#ffffff" : "#b3b3b3"
+                        color: "#ffffff"
                     }
                     MouseArea {
                         anchors.fill: parent
@@ -383,15 +405,17 @@ Item {
                 Item {
                     width: 40; height: parent.height
                     HoverHandler { id: repH }
+                    scale: repH.hovered ? 1.08 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 120 } }
                     AppIcon {
                         anchors.centerIn: parent
                         source: "../assets/icons/media-playlist-repeat-symbolic.svg"
                         iconSize: 20
-                        color: repH.hovered ? "#ffffff" : (root.isRepeat ? "#ffffff" : "#b3b3b3")
+                        color: root.isRepeat ? root.accentColor : "#ffffff"
                     }
                     Rectangle {
                         width: 3; height: 3; radius: 1.5
-                        color: "#ffffff"
+                        color: root.accentColor
                         anchors.bottom: parent.bottom
                         anchors.bottomMargin: 8
                         anchors.horizontalCenter: parent.horizontalCenter
@@ -487,7 +511,10 @@ Item {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.openDetailsRequested()
+                        onClicked: mouse => {
+                            mouse.accepted = true;
+                            root.openDetailsRequested();
+                        }
                     }
                 }
 
@@ -509,7 +536,10 @@ Item {
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.openDetailsRequested()
+                            onClicked: mouse => {
+                                mouse.accepted = true;
+                                root.barClicked();
+                            }
                         }
                     }
 
@@ -528,11 +558,10 @@ Item {
 
                         MouseArea {
                             anchors.fill: parent
-                            cursorShape: root.currentTrack ? Qt.PointingHandCursor : Qt.ArrowCursor
-                            onClicked: {
-                                if (root.currentTrack && root.currentTrack.artist) {
-                                    root.openArtistRequested(parent.text, root.currentTrack.channelId || "");
-                                }
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: mouse => {
+                                mouse.accepted = true;
+                                root.barClicked();
                             }
                         }
                     }
@@ -546,6 +575,15 @@ Item {
                 anchors.bottomMargin: 10
                 opacity: 1.0 - centerSectionBox.infoAlpha
                 visible: opacity > 0.01
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: mouse => {
+                        mouse.accepted = true;
+                        root.barClicked();
+                    }
+                }
 
                 // Elapsed Time (Left)
                 Text {
@@ -647,6 +685,7 @@ Item {
                 }
 
                 MouseArea {
+                    id: miniProgressBarMouse
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
@@ -765,15 +804,16 @@ Item {
                     Item {
                         id: heartIconWrapper
                         anchors.fill: parent
-                        scale: 1.0
+                        scale: likeH.hovered ? 1.08 : 1.0
                         transformOrigin: Item.Center
+                        Behavior on scale { NumberAnimation { duration: 120 } }
 
                         AppIcon {
                             id: heartIcon
                             anchors.centerIn: parent
                             source: root.isLiked ? "../assets/icons/emblem-favorite-symbolic.svg" : "../assets/icons/favorite-border-symbolic.svg"
                             iconSize: 20
-                            color: root.isLiked ? "#f43f5e" : (likeH.hovered ? "#ffffff" : "#b3b3b3")
+                            color: root.isLiked ? "#f43f5e" : "#ffffff"
                             Behavior on color { ColorAnimation { duration: 150 } }
                         }
                     }
@@ -795,11 +835,13 @@ Item {
                 Item {
                     width: 40; height: parent.height
                     HoverHandler { id: qH }
+                    scale: qH.hovered ? 1.08 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 120 } }
                     AppIcon {
                         anchors.centerIn: parent
                         source: "../assets/icons/queue-music-symbolic.svg"
                         iconSize: 20
-                        color: (qH.hovered || (root.isNowPlayingOpen && typeof ytNowPlayingView !== "undefined" && ytNowPlayingView && ytNowPlayingView.activeTab === "up_next")) ? "#ffffff" : "#b3b3b3"
+                        color: (root.isNowPlayingOpen && typeof ytNowPlayingView !== "undefined" && ytNowPlayingView && ytNowPlayingView.activeTab === "up_next") ? root.accentColor : "#ffffff"
                     }
                     MouseArea {
                         anchors.fill: parent
@@ -812,11 +854,13 @@ Item {
                 Item {
                     width: 40; height: parent.height
                     HoverHandler { id: lyricsNowPlayingH }
+                    scale: lyricsNowPlayingH.hovered ? 1.08 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 120 } }
                     AppIcon {
                         anchors.centerIn: parent
                         source: "../assets/icons/window-restore-symbolic.svg"
                         iconSize: 18
-                        color: (lyricsNowPlayingH.hovered || (root.isNowPlayingOpen && typeof ytNowPlayingView !== "undefined" && ytNowPlayingView && ytNowPlayingView.activeTab === "lyrics")) ? "#ffffff" : "#b3b3b3"
+                        color: (root.isNowPlayingOpen && typeof ytNowPlayingView !== "undefined" && ytNowPlayingView && ytNowPlayingView.activeTab === "lyrics") ? root.accentColor : "#ffffff"
                     }
                     MouseArea {
                         anchors.fill: parent
@@ -830,6 +874,8 @@ Item {
                     id: volumeButtonAnchor
                     width: 40; height: parent.height
                     z: 50
+                    scale: volBtnHover.hovered ? 1.08 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 120 } }
 
                     HoverHandler { id: volBtnHover }
 
@@ -837,7 +883,7 @@ Item {
                         anchors.centerIn: parent
                         source: root.volume === 0 ? "../assets/icons/audio-volume-muted-symbolic.svg" : "../assets/icons/audio-volume-high-symbolic.svg"
                         iconSize: 20
-                        color: (volBtnHover.hovered || root.isVolumePopupOpen) ? "#ffffff" : "#b3b3b3"
+                        color: root.isVolumePopupOpen ? root.accentColor : "#ffffff"
                     }
 
                     MouseArea {
@@ -857,11 +903,13 @@ Item {
                 Item {
                     width: 40; height: parent.height
                     HoverHandler { id: closeH }
+                    scale: closeH.hovered ? 1.08 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 120 } }
                     AppIcon {
                         anchors.centerIn: parent
                         source: "../assets/icons/window-close-symbolic.svg"
                         iconSize: 18
-                        color: closeH.hovered ? "#ff5252" : "#b3b3b3"
+                        color: closeH.hovered ? "#ff5252" : "#ffffff"
                     }
                     MouseArea {
                         anchors.fill: parent

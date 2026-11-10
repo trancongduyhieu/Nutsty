@@ -286,15 +286,18 @@ Item {
 
             // Action 4: Open folder (local) or Download (online)
             MenuItemButton {
-                property bool isLocal: root.track && !root.track.videoId && (!root.track.path || !root.track.path.startsWith("ytdl://"))
+                id: openOrDownloadBtn
                 property string vid: {
                     if (!root.track) return "";
-                    if (root.track.videoId) return root.track.videoId;
+                    if (root.track.videoId) return String(root.track.videoId);
                     if (root.track.path && root.track.path.startsWith("ytdl://")) return root.track.path.replace("ytdl://", "");
                     return "";
                 }
-                property bool isDownloading: (root.dlMgr && vid) ? !!root.dlMgr.isDownloading(vid) : false
-                property real progress: (root.dlMgr && vid) ? root.dlMgr.getProgress(vid) : -1
+                property int dlRev: root.dlMgr ? root.dlMgr.revision : 0
+                property bool isDownloaded: (dlRev >= 0 && root.dlMgr) ? !!root.dlMgr.isDownloaded(vid, root.track) : false
+                property bool isLocal: isDownloaded || (root.track && root.track.path && !root.track.path.startsWith("ytdl://") && !root.track.path.startsWith("http://") && !root.track.path.startsWith("https://"))
+                property bool isDownloading: (dlRev >= 0 && root.dlMgr && vid) ? !!root.dlMgr.isDownloading(vid) : false
+                property real progress: (dlRev >= 0 && root.dlMgr && vid) ? root.dlMgr.getProgress(vid) : -1
 
                 text: isLocal ? I18n.tr("Mở thư mục chứa file", "Open containing folder") : (isDownloading ? (I18n.tr("Đang tải (", "Downloading (") + Math.max(0, Math.round(progress)) + "%)...") : I18n.tr("Tải bài hát", "Download track"))
                 iconSource: isLocal ? "../assets/icons/folder-music-symbolic.svg" : (isDownloading ? "../assets/icons/process-working-symbolic.svg" : "../assets/icons/download-symbolic.svg")
@@ -319,7 +322,7 @@ Item {
                 height: 1
                 color: Qt.rgba(1, 1, 1, 0.08)
                 anchors.horizontalCenter: parent.horizontalCenter
-                visible: root.isQueueItem || (root.track && !root.track.videoId && (!root.track.path || !root.track.path.startsWith("ytdl://")))
+                visible: root.isQueueItem || openOrDownloadBtn.isLocal
             }
 
             // Action 5: Remove from Custom Playlist
@@ -339,7 +342,7 @@ Item {
 
             // Action 6: Remove from Queue or Delete
             MenuItemButton {
-                visible: root.isQueueItem || (root.track && !root.track.videoId && (!root.track.path || !root.track.path.startsWith("ytdl://")))
+                visible: root.isQueueItem || openOrDownloadBtn.isLocal
                 text: root.isQueueItem ? I18n.tr("Xóa khỏi hàng đợi", "Remove from queue") : I18n.tr("Xóa khỏi thư viện", "Delete from library")
                 textColor: "#ff5252"
                 iconColor: "#ff5252"

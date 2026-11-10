@@ -452,6 +452,7 @@ Item {
     onVisibleChanged: {
         if (visible) {
             delayedAudioSpecsTimer.restart();
+            updateActiveLyric(true);
         }
         if (visible && root.track && (!root.moodChips || root.moodChips.length === 0)) {
             fetchMoodChips();
@@ -465,7 +466,9 @@ Item {
     }
 
     onCurrentTimeChanged: {
-        updateActiveLyric(false);
+        if (root.visible) {
+            updateActiveLyric(false);
+        }
     }
 
     Timer {
@@ -837,7 +840,7 @@ Item {
     }
 
     function updateActiveLyric(forceScroll) {
-        if (!activeLyrics || activeLyrics.length === 0) {
+        if (!root.visible || !activeLyrics || activeLyrics.length === 0) {
             currentLyricIndex = -1;
             return;
         }
@@ -1222,25 +1225,20 @@ Item {
                                 if (root.track.path && root.track.path.startsWith("ytdl://")) return root.track.path.replace("ytdl://", "");
                                 return "";
                             }
-                            property bool isDl: Boolean(typeof downloadManager !== "undefined" && downloadManager && vid && downloadManager.isDownloading(vid))
-                            property real dlProg: (typeof downloadManager !== "undefined" && downloadManager && vid && downloadManager.getProgress(vid) !== undefined) ? downloadManager.getProgress(vid) : -1
-                            property bool isDone: {
-                                if (!root.track) return false;
-                                if (typeof downloadManager !== "undefined" && downloadManager && vid && downloadManager.isDownloaded(vid)) return true;
-                                if (root.track.path && !root.track.path.startsWith("ytdl://") && !root.track.path.startsWith("http")) return true;
-                                if (typeof win !== "undefined" && win && win.allTracks) {
-                                    var tName = (root.track.title || root.track.name || "").toLowerCase().trim();
-                                    for (var i = 0; i < win.allTracks.length; ++i) {
-                                        var at = win.allTracks[i];
-                                        if (vid && at.image && at.image.indexOf(vid) !== -1) return true;
-                                        var aName = (at.title || at.name || "").toLowerCase().trim();
-                                        if (tName && aName && tName === aName) return true;
-                                    }
-                                }
-                                return false;
-                            }
+                            property int dlRev: (typeof downloadManager !== "undefined" && downloadManager) ? downloadManager.revision : 0
+                            property bool isDl: (dlRev >= 0 && typeof downloadManager !== "undefined" && downloadManager && vid) ? Boolean(downloadManager.isDownloading(vid)) : false
+                            property real dlProg: (dlRev >= 0 && typeof downloadManager !== "undefined" && downloadManager && vid && downloadManager.getProgress(vid) !== undefined) ? downloadManager.getProgress(vid) : -1
+                            property bool isDone: (dlRev >= 0 && typeof downloadManager !== "undefined" && downloadManager) ? Boolean(downloadManager.isDownloaded(vid, root.track)) : false
 
                             HoverHandler { id: dlH }
+
+                            ToolTip.visible: dlH.hovered
+                            ToolTip.text: parent.isDl
+                                ? I18n.tr("Hủy tải xuống", "Cancel download")
+                                : (parent.isDone
+                                    ? I18n.tr("Xóa khỏi thư viện tải về", "Remove downloaded track")
+                                    : I18n.tr("Tải bài hát", "Download track"))
+                            ToolTip.delay: 350
 
                             DownloadingSpinner {
                                 anchors.centerIn: parent
@@ -1275,7 +1273,11 @@ Item {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    if (parent.isDone) {
+                                    if (parent.isDl) {
+                                        if (typeof downloadManager !== "undefined" && downloadManager) {
+                                            downloadManager.cancel(parent.vid);
+                                        }
+                                    } else if (parent.isDone) {
                                         if (typeof downloadManager !== "undefined" && downloadManager) {
                                             downloadManager.deleteDownloaded(parent.vid, root.track);
                                         }
@@ -2099,8 +2101,8 @@ Item {
 
                             // 1:1 Mochy-Music state scale & alpha transitions (LyricsGlowLine.kt)
                             // Strictly NO dynamic font resizing (Footgun #217: causes layout reflows and stutter)
-                            readonly property real restingAlpha: isCurrent ? 1.0 : (lyricsView.isUserScrolling ? 0.85 : (isHovered ? 0.90 : (signedDist < 0 ? 0.24 : (dist === 1 ? 0.45 : 0.38))))
-                            readonly property real restingScale: isPlainLine ? 1.0 : (isCurrent ? 1.06 : (signedDist < 0 ? 0.93 : (dist === 1 ? 0.98 : 0.95)))
+                            readonly property real restingAlpha: isCurrent ? 1.0 : (lyricsView.isUserScrolling ? 0.85 : (isHovered ? 0.90 : (signedDist < 0 ? 0.24 : (dist === 1 ? 0.50 : 0.30))))
+                            readonly property real restingScale: isPlainLine ? 1.0 : (isCurrent ? 1.06 : (signedDist < 0 ? 0.93 : (dist === 1 ? 0.98 : 0.93)))
 
                             // Duet vocal layout & agent classification (1:1 Mochy-Music & Apple Music)
                             readonly property bool isDuetInterlude: !!(modelData && modelData.isInterlude)
@@ -2137,8 +2139,15 @@ Item {
                                 }
                             }
 
-                            // High-performance depth-of-field: pure typography opacity and scale falloff (0 FBO overhead, zero thermal load)
-                            layer.enabled: false
+                            // 1:1 Mochy-Music / Apple Music Camera DoF Optical Blur (LyricsScreen.kt LineLook)
+                            // Continuously blurs all distant lines (dist >= 1) with zero pop-back to sharp text.
+                            layer.enabled: !lyricsView.isUserScrolling && !lyricRow.isHovered && (lyricRow.dist >= 1) && !lyricRow.isDuetInterlude
+                            layer.effect: MultiEffect {
+                                blurEnabled: true
+                                blur: lyricRow.dist === 1 ? 0.35 : 0.75
+                                blurMax: 16
+                                autoPaddingEnabled: true
+                            }
 
 
                             Column {
@@ -2263,11 +2272,12 @@ Item {
                                     }
 
                                     // 2. Apple Music Word Flow: Progressive character sweep + MultiEffect Gaussian bloom
-                                    // Persistent across nearby lines (dist <= 3) to guarantee 100% steady wrapping without jumps
+                                    // Active only on current/adjacent line and only visible for the current singing line
                                     Loader {
                                         id: appleMusicFlowLoader
-                                        active: !interludeBeadsRow.visible && lyricRow.dist <= 3 && modelData.hasWords && !modelData.isSynthetic && lyricRow.leadWords && lyricRow.leadWords.length > 0
-                                        visible: active
+                                        active: !interludeBeadsRow.visible && lyricRow.dist <= 1 && modelData.hasWords && !modelData.isSynthetic && lyricRow.leadWords && lyricRow.leadWords.length > 0
+                                        visible: active && (lyricRow.isCurrent ||
+                                                 (lyricRow.signedDist === -1 && appleMusicFlowLoader.item !== null && appleMusicFlowLoader.item.hasActiveHeldWord))
                                         anchors.left: parent.left
                                         anchors.right: parent.right
                                         sourceComponent: Component {
@@ -2276,6 +2286,7 @@ Item {
                                                 anchors.right: parent.right
                                                 words: (modelData.hasWords && !modelData.isSynthetic && lyricRow.leadWords) ? lyricRow.leadWords : []
                                                 currentTime: root.currentTime
+                                                isLineActive: lyricRow.isCurrent
                                                 fontSize: 28
                                                 accentColor: "#ffffff"
                                                 isAnsweringVoice: lyricRow.isAnsweringVoice
@@ -2299,13 +2310,9 @@ Item {
                                         font.pixelSize: 28
                                         font.weight: Font.Bold
                                         font.italic: lyricRow.isBackgroundVocal
-                                        color: lyricRow.isCurrent ? "#ffffff" : "#c4c8d4"
+                                        color: "#ffffff"
                                         wrapMode: Text.Wrap
                                         lineHeight: 1.28
-
-                                        Behavior on color {
-                                            ColorAnimation { duration: 180 }
-                                        }
                                     }
                                 }
 

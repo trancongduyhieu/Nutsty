@@ -1,25 +1,6 @@
 [
   {
     "id": 1,
-    "title": "プロポーズ - propose",
-    "name": "プロポーズ - propose",
-    "artist": "9Lana",
-    "album": "propose",
-    "year": "",
-    "duration": "3:54",
-    "duration_ms": 234414,
-    "duration_sec": 234.414,
-    "bitrate": 124,
-    "codec": "opus",
-    "source": "Nutsty",
-    "path": "/home/apple/Music/Nutsty/Tracks/9Lana - プロポーズ - propose.opus",
-    "filename": "9Lana - プロポーズ - propose.opus",
-    "image": "https://yt3.googleusercontent.com/FtgUbn4i8fMAOFIMkZOK5DM00rTAD0AlmM0oxAtjCW5KFkTWmgK7Np4FKYX13P01ydM-Zj0BA4CUo9E=w1200-h1200-l90-rj",
-    "videoId": "Yjo_NQUyBa8",
-    "mtime": 1788946306
-  },
-  {
-    "id": 2,
     "title": "Aishite Aishite Aishite",
     "name": "Aishite Aishite Aishite",
     "artist": "Ado",
@@ -38,7 +19,7 @@
     "mtime": 1788946301
   },
   {
-    "id": 3,
+    "id": 2,
     "title": "unravel",
     "name": "unravel",
     "artist": "Ado",
@@ -57,7 +38,7 @@
     "mtime": 1788946300
   },
   {
-    "id": 4,
+    "id": 3,
     "title": "うっせぇわ - Usseewa",
     "name": "うっせぇわ - Usseewa",
     "artist": "Ado",
@@ -76,7 +57,7 @@
     "mtime": 1788946307
   },
   {
-    "id": 5,
+    "id": 4,
     "title": "アイ・アイ・ア - AiAiA",
     "name": "アイ・アイ・ア - AiAiA",
     "artist": "Ado",
@@ -95,7 +76,7 @@
     "mtime": 1788946310
   },
   {
-    "id": 6,
+    "id": 5,
     "title": "唱 (TeddyLoid Remix) - Show (TeddyLoid Remix)",
     "name": "唱 (TeddyLoid Remix) - Show (TeddyLoid Remix)",
     "artist": "Ado",
@@ -114,7 +95,7 @@
     "mtime": 1788946310
   },
   {
-    "id": 7,
+    "id": 6,
     "title": "唱 - Show",
     "name": "唱 - Show",
     "artist": "Ado",
@@ -133,7 +114,7 @@
     "mtime": 1788946309
   },
   {
-    "id": 8,
+    "id": 7,
     "title": "悪魔の子",
     "name": "悪魔の子",
     "artist": "Ai Higuchi, 348 Tr lượt phát",
@@ -152,7 +133,7 @@
     "mtime": 1788946303
   },
   {
-    "id": 9,
+    "id": 8,
     "title": "hobbies",
     "name": "hobbies",
     "artist": "Aleyna Moon",
@@ -171,7 +152,7 @@
     "mtime": 1788946311
   },
   {
-    "id": 10,
+    "id": 9,
     "title": "Idol - Oshi no Ko OP [Piano]  YOASOBI",
     "name": "Idol - Oshi no Ko OP [Piano]  YOASOBI",
     "artist": "Animenz",
@@ -190,7 +171,7 @@
     "mtime": 1788946311
   },
   {
-    "id": 11,
+    "id": 10,
     "title": "Unravel (Tokyo Ghoul) - Piano Version",
     "name": "Unravel (Tokyo Ghoul) - Piano Version",
     "artist": "Animenz",
@@ -209,7 +190,7 @@
     "mtime": 1788946306
   },
   {
-    "id": 12,
+    "id": 11,
     "title": "505",
     "name": "505",
     "artist": "Arctic Monkeys",
@@ -228,7 +209,7 @@
     "mtime": 1788946308
   },
   {
-    "id": 13,
+    "id": 12,
     "title": "IDOL【ENGLISH EDM COVER】「アイドル」 by YOASOBI【Aries Shepard x @djJoMusicChannel 】",
     "name": "IDOL【ENGLISH EDM COVER】「アイドル」 by YOASOBI【Aries Shepard x @djJoMusicChannel 】",
     "artist": "Aries Shepard",
@@ -247,7 +228,7 @@
     "mtime": 1788946302
   },
   {
-    "id": 14,
+    "id": 13,
     "title": "Light Switch",
     "name": "Light Switch",
     "artist": "Charlie Puth",
@@ -266,7 +247,7 @@
     "mtime": 1788946304
   },
   {
-    "id": 15,
+    "id": 14,
     "title": "Nói Dối",
     "name": "Nói Dối",
     "artist": "Côngg, inari",
@@ -285,7 +266,7 @@
     "mtime": 1788946311
   },
   {
-    "id": 16,
+    "id": 15,
     "title": "Cradles (Female Version)",
     "name": "Cradles (Female Version)",
     "artist": "Eiden XII",
@@ -304,7 +285,7 @@
     "mtime": 1788946308
   },
   {
-    "id": 17,
+    "id": 16,
     "title": "Vietsub - Monitoring - DECO27  Best Friend Remix version.【VIETSUB】",
     "name": "Vietsub - Monitoring - DECO27  Best Friend Remix version.【VIETSUB】",
     "artist": "Fuwamochi",
@@ -323,7 +304,7 @@
     "mtime": 1788946299
   },
   {
-    "id": 18,
+    "id": 17,
     "title": "【MV】 プロポーズ  propose  HAKOS BAELZ COVER",
     "name": "【MV】 プロポーズ  propose  HAKOS BAELZ COVER",
     "artist": "Hakos Baelz",
@@ -342,7 +323,7 @@
     "mtime": 1788946310
   },
   {
-    "id": 19,
+    "id": 18,
     "title": "Tháng Tư Là Lời Nói Dối Của Em",
     "name": "Tháng Tư Là Lời Nói Dối Của Em",
     "artist": "Hà Anh Tuấn",
@@ -361,7 +342,7 @@
     "mtime": 1788946303
   },
   {
-    "id": 20,
+    "id": 19,
     "title": "Demons",
     "name": "Demons",
     "artist": "Imagine Dragons",
@@ -380,7 +361,7 @@
     "mtime": 1788946303
   },
   {
-    "id": 21,
+    "id": 20,
     "title": "Unravel (Full Version)",
     "name": "Unravel (Full Version)",
     "artist": "Jonathan Young",
@@ -399,7 +380,7 @@
     "mtime": 1788946303
   },
   {
-    "id": 22,
+    "id": 21,
     "title": "GEMN「ファタール」 Performance Video (Prod. by Kento Nakajima)",
     "name": "GEMN「ファタール」 Performance Video (Prod. by Kento Nakajima)",
     "artist": "Kento Nakajima, Tatsuya Kitani, GEMN",
@@ -418,7 +399,7 @@
     "mtime": 1788946304
   },
   {
-    "id": 23,
+    "id": 22,
     "title": "Call of Silence (From Attack on Titan) (Piano Cover)",
     "name": "Call of Silence (From Attack on Titan) (Piano Cover)",
     "artist": "Lazypianist",
@@ -437,7 +418,7 @@
     "mtime": 1788946309
   },
   {
-    "id": 24,
+    "id": 23,
     "title": "GODS",
     "name": "GODS",
     "artist": "League of Legends, NewJeans",
@@ -456,7 +437,7 @@
     "mtime": 1788946310
   },
   {
-    "id": 25,
+    "id": 24,
     "title": "TK from 凛として時雨 『unravel』 Music Video(Full Size)",
     "name": "TK from 凛として時雨 『unravel』 Music Video(Full Size)",
     "artist": "Ling Tosite Sigure",
@@ -475,7 +456,7 @@
     "mtime": 1788946302
   },
   {
-    "id": 26,
+    "id": 25,
     "title": "[English Cover] Catcher in the Ui (Shigure Ui)  Mugibatake de Tsukamaete",
     "name": "[English Cover] Catcher in the Ui (Shigure Ui)  Mugibatake de Tsukamaete",
     "artist": "Little Nii",
@@ -494,7 +475,7 @@
     "mtime": 1788946311
   },
   {
-    "id": 27,
+    "id": 26,
     "title": "Cry For Me (cùng với Ami)",
     "name": "Cry For Me (cùng với Ami)",
     "artist": "Michita",
@@ -513,7 +494,7 @@
     "mtime": 1788946300
   },
   {
-    "id": 28,
+    "id": 27,
     "title": "Bản Ngã Trong Tôi",
     "name": "Bản Ngã Trong Tôi",
     "artist": "Moonatics",
@@ -532,7 +513,7 @@
     "mtime": 1788946301
   },
   {
-    "id": 29,
+    "id": 28,
     "title": "シネテ - NARI",
     "name": "シネテ - NARI",
     "artist": "NARI",
@@ -551,7 +532,7 @@
     "mtime": 1788946305
   },
   {
-    "id": 30,
+    "id": 29,
     "title": "ペカビ - Peccavi",
     "name": "ペカビ - Peccavi",
     "artist": "NARI",
@@ -570,7 +551,7 @@
     "mtime": 1788946311
   },
   {
-    "id": 31,
+    "id": 30,
     "title": "Cơn Mưa Ngang Qua - Metal Rock Version",
     "name": "Cơn Mưa Ngang Qua - Metal Rock Version",
     "artist": "Nhạc Dốc Mê Ta",
@@ -589,7 +570,7 @@
     "mtime": 1788946308
   },
   {
-    "id": 32,
+    "id": 31,
     "title": "House of Memories",
     "name": "House of Memories",
     "artist": "Panic! At The Disco",
@@ -608,7 +589,7 @@
     "mtime": 1788946297
   },
   {
-    "id": 33,
+    "id": 32,
     "title": "Mặt Mộc (cùng với BMZ)",
     "name": "Mặt Mộc (cùng với BMZ)",
     "artist": "Phạm Nguyên Ngọc, VAnh, Ân Nhi",
@@ -627,7 +608,7 @@
     "mtime": 1788946305
   },
   {
-    "id": 34,
+    "id": 33,
     "title": "NIGHT DANCER - Imase [ Remind Cover ]",
     "name": "NIGHT DANCER - Imase [ Remind Cover ]",
     "artist": "Remind TV",
@@ -646,7 +627,7 @@
     "mtime": 1788946304
   },
   {
-    "id": 35,
+    "id": 34,
     "title": "DECO27 The Vampire - RiiKami (Cover)",
     "name": "DECO27 The Vampire - RiiKami (Cover)",
     "artist": "Riikami Ch.",
@@ -665,7 +646,7 @@
     "mtime": 1788946309
   },
   {
-    "id": 36,
+    "id": 35,
     "title": "Shaun (숀) - Way Back Home (Piano Cover by Riyandi Kusuma)",
     "name": "Shaun (숀) - Way Back Home (Piano Cover by Riyandi Kusuma)",
     "artist": "Riyandi Kusuma",
@@ -684,7 +665,7 @@
     "mtime": 1788946296
   },
   {
-    "id": 37,
+    "id": 36,
     "title": "Wasteland (from the series Arcane League of Legends)",
     "name": "Wasteland (from the series Arcane League of Legends)",
     "artist": "Royal & the Serpent",
@@ -703,7 +684,7 @@
     "mtime": 1788946300
   },
   {
-    "id": 38,
+    "id": 37,
     "title": "Confessions of a Rotten Girl",
     "name": "Confessions of a Rotten Girl",
     "artist": "SAWTOWNE",
@@ -722,7 +703,7 @@
     "mtime": 1788946309
   },
   {
-    "id": 39,
+    "id": 38,
     "title": "I Really Want to Stay at Your House",
     "name": "I Really Want to Stay at Your House",
     "artist": "Samuel Kim, Lorien",
@@ -741,7 +722,7 @@
     "mtime": 1788946301
   },
   {
-    "id": 40,
+    "id": 39,
     "title": "Phía Sau Một Cô Gái - Soobin Hoàng Sơn (Official Music Video 4K)",
     "name": "Phía Sau Một Cô Gái - Soobin Hoàng Sơn (Official Music Video 4K)",
     "artist": "Soobin Hoàng Sơn",
@@ -760,7 +741,7 @@
     "mtime": 1788946300
   },
   {
-    "id": 41,
+    "id": 40,
     "title": "Chạy Ngay Đi",
     "name": "Chạy Ngay Đi",
     "artist": "Sơn Tùng M-TP",
@@ -779,7 +760,7 @@
     "mtime": 1788946303
   },
   {
-    "id": 42,
+    "id": 41,
     "title": "Lạc Trôi",
     "name": "Lạc Trôi",
     "artist": "Sơn Tùng M-TP",
@@ -798,7 +779,7 @@
     "mtime": 1788946296
   },
   {
-    "id": 43,
+    "id": 42,
     "title": "Execution Clap",
     "name": "Execution Clap",
     "artist": "TRAP CHICK",
@@ -817,7 +798,7 @@
     "mtime": 1788946307
   },
   {
-    "id": 44,
+    "id": 43,
     "title": "HEAVENLY JUMPSTYLE (Slowed)",
     "name": "HEAVENLY JUMPSTYLE (Slowed)",
     "artist": "TWXNY, Sxilwix, Innxcence",
@@ -836,7 +817,7 @@
     "mtime": 1788946310
   },
   {
-    "id": 45,
+    "id": 44,
     "title": "Blinding Lights",
     "name": "Blinding Lights",
     "artist": "The Weeknd",
@@ -855,7 +836,7 @@
     "mtime": 1788946296
   },
   {
-    "id": 46,
+    "id": 45,
     "title": "Aishite Aishite Aishite",
     "name": "Aishite Aishite Aishite",
     "artist": "Trickle",
@@ -874,7 +855,7 @@
     "mtime": 1788946309
   },
   {
-    "id": 47,
+    "id": 46,
     "title": "BUTCHER VANITY",
     "name": "BUTCHER VANITY",
     "artist": "Trickle",
@@ -893,7 +874,7 @@
     "mtime": 1788946296
   },
   {
-    "id": 48,
+    "id": 47,
     "title": "Idol  ENGLISH COVER【Trickle】Oshi no Ko",
     "name": "Idol  ENGLISH COVER【Trickle】Oshi no Ko",
     "artist": "Trickle",
@@ -912,7 +893,7 @@
     "mtime": 1788946303
   },
   {
-    "id": 49,
+    "id": 48,
     "title": "KING",
     "name": "KING",
     "artist": "Trickle",
@@ -931,7 +912,7 @@
     "mtime": 1788946308
   },
   {
-    "id": 50,
+    "id": 49,
     "title": "Monitoring  English Cover - Trickle",
     "name": "Monitoring  English Cover - Trickle",
     "artist": "Trickle",
@@ -950,7 +931,7 @@
     "mtime": 1788946308
   },
   {
-    "id": 51,
+    "id": 50,
     "title": "Show",
     "name": "Show",
     "artist": "Trickle",
@@ -969,7 +950,7 @@
     "mtime": 1788946309
   },
   {
-    "id": 52,
+    "id": 51,
     "title": "Trickle • Aishite Aishite Aishite (English Cover) – Kikuo",
     "name": "Trickle • Aishite Aishite Aishite (English Cover) – Kikuo",
     "artist": "Trickle",
@@ -988,7 +969,7 @@
     "mtime": 1788946311
   },
   {
-    "id": 53,
+    "id": 52,
     "title": "Trickle • Brain Rot (English Cover) – Tokyo Manaka",
     "name": "Trickle • Brain Rot (English Cover) – Tokyo Manaka",
     "artist": "Trickle",
@@ -1007,7 +988,7 @@
     "mtime": 1788946307
   },
   {
-    "id": 54,
+    "id": 53,
     "title": "Vừa Hận Vừa Yêu",
     "name": "Vừa Hận Vừa Yêu",
     "artist": "Trung Tự",
@@ -1026,7 +1007,7 @@
     "mtime": 1788946305
   },
   {
-    "id": 55,
+    "id": 54,
     "title": "The Line (from the series Arcane League of Legends)",
     "name": "The Line (from the series Arcane League of Legends)",
     "artist": "Twenty One Pilots",
@@ -1045,7 +1026,7 @@
     "mtime": 1788946307
   },
   {
-    "id": 56,
+    "id": 55,
     "title": "唱 (Cover)",
     "name": "唱 (Cover)",
     "artist": "Unnämed",
@@ -1064,7 +1045,7 @@
     "mtime": 1788946310
   },
   {
-    "id": 57,
+    "id": 56,
     "title": "Harlequin Contraption ft. Kasane Teto",
     "name": "Harlequin Contraption ft. Kasane Teto",
     "artist": "Vane Lily",
@@ -1083,7 +1064,7 @@
     "mtime": 1788946311
   },
   {
-    "id": 58,
+    "id": 57,
     "title": "THÁNG TƯ LÀ LỜI NÓI DỐI CỦA EM - PIANO COVER - HÀ ANH TUẤN",
     "name": "THÁNG TƯ LÀ LỜI NÓI DỐI CỦA EM - PIANO COVER - HÀ ANH TUẤN",
     "artist": "Vu Ngoc Tien",
@@ -1102,7 +1083,7 @@
     "mtime": 1788946305
   },
   {
-    "id": 59,
+    "id": 58,
     "title": "Fatal (English Cover)「Oshi no Ko OP 2」【Will Stetson】「ファタール - 推しの子」",
     "name": "Fatal (English Cover)「Oshi no Ko OP 2」【Will Stetson】「ファタール - 推しの子」",
     "artist": "Will Stetson",
@@ -1121,7 +1102,7 @@
     "mtime": 1788946307
   },
   {
-    "id": 60,
+    "id": 59,
     "title": "Overdose (English Cover)「なとり」【Will Stetson】",
     "name": "Overdose (English Cover)「なとり」【Will Stetson】",
     "artist": "Will Stetson",
@@ -1140,7 +1121,7 @@
     "mtime": 1788946308
   },
   {
-    "id": 61,
+    "id": 60,
     "title": "AiAiA ENGLISH COVER 【Y1L1NG】Ado",
     "name": "AiAiA ENGLISH COVER 【Y1L1NG】Ado",
     "artist": "Y1L1NG",
@@ -1159,7 +1140,7 @@
     "mtime": 1788946302
   },
   {
-    "id": 62,
+    "id": 61,
     "title": "怪物",
     "name": "怪物",
     "artist": "YOASOBI",
@@ -1178,7 +1159,7 @@
     "mtime": 1788946302
   },
   {
-    "id": 63,
+    "id": 62,
     "title": "Harpy Hare",
     "name": "Harpy Hare",
     "artist": "Yaelokre",
@@ -1197,7 +1178,7 @@
     "mtime": 1788946301
   },
   {
-    "id": 64,
+    "id": 63,
     "title": "Hearken",
     "name": "Hearken",
     "artist": "Yaelokre",
@@ -1216,7 +1197,7 @@
     "mtime": 1788946297
   },
   {
-    "id": 65,
+    "id": 64,
     "title": "Kid & Leveret",
     "name": "Kid & Leveret",
     "artist": "Yaelokre",
@@ -1235,7 +1216,7 @@
     "mtime": 1788946301
   },
   {
-    "id": 66,
+    "id": 65,
     "title": "My farewells to the fields",
     "name": "My farewells to the fields",
     "artist": "Yaelokre",
@@ -1254,7 +1235,7 @@
     "mtime": 1788946307
   },
   {
-    "id": 67,
+    "id": 66,
     "title": "Neath the grove is a heart",
     "name": "Neath the grove is a heart",
     "artist": "Yaelokre",
@@ -1273,7 +1254,7 @@
     "mtime": 1788946297
   },
   {
-    "id": 68,
+    "id": 67,
     "title": "うそつきマカロン - Liar Macaron (cùng với KASANE TETO)",
     "name": "うそつきマカロン - Liar Macaron (cùng với KASANE TETO)",
     "artist": "bouinboushokup",
@@ -1292,7 +1273,7 @@
     "mtime": 1788946304
   },
   {
-    "id": 69,
+    "id": 68,
     "title": "Ca Sĩ Vô Danh",
     "name": "Ca Sĩ Vô Danh",
     "artist": "inari, Côngg",
@@ -1311,7 +1292,7 @@
     "mtime": 1788946311
   },
   {
-    "id": 70,
+    "id": 69,
     "title": "not again",
     "name": "not again",
     "artist": "mindfreakk!",
@@ -1330,7 +1311,7 @@
     "mtime": 1788946311
   },
   {
-    "id": 71,
+    "id": 70,
     "title": "All The Things She Said",
     "name": "All The Things She Said",
     "artist": "t.A.T.u.",
@@ -1349,7 +1330,7 @@
     "mtime": 1788946309
   },
   {
-    "id": 72,
+    "id": 71,
     "title": "【tira feat. Yi Xi】INFINITE DEATH【ORIGINAL SONG】",
     "name": "【tira feat. Yi Xi】INFINITE DEATH【ORIGINAL SONG】",
     "artist": "tiramika",
@@ -1368,7 +1349,7 @@
     "mtime": 1788946306
   },
   {
-    "id": 73,
+    "id": 72,
     "title": "Wannabe (Sped Up Version)",
     "name": "Wannabe (Sped Up Version)",
     "artist": "why mona, 22 Tr lượt phát",
@@ -1387,7 +1368,7 @@
     "mtime": 1788946308
   },
   {
-    "id": 74,
+    "id": 73,
     "title": "Fatal – Oshi no Ko OP 2【Duet Cover  xsakurarose & reruzensky】「ファタール」",
     "name": "Fatal – Oshi no Ko OP 2【Duet Cover  xsakurarose & reruzensky】「ファタール」",
     "artist": "xsakurarose",
@@ -1406,7 +1387,7 @@
     "mtime": 1788946302
   },
   {
-    "id": 75,
+    "id": 74,
     "title": "爱是难解的签",
     "name": "爱是难解的签",
     "artist": "一只白羊",
@@ -1425,7 +1406,7 @@
     "mtime": 1788946310
   },
   {
-    "id": 76,
+    "id": 75,
     "title": "ラビットホール×メズマライザー(Mashup)  初音ミク・重音テトSV【channel】",
     "name": "ラビットホール×メズマライザー(Mashup)  初音ミク・重音テトSV【channel】",
     "artist": "作曲生徒︎︎　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　 ︎",
@@ -1444,7 +1425,7 @@
     "mtime": 1788946297
   },
   {
-    "id": 77,
+    "id": 76,
     "title": "05 (Không Phai) | @tangduytan  x T.R.I x Phong Max ( phiên bản Phong Max )",
     "name": "05 (Không Phai) | @tangduytan  x T.R.I x Phong Max ( phiên bản Phong Max )",
     "artist": "Phong Max",
@@ -1463,7 +1444,7 @@
     "mtime": 1789118128
   },
   {
-    "id": 78,
+    "id": 77,
     "title": "unravel",
     "name": "unravel",
     "artist": "Ado",
@@ -1482,7 +1463,7 @@
     "mtime": 1788945012
   },
   {
-    "id": 79,
+    "id": 78,
     "title": "Beggin'",
     "name": "Beggin'",
     "artist": "McPepii",
@@ -1501,7 +1482,7 @@
     "mtime": 1789121663
   },
   {
-    "id": 80,
+    "id": 79,
     "title": "Chúng Ta Của Tương Lai",
     "name": "Chúng Ta Của Tương Lai",
     "artist": "Sơn Tùng M-TP",
@@ -1520,7 +1501,7 @@
     "mtime": 1789736668
   },
   {
-    "id": 81,
+    "id": 80,
     "title": "Dù Cho Mai Về Sau (Acoustic Version) / buitruonglinh",
     "name": "Dù Cho Mai Về Sau (Acoustic Version) / buitruonglinh",
     "artist": "buitruonglinh",
@@ -1539,7 +1520,7 @@
     "mtime": 1789489037
   },
   {
-    "id": 82,
+    "id": 81,
     "title": "Earrings",
     "name": "Earrings",
     "artist": "Malcolm Todd",
@@ -1558,7 +1539,7 @@
     "mtime": 1789119784
   },
   {
-    "id": 83,
+    "id": 82,
     "title": "Không Buông",
     "name": "Không Buông",
     "artist": "Hngle, Ari",
@@ -1577,7 +1558,7 @@
     "mtime": 1789551795
   },
   {
-    "id": 84,
+    "id": 83,
     "title": "Let me battle",
     "name": "Let me battle",
     "artist": "9Lana",
@@ -1596,7 +1577,7 @@
     "mtime": 1789736163
   },
   {
-    "id": 85,
+    "id": 84,
     "title": "Làm Sao Để Em Tựa Vào | Sino ft. Khang Thanh (prod. MKM) | Animated MV",
     "name": "Làm Sao Để Em Tựa Vào | Sino ft. Khang Thanh (prod. MKM) | Animated MV",
     "artist": "SiNo studio",
@@ -1615,7 +1596,7 @@
     "mtime": 1789424634
   },
   {
-    "id": 86,
+    "id": 85,
     "title": "Nếu Ngày Ấy (Lofi Ver.) - Andiez x Freak D | St. Nguyễn Đức Tùng",
     "name": "Nếu Ngày Ấy (Lofi Ver.) - Andiez x Freak D | St. Nguyễn Đức Tùng",
     "artist": "Freak D Music",
@@ -1634,7 +1615,7 @@
     "mtime": 1789314419
   },
   {
-    "id": 87,
+    "id": 86,
     "title": "Overdose / Yi Xi [ Synthv cover ]",
     "name": "Overdose / Yi Xi [ Synthv cover ]",
     "artist": "ひかる",
@@ -1653,7 +1634,7 @@
     "mtime": 1789735969
   },
   {
-    "id": 88,
+    "id": 87,
     "title": "Overthink",
     "name": "Overthink",
     "artist": "Côngg, inari",
@@ -1672,7 +1653,7 @@
     "mtime": 1789461007
   },
   {
-    "id": 89,
+    "id": 88,
     "title": "RASEN Acoustic Ver",
     "name": "RASEN Acoustic Ver",
     "artist": "9Lana",
@@ -1691,7 +1672,7 @@
     "mtime": 1789734529
   },
   {
-    "id": 90,
+    "id": 89,
     "title": "Self Aware",
     "name": "Self Aware",
     "artist": "Temper City",
@@ -1710,45 +1691,7 @@
     "mtime": 1789388933
   },
   {
-    "id": 91,
-    "title": "Trước Khi Em Tồn Tại",
-    "name": "Trước Khi Em Tồn Tại",
-    "artist": "Thắng",
-    "album": "Cái Đầu Tiên",
-    "year": "",
-    "duration": "3:14",
-    "duration_ms": 194194,
-    "duration_sec": 194.194,
-    "bitrate": 134,
-    "codec": "opus",
-    "source": "Downloads",
-    "path": "/home/apple/Music/Downloads_Phone/Trước Khi Em Tồn Tại.opus",
-    "filename": "Trước Khi Em Tồn Tại.opus",
-    "image": "/home/apple/.cache/nutsty/thumbnails/1a8421810212cc8c4487d387bb6e0c8d.jpg",
-    "videoId": "0IwyTDHVYvI",
-    "mtime": 1793307138
-  },
-  {
-    "id": 92,
-    "title": "Tìm Em",
-    "name": "Tìm Em",
-    "artist": "Hngle, Bảo Anh",
-    "album": "Tìm Em",
-    "year": "",
-    "duration": "4:34",
-    "duration_ms": 274594,
-    "duration_sec": 274.594,
-    "bitrate": 133,
-    "codec": "opus",
-    "source": "Downloads",
-    "path": "/home/apple/Music/Downloads_Phone/Tìm Em.opus",
-    "filename": "Tìm Em.opus",
-    "image": "/home/apple/.cache/nutsty/thumbnails/745633881a2e074d8937f416da188944.jpg",
-    "videoId": "gJAbDSse5WM",
-    "mtime": 1790233407
-  },
-  {
-    "id": 93,
+    "id": 90,
     "title": "Từng Quen (Lofi Ver.) - Wren Evans x Freak D",
     "name": "Từng Quen (Lofi Ver.) - Wren Evans x Freak D",
     "artist": "Freak D Music",
@@ -1767,7 +1710,7 @@
     "mtime": 1789388883
   },
   {
-    "id": 94,
+    "id": 91,
     "title": "NIGHT DANCER",
     "name": "NIGHT DANCER",
     "artist": "Will Stetson",
@@ -1786,7 +1729,7 @@
     "mtime": 1788945013
   },
   {
-    "id": 95,
+    "id": 92,
     "title": "Yêu một người có lẽ - Lou Hoàng, Miu Lê | hqhuy cover (ft. Hziaa)",
     "name": "Yêu một người có lẽ - Lou Hoàng, Miu Lê | hqhuy cover (ft. Hziaa)",
     "artist": "hqhuy",
@@ -1805,7 +1748,7 @@
     "mtime": 1790233379
   },
   {
-    "id": 96,
+    "id": 93,
     "title": "engravings",
     "name": "engravings",
     "artist": "Ethan Bortnick",
@@ -1824,7 +1767,7 @@
     "mtime": 1790443543
   },
   {
-    "id": 97,
+    "id": 94,
     "title": "giữ lấy làm gì",
     "name": "giữ lấy làm gì",
     "artist": "MONSTAR",
@@ -1843,7 +1786,7 @@
     "mtime": 1789221184
   },
   {
-    "id": 98,
+    "id": 95,
     "title": "thế giới có nơi nào cho em (cm1x remix) - @sweetliquor",
     "name": "thế giới có nơi nào cho em (cm1x remix) - @sweetliquor",
     "artist": "CM1X Official",
@@ -1862,7 +1805,7 @@
     "mtime": 1789737742
   },
   {
-    "id": 99,
+    "id": 96,
     "title": "ĐỊA NGỤC TRẦN GIAN | PHẠM KỲ | OFFICIAL MV",
     "name": "ĐỊA NGỤC TRẦN GIAN | PHẠM KỲ | OFFICIAL MV",
     "artist": "PHẠM KỲ OFFICIAL",
@@ -1881,7 +1824,7 @@
     "mtime": 1788945022
   },
   {
-    "id": 100,
+    "id": 97,
     "title": "Địa Ngục Trần Gian (Thazh x Đông Remix) - Phạm Kỳ ♫ Những Cánh Hoa Rơi Theo Dòng Nước Mắt Remix",
     "name": "Địa Ngục Trần Gian (Thazh x Đông Remix) - Phạm Kỳ ♫ Những Cánh Hoa Rơi Theo Dòng Nước Mắt Remix",
     "artist": "Trang Xinh Music",
@@ -1900,7 +1843,7 @@
     "mtime": 1788945014
   },
   {
-    "id": 101,
+    "id": 98,
     "title": "東京真中 -  ブレインロット feat. 重音テト",
     "name": "東京真中 -  ブレインロット feat. 重音テト",
     "artist": "Tokyo Manaka",
@@ -1919,7 +1862,7 @@
     "mtime": 1789735809
   },
   {
-    "id": 102,
+    "id": 99,
     "title": "死神 / 米津玄師　- 梓川 (cover)",
     "name": "死神 / 米津玄師　- 梓川 (cover)",
     "artist": "Azusagawa",
@@ -1938,7 +1881,7 @@
     "mtime": 1789120436
   },
   {
-    "id": 103,
+    "id": 100,
     "title": "燕无歇 (Yến Vô Hiết) x 朧月 (Hazy Moon) (prod.htingale x Renard 狐 )",
     "name": "燕无歇 (Yến Vô Hiết) x 朧月 (Hazy Moon) (prod.htingale x Renard 狐 )",
     "artist": "htingale, Renard 狐",
@@ -1957,7 +1900,7 @@
     "mtime": 1789113873
   },
   {
-    "id": 104,
+    "id": 101,
     "title": "西楼别序 (prod.htingale)",
     "name": "西楼别序 (prod.htingale)",
     "artist": "htingale",

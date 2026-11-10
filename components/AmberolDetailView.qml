@@ -69,7 +69,7 @@ Rectangle {
     signal seekRequested(real seconds)
 
     function updateActiveLyric(forceScroll) {
-        if (!activeLyrics || activeLyrics.length === 0) {
+        if (!root.visible || !activeLyrics || activeLyrics.length === 0) {
             currentLyricIndex = -1;
             return;
         }
@@ -271,7 +271,7 @@ Rectangle {
         fetchSongDetails();
         delayedAudioSpecsTimer.restart();
     }
-    onCurrentTimeChanged: updateActiveLyric(false)
+    onCurrentTimeChanged: if (root.visible) updateActiveLyric(false)
     onActiveLyricsChanged: Qt.callLater(function() { updateActiveLyric(true); })
     onVisibleChanged: {
         if (visible) {
@@ -1501,21 +1501,23 @@ Rectangle {
                         readonly property bool isHovered: rowMouse.pressed && !isCurrent
 
                         readonly property bool isPlainLine: !modelData.hasWords || modelData.isSynthetic || !modelData.words || modelData.words.length === 0
-                        readonly property real targetOpacity: isCurrent ? 1.0 : (lyricsView.isUserScrolling ? 0.85 : (isHovered ? 0.90 : (dist === 1 ? 0.55 : 0.26)))
+                        readonly property real targetOpacity: isCurrent ? 1.0 : (lyricsView.isUserScrolling ? 0.85 : (isHovered ? 0.90 : (dist === 1 ? 0.50 : 0.30)))
                         readonly property int targetFontSize: 28
 
                         opacity: targetOpacity
                         transformOrigin: Item.Left
-                        scale: isCurrent ? 1.0 : 0.98
+                        scale: isCurrent ? 1.06 : (dist === 1 ? 0.98 : 0.93)
                         Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
                         Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
 
-                        // Mochy-Music / Apple Music Camera DoF Optical Blur (Max 4 closest adjacent lines)
-                        layer.enabled: !lyricsView.isUserScrolling && !lyricRow.isHovered && (dist === 1 || dist === 2)
+                        // 1:1 Mochy-Music / Apple Music Camera DoF Optical Blur (LyricsScreen.kt LineLook)
+                        // Continuously blurs all distant lines (dist >= 1) with zero pop-back to sharp text.
+                        layer.enabled: !lyricsView.isUserScrolling && !lyricRow.isHovered && (lyricRow.dist >= 1) && !lyricRow.isDuetInterlude
                         layer.effect: MultiEffect {
                             blurEnabled: true
-                            blur: lyricRow.dist === 1 ? 0.20 : 0.55
-                            blurMax: lyricRow.dist === 1 ? 8 : 16
+                            blur: lyricRow.dist === 1 ? 0.35 : 0.75
+                            blurMax: 16
+                            autoPaddingEnabled: true
                         }
 
 
@@ -1616,6 +1618,7 @@ Rectangle {
                                         AppleMusicWordFlow {
                                             words: (modelData.hasWords && !modelData.isSynthetic && modelData.words) ? modelData.words : []
                                             currentTime: root.currentTime
+                                            isLineActive: lyricRow.isCurrent
                                             fontSize: 28
                                             accentColor: "#ffffff"
                                         }
@@ -1633,13 +1636,9 @@ Rectangle {
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 28
                                     font.weight: lyricRow.isCurrent ? Font.Bold : Font.DemiBold
-                                    color: lyricRow.isCurrent ? "#ffffff" : "#d8dce8"
+                                    color: "#ffffff"
                                     wrapMode: Text.Wrap
                                     lineHeight: 1.28
-
-                                    Behavior on color {
-                                        ColorAnimation { duration: 180 }
-                                    }
                                 }
                             }
 

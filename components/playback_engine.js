@@ -41,10 +41,14 @@ function extractTrackDuration(trk) {
 
 function isTrackOnline(trk) {
     if (!trk) return false;
+    // 1. Explicit remote streaming URLs
     if (trk.path && (trk.path.startsWith("ytdl://") || trk.path.startsWith("http://") || trk.path.startsWith("https://"))) return true;
-    if (trk.videoId || trk.id) return true;
-    if (trk.source === "youtube" || trk.source === "online") return true;
+    // 2. Explicit local filesystem path is ALWAYS local, NEVER online!
     if (trk.path && (trk.path.startsWith("/") || trk.path.startsWith("file://") || trk.path.indexOf(":\\") !== -1 || trk.path.indexOf(":/") !== -1)) return false;
+    // 3. Explicit online source
+    if (trk.source === "youtube" || trk.source === "online") return true;
+    // 4. Remote video ID without a local file path
+    if (trk.videoId || (trk.id && typeof trk.id === "string" && trk.id.length > 5)) return true;
     return !trk.path;
 }
 
@@ -130,7 +134,7 @@ function playOnlineTrack(win, trk, startRadio, radioProc, prewarmTimer, pollTime
         win.lastLocalActionTimestamp = Date.now();
     }
     var rVid = trk.videoId || trk.id || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
-    if (rVid && rVid.startsWith("yt_")) {
+    if (rVid && typeof rVid === "string" && rVid.startsWith("yt_")) {
         rVid = rVid.replace(/^yt_/, "");
     }
     if (!rVid) {
@@ -182,7 +186,9 @@ function playOnlineTrack(win, trk, startRadio, radioProc, prewarmTimer, pollTime
     var localMatch = win.findLocalDownloadedTrack(trk);
     var hasLocalFile = Boolean(localMatch && localMatch.path);
 
-    if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.stopImmediate) {
+    if (hasLocalFile && localMatch && localMatch.path) {
+        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "play", localMatch.path]);
+    } else if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.stopImmediate) {
         __NutstyBridge.stopImmediate();
     } else {
         Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "stop"]);
@@ -197,11 +203,6 @@ function playOnlineTrack(win, trk, startRadio, radioProc, prewarmTimer, pollTime
     var initDur = extractTrackDuration(trk);
     win.totalDuration = initDur > 0 ? initDur : 0.0;
     win.isPlaying = true;
-    if (win.currentView !== "search" && win.currentView !== "library") {
-        win.showAmberolDetails = true;
-    } else {
-        win.showAmberolDetails = false;
-    }
 
     if (win.syncHistoryToGoogle) {
         win.trackPlayback(trk);
@@ -294,7 +295,9 @@ function playTrack(win, trk, pollTimer) {
     win.playEpoch = Math.max(Date.now(), (win.playEpoch || 0) + 1);
     var currentEpoch = win.playEpoch;
 
-    if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.stopImmediate) {
+    if (trk.path && !trk.path.startsWith("ytdl://") && !trk.path.startsWith("http://") && !trk.path.startsWith("https://")) {
+        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "play", trk.path]);
+    } else if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.stopImmediate) {
         __NutstyBridge.stopImmediate();
     } else {
         Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "stop"]);
@@ -309,11 +312,6 @@ function playTrack(win, trk, pollTimer) {
     var localDur = extractTrackDuration(trk);
     win.totalDuration = localDur > 0 ? localDur : ((trk.durationMs || 0) / 1000.0);
     win.isPlaying = true;
-    if (win.currentView !== "search") {
-        win.isNowPlayingOpen = true;
-    } else {
-        win.isNowPlayingOpen = false;
-    }
 
     if (win.syncHistoryToGoogle) {
         win.trackPlayback(trk);
@@ -663,6 +661,15 @@ function deleteLocalTrack(win, trk) {
     var p = trk.path || "";
     var fn = trk.filename || "";
     var title = trk.title || trk.name || "";
+    var vid = trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
+
+    // 1. Immediately mark deleted in downloadManager cache
+    if (typeof downloadManager !== "undefined" && downloadManager) {
+        if (p) downloadManager.markPathDeleted(p);
+        if (title) downloadManager.markTitleDeleted(title);
+        if (vid) downloadManager.markIdDeleted(vid);
+        downloadManager.revision++;
+    }
 
     var wasPlaying = win.isPlaying;
     var isCurrent = win.isSameTrack(win.currentTrack, trk);
@@ -687,6 +694,9 @@ function deleteLocalTrack(win, trk) {
             win.appDir + "/bin/nutsty-library", "delete",
             p, fn, title
         ]);
+        if (p && p.startsWith("/")) {
+            Quickshell.execDetached(["rm", "-f", p, p.replace(/\.[^.]+$/, ".lrc")]);
+        }
     }
 }
 
@@ -891,27 +901,33 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
 
             var isDirectStream = Boolean((s.path && (s.path.startsWith("http://") || s.path.startsWith("https://") || s.path.indexOf("googlevideo.com") !== -1)) || (s.filename && s.filename.startsWith("videoplayback")));
             var isTrackMatched = false;
-            if (curVid && s.target_vid) {
-                isTrackMatched = (curVid === s.target_vid);
-            } else if (curVid && mpvVid) {
-                isTrackMatched = (curVid === mpvVid);
-            } else if (curVid && isDirectStream) {
-                var sTitle = String(s.media_title || "").toLowerCase();
-                var expectedTitle = String(win.currentTrack.title || win.currentTrack.name || "").toLowerCase();
-                if (expectedTitle && sTitle && sTitle.indexOf(expectedTitle) !== -1) {
+            if (win.currentTrack.path) {
+                if (s.path && (s.path === win.currentTrack.path || s.path.endsWith(win.currentTrack.path) || win.currentTrack.path.endsWith(s.path))) {
                     isTrackMatched = true;
-                } else if (s.filename && s.filename.indexOf(curVid) !== -1) {
-                    isTrackMatched = true;
-                } else if (s.path && s.path.indexOf(curVid) !== -1) {
-                    isTrackMatched = true;
-                } else if (!s.target_vid || s.target_vid === curVid) {
+                } else if (s.filename && (win.currentTrack.path.endsWith(s.filename) || (win.currentTrack.filename && win.currentTrack.filename === s.filename))) {
                     isTrackMatched = true;
                 }
-            } else if (win.currentTrack.path) {
-                if (s.path && (s.path === win.currentTrack.path || s.path.endsWith(win.currentTrack.path) || win.currentTrack.path.endsWith(s.path))) isTrackMatched = true;
-                else if (s.filename && win.currentTrack.path.endsWith(s.filename)) isTrackMatched = true;
-            } else {
-                isTrackMatched = true;
+            }
+            if (!isTrackMatched) {
+                if (curVid && s.target_vid) {
+                    isTrackMatched = (curVid === s.target_vid);
+                } else if (curVid && mpvVid) {
+                    isTrackMatched = (curVid === mpvVid);
+                } else if (curVid && isDirectStream) {
+                    var sTitle = String(s.media_title || "").toLowerCase();
+                    var expectedTitle = String(win.currentTrack.title || win.currentTrack.name || "").toLowerCase();
+                    if (expectedTitle && sTitle && sTitle.indexOf(expectedTitle) !== -1) {
+                        isTrackMatched = true;
+                    } else if (s.filename && s.filename.indexOf(curVid) !== -1) {
+                        isTrackMatched = true;
+                    } else if (s.path && s.path.indexOf(curVid) !== -1) {
+                        isTrackMatched = true;
+                    } else if (!s.target_vid || s.target_vid === curVid) {
+                        isTrackMatched = true;
+                    }
+                } else if (!curVid && !win.currentTrack.path) {
+                    isTrackMatched = true;
+                }
             }
 
             if (!isTrackMatched && (s.filename || s.path)) {
@@ -1101,15 +1117,6 @@ function playArtistShuffle(win, artistItem, candidateTracks) {
         }
 
         // Keep view context steady: if user is in search, don't force NowPlayingView open
-        if (win.currentView !== "search") {
-            win.isNowPlayingOpen = true;
-            if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) {
-                ytNowPlayingView.activeTab = "up_next";
-            }
-        } else {
-            win.isNowPlayingOpen = false;
-        }
-
         var xhr = new XMLHttpRequest();
         var url = "http://127.0.0.1:17890/api/artist_shuffle?name=" + encodeURIComponent(aName) + "&browseId=" + encodeURIComponent(bId);
         xhr.open("GET", url, true);

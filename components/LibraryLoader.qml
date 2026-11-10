@@ -13,17 +13,32 @@ Item {
     property var allTracks: []
     signal loaded()
 
+    Timer {
+        id: parseDebounceTimer
+        interval: 100
+        repeat: false
+        onTriggered: root.parseLibrary()
+    }
+
     FileView {
         id: libFileView
         path: root.libraryPath
+        watchChanges: true
         onLoadedChanged: {
-            if (loaded) root.parseLibrary();
+            if (loaded) parseDebounceTimer.restart();
+        }
+        onFileChanged: {
+            libFileView.reload();
+            parseDebounceTimer.restart();
+        }
+        onTextChanged: {
+            parseDebounceTimer.restart();
         }
     }
 
     function reload() {
         libFileView.reload();
-        root.parseLibrary();
+        parseDebounceTimer.restart();
     }
 
     function parseLibrary() {
@@ -40,9 +55,20 @@ Item {
                 if (parsed.tracks) rawTracks = parsed.tracks;
             }
 
+            var dlMgr = (typeof downloadManager !== "undefined" && downloadManager) ? downloadManager : null;
+
             validTracks = rawTracks.filter(function(t) {
                 if (!t || !t.path) return false;
                 var p = String(t.path);
+
+                // Filter out any track marked as deleted
+                if (dlMgr) {
+                    if (dlMgr.isPathDeleted && dlMgr.isPathDeleted(p)) return false;
+                    if (t.videoId && dlMgr.isIdDeleted && dlMgr.isIdDeleted(t.videoId)) return false;
+                    var tName = t.title || t.name || "";
+                    if (dlMgr.isTitleDeleted && dlMgr.isTitleDeleted(tName)) return false;
+                }
+
                 if (p.startsWith("ytdl://") || p.startsWith("http:") || p.startsWith("https:")) return true;
                 if (Qt.platform.os === "windows" && p.startsWith("/home/")) return false;
                 if (Qt.platform.os === "linux" && (p.indexOf(":\\") !== -1 || p.startsWith("C:/") || p.startsWith("c:/"))) return false;

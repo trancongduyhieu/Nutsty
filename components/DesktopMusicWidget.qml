@@ -26,8 +26,10 @@ PanelWindow {
 
     readonly property bool isWindows: Qt.platform.os === "windows"
 
-    width: isWindows ? 216 : ((screen && screen.geometry) ? screen.geometry.width : Screen.width)
-    height: isWindows ? 216 : ((screen && screen.geometry) ? screen.geometry.height : Screen.height)
+    implicitWidth: isWindows ? 216 : ((screen && screen.geometry) ? screen.geometry.width : Screen.width)
+    implicitHeight: isWindows ? 216 : ((screen && screen.geometry) ? screen.geometry.height : Screen.height)
+    width: isWindows ? 216 : implicitWidth
+    height: isWindows ? 216 : implicitHeight
 
     screen: Quickshell.screens[0]
     exclusionMode: ExclusionMode.Ignore
@@ -311,7 +313,7 @@ PanelWindow {
                     Behavior on color { ColorAnimation { duration: 150 } }
 
                     SequentialAnimation on height {
-                        running: root.isPlaying
+                        running: root.visible && root.isPlaying
                         loops: Animation.Infinite
                         NumberAnimation { to: 4; duration: 420; easing.type: Easing.InOutQuad }
                         NumberAnimation { to: 14; duration: 380; easing.type: Easing.InOutQuad }
@@ -328,7 +330,7 @@ PanelWindow {
                     Behavior on color { ColorAnimation { duration: 150 } }
 
                     SequentialAnimation on height {
-                        running: root.isPlaying
+                        running: root.visible && root.isPlaying
                         loops: Animation.Infinite
                         NumberAnimation { to: 16; duration: 320; easing.type: Easing.InOutQuad }
                         NumberAnimation { to: 6; duration: 450; easing.type: Easing.InOutQuad }
@@ -345,7 +347,7 @@ PanelWindow {
                     Behavior on color { ColorAnimation { duration: 150 } }
 
                     SequentialAnimation on height {
-                        running: root.isPlaying
+                        running: root.visible && root.isPlaying
                         loops: Animation.Infinite
                         NumberAnimation { to: 6; duration: 360; easing.type: Easing.InOutQuad }
                         NumberAnimation { to: 13; duration: 400; easing.type: Easing.InOutQuad }

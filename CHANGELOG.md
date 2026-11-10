@@ -2,9 +2,13 @@
 
 Tất cả các tính năng mới và cải tiến của Nutsty được lưu trữ tại đây.
 
-## [1.0.7] - 2026-11-07
+## [1.0.7] - 2026-11-10
 
 ### Added
+- **Đảo thể loại thông minh bung mở & thu gọn (Dynamic Mood Island)**: Toàn bộ các thể loại cảm xúc được gom gọn thành một viên ngọc nhỏ nhắn `[ Tất cả ]` ở chính giữa trang chủ. Khi bấm vào, thanh dock kính mờ nhẹ nhàng bung mở hiển thị trọn vẹn 11 thể loại cảm xúc (kể cả thể loại "Tập trung") kèm viên ngọc lướt êm ái theo thể loại được chọn, và tự động thu gọn sau 4.5 giây giúp không gian nghe nhạc luôn thoáng đãng, tinh tế.
+- **Bảng áp phích nghệ thuật cạnh bên (Mochy Side Panel)**: Bấm vào thanh phát nhạc bên dưới để mở nhanh bảng áp phích trình diễn lời bài hát và ảnh bìa khổ lớn cạnh bên màn hình. Thanh phát nhạc tự động lướt sang trái và co giãn cân xứng nhường chỗ cho bảng áp phích, mang lại trải nghiệm xem lời bài hát sống động mà không che khuất danh sách nhạc.
+- **Chuyển động thanh phát nhạc nhịp nhàng & chống bấm nhanh**: Khi bạn chuyển đổi qua lại giữa các màn hình hoặc bấm liên tục vào thanh phát nhạc, thanh lướt êm dịu với độ mượt mà cao, loại bỏ hoàn toàn cảm giác giật cục hay trễ khung hình.
+- **Đồng bộ xóa bài hát tức thì khỏi thư viện**: Khi xóa bài hát tải về, bài hát sẽ biến mất ngay lập tức khỏi màn hình thư viện mà không cần tải lại trang, đồng thời tự động cập nhật danh sách và bộ nhớ đệm ngầm một cách liền mạch.
 - **Lời bài hát song ca & đối đáp điện ảnh**: Tự động nhận diện và phân chia giọng hát nam nữ hoặc các ca sĩ song ca (như *Die With A Smile*, *Señorita*). Câu hát của từng ca sĩ được căn chỉnh trực quan hai bên trái - phải hoặc đồng ca ở giữa hài hòa, cố định vị trí chuẩn xác ngay từ khung hình đầu tiên.
 - **Hiệu ứng chữ hoa nở tỏa sáng khi ngân nga**: Từng âm tiết khi ca sĩ ngân dài sẽ nở rộng mềm mại và tỏa quầng sáng êm dịu theo đúng nhịp điệu của bài hát, tạo cảm giác sống động như thưởng thức một MV âm nhạc nghệ thuật.
 - **Chấm tròn đếm ngược dạo nhạc thông minh**: Khi bài hát có đoạn nhạc dạo (từ 4 giây trở lên), 3 dấu chấm tròn sẽ nhẹ nhàng bung nở và phát sáng đếm ngược từng nhịp điệu, giúp bạn biết chính xác thời điểm câu hát tiếp theo chuẩn bị bắt đầu.
@@ -36,6 +40,11 @@ Tất cả các tính năng mới và cải tiến của Nutsty được lưu tr
 - **Nền chất lỏng sống động & Quầng sáng quét lời bài hát điện ảnh (Liquid Warp & Lagged Bloom Engine)**: Nâng cấp toàn diện trải nghiệm hình ảnh khi phát nhạc với công nghệ biến dạng chất lỏng 2 chiều thời gian thực. Bìa bài hát được chuyển hóa thành các dải lụa màu sắc mềm mại, liên tục cuộn trôi và thở theo nhịp điệu bài hát mà không làm nóng máy hay tốn pin. Từng câu chữ khi ca sĩ cất giọng sẽ nhẹ nhàng nhấc bổng đàn hồi với quầng sáng sao băng trượt đuổi theo sau từng âm tiết, kết hợp độ mờ quang học chiều sâu điện ảnh cho các câu ở xa mang lại cảm giác cực kỳ sang trọng và cuốn hút.
 
 ### Fixed
+- **Cân đối khoảng cách đáy và lề cạnh bên hoàn hảo**: Tinh chỉnh khoảng cách lề dưới đáy bằng đúng khoảng cách lề bên phải, tạo nên bố cục cân xứng, thẳng tắp và thuận mắt trên toàn bộ cửa sổ ứng dụng.
+- **Phân tách vùng bấm trên thanh phát nhạc**: Bấm vào ảnh bìa nhỏ sẽ mở xem chi tiết bài hát, bấm vào thân thanh phát để mở bảng áp phích, và các nút điều khiển âm lượng, chuyển bài, yêu thích luôn nhận lệnh độc lập, không bị bấm nhầm lẫn.
+- **Hiển thị đầy đủ mọi thể loại nhạc không bị cắt viền**: Khắc phục hiện tượng thể loại "Tập trung" bị xén mất chữ hoặc chém mép viền, đảm bảo toàn bộ 11 thẻ thể loại đều hiển thị vuông vắn, tròn trịa và rõ ràng.
+- **Không tự động che kín màn hình khi bấm phát nhạc**: Khắc phục hiện tượng chọn phát một bài hát từ danh sách trang chủ hoặc nghệ sĩ làm phóng to màn hình lời bài hát che mất danh sách đang xem.
+- **Phát bài hát tải về trực tiếp không độ trễ**: Khi phát các bài hát đã tải về trong máy tính, nhạc cất tiếng ngay lập tức từ bộ nhớ cục bộ mà không cần kết nối mạng hay gửi yêu cầu chờ đợi.
 - **Chấm dứt hiện tượng chớp nháy và biến mất đột ngột khi đổi thể loại nhạc**: Khắc phục triệt để lỗi khi bấm chọn thể loại tâm trạng (như Năng lượng, Thư giãn) bị hiện tạm bợ danh sách cũ rồi đột ngột biến mất để hiện danh sách mới. Nutsty hiện khung xương chờ đúng tên thể loại hoặc hoán đổi trực tiếp tại chỗ không chớp nháy khi đã có sẵn trong bộ nhớ đệm.
 - **Nút Dừng & Phát nhạc dứt khoát tuyệt đối**: Sửa triệt để hiện tượng bấm Dừng nhưng nhạc vẫn chạy hoặc bấm Phát bị đảo ngược trạng thái, phản hồi cực kỳ chuẩn xác và ổn định.
 - **Điều hướng bài hát chuẩn xác**: Thao tác chuyển bài kế tiếp và quay lại bài trước hoạt động mượt mà, đúng danh sách và đúng nhịp điệu của hàng đợi.

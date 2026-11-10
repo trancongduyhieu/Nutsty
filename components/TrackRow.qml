@@ -27,17 +27,10 @@ Rectangle {
         if (trackPath && trackPath.startsWith("ytdl://")) return trackPath.replace("ytdl://", "");
         return "";
     }
-    readonly property bool isDownloading: (typeof downloadManager !== "undefined" && downloadManager) ? downloadManager.isDownloading(trackVideoId) : false
-    readonly property real downloadProgress: (typeof downloadManager !== "undefined" && downloadManager) ? downloadManager.getProgress(trackVideoId) : -1
-    readonly property bool isDownloaded: {
-        if (typeof downloadManager !== "undefined" && downloadManager && downloadManager.isDownloaded(trackVideoId)) return true;
-        if (trackVideoId && typeof win !== "undefined" && win.allTracks) {
-            var vId = trackVideoId;
-            var tName = (trackTitle || "").toLowerCase().trim();
-            return win.allTracks.some(t => (vId && t.videoId === vId) || (tName && (t.title || t.name || "").toLowerCase().trim() === tName));
-        }
-        return false;
-    }
+    readonly property int dlRev: (typeof downloadManager !== "undefined" && downloadManager) ? downloadManager.revision : 0
+    readonly property bool isDownloading: (dlRev >= 0 && typeof downloadManager !== "undefined" && downloadManager) ? downloadManager.isDownloading(trackVideoId) : false
+    readonly property real downloadProgress: (dlRev >= 0 && typeof downloadManager !== "undefined" && downloadManager) ? downloadManager.getProgress(trackVideoId) : -1
+    readonly property bool isDownloaded: (dlRev >= 0 && typeof downloadManager !== "undefined" && downloadManager) ? downloadManager.isDownloaded(trackVideoId, row.rawTrack) : false
 
     signal trackClicked()
     signal contextMenuRequested(var track, real globalX, real globalY, bool isQueue)
