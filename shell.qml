@@ -1725,6 +1725,7 @@ Scope {
     property bool isNowPlayingOpen: false
     property alias showAmberolDetails: win.isNowPlayingOpen
     property bool isMochySidePanelOpen: false
+    property string mochyActiveTab: "lyrics" // "lyrics" | "queue"
     property int mochyPanelStyle: 2 // 1: Flush Split-Rail, 2: Bento Glass Island (User Choice)
     onIsNowPlayingOpenChanged: {
         if (win.isNowPlayingOpen) {
@@ -2225,10 +2226,7 @@ Scope {
                     anchors.left: parent.left
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
-                    width: (win.isMochySidePanelOpen && !win.isNowPlayingOpen)
-                        ? (parent.width - mochySidePanel.width - (win.mochyPanelStyle === 1 ? 0 : 16))
-                        : parent.width
-                    Behavior on width { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+                    width: parent.width - mochySidePanel.width - (mochySidePanel.width > 1.0 ? (win.mochyPanelStyle === 1 ? 0 : 16) : 0)
                     visible: opacity > 0.01
                     opacity: win.isNowPlayingOpen ? 0.0 : 1.0
                     enabled: !win.isNowPlayingOpen
@@ -2550,16 +2548,26 @@ Scope {
                     anchors.bottomMargin: win.mochyPanelStyle === 1 ? 0 : 16
                     anchors.rightMargin: win.mochyPanelStyle === 1 ? 0 : 8
                     panelStyle: win.mochyPanelStyle
-                    width: Math.max(380, Math.min(460, Math.round(parent.width * 0.34)))
-                    visible: opacity > 0.01 && !win.isNowPlayingOpen
+                    clip: true
+                    width: (win.isMochySidePanelOpen && !win.isNowPlayingOpen) ? targetPanelWidth : 0
+                    visible: width > 1.0 && !win.isNowPlayingOpen
                     opacity: (win.isMochySidePanelOpen && !win.isNowPlayingOpen) ? 1.0 : 0.0
                     enabled: win.isMochySidePanelOpen && !win.isNowPlayingOpen
-                    Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+                    Behavior on width {
+                        SpringAnimation {
+                            spring: 4
+                            damping: 0.32
+                            epsilon: 0.5
+                        }
+                    }
+                    Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                     z: 10
 
                     isEffectivelyActive: win.isWindowEffectivelyActive && win.isMochySidePanelOpen && !win.isNowPlayingOpen
 
+                    activeTab: win.mochyActiveTab
                     currentTrack: win.currentTrack
+                    currentTracks: win.currentTracks
                     currentTime: win.currentTime
                     totalDuration: win.totalDuration
                     isPlaying: win.isPlaying
@@ -2580,6 +2588,17 @@ Scope {
                     onNextRequested: win.playNext()
                     onPreviousRequested: win.playPrev()
                     onToggleLikeRequested: win.toggleLikeCurrentTrack()
+                    onTrackPlayRequested: (trk, idx) => {
+                        if (win.isContextMenuActive) return;
+                        if (trk) {
+                            if ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId) {
+                                win.playOnlineTrack(trk, false);
+                            } else {
+                                win.playTrack(trk);
+                            }
+                        }
+                    }
+                    onTrackContextMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false)
                 }
 
                 // 3. YouTube Music Split-Screen Now Playing View (Full-Width Experience)
@@ -2675,9 +2694,9 @@ Scope {
             volume: win.volume
             isShuffle: win.isShuffle
             isRepeat: win.isRepeat
-            isLyricsActive: win.isNowPlayingOpen || win.isMochySidePanelOpen
+            isLyricsActive: win.isMochySidePanelOpen && win.mochyActiveTab === "lyrics"
             isNowPlayingOpen: win.isNowPlayingOpen
-            isQueueActive: false
+            isQueueActive: win.isMochySidePanelOpen && win.mochyActiveTab === "queue"
             isSleepTimerActive: win.isSleepTimerActive
             sleepTimerRemainingSeconds: win.sleepTimerRemainingSeconds
             accentColor: win.accentColor
@@ -2703,11 +2722,22 @@ Scope {
                     ytNowPlayingView.activeTab = "lyrics";
                 }
             }
+            onLyricsClicked: {
+                if (win.isMochySidePanelOpen && win.mochyActiveTab === "lyrics") {
+                    win.isMochySidePanelOpen = false;
+                } else {
+                    win.mochyActiveTab = "lyrics";
+                    win.isMochySidePanelOpen = true;
+                    if (win.isNowPlayingOpen) win.isNowPlayingOpen = false;
+                }
+            }
             onQueueClicked: {
-                win.isMochySidePanelOpen = false;
-                win.isNowPlayingOpen = true;
-                if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) {
-                    ytNowPlayingView.activeTab = "up_next";
+                if (win.isMochySidePanelOpen && win.mochyActiveTab === "queue") {
+                    win.isMochySidePanelOpen = false;
+                } else {
+                    win.mochyActiveTab = "queue";
+                    win.isMochySidePanelOpen = true;
+                    if (win.isNowPlayingOpen) win.isNowPlayingOpen = false;
                 }
             }
             onToggleShuffle: {
@@ -4526,6 +4556,7 @@ Scope {
         function testSpotifyCompleted(title: string, trackCount: int, image: string) { frostifyIpc.testSpotifyCompleted(title, trackCount, image); }
         function testPlayCustomPlaylist() { frostifyIpc.testPlayCustomPlaylist(); }
         function setNowPlayingTab(tab: string) { frostifyIpc.setNowPlayingTab(tab); }
+        function setMochyTab(tab: string) { frostifyIpc.setMochyTab(tab); }
         function expandSpotifySettings() { frostifyIpc.expandSpotifySettings(); }
         function testSpotifyConnected(spdc: string) { frostifyIpc.testSpotifyConnected(spdc); }
         function testSpotifyDisconnected() { frostifyIpc.testSpotifyDisconnected(); }
@@ -4605,6 +4636,11 @@ Scope {
         function setMochyPanelStyle(s: int) {
             win.mochyPanelStyle = s;
             console.log("[MochyPanel] Style set to:", win.mochyPanelStyle);
+        }
+        function setMochyTab(tab: string) {
+            win.mochyActiveTab = tab;
+            win.isMochySidePanelOpen = true;
+            if (win.isNowPlayingOpen) win.isNowPlayingOpen = false;
         }
         function toggleMoodIsland() {
             if (typeof topHeader !== "undefined" && topHeader) {

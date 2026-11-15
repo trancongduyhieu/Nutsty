@@ -34,7 +34,11 @@ Item {
 
     // Reactive fallback for maxresdefault -> hqdefault (preserves property binding without mutation)
     property bool highResFallbackActive: false
-    onSourceChanged: highResFallbackActive = false
+    property real detectedAspect: 1.0
+    onSourceChanged: {
+        highResFallbackActive = false;
+        detectedAspect = 1.0;
+    }
 
     readonly property url effectiveSource: {
         var s = String(root.source);
@@ -45,11 +49,11 @@ Item {
     }
 
     // Effective zoom scale (automatically zooms 1.34x for 4:3 YouTube thumbnails to crop black bars)
+    // Uses event-driven detectedAspect to prevent sourceSize -> implicitSize binding loops
     readonly property real effectiveZoom: {
         if (zoomFactor !== 1.0) return Math.max(0.1, zoomFactor);
-        if (autoCropBlackBars && img.implicitWidth > 0 && img.implicitHeight > 0) {
-            var r = img.implicitWidth / img.implicitHeight;
-            if (r > 1.25 && r < 1.45) return 1.34;
+        if (autoCropBlackBars && root.detectedAspect > 1.25 && root.detectedAspect < 1.45) {
+            return 1.34;
         }
         return 1.0;
     }
@@ -121,67 +125,61 @@ Item {
         visible: img.status !== Image.Ready && !root.hasInitials && root.fallbackIcon !== ""
     }
 
-    // 4. Rounded Mask Item (Active only when radius > 0 and image is ready and visible)
-    Rectangle {
-        id: maskRect
+    // 4. Background Image Loader (Decodes texture in background for scene graph)
+    Image {
+        id: img
         anchors.fill: parent
-        anchors.margins: root.borderWidth > 0 ? (root.borderWidth * 0.5) : 0
-        radius: Math.max(0, root.radius - (root.borderWidth > 0 ? (root.borderWidth * 0.5) : 0))
-        color: "#ffffff"
-        layer.enabled: root.radius > 0 && img.status === Image.Ready && root.visible && root.opacity > 0.01
-        visible: false
+        source: root.effectiveSource
+        fillMode: root.fillMode
+        sourceSize: {
+            if (root.sourceSize.width > 0 && root.sourceSize.height > 0) {
+                return root.sourceSize;
+            }
+            var w = root.width > 0 ? root.width : root.implicitWidth;
+            var h = root.height > 0 ? root.height : root.implicitHeight;
+            if (w <= 0 || h <= 0) return Qt.size(0, 0);
+            var zoom = root.effectiveZoom;
+            // Quantize to steps of 100px so subpixel resizing animations never thrash Qt Image texture decoding
+            var qw = Math.ceil(Math.max(16, w * 2 * zoom) / 100) * 100;
+            var qh = Math.ceil(Math.max(16, h * 2 * zoom) / 100) * 100;
+            return Qt.size(qw, qh);
+        }
+        asynchronous: root.asynchronous
+        cache: root.cache
+        smooth: true
+        mipmap: true
+        // Only visible directly when radius <= 0; when radius > 0, roundedShader handles single-pass SDF rendering
+        visible: root.radius <= 0 && status === Image.Ready
+
+        onStatusChanged: {
+            if (status === Image.Ready) {
+                if (implicitHeight > 0) {
+                    root.detectedAspect = implicitWidth / implicitHeight;
+                }
+            } else if (status === Image.Error) {
+                var srcStr = String(root.source);
+                if (srcStr.indexOf("maxresdefault.jpg") !== -1 && !root.highResFallbackActive) {
+                    root.highResFallbackActive = true;
+                }
+            }
+        }
     }
 
-    // 5. Hardware-accelerated Concentric Image Loader (MultiEffect masked on container)
-    // Container guarantees that zoom transformations (autoCropBlackBars) NEVER overflow the outer bounds!
-    Item {
-        id: imageMaskContainer
+    // 5. Hardware-accelerated Single-Pass SDF Rounded Shader (0 FBOs, 0 GPU leak, 0 dark corner fringe)
+    ShaderEffect {
+        id: roundedShader
         anchors.fill: parent
-        visible: img.status === Image.Ready
-        clip: true
+        anchors.margins: root.borderWidth > 0 ? (root.borderWidth * 0.5) : 0
+        visible: root.radius > 0 && img.status === Image.Ready && root.visible && root.opacity > 0.01
 
-        layer.enabled: root.radius > 0 && img.status === Image.Ready && root.visible && root.opacity > 0.01
-        layer.effect: MultiEffect {
-            maskEnabled: root.radius > 0 && root.visible
-            maskSource: maskRect
-            autoPaddingEnabled: false
-        }
+        property variant source: img
+        property vector2d u_resolution: Qt.vector2d(Math.max(1, width), Math.max(1, height))
+        property vector2d u_sourceSize: Qt.vector2d(Math.max(1, img.implicitWidth), Math.max(1, img.implicitHeight))
+        property real u_radius: Math.max(0, root.radius - (root.borderWidth > 0 ? (root.borderWidth * 0.5) : 0))
+        property real u_scale: root.effectiveZoom
+        property int u_fillMode: root.fillMode === Image.PreserveAspectCrop ? 2 : 0
 
-        Image {
-            id: img
-            anchors.fill: parent
-            source: root.effectiveSource
-            fillMode: root.fillMode
-            sourceSize: {
-                if (root.sourceSize.width > 0 && root.sourceSize.height > 0) {
-                    return root.sourceSize;
-                }
-                var w = root.width > 0 ? root.width : root.implicitWidth;
-                var h = root.height > 0 ? root.height : root.implicitHeight;
-                if (w <= 0 || h <= 0) return Qt.size(0, 0);
-                var zoom = root.effectiveZoom;
-                // Quantize to steps of 100px so subpixel resizing animations never thrash Qt Image texture decoding
-                var qw = Math.ceil(Math.max(16, w * 2 * zoom) / 100) * 100;
-                var qh = Math.ceil(Math.max(16, h * 2 * zoom) / 100) * 100;
-                return Qt.size(qw, qh);
-            }
-            asynchronous: root.asynchronous
-            cache: root.cache
-            smooth: true
-            mipmap: true
-            scale: root.effectiveZoom
-            transformOrigin: Item.Center
-            visible: status === Image.Ready
-
-            onStatusChanged: {
-                if (status === Image.Error) {
-                    var srcStr = String(root.source);
-                    if (srcStr.indexOf("maxresdefault.jpg") !== -1 && !root.highResFallbackActive) {
-                        root.highResFallbackActive = true;
-                    }
-                }
-            }
-        }
+        fragmentShader: Qt.resolvedUrl("../assets/shaders/rounded_image.frag.qsb")
     }
 
     // 6. Hairline Border Overlay

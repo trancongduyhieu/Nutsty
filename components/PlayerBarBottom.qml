@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls.Basic
 import QtQuick.Effects
 import QtQuick.Shapes
 import "."
@@ -72,6 +73,7 @@ Item {
     signal reqVolumeChange(real newVol)
     signal openDetailsRequested()
     signal barClicked()
+    signal lyricsClicked()
     signal queueClicked()
     signal openArtistRequested(string artistName, string channelId)
     signal closeClicked()
@@ -81,7 +83,7 @@ Item {
     signal toggleLikeClicked()
     signal openVolumePopoverRequested()
 
-    readonly property bool isBodyHovered: (backgroundDragArea.containsMouse || centerHover.hovered) && !miniCoverMouse.containsMouse && !root.isScrubbingProgress && !miniProgressBarMouse.containsMouse
+    readonly property bool isBodyHovered: (backgroundDragArea.containsMouse || centerHoverHandler.hovered) && !miniCoverMouse.containsMouse && !root.isScrubbingProgress && !miniProgressBarMouse.containsMouse
 
     property alias volumeButtonAnchorItem: volumeButtonAnchor
 
@@ -478,11 +480,24 @@ Item {
             width: 300
             height: root.height
 
-            readonly property bool showScrubber: centerHover.hovered || root.isScrubbingProgress
-            property real infoAlpha: showScrubber ? 0.0 : 1.0
-            Behavior on infoAlpha { NumberAnimation { duration: 200; easing.type: Easing.InOutQuad } }
+            // Persistent hover zone covering middle text/metadata area (excludes mini cover at left: 0-42px)
+            Item {
+                id: centerHoverZone
+                anchors.left: parent.left
+                anchors.leftMargin: 42
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                z: 2
 
-            HoverHandler { id: centerHover }
+                HoverHandler {
+                    id: centerHoverHandler
+                }
+            }
+
+            readonly property bool showScrubber: (centerHoverHandler.hovered || miniProgressBarMouse.containsMouse || root.isScrubbingProgress) && !miniCoverMouse.containsMouse
+            property real infoAlpha: showScrubber ? 0.0 : 1.0
+            Behavior on infoAlpha { NumberAnimation { duration: 220; easing.type: Easing.InOutQuad } }
 
             // --- State A: Artwork (32x32, bo 6dp) + Track Title & Artist (Rest State) ---
             RowLayout {
@@ -492,46 +507,96 @@ Item {
                 opacity: centerSectionBox.infoAlpha
                 visible: opacity > 0.01
 
-                // Thumbnail Artwork (32x32, radius 6px)
+                // Thumbnail Artwork (32x32, radius 6px) with Spring Hover-Zoom & open_in_full overlay
                 Item {
+                    id: miniCoverContainer
                     Layout.preferredWidth: 32
                     Layout.preferredHeight: 32
 
-                    RoundedImage {
-                        id: miniCover
+                    Item {
+                        id: miniCoverScalable
                         anchors.fill: parent
-                        radius: 6
-                        source: {
-                            if (root.resolvedSquareImage !== "" && !root.squareFailed) {
-                                var r = root.resolvedSquareImage;
-                                return (r.startsWith("/") && !r.startsWith("file://")) ? ("file://" + r) : r;
-                            }
-                            if (!root.currentTrack) return "";
-                            var s = root.currentTrack.image || root.currentTrack.artUrl || root.currentTrack.cover || root.currentTrack.thumbnail || "";
-                            if (!s && root.currentTrack.videoId) {
-                                s = "https://i.ytimg.com/vi/" + root.currentTrack.videoId + "/hqdefault.jpg";
-                            }
-                            if (s.indexOf("i.ytimg.com") !== -1) s = s.split("?")[0];
-                            return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
-                        }
-                        fillMode: Image.PreserveAspectCrop
-                        autoCropBlackBars: true
-                        sourceSize: Qt.size(128, 128)
-                        fallbackIcon: "../assets/icons/folder-music-symbolic.svg"
-                        fallbackIconSize: 16
-                        onStatusChanged: {
-                            if (status === Image.Error && root.resolvedSquareImage !== "" && !root.squareFailed) {
-                                root.squareFailed = true;
-                            }
-                        }
-                    }
+                        scale: miniCoverMouse.containsMouse ? 1.15 : 1.0
+                        transformOrigin: Item.Center
+                        z: miniCoverMouse.containsMouse ? 10 : 1
 
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: 6
-                        color: "transparent"
-                        border.color: miniCoverMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.40) : Qt.rgba(1.0, 1.0, 1.0, 0.18)
-                        border.width: 1
+                        Behavior on scale {
+                            SpringAnimation {
+                                spring: 7
+                                damping: 0.24
+                                epsilon: 0.002
+                            }
+                        }
+
+                        // Soft diffuse shadow behind miniCover on hover (Swiftify style)
+                        Rectangle {
+                            anchors.fill: parent
+                            anchors.margins: -3
+                            radius: 8
+                            color: Qt.rgba(0, 0, 0, miniCoverMouse.containsMouse ? 0.55 : 0.0)
+                            z: -1
+                            Behavior on color { ColorAnimation { duration: 160 } }
+                        }
+
+                        RoundedImage {
+                            id: miniCover
+                            anchors.fill: parent
+                            radius: 6
+                            source: {
+                                if (root.resolvedSquareImage !== "" && !root.squareFailed) {
+                                    var r = root.resolvedSquareImage;
+                                    return (r.startsWith("/") && !r.startsWith("file://")) ? ("file://" + r) : r;
+                                }
+                                if (!root.currentTrack) return "";
+                                var s = root.currentTrack.image || root.currentTrack.artUrl || root.currentTrack.cover || root.currentTrack.thumbnail || "";
+                                if (!s && root.currentTrack.videoId) {
+                                    s = "https://i.ytimg.com/vi/" + root.currentTrack.videoId + "/hqdefault.jpg";
+                                }
+                                if (s.indexOf("i.ytimg.com") !== -1) s = s.split("?")[0];
+                                return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
+                            }
+                            fillMode: Image.PreserveAspectCrop
+                            autoCropBlackBars: true
+                            sourceSize: Qt.size(128, 128)
+                            fallbackIcon: "../assets/icons/folder-music-symbolic.svg"
+                            fallbackIconSize: 16
+                            onStatusChanged: {
+                                if (status === Image.Error && root.resolvedSquareImage !== "" && !root.squareFailed) {
+                                    root.squareFailed = true;
+                                }
+                            }
+                        }
+
+                        // Subtle dark overlay on hover
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 6
+                            color: Qt.rgba(0, 0, 0, 0.40)
+                            opacity: miniCoverMouse.containsMouse ? 1.0 : 0.0
+                            Behavior on opacity { NumberAnimation { duration: 140 } }
+                        }
+
+                        // open_in_full icon on hover
+                        AppIcon {
+                            anchors.centerIn: parent
+                            source: "../assets/icons/open-in-full-symbolic.svg"
+                            iconSize: 15
+                            color: "#ffffff"
+                            opacity: miniCoverMouse.containsMouse ? 1.0 : 0.0
+                            scale: miniCoverMouse.containsMouse ? 1.0 : 0.7
+                            Behavior on opacity { NumberAnimation { duration: 140 } }
+                            Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutBack } }
+                        }
+
+                        // Concentric border
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 6
+                            color: "transparent"
+                            border.color: miniCoverMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.45) : Qt.rgba(1.0, 1.0, 1.0, 0.18)
+                            border.width: 1
+                            Behavior on border.color { ColorAnimation { duration: 140 } }
+                        }
                     }
 
                     MouseArea {
@@ -546,7 +611,7 @@ Item {
                     }
                 }
 
-                // Metadata Text
+                // Metadata Text (State A: Title & Artist)
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 1
@@ -832,8 +897,32 @@ Item {
                     }
                 }
 
-                // 2. Up Next / Queue (SimpIcons.QueueMusic: opens Now Playing Up Next tab!)
+                // 2. Lyrics Button (Swiftify Style: toggles Mochy Sidebar in Lyrics mode)
                 Item {
+                    id: lyricsBtn
+                    width: 40; height: parent.height
+                    HoverHandler { id: lyricsNowPlayingH }
+                    scale: lyricsNowPlayingH.hovered ? 1.08 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 120 } }
+                    AppIcon {
+                        anchors.centerIn: parent
+                        source: "../assets/icons/view-lyrics-symbolic.svg"
+                        iconSize: 20
+                        color: root.isLyricsActive ? root.accentColor : "#ffffff"
+                    }
+                    ToolTip.visible: lyricsNowPlayingH.hovered
+                    ToolTip.text: I18n.tr("Lời bài hát", "Lyrics")
+                    ToolTip.delay: 350
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.lyricsClicked()
+                    }
+                }
+
+                // 3. Queue / Playing Next Button (Swiftify Style: toggles Mochy Sidebar in Queue mode)
+                Item {
+                    id: queueBtn
                     width: 40; height: parent.height
                     HoverHandler { id: qH }
                     scale: qH.hovered ? 1.08 : 1.0
@@ -842,31 +931,15 @@ Item {
                         anchors.centerIn: parent
                         source: "../assets/icons/queue-music-symbolic.svg"
                         iconSize: 20
-                        color: (root.isNowPlayingOpen && typeof ytNowPlayingView !== "undefined" && ytNowPlayingView && ytNowPlayingView.activeTab === "up_next") ? root.accentColor : "#ffffff"
+                        color: root.isQueueActive ? root.accentColor : "#ffffff"
                     }
+                    ToolTip.visible: qH.hovered
+                    ToolTip.text: I18n.tr("Phát tiếp theo", "Playing Next")
+                    ToolTip.delay: 350
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.queueClicked()
-                    }
-                }
-
-                // 3. Fullscreen Lyrics / Now Playing (Nút bên cạnh cái loa ở bên trái!)
-                Item {
-                    width: 40; height: parent.height
-                    HoverHandler { id: lyricsNowPlayingH }
-                    scale: lyricsNowPlayingH.hovered ? 1.08 : 1.0
-                    Behavior on scale { NumberAnimation { duration: 120 } }
-                    AppIcon {
-                        anchors.centerIn: parent
-                        source: "../assets/icons/window-restore-symbolic.svg"
-                        iconSize: 18
-                        color: (root.isNowPlayingOpen && typeof ytNowPlayingView !== "undefined" && ytNowPlayingView && ytNowPlayingView.activeTab === "lyrics") ? root.accentColor : "#ffffff"
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.openDetailsRequested()
                     }
                 }
 

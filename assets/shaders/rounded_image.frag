@@ -34,9 +34,8 @@ void main() {
     // Distance from current pixel to rounded box border
     float d = sdRoundedBox(centeredCoord, halfSize, r);
     
-    // Subpixel anti-aliased edge mask
-    float edgeWidth = clamp(fwidth(d), 0.75, 1.5);
-    float mask = 1.0 - smoothstep(-edgeWidth, edgeWidth, d);
+    // Subpixel anti-aliased edge mask (analytic 1px SDF coverage, zero scissor clipping, zero dark fringe)
+    float mask = clamp(0.5 - d, 0.0, 1.0);
     if (mask <= 0.0) {
         fragColor = vec4(0.0);
         return;
@@ -67,5 +66,10 @@ void main() {
     uv = clamp(uv, vec2(0.0005), vec2(0.9995));
     
     vec4 tex = texture(source, uv);
-    fragColor = tex * (mask * qt_Opacity);
+    if (tex.a > 0.001) {
+        vec3 unmultiplied = tex.rgb / tex.a;
+        fragColor = vec4(unmultiplied * (mask * tex.a * qt_Opacity), mask * tex.a * qt_Opacity);
+    } else {
+        fragColor = vec4(0.0);
+    }
 }

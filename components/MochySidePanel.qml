@@ -19,6 +19,9 @@ Item {
     property string resolvedSquareImage: ""
     property Item backgroundSourceItem: null
     property int panelStyle: 1 // 1: Flush Split-Rail, 2: Bento Glass Island
+    property string activeTab: "lyrics" // "lyrics" | "queue"
+    property var currentTracks: []
+    readonly property real targetPanelWidth: Math.max(380, Math.min(460, Math.round((parent ? parent.width : 1200) * 0.34)))
 
     // Performance Gating (Zero-overhead: disables all shaders, FBOs, and lyric updates when hidden, closed, or in another app)
     property bool isEffectivelyActive: true
@@ -31,6 +34,51 @@ Item {
     signal nextRequested()
     signal previousRequested()
     signal toggleLikeRequested()
+    signal trackPlayRequested(var track, int index)
+    signal trackContextMenuRequested(var track, real gx, real gy)
+
+    readonly property var upNextTracks: {
+        if (!root.currentTracks || root.currentTracks.length === 0) return [];
+        var curIdx = -1;
+        if (root.currentTrack) {
+            for (var i = 0; i < root.currentTracks.length; ++i) {
+                if (root.isSameTrack(root.currentTracks[i], root.currentTrack)) {
+                    curIdx = i;
+                    break;
+                }
+            }
+        }
+        if (curIdx >= 0) {
+            return root.currentTracks.slice(curIdx + 1);
+        }
+        return root.currentTracks;
+    }
+
+    function isSameTrack(a, b) {
+        if (!a || !b) return false;
+        if (typeof win !== "undefined" && win && typeof win.isSameTrack === "function") {
+            return win.isSameTrack(a, b);
+        }
+        if (a.id && b.id && a.id === b.id) return true;
+        if (a.videoId && b.videoId && a.videoId === b.videoId) return true;
+        if (a.path && b.path && a.path === b.path) return true;
+        return (a.title && b.title && a.title === b.title && a.artist && b.artist && a.artist === b.artist);
+    }
+
+    function formatDuration(sec) {
+        if (!sec || isNaN(sec) || sec <= 0) return "--:--";
+        var m = Math.floor(sec / 60);
+        var s = Math.floor(sec % 60);
+        return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+    }
+
+    function getTrackDuration(trk) {
+        if (!trk) return "";
+        if (typeof trk.duration === "number") return formatDuration(trk.duration);
+        if (typeof trk.duration === "string" && trk.duration.length > 0) return trk.duration;
+        if (trk.length) return formatDuration(trk.length);
+        return "";
+    }
 
     // -------------------------------------------------------------------------
     // LYRICS SYNCHRONIZATION & WORD-LEVEL STATE MACHINE
@@ -538,10 +586,25 @@ Item {
             // Base deep dark tone
             Rectangle {
                 anchors.fill: parent
-                color: root.panelStyle === 1 ? "#121216" : "#0d0d12"
+                visible: root.activeTab === "lyrics" || !queueLiquidBackdrop.visible
+                color: root.panelStyle === 1 ? "#0e0f14" : "#0a0b10"
             }
 
-            // Blurred album art background
+            // 1. Queue Mode: Seamless Frosted Continuation of Home Background (0 duplicate textures)
+            LiquidGlass {
+                id: queueLiquidBackdrop
+                anchors.fill: parent
+                visible: root.activeTab === "queue" && root.isPanelRenderable
+                backgroundSourceItem: root.backgroundSourceItem
+                radius: root.panelStyle === 1 ? 0 : 20
+                displacement: 12.0
+                bevelWidth: 16.0
+                blurRadius: 0.85
+                tintColor: Qt.rgba(0.06, 0.07, 0.10, 0.74)
+                isFlowActive: false
+            }
+
+            // 2. Lyrics Mode: Expressive Blurred Artwork Backdrop
             Image {
                 id: backdropImage
                 anchors.fill: parent
@@ -549,15 +612,15 @@ Item {
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
                 cache: true
-                layer.enabled: root.isPanelRenderable
+                layer.enabled: root.isPanelRenderable && root.activeTab === "lyrics"
                 visible: false
             }
 
             MultiEffect {
                 anchors.fill: parent
                 source: backdropImage
-                visible: root.isPanelRenderable
-                blurEnabled: root.isPanelRenderable
+                visible: root.isPanelRenderable && root.activeTab === "lyrics"
+                blurEnabled: root.isPanelRenderable && root.activeTab === "lyrics"
                 blur: 1.0
                 blurMax: 64
                 saturation: 1.35
@@ -565,9 +628,10 @@ Item {
                 contrast: 0.10
             }
 
-            // Soft dark gradient overlay: lets cover colors breathe while ensuring high contrast
+            // Lyrics Mode Scrim Overlay
             Rectangle {
                 anchors.fill: parent
+                visible: root.activeTab === "lyrics"
                 gradient: Gradient {
                     GradientStop { position: 0.0; color: Qt.rgba(0.06, 0.06, 0.08, 0.20) }
                     GradientStop { position: 0.40; color: Qt.rgba(0.06, 0.06, 0.08, 0.55) }
@@ -584,20 +648,32 @@ Item {
                 topRightRadius: 20
                 bottomRightRadius: 20
                 color: "transparent"
-                border.color: root.panelStyle === 1 ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(1, 1, 1, 0.16)
+                border.color: root.activeTab === "queue" ? Qt.rgba(1, 1, 1, 0.08) : (root.panelStyle === 1 ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(1, 1, 1, 0.16))
                 border.width: root.panelStyle === 1 ? 1 : 1.2
             }
         }
 
         // =====================================================================
-        // LAYER B: CIRCLECOVER (MOCHY EXACT GEOMETRIC CIRCLE ARC - ELEVATED)
-        // Center: (0.13 * W, -0.28 * W), Radius: 1.14 * W, Height: 0.88 * W
-        // Sweeps through right edge at 0.457 W, left edge at 0.853 W
-        // Elevated to give +130px generous breathing room for multi-line lyrics!
-        // "ở trên rõ, ở dưới làm mờ"
+        // VIEW 1: LYRICS MODE (Mochy CircleCover + Expressive Kinetic Canvas)
         // =====================================================================
         Item {
-            id: circleCover
+            id: lyricsView
+            anchors.fill: parent
+            visible: opacity > 0.01
+            opacity: root.activeTab === "lyrics" ? 1.0 : 0.0
+            scale: root.activeTab === "lyrics" ? 1.0 : 0.94
+            Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+            Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+
+            // =====================================================================
+            // LAYER B: CIRCLECOVER (MOCHY EXACT GEOMETRIC CIRCLE ARC - ELEVATED)
+            // Center: (0.13 * W, -0.28 * W), Radius: 1.14 * W, Height: 0.88 * W
+            // Sweeps through right edge at 0.457 W, left edge at 0.853 W
+            // Elevated to give +130px generous breathing room for multi-line lyrics!
+            // "ở trên rõ, ở dưới làm mờ"
+            // =====================================================================
+            Item {
+                id: circleCover
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
@@ -1283,6 +1359,426 @@ Item {
                             font.pixelSize: 12
                             color: Qt.rgba(1, 1, 1, 0.45)
                         }
+                    }
+                }
+            }
+        }
+    }
+
+        // =====================================================================
+        // VIEW 2: QUEUE MODE ("Playing Next" List + Current Track Header)
+        // =====================================================================
+        Item {
+            id: queueView
+            anchors.fill: parent
+            visible: opacity > 0.01
+            opacity: root.activeTab === "queue" ? 1.0 : 0.0
+            scale: root.activeTab === "queue" ? 1.0 : 0.94
+            Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+            Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+
+            // Header (Title, Track count, Close button)
+            Item {
+                id: queueHeader
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
+                anchors.topMargin: 16
+                height: 48
+                z: 20
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: I18n.tr("Phát tiếp theo", "Playing Next")
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 16
+                    font.bold: true
+                    color: "#ffffff"
+                }
+
+                // Close Button (Glass Capsule Circle)
+                Item {
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 30
+                    height: 30
+
+                    HoverHandler { id: qCloseH }
+                    scale: qCloseH.hovered ? 1.08 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 120 } }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 15
+                        color: qCloseH.hovered ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.06)
+                        border.color: Qt.rgba(1, 1, 1, 0.12)
+                        border.width: 1
+                        Behavior on color { ColorAnimation { duration: 120 } }
+
+                        AppIcon {
+                            anchors.centerIn: parent
+                            source: "../assets/icons/window-close-symbolic.svg"
+                            iconSize: 12
+                            color: "#ffffff"
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.closeRequested()
+                    }
+                }
+            }
+
+            // Up Next List
+            ListView {
+                id: queueListView
+                anchors.top: queueHeader.bottom
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.topMargin: 8
+                anchors.leftMargin: 12
+                anchors.rightMargin: 12
+                anchors.bottomMargin: 12
+                clip: true
+                spacing: 4
+                boundsBehavior: Flickable.StopAtBounds
+                model: root.upNextTracks
+
+                header: Column {
+                    width: queueListView.width
+                    spacing: 8
+                    bottomPadding: 6
+
+                    // Now Playing Header Label
+                    Text {
+                        visible: root.currentTrack !== null
+                        text: I18n.tr("ĐANG PHÁT", "NOW PLAYING")
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 11
+                        font.bold: true
+                        font.letterSpacing: 0.8
+                        color: root.accentColor
+                        leftPadding: 4
+                    }
+
+                    // Current Playing Track Card
+                    Item {
+                        id: currentPlayingCard
+                        visible: root.currentTrack !== null
+                        width: parent.width
+                        height: 56
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 10
+                            color: Qt.rgba(1, 1, 1, 0.04)
+                            border.color: curCardHover.hovered 
+                                ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45) 
+                                : Qt.rgba(1, 1, 1, 0.10)
+                            border.width: 1
+                            Behavior on border.color { ColorAnimation { duration: 150 } }
+                        }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            spacing: 12
+
+                            // Artwork with live playing equalizer bars
+                            Item {
+                                Layout.preferredWidth: 40
+                                Layout.preferredHeight: 40
+
+                                RoundedImage {
+                                    anchors.fill: parent
+                                    radius: 6
+                                    source: root.coverImageUrl
+                                    fillMode: Image.PreserveAspectCrop
+                                    fallbackIcon: "../assets/icons/folder-music-symbolic.svg"
+                                    fallbackIconSize: 18
+                                }
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: 8
+                                    color: Qt.rgba(0, 0, 0, 0.50)
+                                    visible: root.isPlaying
+
+                                    Row {
+                                        anchors.centerIn: parent
+                                        spacing: 2.5
+                                        Repeater {
+                                            model: 3
+                                            Rectangle {
+                                                width: 3
+                                                height: 8 + (index % 2) * 6
+                                                radius: 1.5
+                                                color: root.accentColor
+                                                SequentialAnimation on height {
+                                                    running: root.isPlaying && root.visible && root.activeTab === "queue"
+                                                    loops: Animation.Infinite
+                                                    NumberAnimation { from: 5; to: 16; duration: 280 + index * 110; easing.type: Easing.InOutQuad }
+                                                    NumberAnimation { from: 16; to: 5; duration: 280 + index * 110; easing.type: Easing.InOutQuad }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Info (Title, Artist)
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: root.currentTrack ? (root.currentTrack.title || root.currentTrack.name || "Nutsty Track") : ""
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 13
+                                    font.bold: true
+                                    color: "#ffffff"
+                                    elide: Text.ElideRight
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: root.currentTrack ? (root.currentTrack.artist || root.currentTrack.artists || "Unknown Artist") : ""
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    color: Qt.rgba(1, 1, 1, 0.65)
+                                    elide: Text.ElideRight
+                                }
+                            }
+
+                            // 3-Dots Action Button (Isolated from row-click)
+                            Item {
+                                Layout.preferredWidth: 32
+                                Layout.preferredHeight: 32
+                                Layout.alignment: Qt.AlignVCenter
+                                z: 10
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: 16
+                                    color: curMoreH.hovered ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+                                    Behavior on color { ColorAnimation { duration: 120 } }
+                                }
+
+                                AppIcon {
+                                    anchors.centerIn: parent
+                                    source: "../assets/icons/view-more-symbolic.svg"
+                                    iconSize: 18
+                                    color: curMoreH.hovered ? "#ffffff" : Qt.rgba(1, 1, 1, 0.65)
+                                    Behavior on color { ColorAnimation { duration: 120 } }
+                                }
+
+                                HoverHandler { id: curMoreH }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                    onClicked: mouse => {
+                                        mouse.accepted = true;
+                                        var pt = mapToItem(null, mouse.x, mouse.y);
+                                        root.trackContextMenuRequested(root.currentTrack, pt.x, pt.y);
+                                    }
+                                }
+                            }
+                        }
+
+                        HoverHandler { id: curCardHover }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            z: 1
+                            onClicked: root.openDetailsRequested()
+                        }
+                    }
+
+                    // Up Next Section Label
+                    Item {
+                        width: parent.width
+                        height: 28
+                        visible: root.upNextTracks.length > 0
+
+                        Text {
+                            anchors.bottom: parent.bottom
+                            anchors.bottomMargin: 4
+                            leftPadding: 4
+                            text: I18n.tr("DANH SÁCH TIẾP THEO", "UP NEXT")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            font.bold: true
+                            font.letterSpacing: 0.8
+                            color: Qt.rgba(1, 1, 1, 0.50)
+                        }
+                    }
+                }
+
+                delegate: Item {
+                    id: queueItem
+                    required property int index
+                    required property var modelData
+
+                    width: queueListView.width
+                    height: 52
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 8
+                        color: rowHover.hovered ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
+                        Behavior on color { ColorAnimation { duration: 120 } }
+                    }
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 10
+                        spacing: 10
+
+                        Item {
+                            Layout.preferredWidth: 40
+                            Layout.preferredHeight: 40
+
+                            RoundedImage {
+                                anchors.fill: parent
+                                radius: 6
+                                source: {
+                                    var trk = queueItem.modelData;
+                                    if (!trk) return "";
+                                    var s = trk.image || trk.artUrl || trk.cover || trk.thumbnail || "";
+                                    if (!s && trk.videoId) {
+                                        s = "https://i.ytimg.com/vi/" + trk.videoId + "/hqdefault.jpg";
+                                    }
+                                    if (s.indexOf("i.ytimg.com") !== -1) s = s.split("?")[0];
+                                    return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
+                                }
+                                fillMode: Image.PreserveAspectCrop
+                                fallbackIcon: "../assets/icons/media-optical-audio-symbolic.svg"
+                                fallbackIconSize: 18
+                            }
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: queueItem.modelData ? (queueItem.modelData.title || queueItem.modelData.name || "Track") : ""
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 13
+                                font.weight: Font.Medium
+                                color: rowHover.hovered ? "#ffffff" : Qt.rgba(1, 1, 1, 0.90)
+                                elide: Text.ElideRight
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: queueItem.modelData ? (queueItem.modelData.artist || queueItem.modelData.artists || "Unknown Artist") : ""
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 11
+                                color: Qt.rgba(1, 1, 1, 0.50)
+                                elide: Text.ElideRight
+                            }
+                        }
+
+                        // 3-Dots Action Button (Dedicated click target with high z-index)
+                        Item {
+                            Layout.preferredWidth: 32
+                            Layout.preferredHeight: 32
+                            Layout.alignment: Qt.AlignVCenter
+                            z: 10
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 16
+                                color: moreHover.hovered ? Qt.rgba(1, 1, 1, 0.14) : "transparent"
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                            }
+
+                            AppIcon {
+                                anchors.centerIn: parent
+                                source: "../assets/icons/view-more-symbolic.svg"
+                                iconSize: 18
+                                color: moreHover.hovered ? "#ffffff" : Qt.rgba(1, 1, 1, 0.65)
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                            }
+
+                            HoverHandler { id: moreHover }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                onClicked: mouse => {
+                                    mouse.accepted = true;
+                                    var pt = mapToItem(null, mouse.x, mouse.y);
+                                    root.trackContextMenuRequested(queueItem.modelData, pt.x, pt.y);
+                                }
+                            }
+                        }
+                    }
+
+                    HoverHandler { id: rowHover }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        cursorShape: Qt.PointingHandCursor
+                        z: 1
+                        onClicked: mouse => {
+                            if (mouse.button === Qt.RightButton) {
+                                var pt = mapToItem(null, mouse.x, mouse.y);
+                                root.trackContextMenuRequested(queueItem.modelData, pt.x, pt.y);
+                            } else {
+                                root.trackPlayRequested(queueItem.modelData, queueItem.index);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Empty State
+            Item {
+                anchors.centerIn: parent
+                width: parent.width - 40
+                visible: root.upNextTracks.length === 0 && (root.currentTrack === null)
+
+                Column {
+                    anchors.centerIn: parent
+                    spacing: 12
+
+                    AppIcon {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        source: "../assets/icons/queue-music-symbolic.svg"
+                        iconSize: 36
+                        color: Qt.rgba(1, 1, 1, 0.20)
+                    }
+
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: I18n.tr("Hàng đợi trống", "Queue is empty")
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 14
+                        font.bold: true
+                        color: Qt.rgba(1, 1, 1, 0.50)
+                    }
+
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: I18n.tr("Chọn bài hát để bắt đầu danh sách phát", "Play a track to start the queue")
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 11
+                        color: Qt.rgba(1, 1, 1, 0.35)
                     }
                 }
             }

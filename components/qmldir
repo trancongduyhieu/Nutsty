@@ -14,10 +14,12 @@ ContentView 1.0 ContentView.qml
 CreatePlaylistModal 1.0 CreatePlaylistModal.qml
 DesktopLyricsWidget 1.0 DesktopLyricsWidget.qml
 DesktopMusicWidget 1.0 DesktopMusicWidget.qml
+DualRotateIcon 1.0 DualRotateIcon.qml
 DownloadManager 1.0 DownloadManager.qml
 DownloadQueuePopover 1.0 DownloadQueuePopover.qml
 DownloadingSpinner 1.0 DownloadingSpinner.qml
 EnchantingSentence 1.0 EnchantingSentence.qml
+ExpressiveButton 1.0 ExpressiveButton.qml
 FloatingChatBubble 1.0 FloatingChatBubble.qml
 FriendRequestsPopover 1.0 FriendRequestsPopover.qml
 FriendStoryModal 1.0 FriendStoryModal.qml
@@ -56,6 +58,7 @@ SkeletonTrackRow 1.0 SkeletonTrackRow.qml
 SleepTimerController 1.0 SleepTimerController.qml
 SleepTimerPopover 1.0 SleepTimerPopover.qml
 SpotifyImportModal 1.0 SpotifyImportModal.qml
+SpringBounce 1.0 SpringBounce.qml
 SuggestTrackToast 1.0 SuggestTrackToast.qml
 singleton Theme 1.0 Theme.qml
 TopHeaderBar 1.0 TopHeaderBar.qml

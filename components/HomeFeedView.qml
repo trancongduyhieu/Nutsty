@@ -318,26 +318,29 @@ Rectangle {
             readonly property var sectionData: modelData
 
             // Responsive Metric Engine: Flush-fit 100% width, zero edge gaps ("không thiếu không dư")
-            readonly property real availableWidth: Math.max(300, secDelegate.width - 48)
+            readonly property real availableContentWidth: Math.max(300, secDelegate.width - 48)
 
             // Video Carousel (16:9 Landscape cards - "Nghe lại")
-            readonly property int cardVideoCount: Math.max(2, Math.round((availableWidth + 16) / (250 + 16)))
-            property real cardVideoWidth: (availableWidth - (cardVideoCount - 1) * 16) / cardVideoCount
-            Behavior on cardVideoWidth { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+            // Responsive Flush-fit: Exactly 3 cards when side panel is open, 5 cards when closed
+            readonly property int cardVideoCount: Math.max(3, Math.round((availableContentWidth + 16) / 240))
+            property real cardVideoWidth: (availableContentWidth - (cardVideoCount - 1) * 16) / cardVideoCount
+            Behavior on cardVideoWidth { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
             property real cardVideoHeight: Math.round((cardVideoWidth - 8) * 9 / 16) + 78
-            Behavior on cardVideoHeight { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+            Behavior on cardVideoHeight { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
 
-            // Square Carousel (1:1 Album/Playlist cards)
-            readonly property int cardSquareCount: Math.max(3, Math.round((availableWidth + 16) / (172 + 16)))
-            property real cardSquareWidth: (availableWidth - (cardSquareCount - 1) * 16) / cardSquareCount
-            Behavior on cardSquareWidth { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+            // Square Carousel (1:1 Album/Playlist cards) - Flush-fit 100% width, zero edge gaps
+            // Exactly 4 cards when side panel is open, 6 cards when closed
+            readonly property int cardSquareCount: Math.max(4, Math.round((availableContentWidth + 16) / 180))
+            property real cardSquareWidth: (availableContentWidth - (cardSquareCount - 1) * 16) / cardSquareCount
+            Behavior on cardSquareWidth { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
             property real cardSquareHeight: Math.round(cardSquareWidth - 8) + 78
-            Behavior on cardSquareHeight { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+            Behavior on cardSquareHeight { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
 
-            // Multi-row Track Grid (4 rows per column)
-            readonly property int cardGridColCount: Math.max(1, Math.round((availableWidth + 14) / (320 + 14)))
-            property real cardGridColWidth: (availableWidth - (cardGridColCount - 1) * 14) / cardGridColCount
-            Behavior on cardGridColWidth { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+            // Multi-row Track Grid (4 rows per column - "Bản cover & Phối lại")
+            // Exactly 2 columns when side panel is open, 3 columns when closed
+            readonly property int cardGridColCount: Math.max(2, Math.round((availableContentWidth + 14) / 340))
+            property real cardGridColWidth: (availableContentWidth - (cardGridColCount - 1) * 14) / cardGridColCount
+            Behavior on cardGridColWidth { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
             readonly property real cardGridColHeight: 240
 
             property var activeFlickable: {
@@ -474,7 +477,6 @@ Rectangle {
                         property real revealOpacity: 1.0
 
                         opacity: revealOpacity
-                        visible: opacity > 0.01
                         Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
                         readonly property string itemKey: String((modelData ? (modelData.videoId || modelData.path || modelData.title) : "") || "")
@@ -693,8 +695,6 @@ Rectangle {
                         width: secDelegate.cardGridColWidth
                         height: secDelegate.cardGridColHeight
                         readonly property var chunkTracks: modelData
-
-                        opacity: 1.0
 
                         Column {
                             anchors.fill: parent
@@ -927,7 +927,6 @@ Rectangle {
                         property real revealOpacity: 1.0
 
                         opacity: revealOpacity
-                        visible: opacity > 0.01
                         Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
                         readonly property string itemKey: String((modelData ? (modelData.browseId || modelData.playlistId || modelData.id || modelData.title) : "") || "")
@@ -1204,8 +1203,6 @@ Rectangle {
                         height: secDelegate.cardGridColHeight
                         readonly property var chunkTracks: modelData
 
-                        opacity: 1.0
-
                         Column {
                             anchors.fill: parent
                             spacing: 8
@@ -1418,7 +1415,6 @@ Rectangle {
                         property real revealOpacity: 1.0
 
                         opacity: revealOpacity
-                        visible: opacity > 0.01
                         Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
                         readonly property string itemKey: String((modelData ? (modelData.browseId || modelData.playlistId || modelData.id || modelData.title) : "") || "")
