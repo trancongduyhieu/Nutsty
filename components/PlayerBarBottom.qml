@@ -910,7 +910,7 @@ Item {
                     Behavior on scale { NumberAnimation { duration: 120 } }
                     AppIcon {
                         anchors.centerIn: parent
-                        source: "../assets/icons/view-lyrics-symbolic.svg"
+                        source: "../assets/icons/material/ms-lyrics-fill.svg"
                         iconSize: 20
                         color: root.isLyricsActive ? root.accentColor : "#ffffff"
                     }

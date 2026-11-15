@@ -401,6 +401,19 @@ Item {
 
     // Settings are written by a detached process, so give it a moment before the helper re-reads them.
     function refetchLyricsSoon() { lyricsRefetchTimer.restart(); }
+    // Apply the copy the lyrics source probe already fetched for `key` (instant, no new search)
+    function applyLyricsSource(key) {
+        var title = (track && (track.title || track.name)) ? (track.title || track.name) : "";
+        if (title === "" || key === "auto") { refetchLyricsSoon(); return; }
+        lyricsRefetchTimer.stop();
+        activeLyrics = [];
+        currentLyricIndex = -1;
+        hasLyrics = false;
+        isLoadingLyrics = true;
+        lyricsProc.running = false;
+        lyricsProc.command = ["python3", "-u", root.appDir + "/backend/lyrics_helper.py", "--apply", key, title, (track && track.artist) ? track.artist : ""];
+        lyricsProc.running = true;
+    }
     Timer { id: lyricsRefetchTimer; interval: 450; repeat: false; onTriggered: root.fetchLyrics() }
     signal playlistSelected(var pl)
     signal artistSelected(string name, string channelId)

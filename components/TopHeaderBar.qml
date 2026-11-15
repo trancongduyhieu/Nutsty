@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import "."
 
@@ -369,31 +370,13 @@ Rectangle {
     // Center Floating: Dynamic Mood Island (Direct child of headerRoot -> Dead Center!)
     // -------------------------------------------------------------------------
     Rectangle {
-        id: dynamicMoodShadow
-        anchors.horizontalCenter: dynamicMoodIsland.horizontalCenter
-        anchors.verticalCenter: dynamicMoodIsland.verticalCenter
-        anchors.verticalCenterOffset: 2
-        width: dynamicMoodIsland.width
-        height: dynamicMoodIsland.height
-        radius: dynamicMoodIsland.radius
-        color: "#55000000"
-        visible: dynamicMoodIsland.visible && dynamicMoodIsland.width > 0
-        z: 11
-        Behavior on width {
-            NumberAnimation {
-                duration: 320
-                easing.type: Easing.BezierSpline
-                easing.bezierCurve: [0.08, 0.72, 0.15, 1.0]
-            }
-        }
-    }
-
-    Rectangle {
         id: dynamicMoodIsland
         anchors.horizontalCenter: headerRoot.horizontalCenter
         anchors.verticalCenter: headerRoot.verticalCenter
-        height: 34
-        radius: 17
+        // Same frosted pill as the Now Playing mode switcher: light translucent fill + hairline,
+        // the active mood is a solid segment in the cover / wallpaper accent
+        height: 38
+        radius: 19
         z: 12
         clip: true
         visible: opacity > 0.01
@@ -401,7 +384,9 @@ Rectangle {
         Behavior on opacity { NumberAnimation { duration: 180 } }
 
         readonly property bool isExpanded: headerRoot.isMoodIslandExpanded
-        readonly property real compactWidth: compactTxt.implicitWidth + 28
+        // Selected chip takes the cover / wallpaper accent; text flips dark on light accents
+        readonly property color chipTextColor: topMoodFlickable.accentLuminance > 0.6 ? "#121214" : "#ffffff"
+        readonly property real compactWidth: compactTxt.implicitWidth + 36
         readonly property real expandedTargetWidth: Math.min(headerRoot.width - 580, moodRow.width + 24)
         width: isExpanded ? expandedTargetWidth : compactWidth
 
@@ -413,28 +398,22 @@ Rectangle {
             }
         }
 
-        color: isExpanded 
-            ? Qt.rgba(0.08, 0.08, 0.10, 0.82) 
-            : Qt.rgba(headerRoot.accentColor.r, headerRoot.accentColor.g, headerRoot.accentColor.b, 0.95)
+        color: Qt.rgba(1, 1, 1, 0.10)
         border.width: 1
-        border.color: isExpanded 
-            ? Qt.rgba(1.0, 1.0, 1.0, 0.14) 
-            : Qt.rgba(headerRoot.accentColor.r * 1.15, headerRoot.accentColor.g * 1.15, headerRoot.accentColor.b * 1.15, 0.95)
-
-        Behavior on color { ColorAnimation { duration: 240 } }
-        Behavior on border.color { ColorAnimation { duration: 240 } }
+        border.color: Qt.rgba(1, 1, 1, 0.14)
 
         scale: (!isExpanded && compactMouse.containsMouse) ? 1.05 : 1.0
         Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
+        // Compact: the selected mood as a white segment inside the frosted pill
         Rectangle {
             anchors.fill: parent
-            anchors.margins: 1
-            radius: 16
-            color: "transparent"
-            border.color: Qt.rgba(1.0, 1.0, 1.0, dynamicMoodIsland.isExpanded ? 0.08 : (topMoodFlickable.accentLuminance > 0.55 ? 0.35 : 0.22))
-            border.width: 1
-            Behavior on border.color { ColorAnimation { duration: 200 } }
+            anchors.margins: 4
+            radius: height / 2
+            color: Qt.rgba(headerRoot.accentColor.r, headerRoot.accentColor.g, headerRoot.accentColor.b, 0.95)
+            Behavior on color { ColorAnimation { duration: 400 } }
+            opacity: dynamicMoodIsland.isExpanded ? 0.0 : 1.0
+            Behavior on opacity { NumberAnimation { duration: 160 } }
         }
 
         // Layer 1: Compact View (Single Active Mood Pill in Center)
@@ -445,7 +424,7 @@ Rectangle {
             font.family: Theme.fontFamily
             font.pixelSize: 12
             font.bold: true
-            color: topMoodFlickable.accentLuminance > 0.55 ? "#0f0f11" : "#ffffff"
+            color: dynamicMoodIsland.chipTextColor
             visible: opacity > 0.01
             opacity: dynamicMoodIsland.isExpanded ? 0.0 : 1.0
             Behavior on opacity { NumberAnimation { duration: 160 } }
@@ -464,18 +443,40 @@ Rectangle {
             }
         }
 
+        Item {
+            id: moodScrollMask
+            anchors.fill: topMoodFlickable
+            visible: false
+            layer.enabled: true
+            Rectangle {
+                anchors.fill: parent
+                anchors.topMargin: 4
+                anchors.bottomMargin: 4
+                radius: height / 2
+                color: "#ffffff"
+            }
+        }
+
         // Layer 2: Expanded View (Full Moods Palette with Liquid Tint Glass)
         Flickable {
             id: topMoodFlickable
             anchors.fill: parent
-            anchors.leftMargin: 8
-            anchors.rightMargin: 8
-            contentWidth: moodRow.width + 8
+            anchors.leftMargin: 4
+            anchors.rightMargin: 4
+            contentWidth: moodRow.width
             contentHeight: height
             boundsBehavior: Flickable.StopAtBounds
             flickableDirection: Flickable.HorizontalFlick
             pixelAligned: true
             clip: true
+            // A square clip lets chips scrolled to either end poke past the pill's round caps;
+            // mask to a capsule concentric with the pill (R 19 - inset 4 = 15, same as a chip)
+            layer.enabled: visible
+            layer.effect: MultiEffect {
+                maskEnabled: true
+                maskSource: moodScrollMask
+                autoPaddingEnabled: false
+            }
             interactive: contentWidth > width && dynamicMoodIsland.isExpanded
             enabled: dynamicMoodIsland.isExpanded
             visible: opacity > 0.01
@@ -496,23 +497,13 @@ Rectangle {
 
             Rectangle {
                 id: activeMoodIndicator
-                height: 26
-                radius: 13
+                height: 30
+                radius: 15
                 y: (topMoodFlickable.height - height) / 2
                 z: 2
                 color: Qt.rgba(headerRoot.accentColor.r, headerRoot.accentColor.g, headerRoot.accentColor.b, 0.95)
-                border.color: Qt.rgba(1.0, 1.0, 1.0, 0.45)
-                border.width: 1
+            Behavior on color { ColorAnimation { duration: 400 } }
                 visible: width > 0
-
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: 1
-                    radius: 12
-                    color: "transparent"
-                    border.color: Qt.rgba(1.0, 1.0, 1.0, topMoodFlickable.accentLuminance > 0.55 ? 0.35 : 0.25)
-                    border.width: 1
-                }
 
                 Behavior on x { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
                 Behavior on width { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
@@ -520,9 +511,9 @@ Rectangle {
 
             Row {
                 id: moodRow
-                spacing: 6
+                spacing: 2
                 anchors.verticalCenter: parent.verticalCenter
-                x: Math.max(4, (topMoodFlickable.width - width) / 2)
+                x: Math.max(0, (topMoodFlickable.width - width) / 2)
                 z: 5
                 onWidthChanged: Qt.callLater(topMoodFlickable.updateActiveIndicator)
 
@@ -532,8 +523,8 @@ Rectangle {
 
                     delegate: Item {
                         id: pillItem
-                        height: 26
-                        width: pillTxt.implicitWidth + 14
+                        height: 30
+                        width: pillTxt.implicitWidth + 24
                         readonly property bool isSelected: headerRoot.selectedMood === modelData.title
                         readonly property bool isHovered: pillMouse.containsMouse
 
@@ -552,21 +543,11 @@ Rectangle {
 
                         Rectangle {
                             anchors.fill: parent
-                            radius: 13
-                            color: pillItem.isHovered 
-                                ? Qt.rgba(headerRoot.accentColor.r, headerRoot.accentColor.g, headerRoot.accentColor.b, 0.20) 
-                                : Qt.rgba(0.16, 0.16, 0.19, 0.85)
-                            border.width: 1
-                            border.color: pillItem.isHovered 
-                                ? Qt.rgba(headerRoot.accentColor.r, headerRoot.accentColor.g, headerRoot.accentColor.b, 0.45) 
-                                : Qt.rgba(1.0, 1.0, 1.0, 0.08)
-                            opacity: pillItem.isSelected ? 0.0 : 1.0
-                            scale: (pillItem.isHovered && !pillItem.isSelected) ? 1.04 : 1.0
-
+                            radius: 15
+                            // No per-chip fill: chips sit directly on the frosted pill, hover is an accent tint
+                            color: Qt.rgba(headerRoot.accentColor.r, headerRoot.accentColor.g, headerRoot.accentColor.b, 0.22)
+                            opacity: (pillItem.isHovered && !pillItem.isSelected) ? 1.0 : 0.0
                             Behavior on opacity { NumberAnimation { duration: 150 } }
-                            Behavior on color { ColorAnimation { duration: 150 } }
-                            Behavior on border.color { ColorAnimation { duration: 150 } }
-                            Behavior on scale { NumberAnimation { duration: 120 } }
                         }
 
                         Text {
@@ -574,11 +555,10 @@ Rectangle {
                             anchors.centerIn: parent
                             text: headerRoot.formatMoodTitle(modelData.title)
                             font.family: Theme.fontFamily
-                            font.pixelSize: 11
+                            font.pixelSize: 12
                             font.weight: pillItem.isSelected ? Font.Bold : Font.DemiBold
-                            color: pillItem.isSelected 
-                                   ? (topMoodFlickable.accentLuminance > 0.55 ? "#0f0f11" : "#ffffff") 
-                                   : (pillItem.isHovered ? "#ffffff" : Qt.rgba(0.92, 0.92, 0.94, 0.90))
+                            color: pillItem.isSelected ? dynamicMoodIsland.chipTextColor
+                                   : (pillItem.isHovered ? "#ffffff" : Qt.rgba(1, 1, 1, 0.78))
                             Behavior on color { ColorAnimation { duration: 120 } }
                         }
 

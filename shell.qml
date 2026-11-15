@@ -2598,6 +2598,8 @@ Scope {
                     currentTrack: win.currentTrack
                     currentTracks: win.currentTracks
                     currentTime: win.currentTime
+                    syncTime: win.lastSyncTime
+                    syncStamp: win.lastSyncTimestamp
                     totalDuration: win.totalDuration
                     isPlaying: win.isPlaying
                     accentColor: win.accentColor
@@ -3402,7 +3404,7 @@ Scope {
             onLyricsSourceSelected: src => {
                 win.lyricsSource = src;
                 win.saveSettings();
-                ytNowPlayingView.refetchLyricsSoon();
+                ytNowPlayingView.applyLyricsSource(src);
             }
         }
 
@@ -4742,6 +4744,7 @@ Scope {
         function showHome() { frostifyIpc.showHome(); }
         function selectMood(title: string, params: string) { frostifyIpc.selectMood(title, params); }
         function openContextMenuForTest(isQueue: bool, forceLocal: bool) { frostifyIpc.openContextMenuForTest(isQueue, forceLocal); }
+        function openLyricsSourceMenuForTest() { frostifyIpc.openLyricsSourceMenuForTest(); }
         function closeContextMenu() { frostifyIpc.closeContextMenu(); }
         function openArtist(artistNameOrId: string) { frostifyIpc.openArtist(artistNameOrId); }
         function openAlbum(browseId: string) { frostifyIpc.openAlbum(browseId); }
@@ -5222,6 +5225,11 @@ Scope {
             if (trk) {
                 trackContextMenu.openAt(trk, 600, 320, isQueue);
             }
+        }
+        function openLyricsSourceMenuForTest() {
+            if (!win.currentTrack) return;
+            trackContextMenu.openAt(win.currentTrack, 900, 260, false, true);
+            trackContextMenu.isLyricsSourceSubmenuOpen = true;
         }
         function closeContextMenu() {
             trackContextMenu.closeMenu();

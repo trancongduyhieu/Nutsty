@@ -1237,7 +1237,114 @@ def _enrich_with_romanization(lines):
     return lines
 
 
+_VOWELS = set("aeiouyàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹ")
+
+def _is_consonant_fragment(t):
+    """A Latin-letter token with no vowel ("n", "nh", "đ") can't be a word on its own."""
+    low = t.lower()
+    return bool(low) and all(("a" <= c <= "z" or c == "đ") and c not in _VOWELS for c in low)
+
+_FINALS = {"c", "ch", "m", "n", "ng", "nh", "p", "t"}
+_GLIDES = {"oa", "oă", "oe", "uy", "uê", "uâ", "uô", "ươ", "iê", "yê", "ua"}
+_TONE_MARKS = {"\u0300", "\u0301", "\u0303", "\u0309", "\u0323"}
+
+def _vi_parts(t):
+    """(letters without tone marks, has a tone mark) for a Vietnamese token."""
+    import unicodedata
+    d = unicodedata.normalize("NFD", t.lower())
+    toned = any(c in _TONE_MARKS for c in d)
+    return unicodedata.normalize("NFC", "".join(c for c in d if c not in _TONE_MARKS)), toned
+
+def _is_onset_fragment(t):
+    return _is_consonant_fragment(t) or t.lower() in ("qu", "gi")
+
+def _mend_word_list(words):
+    """Some community word-sync copies (seen on SimpMusic) split Vietnamese words into spaced
+    pieces: "n à o", "m ì nh", "T ì nh y ê u", "qu ê n", "xo á". Glue them back with a few syllable
+    rules: a vowel-less piece is a final consonant when the glued syllable is still open and no
+    vowel-led piece follows, otherwise the start of the next syllable; lone vowels extend an open
+    glued syllable or chain together; a toned vowel piece completes a short untoned glide ("xo"+"á")."""
+    out = []
+    kind = None      # how out[-1] was glued: None (a normal token), "cons" or "vow"
+    closed = False   # out[-1] already ends in a final consonant
+    def join(a, b):
+        a["text"] += b["text"]
+        a["end"] = b.get("end", a.get("end"))
+        a["duration"] = round(max(0.08, a["end"] - a["start"]), 3)
+        a["hasSpace"] = b.get("hasSpace", True)
+        a["isHeld"] = a["duration"] >= 0.85
+    def has_vowel(t):
+        return any(c in _VOWELS for c in t.lower())
+    def starts_vowel(t):
+        return t[:1].lower() in _VOWELS
+    i = 0
+    while i < len(words):
+        w = dict(words[i])
+        t = str(w.get("text", ""))
+        nt = str(words[i + 1].get("text", "")) if i + 1 < len(words) else ""
+        lone_vowel = len(t) == 1 and t.lower() in _VOWELS
+        if _is_onset_fragment(t):
+            next_is_rhyme = starts_vowel(nt) and len(nt) > 1  # "m" + "ình": onset of the next word
+            if (out and kind == "cons" and not closed and has_vowel(out[-1]["text"])
+                    and t.lower() in _FINALS and not next_is_rhyme):
+                join(out[-1], w); closed = True
+            elif starts_vowel(nt):
+                out.append(w); kind = "cons"; closed = False
+            elif out and t.lower() not in ("qu", "gi"):
+                join(out[-1], w); closed = True
+            else:
+                out.append(w); kind = None
+            i += 1
+            continue
+        prev = out[-1]["text"] if out else ""
+        if lone_vowel and out and kind is not None and not closed:
+            join(out[-1], w)
+        elif out and kind == "cons" and not closed and not has_vowel(prev.replace("qu", "q").replace("gi", "g")):
+            join(out[-1], w)  # onset piece + rest of the syllable ("đ" + "ó", "qu" + "ê")
+        elif out and starts_vowel(t) and len(prev) <= 2 and not closed:
+            pb, ptoned = _vi_parts(prev)
+            cb, ctoned = _vi_parts(t)
+            pair = (pb[-1] + cb[:1]) if pb else ""
+            # Toned second piece always reads as one syllable; untoned only for the hat glides
+            # (iê/yê/uô/ươ), so plain "cho ăn" / "cho em" stay two words
+            if not ptoned and pair in _GLIDES and (ctoned or pair in ("iê", "yê", "uô", "ươ")):
+                join(out[-1], w); kind = "vow"; closed = False
+            elif lone_vowel:
+                out.append(w); kind = "vow"; closed = False
+            else:
+                out.append(w); kind = None; closed = False
+        elif lone_vowel:
+            out.append(w); kind = "vow"; closed = False
+        else:
+            out.append(w); kind = None; closed = False
+        i += 1
+    return out
+
+def _mend_split_words(lines):
+    for item in lines:
+        if not isinstance(item, dict):
+            continue
+        # Vietnamese-only repair: English has real vowel-less words ("hmm", "shh") that must stay
+        if not any((not c.isascii()) and (c in _VOWELS or c in "đĐ") for c in str(item.get("text", "")).lower()):
+            continue
+        changed = False
+        for k, v in list(item.items()):
+            if isinstance(v, list) and v and all(isinstance(x, dict) and "start" in x and "text" in x for x in v):
+                mended = _mend_word_list(v)
+                if len(mended) != len(v):
+                    item[k] = mended
+                    changed = True
+        if changed and isinstance(item.get("words"), list) and item["words"]:
+            item["text"] = clean_vocal_markers("".join(
+                w["text"] + (" " if w.get("hasSpace", True) else "") for w in item["words"]).strip())
+    return lines
+
 def _insert_interlude_dots(lines):
+    if isinstance(lines, list):
+        _mend_split_words(lines)
+    return _insert_interlude_dots_impl(lines)
+
+def _insert_interlude_dots_impl(lines):
     """
     SimpMusic / Apple Music style interlude countdown dots:
     During intro (>= 3.5s) or instrumental gaps (>= 3.5s) between lyric lines,
@@ -1406,7 +1513,130 @@ def handle_cli(args):
     res = get_lyrics(title_arg, artist_arg, vid_arg, path_arg, dur_arg)
     print(json.dumps(res, ensure_ascii=False))
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Lyrics source picker: probe every source, then apply the copy the user picks
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Menu key -> source tag written to the .lrc cache (matches the cache-source check in _get_lyrics_raw)
+_SOURCE_CACHE_TAGS = {
+    "youlyplus": "Apple Music (YouLyPlus)",
+    "simpmusic": "SimpMusic",
+    "betterlyrics": "Apple Music",
+    "spotify": "Spotify",
+    "lrclib": "LRCLIB",
+    "kugou": "KuGou",
+    "netease": "NetEase Music",
+    "youtube": "YouTube",
+}
+PROBE_BUDGET_SEC = 10.0
+
+def _probe_path(title, artist):
+    d = os.path.join(CACHE_DIR, "probe")
+    os.makedirs(d, exist_ok=True)
+    key = hashlib.md5(f"{title}|{artist or ''}".lower().strip().encode("utf-8")).hexdigest()
+    return os.path.join(d, key + ".json")
+
+def _describe_lines(lines, cand):
+    """('word' | 'line' | 'plain', has_duet) for a source's lyrics."""
+    if not lines:
+        return "plain", False
+    worded = sum(1 for ln in lines if len(ln.get("words") or []) > 1)
+    if worded * 3 >= len(lines):
+        sync = "word"
+    elif cand is not None and cand.sync_kind <= 1:
+        sync = "plain"
+    else:
+        sync = "line" if any((ln.get("time") or 0) > 0 for ln in lines) else "plain"
+    agents = {ln.get("agent") for ln in lines if ln.get("agent") and ln.get("agent") != "v1000"}
+    return sync, (len(agents) > 1 or bool(cand is not None and cand.has_duet))
+
+def probe_sources(title, artist=None, video_id=None, duration_sec=None):
+    """Ask every source in parallel. Prints one JSON line per source as soon as it answers, so the
+    menu fills in progressively, and stores each found copy so picking one is instant (apply_source)."""
+    try:
+        from . import multi_lyrics_resolver as mlr
+    except (ImportError, ValueError):
+        import multi_lyrics_resolver as mlr
+    from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
+
+    t = clean_search_title(title)
+    a = artist or ""
+    jobs = {
+        "youlyplus": lambda: mlr.fetch_youlyplus_candidate(t, a),
+        "simpmusic": lambda: mlr.fetch_simpmusic_candidate(video_id or "", t, a, duration_sec),
+        "betterlyrics": lambda: mlr.fetch_betterlyrics_candidate(t, a, duration_sec),
+        "spotify": lambda: mlr.fetch_spotify_candidate(t, a, duration_sec),
+        "lrclib": lambda: mlr.fetch_lrclib_candidate(t, a, duration_sec),
+        "kugou": lambda: mlr.fetch_kugou_candidate(t, a, duration_sec),
+        "netease": lambda: mlr.fetch_netease_candidate(t, a, duration_sec),
+        "youtube": (lambda: mlr.fetch_youtube_captions_candidate(video_id)) if video_id else (lambda: None),
+    }
+    store = {}
+    path = _probe_path(title, artist)
+
+    def emit(obj):
+        sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
+        sys.stdout.flush()
+
+    pool = ThreadPoolExecutor(max_workers=len(jobs), thread_name_prefix="nutsty_probe")
+    futs = {pool.submit(fn): key for key, fn in jobs.items()}
+    pending = set(futs)
+    deadline = time.time() + PROBE_BUDGET_SEC
+    try:
+        while pending:
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                break
+            done, pending = wait(pending, timeout=remaining, return_when=FIRST_COMPLETED)
+            for fut in done:
+                key = futs[fut]
+                try:
+                    cand = fut.result()
+                except Exception:
+                    cand = None
+                lines = mlr.candidate_to_nutsty_lines(cand) if (cand and cand.raw_lyrics) else []
+                lines = [ln for ln in lines if (ln.get("text") or "").strip() or ln.get("words")]
+                if not lines:
+                    emit({"key": key, "status": "none"})
+                    continue
+                sync, duet = _describe_lines(lines, cand)
+                store[key] = lines
+                try:
+                    with open(path, "w", encoding="utf-8") as f:
+                        json.dump(store, f, ensure_ascii=False)
+                except Exception:
+                    pass
+                emit({"key": key, "status": "ok", "sync": sync, "duet": duet, "lines": len(lines)})
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+    for fut in pending:
+        emit({"key": futs[fut], "status": "none"})
+    emit({"done": True})
+
+def apply_source(key, title, artist=None):
+    """Return the copy a probe found for `key` (fully post-processed, like get_lyrics) and cache it
+    as this song's lyrics so later fetches with the same preference reuse it."""
+    try:
+        with open(_probe_path(title, artist), "r", encoding="utf-8") as f:
+            lines = json.load(f).get(key) or []
+    except Exception:
+        lines = []
+    if not lines:
+        return []
+    tag = _SOURCE_CACHE_TAGS.get(key, key)
+    _tag_source(lines, tag)
+    _save_lrc_cache_from_lines(lines, title, artist, source=tag)
+    return _insert_interlude_dots(_enrich_with_romanization(lines))
+
 def main():
+    if len(sys.argv) >= 2 and sys.argv[1] == "--probe":
+        a = sys.argv[2:] + [""] * 4
+        probe_sources(a[0], a[1] or None, a[2] or None, float(a[3]) if a[3].strip() else None)
+        return
+    if len(sys.argv) >= 2 and sys.argv[1] == "--apply":
+        a = sys.argv[2:] + [""] * 3
+        print(json.dumps(apply_source(a[0], a[1], a[2] or None), ensure_ascii=False))
+        return
     if len(sys.argv) < 2:
         print("[]")
         return

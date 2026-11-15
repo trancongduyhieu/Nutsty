@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls.Basic
+import Quickshell.Io
 
 Item {
     id: root
@@ -44,6 +45,70 @@ Item {
         return lyricsSourceOptions[0].name;
     }
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
+
+    // ---- Lyrics source probe (Mochy-like): every source is asked as soon as the menu opens and each
+    // row says what it found. Only sources that actually have lyrics for this song can be picked.
+    // probeStates[key] = { status: "checking" | "ok" | "none", sync: "word" | "line" | "plain", duet }
+    property var probeStates: ({})
+    property string probeTrackKey: ""
+    property bool probeRunning: false
+    function startLyricsProbe() {
+        var trk = root.track;
+        if (!trk) return;
+        var title = trk.title || trk.name || "";
+        var artist = trk.artist || "";
+        if (title === "") return;
+        var key = title + "|" + artist;
+        if (key === root.probeTrackKey && (root.probeRunning || Object.keys(root.probeStates).length > 0)) return;
+        root.probeTrackKey = key;
+        var st = {};
+        for (var i = 1; i < root.lyricsSourceOptions.length; ++i) st[root.lyricsSourceOptions[i].key] = { status: "checking" };
+        root.probeStates = st;
+        var dur = (typeof win !== "undefined" && win && win.totalDuration > 1) ? String(Math.round(win.totalDuration)) : "";
+        var appDir = (typeof win !== "undefined" && win && win.appDir) ? win.appDir : "";
+        probeProc.running = false;
+        probeProc.command = ["python3", "-u", appDir + "/backend/lyrics_helper.py", "--probe", title, artist, root.trackVid, dur];
+        root.probeRunning = true;
+        probeProc.running = true;
+    }
+    function probeDescription(key) {
+        if (key === "auto") return I18n.tr("Tự chọn bản lời tốt nhất", "Picks the best lyrics for you");
+        var st = root.probeStates[key];
+        if (!st || st.status === "checking") return I18n.tr("Đang kiểm tra...", "Checking...");
+        if (st.status !== "ok") return I18n.tr("Không có lời cho bài này", "No lyrics for this song");
+        var d = st.sync === "word" ? I18n.tr("Đồng bộ theo từng chữ", "Word synced")
+              : (st.sync === "line" ? I18n.tr("Đồng bộ theo từng câu", "Line synced") : I18n.tr("Không đồng bộ thời gian", "Not time-synced"));
+        if (st.duet) d += I18n.tr(" · Song ca", " · Duet");
+        return d;
+    }
+    Process {
+        id: probeProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                if (!data || data.trim() === "") return;
+                var obj;
+                try { obj = JSON.parse(data); } catch (e) { return; }
+                var st = Object.assign({}, root.probeStates);
+                if (obj.done) {
+                    for (var k in st) if (st[k].status === "checking") st[k] = { status: "none" };
+                    root.probeStates = st;
+                    root.probeRunning = false;
+                    return;
+                }
+                if (!obj.key) return;
+                st[obj.key] = obj.status === "ok" ? { status: "ok", sync: obj.sync, duet: !!obj.duet } : { status: "none" };
+                root.probeStates = st;
+            }
+        }
+        onExited: {
+            if (!root.probeRunning) return;
+            var st = Object.assign({}, root.probeStates);
+            for (var k in st) if (st[k].status === "checking") st[k] = { status: "none" };
+            root.probeStates = st;
+            root.probeRunning = false;
+        }
+    }
 
     Timer {
         id: closeTimer
@@ -92,6 +157,8 @@ Item {
         root.targetX = xPos;
         root.targetY = yPos;
         root.isOpen = true;
+        menuFlick.contentY = 0;
+        if (root.showLyricsSource) root.startLyricsProbe();
     }
 
     function closeMenu() {
@@ -118,8 +185,10 @@ Item {
     Rectangle {
         id: menuCard
         width: 230
-        height: menuCol.implicitHeight + 16
+        // Never taller than the window: with the lyrics sources expanded the list scrolls instead
+        height: Math.min(menuCol.implicitHeight + 16, root.height - 24)
         radius: 10
+        clip: true
         color: Qt.rgba(0.11, 0.11, 0.13, 0.96)
         border.color: Qt.rgba(1, 1, 1, 0.12)
         border.width: 1
@@ -143,12 +212,20 @@ Item {
             onClicked: mouse => mouse.accepted = true
         }
 
+        Flickable {
+            id: menuFlick
+            anchors.fill: parent
+            anchors.topMargin: 8
+            anchors.bottomMargin: 8
+            contentWidth: width
+            contentHeight: menuCol.implicitHeight
+            interactive: contentHeight > height
+            boundsBehavior: Flickable.StopAtBounds
+            clip: true
+
         Column {
             id: menuCol
-            anchors.top: parent.top
-            anchors.topMargin: 8
-            anchors.left: parent.left
-            anchors.right: parent.right
+            width: menuFlick.width
             spacing: 2
 
             // Track header
@@ -269,17 +346,85 @@ Item {
 
                 Repeater {
                     model: root.lyricsSourceOptions
-                    delegate: MenuItemButton {
-                        readonly property bool active: modelData.key === root.currentLyricsSource
-                        text: modelData.name
-                        iconSource: active ? "../assets/icons/material/ms-check.svg" : ""
-                        textColor: active ? root.accentColor : Theme.textPrimary
-                        iconColor: root.accentColor
-                        indent: 14
-                        onClicked: {
-                            var key = modelData.key;
-                            root.closeMenu();
-                            if (!active) root.lyricsSourceSelected(key);
+                    delegate: Rectangle {
+                        id: srcRow
+                        required property var modelData
+                        readonly property string key: modelData.key
+                        readonly property bool active: key === root.currentLyricsSource
+                        readonly property var st: root.probeStates[key]
+                        readonly property bool checking: key !== "auto" && (!st || st.status === "checking")
+                        readonly property bool available: key === "auto" || (!!st && st.status === "ok")
+                        width: parent.width - 8
+                        height: 42
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        radius: 8
+                        color: (srcHover.hovered && available && !active) ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.14) : "transparent"
+                        opacity: (available || checking) ? 1.0 : 0.42
+                        Behavior on opacity { NumberAnimation { duration: 180 } }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 24
+                            anchors.rightMargin: 10
+                            spacing: 10
+                            // Fixed slot: tick for the active source, a small morphing loader while checking
+                            Item {
+                                Layout.preferredWidth: 15
+                                Layout.preferredHeight: 15
+                                AppIcon {
+                                    anchors.centerIn: parent
+                                    visible: srcRow.active
+                                    source: "../assets/icons/material/ms-check.svg"
+                                    color: root.accentColor
+                                    iconSize: 15
+                                }
+                                ShapeLoader {
+                                    anchors.centerIn: parent
+                                    visible: !srcRow.active && srcRow.checking
+                                    running: visible && root.isOpen
+                                    size: 14
+                                    color: root.accentColor
+                                }
+                            }
+                            Column {
+                                Layout.fillWidth: true
+                                spacing: 1
+                                Text {
+                                    width: parent.width
+                                    text: srcRow.modelData.name
+                                    color: srcRow.active ? root.accentColor : Theme.textPrimary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 12
+                                    font.weight: srcRow.active ? Font.DemiBold : Font.Normal
+                                    elide: Text.ElideRight
+                                }
+                                Text {
+                                    width: parent.width
+                                    text: root.probeDescription(srcRow.key)
+                                    color: (srcRow.st && srcRow.st.status === "ok" && srcRow.st.sync === "word") ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.9) : Theme.textSecondary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 10
+                                    elide: Text.ElideRight
+                                }
+                            }
+                        }
+                        HoverHandler {
+                            id: srcHover
+                            cursorShape: (srcRow.available && !srcRow.active) ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            acceptedButtons: Qt.LeftButton
+                            preventStealing: true
+                            enabled: srcRow.available && !srcRow.active
+                            onPressed: mouse => mouse.accepted = true
+                            onReleased: mouse => mouse.accepted = true
+                            onClicked: mouse => {
+                                mouse.accepted = true;
+                                var key = srcRow.key;
+                                root.closeMenu();
+                                root.lyricsSourceSelected(key);
+                            }
                         }
                     }
                 }
@@ -478,6 +623,7 @@ Item {
                     }
                 }
             }
+        }
         }
     }
 

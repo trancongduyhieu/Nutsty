@@ -18,6 +18,9 @@ Item {
     property var activeLyrics: []
     property bool isLoadingLyrics: false
     property string resolvedSquareImage: ""
+    // Last real playback position from mpv and when it was read (ms); drives the per-frame lyric clock
+    property real syncTime: 0.0
+    property double syncStamp: 0
     property Item backgroundSourceItem: null
     property int panelStyle: 1 // 1: Flush Split-Rail, 2: Bento Glass Island
     property string activeTab: "lyrics" // "lyrics" | "queue"
@@ -83,134 +86,44 @@ Item {
     }
 
     // -------------------------------------------------------------------------
-    // LYRICS SYNCHRONIZATION & WORD-LEVEL STATE MACHINE
+    // EXPRESSIVE LYRICS SCHEDULE (Mochy ExpressiveText.kt timing model)
+    // Every line gets a fixed timetable when the lyrics load: when it comes in,
+    // when its singing ends, whether it overlaps the next line and when it leaves.
+    // - Lines that don't overlap are replaced in place: the old one flies off
+    //   while the new one rises into the same spot.
+    // - Lines that overlap stack: the next one waits underneath, then glides up
+    //   into the top spot as the line above flies off.
+    // All motion is a pure function of a smooth per-frame clock, so nothing pops.
     // -------------------------------------------------------------------------
     property int currentLyricIndex: -1
-    property var currentLineWords: []
-    property var currentWordScales: []
-    property real activeBaseFontSize: 26
     property bool isInterlude: false
-    property bool hasRealWordTiming: false
-    property int lineChangeCounter: 0
-
-    // Smooth Dual-Slot Exit Animation State
-    property var exitingLineWords: []
-    property var exitingWordScales: []
-    property real exitingBaseFontSize: 24
-    property real exitProgress: 1.0
-    property real exitingLineHeight: 60.0
 
     // Mochy Authentic Color & Typography Tokens (StyleKit.kt & ExpressiveText.kt)
-    readonly property color mochyInk: "#F1ECEC"                               // 0xFFF1ECEC (Warm Alabaster Chalk)
-    readonly property color mochyInkSoft: Qt.rgba(0.945, 0.925, 0.925, 0.62) // 0xFFF1ECEC @ 62% alpha (Soft Silver-Ash)
-    readonly property color mochyInkDim: Qt.rgba(0.945, 0.925, 0.925, 0.40)  // 0xFFF1ECEC @ 40% alpha (Unsung word)
+    readonly property color mochyInk: "#F1ECEC"
+    readonly property color mochyInkSoft: Qt.rgba(0.945, 0.925, 0.925, 0.62)
+    readonly property color mochyInkDim: Qt.rgba(0.945, 0.925, 0.925, 0.40)
     readonly property string mochyFont: "Inter, Inter Display, SF Pro Display, system-ui, sans-serif"
 
-    // Line Shift & Shout Word Growth Animation State
-    property real lineShiftProgress: 1.0
-    property bool shiftTriggered: true
+    // Timing constants (seconds), mirrored from Mochy
+    readonly property real kEnterLead: 0.42
+    readonly property real kEnterDur: 0.56
+    readonly property real kEnterStagger: 0.065
+    readonly property real kExitDur: 0.46
+    readonly property real kExitStagger: 0.04
+    readonly property real kGapExitDelay: 0.45
+    readonly property real kMinInterludeGap: 4.0
 
-    // Latency compensation for audio buffer so words illuminate right on beat (from AppleMusicWordFlow)
-    readonly property real effectiveLyricTime: root.currentTime + 0.06
+    // Per-line timetable, rebuilt whenever the lyrics change
+    property var lyricSchedule: ({ count: 0, starts: [], ends: [], enter: [], exit: [], gone: [], overlaps: [], words: [], scales: [], fonts: [] })
 
-    // Sequential monotonic reading head: finds the single active singing word index (from AppleMusicWordFlow)
-    readonly property int activeWordIndex: {
-        var ws = root.currentLineWords;
-        if (!ws || ws.length === 0) return -1;
-        var t = root.effectiveLyricTime;
-        for (var i = 0; i < ws.length; i++) {
-            var w = ws[i];
-            var wStart = (w.start !== undefined) ? Number(w.start) : 0.0;
-            var wEnd = (w.end !== undefined) ? Number(w.end) : (wStart + 0.1);
-            if (t < wStart) {
-                return i - 1;
-            }
-            if (t >= wStart && t < wEnd) {
-                return i;
-            }
-        }
-        return ws.length;
-    }
+    // Smooth clock: extrapolates between position samples every frame
+    property real animClock: 0.0
+    property real clockSample: 0.0
+    property double clockStamp: 0
+    // Latency compensation so words light up right on the beat
+    readonly property real effectiveLyricTime: root.animClock + 0.06
 
-    // Trigger delayed shift-up after 2-3 words have been sung at the bottom slot:
-    // "câu 2 phải hát được tầm 2 3 từ mới dịch chuyển lên trên"
-    onActiveWordIndexChanged: {
-        if (!shiftTriggered && exitingLineWords && exitingLineWords.length > 0) {
-            var threshold = (currentLineWords && currentLineWords.length <= 2) ? 1 : 2;
-            if (activeWordIndex >= threshold) {
-                startLineShift();
-            }
-        }
-    }
-
-    function startLineShift() {
-        if (shiftTriggered) return;
-        shiftTriggered = true;
-        delayedShiftTimer.stop();
-        if (exitingLineWords && exitingLineWords.length > 0) {
-            lineShiftAnim.restart();
-        } else {
-            lineShiftProgress = 1.0;
-            exitProgress = 1.0;
-        }
-    }
-
-    // Safety fallback timer: ensures line never stays stuck at the bottom during long pauses
-    Timer {
-        id: delayedShiftTimer
-        interval: 1600
-        repeat: false
-        running: false
-        onTriggered: root.startLineShift()
-    }
-
-    // Upcoming Line State (Waits below active line, words at 1.0x rest scale)
-    property int upcomingLyricIndex: -1
-    property var upcomingLineWords: []
-    property var upcomingWordScales: []
-    property real upcomingBaseFontSize: 21
-
-    // Exit Tilt & Horizontal Drift (Randomized per sequential transition: straight / tilt left / tilt right)
-    property real exitTiltAngle: 0.0
-    property real exitDriftX: 0.0
-
-    // Mochy Dual-Slot Line Shift & Exit Animation (ExpressiveText.kt lines 889-898)
-    // 1. Line 1 floats up over album cover (-170px) with 3-phase velocity curve (liftoff -> buoyant rise -> 500ms silky glide & drift) over 980ms.
-    // 2. CONCURRENTLY, Line 2 glides up from bottom position to y=0 (lineShiftProgress: 0 -> 1) over 720ms.
-    ParallelAnimation {
-        id: lineShiftAnim
-        running: false
-
-        // Act 1: Câu 1 tan biến làm mờ bay lên ảnh bìa (3-Phase Velocity Curve: Smooth Liftoff -> Rise -> Long Deceleration Glide)
-        SequentialAnimation {
-            NumberAnimation {
-                target: root
-                property: "exitProgress"
-                from: 0.0
-                to: 1.0
-                duration: 980
-                easing.type: Easing.BezierSpline
-                easing.bezierCurve: [0.18, 0.10, 0.22, 1.0]
-            }
-            ScriptAction {
-                script: {
-                    root.exitingLineWords = [];
-                    root.exitingWordScales = [];
-                }
-            }
-        }
-
-        // Act 2: Câu 2 trượt từ dưới lên trên mượt mà với quán tính Mochy trong khi đang quét chữ
-        NumberAnimation {
-            target: root
-            property: "lineShiftProgress"
-            from: 0.0
-            to: 1.0
-            duration: 720
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: [0.08, 0.72, 0.15, 1.0]
-        }
-    }
+    ListModel { id: visibleLinesModel }
 
     // Resolved cover image URL
     readonly property string coverImageUrl: {
@@ -219,7 +132,7 @@ Item {
             return (r.startsWith("/") && !r.startsWith("file://")) ? ("file://" + r) : r;
         }
         if (!root.currentTrack) return "";
-        var s = root.currentTrack.image || root.currentTrack.artUrl || root.currentTrack.cover || root.currentTrack.thumbnail || "";
+        var s = String(root.currentTrack.image || root.currentTrack.artUrl || root.currentTrack.cover || root.currentTrack.thumbnail || "");
         if (!s && root.currentTrack.videoId) {
             s = "https://i.ytimg.com/vi/" + root.currentTrack.videoId + "/hqdefault.jpg";
         }
@@ -227,9 +140,21 @@ Item {
         return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
     }
 
-    // Mochy Dynamic Downscaling Algorithm (ExpressiveText.kt lines 606-620):
-    // Measures total characters & words in the line. If line is long (> 10 words or > 40 chars),
-    // proportionally steps down base size so it wraps cleanly without overflowing.
+    function easeOutCubic(x) {
+        var c = Math.max(0.0, Math.min(1.0, x));
+        var u = 1.0 - c;
+        return 1.0 - u * u * u;
+    }
+    function smoothstep(x) {
+        var c = Math.max(0.0, Math.min(1.0, x));
+        return c * c * (3.0 - 2.0 * c);
+    }
+    function smootherstep(x) {
+        var c = Math.max(0.0, Math.min(1.0, x));
+        return c * c * c * (c * (c * 6.0 - 15.0) + 10.0);
+    }
+
+    // Mochy Dynamic Downscaling: long lines step down so they wrap cleanly
     function computeBaseFontSize(words) {
         if (!words || words.length === 0) return 26;
         var count = words.length;
@@ -251,10 +176,16 @@ Item {
         return n;
     }
 
+    function lineStartOf(entry) {
+        return entry ? toSec(entry.time !== undefined ? entry.time : (entry.startTime || 0)) : 0.0;
+    }
+
+    // Word timings: the line's own when it has them, otherwise the time until the
+    // next line shared out by word length, holding a little back for a breath.
     function parseWords(entry, idx) {
         if (!entry) return [];
         var rawText = (entry && entry.text) ? String(entry.text).trim() : "";
-        var lineStart = toSec(entry.time || entry.startTime || 0);
+        var lineStart = lineStartOf(entry);
         var wList = [];
         if (entry.words && entry.words.length > 0) {
             for (var w = 0; w < entry.words.length; ++w) {
@@ -263,217 +194,160 @@ Item {
                 if (wt) {
                     var s = (wd.start !== undefined) ? toSec(wd.start) : (wd.startTime !== undefined ? toSec(wd.startTime) : lineStart);
                     var e = (wd.end !== undefined) ? toSec(wd.end) : (wd.endTime !== undefined ? toSec(wd.endTime) : (s + 0.25));
-                    wList.push({
-                        text: wt,
-                        start: s,
-                        end: e,
-                        duration: Math.max(0.05, e - s),
-                        isHeld: !!(wd.isHeld || (e - s >= 0.85))
-                    });
+                    wList.push({ text: wt, start: s, end: e, duration: Math.max(0.05, e - s), isHeld: !!(wd.isHeld || (e - s >= 0.85)) });
                 }
             }
         } else if (rawText) {
-            var parts = rawText.split(/\s+/);
-            var nextTime = (idx + 1 < activeLyrics.length) ? toSec(activeLyrics[idx + 1].time || activeLyrics[idx + 1].startTime || (lineStart + 4.0)) : (lineStart + 4.0);
-            var lineSpan = Math.max(1.0, (nextTime - lineStart) * 0.85);
-            var step = lineSpan / Math.max(1, parts.length);
+            var parts = rawText.split(/\s+/).filter(function(p) { return p.length > 0; });
+            if (parts.length === 0) return [];
+            var nextStart = (idx + 1 < activeLyrics.length) ? lineStartOf(activeLyrics[idx + 1]) : (lineStart + 4.0);
+            var lineEnd = Math.max(nextStart, lineStart + 0.6);
+            var singing = Math.min((lineEnd - lineStart) * 0.86, parts.length * 0.9);
+            var total = 0;
+            for (var k = 0; k < parts.length; ++k) total += parts[k].length + 1.5;
+            var cursor = lineStart;
             for (var p = 0; p < parts.length; ++p) {
-                if (parts[p]) {
-                    wList.push({
-                        text: parts[p],
-                        start: lineStart + p * step,
-                        end: lineStart + (p + 1) * step,
-                        duration: step,
-                        isHeld: false
-                    });
-                }
+                var len = singing * (parts[p].length + 1.5) / total;
+                wList.push({ text: parts[p], start: cursor, end: cursor + len, duration: Math.max(0.05, len), isHeld: false });
+                cursor += len;
             }
         }
         return wList;
+    }
+
+    function rebuildSchedule() {
+        var lines = activeLyrics || [];
+        var n = lines.length;
+        var sch = { count: n, starts: [], ends: [], enter: [], exit: [], gone: [], overlaps: [], words: [], scales: [], fonts: [] };
+        for (var i = 0; i < n; ++i) {
+            var ws = parseWords(lines[i], i);
+            sch.words.push(ws);
+            sch.scales.push(computeWordScales(ws));
+            var st = lineStartOf(lines[i]);
+            sch.starts.push(st);
+            sch.ends.push(ws.length > 0 ? ws[ws.length - 1].end : st);
+        }
+        for (var a = 0; a < n; ++a) {
+            if (a === 0) sch.enter.push(sch.starts[0] < kMinInterludeGap ? 0.0 : sch.starts[0] - kEnterLead);
+            else sch.enter.push(Math.max(sch.starts[a] - kEnterLead, sch.starts[a - 1]));
+        }
+        for (var b = 0; b < n; ++b) {
+            sch.overlaps.push(b < n - 1 && sch.ends[b] - 0.1 > sch.enter[b + 1]);
+        }
+        for (var c = 0; c < n; ++c) {
+            var ex = -1;
+            if (c < n - 1) {
+                var nx = c + 1;
+                var interlude = (sch.starts[nx] - sch.ends[c] >= kMinInterludeGap) && (sch.enter[nx] - (sch.ends[c] + kGapExitDelay + 0.25) > 1.5);
+                if (interlude) ex = Math.min(sch.ends[c] + kGapExitDelay, sch.enter[nx]);
+                else if (sch.overlaps[c]) ex = sch.ends[c] + 0.15;
+                else ex = Math.max(sch.enter[nx], Math.min(sch.ends[c] - 0.1, Math.max(sch.enter[nx], sch.starts[nx])));
+            }
+            sch.exit.push(ex);
+            sch.gone.push(ex < 0 ? Number.POSITIVE_INFINITY : ex + kExitDur + 12 * kExitStagger + 0.12);
+            // Stacked lines share the canvas, so they come in a touch smaller
+            var stacked = sch.overlaps[c] || (c > 0 && sch.overlaps[c - 1]);
+            var base = computeBaseFontSize(sch.words[c]);
+            sch.fonts.push(stacked ? Math.round(base * 0.86) : base);
+        }
+        lyricSchedule = sch;
+        visibleLinesModel.clear();
+        syncVisibleLines(root.effectiveLyricTime);
+    }
+
+    // Which lines are on screen at t: back from the newest line that has come in,
+    // through every line not gone yet (an overlapping line keeps the scan going).
+    function syncVisibleLines(t) {
+        var sch = lyricSchedule;
+        if (!sch || sch.count === 0) {
+            if (visibleLinesModel.count > 0) visibleLinesModel.clear();
+            return;
+        }
+        var lo = 0, hi = sch.count - 1, shown = -1;
+        while (lo <= hi) {
+            var mid = (lo + hi) >> 1;
+            if (sch.enter[mid] <= t) { shown = mid; lo = mid + 1; } else hi = mid - 1;
+        }
+        var want = [];
+        for (var j = shown; j >= 0 && want.length < 4; --j) {
+            if (t < sch.gone[j]) want.unshift(j);
+            else if (!sch.overlaps[j]) break;
+        }
+        // Diff into the model so lines already on screen keep their delegates
+        for (var r = visibleLinesModel.count - 1; r >= 0; --r) {
+            if (want.indexOf(visibleLinesModel.get(r).lineIdx) < 0) visibleLinesModel.remove(r);
+        }
+        for (var w = 0; w < want.length; ++w) {
+            var pos = 0;
+            var present = false;
+            for (var m = 0; m < visibleLinesModel.count; ++m) {
+                var li = visibleLinesModel.get(m).lineIdx;
+                if (li === want[w]) { present = true; break; }
+                if (li < want[w]) pos = m + 1;
+            }
+            if (!present) visibleLinesModel.insert(pos, { lineIdx: want[w] });
+        }
+    }
+
+    function advanceClock() {
+        var target = root.currentTime;
+        // Extrapolate from mpv's last reported position every frame, not the 25 fps UI clock
+        if (root.isPlaying && root.syncStamp > 0) {
+            target = root.syncTime + Math.max(0.0, (Date.now() - root.syncStamp) / 1000.0);
+        }
+        // Monotonic while playing; small corrections are absorbed, only a real seek moves it back
+        if (target > root.animClock || root.animClock - target > 0.3) root.animClock = target;
+        syncVisibleLines(root.effectiveLyricTime);
+    }
+
+    FrameAnimation {
+        running: root.isPanelRenderable && root.lyricSchedule.count > 0 && root.isPlaying
+        onTriggered: root.advanceClock()
     }
 
     function updateLyricState() {
         if (!root.isPanelRenderable) return;
         if (!activeLyrics || activeLyrics.length === 0) {
             currentLyricIndex = -1;
-            upcomingLyricIndex = -1;
-            currentLineWords = [];
-            upcomingLineWords = [];
-            currentWordScales = [];
-            upcomingWordScales = [];
             isInterlude = false;
             return;
         }
-
         var pos = root.currentTime;
         var idx = -1;
         for (var i = 0; i < activeLyrics.length; ++i) {
-            var l = activeLyrics[i];
-            if (l && l.time !== undefined && Number(l.time) <= pos) {
-                idx = i;
-            } else if (l && l.time !== undefined && Number(l.time) > pos) {
-                break;
-            }
+            if (lineStartOf(activeLyrics[i]) <= pos) idx = i;
+            else break;
         }
-
-        // Interlude detection: before first lyric, or if gap between lines is an actual musical break
-        if (idx === -1 && activeLyrics.length > 0) {
-            var firstTime = toSec(activeLyrics[0].time || activeLyrics[0].startTime || 0);
-            isInterlude = (firstTime > 2.5 && pos < (firstTime - 0.3));
-        } else if (idx >= 0 && idx < activeLyrics.length - 1) {
-            var entry = activeLyrics[idx];
-            var curStart = toSec(entry.time || entry.startTime || 0);
-            var nextStart = toSec(activeLyrics[idx + 1].time || activeLyrics[idx + 1].startTime || 0);
-            var hasWords = !!(entry && entry.words && entry.words.length > 0);
-
-            if (hasWords) {
-                // Word-by-word timing: we know EXACTLY when the singer finished singing this line
-                var lastW = entry.words[entry.words.length - 1];
-                var curEnd = (lastW && (lastW.end !== undefined || lastW.endTime !== undefined)) ? toSec(lastW.end || lastW.endTime) : curStart;
-                var gap = nextStart - curEnd;
-                // Only show interlude if the gap after the singer finished is at least 3.5s,
-                // and give 0.8s grace period after line finishes before collapsing to dots,
-                // and collapse dots 0.35s before next line starts so line 2 can lead in!
-                isInterlude = (gap >= 3.5 && pos > (curEnd + 0.8) && pos < (nextStart - 0.35));
-            } else {
-                // Line-by-line timing (NO word-by-word, e.g. Spotify / LRCLIB lines):
-                // In standard line-by-line LRC, the line MUST stay visible and active for the natural duration of the phrase!
-                // Only if the gap between lines is a massive instrumental solo (gap >= 8.5s),
-                // we show interlude dots after displaying the line for at least 5.0s, and until 0.5s before next line.
-                var lineGap = nextStart - curStart;
-                isInterlude = (lineGap >= 8.5 && pos > (curStart + 5.0) && pos < (nextStart - 0.5));
-            }
-        } else {
-            isInterlude = false;
-        }
-
-        if (idx !== currentLyricIndex) {
-            var isSequential = (idx === currentLyricIndex + 1 && currentLyricIndex >= 0);
-
-            if (isSequential && currentLineWords && currentLineWords.length > 0) {
-                // Snapshot previous line for graceful blur-dissolve upward exit animation
-                exitingLineWords = currentLineWords;
-                exitingWordScales = currentWordScales;
-                exitingBaseFontSize = activeBaseFontSize;
-                exitingLineHeight = (typeof activeLineFlow !== "undefined" && activeLineFlow.height > 0) ? activeLineFlow.height : 60.0;
-
-                // Randomize tilt and drift for exiting line: 1/3 straight, 1/3 tilt left, 1/3 tilt right
-                var r = Math.random();
-                if (r < 0.34) {
-                    exitTiltAngle = 0.0;
-                    exitDriftX = 0.0;
-                } else if (r < 0.67) {
-                    exitTiltAngle = -(2.0 + Math.random() * 2.5);
-                    exitDriftX = -(8.0 + Math.random() * 12.0);
-                } else {
-                    exitTiltAngle = (2.0 + Math.random() * 2.5);
-                    exitDriftX = (8.0 + Math.random() * 12.0);
-                }
-
-                lineShiftAnim.stop();
-                delayedShiftTimer.stop();
-
-                var entry = activeLyrics[idx];
-                root.hasRealWordTiming = !!(entry && entry.words && entry.words.length > 0);
-                var wList = parseWords(entry, idx);
-                var wScales = computeWordScales(wList);
-                var baseSize = computeBaseFontSize(wList);
-
-                // CRITICAL SSOT ORDER: Update scales & base size BEFORE currentLineWords,
-                // so delegates immediately evaluate the correct peakScale and isShoutWord upon binding!
-                currentWordScales = wScales;
-                activeBaseFontSize = baseSize;
-                currentLineWords = wList;
-
-                currentLyricIndex = idx;
-                upcomingLyricIndex = (idx >= 0 && idx + 1 < activeLyrics.length) ? (idx + 1) : -1;
-
-                // Populate upcoming line (starts at 1.0x rest scale, waiting below active line)
-                if (upcomingLyricIndex >= 0 && upcomingLyricIndex < activeLyrics.length) {
-                    var nextEntry = activeLyrics[upcomingLyricIndex];
-                    var nextWords = parseWords(nextEntry, upcomingLyricIndex);
-                    upcomingLineWords = nextWords;
-                    upcomingWordScales = computeWordScales(nextWords);
-                    upcomingBaseFontSize = computeBaseFontSize(nextWords);
-                } else {
-                    upcomingLineWords = [];
-                    upcomingWordScales = [];
-                }
-
-                // Sits at bottom while singer sings first 2-3 words:
-                // exitProgress = 0.0 (Line 1 stays visible at top)
-                // lineShiftProgress = 0.0 (Line 2 positioned at bottom)
-                // shiftTriggered = false (waiting for activeWordIndex >= 2 or timer)
-                exitProgress = 0.0;
-                lineShiftProgress = 0.0;
-                shiftTriggered = false;
-                delayedShiftTimer.interval = Math.min(2400, Math.max(1200, wList.length >= 3 ? 1700 : 1000));
-                delayedShiftTimer.restart();
-
-                // Increment counter ONLY AFTER all line data is completely synchronized!
-                lineChangeCounter++;
-            } else {
-                // Non-sequential / jump / seek: Snap directly to active line without stale exit anim
-                lineShiftAnim.stop();
-                delayedShiftTimer.stop();
-
-                exitingLineWords = [];
-                exitingWordScales = [];
-                exitProgress = 1.0;
-                lineShiftProgress = 1.0;
-                shiftTriggered = true;
-                exitTiltAngle = 0.0;
-                exitDriftX = 0.0;
-
-                if (idx >= 0 && idx < activeLyrics.length) {
-                    var entryNonSeq = activeLyrics[idx];
-                    root.hasRealWordTiming = !!(entryNonSeq && entryNonSeq.words && entryNonSeq.words.length > 0);
-                    var wListNonSeq = parseWords(entryNonSeq, idx);
-                    var wScalesNonSeq = computeWordScales(wListNonSeq);
-                    var baseSizeNonSeq = computeBaseFontSize(wListNonSeq);
-
-                    currentWordScales = wScalesNonSeq;
-                    activeBaseFontSize = baseSizeNonSeq;
-                    currentLineWords = wListNonSeq;
-                } else {
-                    root.hasRealWordTiming = false;
-                    currentWordScales = [];
-                    currentLineWords = [];
-                }
-
-                currentLyricIndex = idx;
-                upcomingLyricIndex = (idx >= 0 && idx + 1 < activeLyrics.length) ? (idx + 1) : -1;
-
-                if (upcomingLyricIndex >= 0 && upcomingLyricIndex < activeLyrics.length) {
-                    var nextEntryNonSeq = activeLyrics[upcomingLyricIndex];
-                    var nextWordsNonSeq = parseWords(nextEntryNonSeq, upcomingLyricIndex);
-                    upcomingLineWords = nextWordsNonSeq;
-                    upcomingWordScales = computeWordScales(nextWordsNonSeq);
-                    upcomingBaseFontSize = computeBaseFontSize(nextWordsNonSeq);
-                } else {
-                    upcomingLineWords = [];
-                    upcomingWordScales = [];
-                }
-
-                lineChangeCounter++;
-            }
-        }
+        currentLyricIndex = idx;
+        isInterlude = visibleLinesModel.count === 0;
     }
 
     onCurrentTimeChanged: {
-        if (root.isPanelRenderable) updateLyricState();
+        var jumped = Math.abs(root.currentTime - root.animClock) > 1.0;
+        root.clockSample = root.currentTime;
+        root.clockStamp = Date.now();
+        if (!root.isPanelRenderable) return;
+        if (jumped) {
+            // Seek: start the clock fresh; lines that land now animate in from their birth
+            root.animClock = root.currentTime;
+            visibleLinesModel.clear();
+        }
+        advanceClock();
+        updateLyricState();
     }
     onActiveLyricsChanged: {
+        rebuildSchedule();
         if (root.isPanelRenderable) updateLyricState();
     }
     onIsPanelRenderableChanged: {
         if (isPanelRenderable) {
+            root.animClock = root.currentTime;
+            visibleLinesModel.clear();
+            advanceClock();
             updateLyricState();
-        } else {
-            lineShiftAnim.stop();
-            delayedShiftTimer.stop();
         }
     }
+    Component.onCompleted: rebuildSchedule()
 
     // Mochy wordScales Algorithm (AlternatePlayerStyles.kt lines 89-102):
     // Shortest word >= 3 chars gets 1.55x (shout word).
@@ -704,29 +578,58 @@ Item {
                 }
             }
 
-            // Drop Shadow underneath the elevated circle arc
-            Shape {
-                anchors.fill: parent
-                layer.enabled: root.isPanelRenderable
-                layer.samples: 8
-                layer.smooth: true
-                preferredRendererType: Shape.CurveRenderer
+            // Cover glow: instead of a dark drop shadow under the arc, the artwork spills its own light
+            // downward. A heavily blurred, saturated copy sits behind the sharp cover and extends past
+            // the curve, fading out so the lyrics underneath stay readable.
+            Item {
+                id: coverGlow
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: parent.height + glowSpill
+                readonly property real glowSpill: Math.round(circleCover.cw * 0.60)
+                visible: root.isPanelRenderable
 
-                ShapePath {
-                    fillColor: "transparent"
-                    strokeColor: Qt.rgba(0, 0, 0, 0.35)
-                    strokeWidth: 4
-                    capStyle: ShapePath.RoundCap
-                    joinStyle: ShapePath.RoundJoin
-                    startX: circleCover.cw
-                    startY: circleCover.cw * 0.4567 + 1.5
-
-                    PathQuad {
-                        x: 0
-                        y: circleCover.cw * 0.8526 + 1.5
-                        controlX: circleCover.cw * 0.50
-                        controlY: circleCover.cw * 0.9150 + 1.5
+                Image {
+                    id: coverGlowSrc
+                    anchors.fill: parent
+                    source: root.coverImageUrl
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
+                    cache: true
+                    visible: false
+                    layer.enabled: coverGlow.visible
+                }
+                Item {
+                    id: coverGlowMask
+                    anchors.fill: parent
+                    visible: false
+                    layer.enabled: coverGlow.visible
+                    Rectangle {
+                        anchors.fill: parent
+                        gradient: Gradient {
+                            GradientStop { position: 0.0; color: "#ffffffff" }
+                            GradientStop { position: 0.52; color: "#ffffffff" }
+                            GradientStop { position: 0.72; color: "#b3ffffff" }
+                            GradientStop { position: 1.0; color: "#00ffffff" }
+                        }
                     }
+                }
+                MultiEffect {
+                    anchors.fill: parent
+                    source: coverGlowSrc
+                    blurEnabled: true
+                    blur: 1.0
+                    blurMax: 64
+                    saturation: 0.9
+                    brightness: 0.12
+                    maskEnabled: true
+                    maskSource: coverGlowMask
+                    // MultiEffect masks are a hard threshold by default; spread makes the gradient a real fade
+                    maskThresholdMin: 0.0
+                    maskSpreadAtMin: 1.0
+                    autoPaddingEnabled: false
+                    opacity: 0.85
                 }
             }
 
@@ -757,8 +660,39 @@ Item {
                     gradient: Gradient {
                         GradientStop { position: 0.0; color: "transparent" }
                         GradientStop { position: 0.60; color: "transparent" }
-                        GradientStop { position: 0.85; color: Qt.rgba(0, 0, 0, 0.20) }
-                        GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.45) }
+                        GradientStop { position: 0.85; color: Qt.rgba(0, 0, 0, 0.06) }
+                        GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.14) }
+                    }
+                }
+            }
+
+            // Light rim: a soft accent-coloured bloom along the arc, so the curve reads as a lit edge
+            Item {
+                anchors.fill: parent
+                visible: root.isPanelRenderable
+                layer.enabled: visible
+                layer.effect: MultiEffect {
+                    blurEnabled: true
+                    blur: 1.0
+                    blurMax: 40
+                    autoPaddingEnabled: true
+                }
+                Shape {
+                    anchors.fill: parent
+                    preferredRendererType: Shape.CurveRenderer
+                    ShapePath {
+                        fillColor: "transparent"
+                        strokeColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.95)
+                        strokeWidth: 9
+                        capStyle: ShapePath.RoundCap
+                        startX: circleCover.cw
+                        startY: circleCover.cw * 0.4567 + 3
+                        PathQuad {
+                            x: 0
+                            y: circleCover.cw * 0.8526 + 3
+                            controlX: circleCover.cw * 0.50
+                            controlY: circleCover.cw * 0.9150 + 3
+                        }
                     }
                 }
             }
@@ -773,8 +707,8 @@ Item {
 
                 ShapePath {
                     fillColor: "transparent"
-                    strokeColor: Qt.rgba(1, 1, 1, 0.28)
-                    strokeWidth: 1.0
+                    strokeColor: Qt.rgba(Math.min(1, root.accentColor.r * 0.5 + 0.5), Math.min(1, root.accentColor.g * 0.5 + 0.5), Math.min(1, root.accentColor.b * 0.5 + 0.5), 0.75)
+                    strokeWidth: 1.2
                     capStyle: ShapePath.RoundCap
                     joinStyle: ShapePath.RoundJoin
                     startX: circleCover.cw
@@ -881,7 +815,10 @@ Item {
             Item {
                 id: interludeDotsBox
                 anchors.fill: parent
-                visible: root.isInterlude || (root.activeLyrics && root.activeLyrics.length > 0 && root.currentLyricIndex < 0)
+                readonly property bool shouldShow: root.activeLyrics && root.activeLyrics.length > 0 && visibleLinesModel.count === 0
+                opacity: shouldShow ? 1.0 : 0.0
+                visible: opacity > 0.01
+                Behavior on opacity { NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
 
                 Row {
                     anchors.verticalCenter: parent.verticalCenter
@@ -912,18 +849,16 @@ Item {
             }
 
             // -----------------------------------------------------------------
-            // STATE 2: EXPRESSIVE LYRICS ENGINE (MOCHY DUAL-SLOT CONVEYOR)
-            // - NO static blurred lines above or below!
-            // - Slot 1 (Active): Words start at normal 1.0x scale, shout words smoothly expand and push outward!
-            // - Slot 2 (Upcoming): Sits waiting below active line at 1.0x rest scale and soft dimmed opacity.
-            // - When line finishes: Exiting line dissolves upward (0 -> -22px, opacity 1 -> 0);
-            //   Upcoming line glides smoothly upward into active position;
-            //   The next line arrives below, repeating this fluid conveyor motion!
+            // STATE 2: EXPRESSIVE LYRICS ENGINE (MOCHY TIMETABLE)
+            // One delegate per line on screen. Each word comes in staggered
+            // (fade, rise, un-blur, zoom 0.94 -> 1) and leaves the same way
+            // (fade, rise, zoom up, blur). A line below an overlapping line is
+            // pushed down by it, then glides up as that line flies off.
             // -----------------------------------------------------------------
             Item {
                 id: expressiveLyricsBox
                 anchors.fill: parent
-                visible: !interludeDotsBox.visible && root.activeLyrics && root.activeLyrics.length > 0 && root.currentLyricIndex >= 0
+                visible: root.activeLyrics && root.activeLyrics.length > 0
 
                 Item {
                     id: linesStackContainer
@@ -934,370 +869,286 @@ Item {
                     anchors.bottom: parent.bottom
                     anchors.bottomMargin: 8
 
-                    // ---------------------------------------------------------
-                    // A. EXITING LINE (Tan biến làm mờ bay lên ảnh bìa: y: 0 -> -170px, blur: 0 -> 26px, random tilt & drift)
-                    // ---------------------------------------------------------
-                    Item {
-                        id: exitingLineContainer
-                        width: parent.width
-                        height: root.exitingLineHeight
-                        visible: root.isPanelRenderable && root.exitingLineWords && root.exitingLineWords.length > 0 && root.exitProgress < 0.99
-                        x: root.exitProgress * root.exitDriftX
-                        y: -root.exitProgress * 170.0
-                        rotation: root.exitProgress * root.exitTiltAngle
-                        transformOrigin: Item.Center
-                        opacity: Math.max(0.0, 1.0 - Math.pow(root.exitProgress, 2.4))
-                        scale: 1.0 + 0.04 * root.exitProgress
-                        z: 1
+                    Repeater {
+                        id: lineRepeater
+                        model: visibleLinesModel
 
-                        layer.enabled: root.isPanelRenderable && visible
-                        layer.effect: MultiEffect {
-                            blurEnabled: root.isPanelRenderable
-                            blur: root.exitProgress * 0.92
-                            blurMax: 26
-                            autoPaddingEnabled: true
-                        }
+                        delegate: Item {
+                            id: lineItem
+                            required property int index
+                            required property int lineIdx
 
-                        Flow {
-                            id: exitingLineFlow
-                            width: parent.width
-                            spacing: 8
+                            readonly property var sch: root.lyricSchedule
+                            readonly property bool validLine: lineIdx >= 0 && lineIdx < sch.count
+                            readonly property var lineWords: validLine ? sch.words[lineIdx] : []
+                            readonly property var lineScales: validLine ? sch.scales[lineIdx] : []
+                            readonly property real baseFont: validLine ? sch.fonts[lineIdx] : 26
+                            readonly property real exitAt: validLine ? sch.exit[lineIdx] : -1
+                            readonly property bool overlapsNext: validLine && sch.overlaps[lineIdx]
 
-                            FontMetrics {
-                                id: exitFontMetrics
-                                font.family: Theme.fontFamily
-                                font.pixelSize: root.exitingBaseFontSize
-                                font.bold: Font.DemiBold
+                            // A line that lands late (a seek, the panel opening) still comes in
+                            property real bornAt: 0.0
+                            readonly property real enterAt: {
+                                var planned = validLine ? sch.enter[lineIdx] : 0.0;
+                                return (bornAt - planned > 0.25) ? bornAt : planned;
+                            }
+                            Component.onCompleted: bornAt = root.animClock
+
+                            readonly property real t: root.effectiveLyricTime
+                            readonly property real liftPx: baseFont
+
+                            function enterOf(order) {
+                                return root.easeOutCubic((t - enterAt - order * root.kEnterStagger) / root.kEnterDur);
+                            }
+                            function exitOf(order) {
+                                if (exitAt < 0) return 0.0;
+                                return root.smoothstep((t - exitAt - order * root.kExitStagger) / root.kExitDur);
                             }
 
-                            readonly property real maxRowHeight: Math.round(root.exitingBaseFontSize * 1.55 * 1.42)
-                            readonly property real baselineY: Math.round(root.exitingBaseFontSize * 1.55 * 1.05)
-
-                            Repeater {
-                                model: root.exitingLineWords
-
-                                delegate: Item {
-                                    id: exitCell
-                                    required property int index
-                                    required property var modelData
-
-                                    readonly property string wordText: modelData ? String(modelData.text || "") : ""
-                                    readonly property real wordScale: (root.exitingWordScales && index < root.exitingWordScales.length) ? root.exitingWordScales[index] : 1.0
-
-                                    width: Math.round(exitText.paintedWidth * wordScale)
-                                    height: exitingLineFlow.maxRowHeight
-
-                                    Item {
-                                        id: exitTransformWrap
-                                        x: Math.round((parent.width - exitText.paintedWidth) / 2)
-                                        y: Math.round(exitingLineFlow.baselineY - exitFontMetrics.ascent)
-                                        width: exitText.paintedWidth
-                                        height: exitText.paintedHeight
-                                        transform: [
-                                            Scale {
-                                                xScale: exitCell.wordScale
-                                                yScale: exitCell.wordScale
-                                                origin.x: exitText.paintedWidth / 2
-                                                origin.y: exitFontMetrics.ascent
-                                            }
-                                        ]
-
-                                        Text {
-                                            id: exitText
-                                            anchors.centerIn: parent
-                                            text: exitCell.wordText
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: root.exitingBaseFontSize
-                                            font.bold: exitCell.wordScale > 1.2 ? true : Font.DemiBold
-                                            color: "#ffffff"
-                                        }
-                                    }
+                            // Overlapping lines above hold this one down, then let it glide up
+                            readonly property real pushY: {
+                                var y = 0.0;
+                                var n = lineRepeater.count;
+                                for (var k = 0; k < index && k < n; ++k) {
+                                    var above = lineRepeater.itemAt(k);
+                                    if (!above || !above.overlapsNext || above.exitAt < 0) continue;
+                                    var hold = 1.0 - root.smootherstep((t - above.exitAt) / root.kExitDur);
+                                    y += (above.height + above.baseFont * 0.28) * hold;
                                 }
-                            }
-                        }
-                    }
-
-                    // ---------------------------------------------------------
-                    // B. ACTIVE LINE (Xuất hiện ở vị trí bên dưới, quét chữ ngay lập tức, đồng thời trượt lên trên thế chỗ câu 1)
-                    // Căn chuẩn Typographic Baseline qua FontMetrics.ascent:
-                    // Các từ nhỏ và từ phóng to tuyệt đối nằm trên cùng 1 đường chân chữ phẳng!
-                    // ---------------------------------------------------------
-                    Item {
-                        id: activeLineContainer
-                        width: parent.width
-                        height: activeLineFlow.height
-                        y: (1.0 - root.lineShiftProgress) * (root.exitingLineWords && root.exitingLineWords.length > 0 ? Math.max(55.0, root.exitingLineHeight + 16.0) : 0.0)
-                        opacity: 1.0
-                        z: 3
-                        visible: root.currentLineWords && root.currentLineWords.length > 0
-
-                        Flow {
-                            id: activeLineFlow
-                            width: parent.width
-                            spacing: 8
-
-                            FontMetrics {
-                                id: baseFontMetrics
-                                font.family: Theme.fontFamily
-                                font.pixelSize: root.activeBaseFontSize
-                                font.bold: Font.DemiBold
+                                return y;
                             }
 
-                            readonly property real maxRowHeight: Math.round(root.activeBaseFontSize * 1.55 * 1.42)
-                            readonly property real baselineY: Math.round(root.activeBaseFontSize * 1.55 * 1.05)
+                            // Whole-line blur for the entrance and exit (one layer, only while moving)
+                            readonly property real lineBlurPx: {
+                                var mid = Math.max(0, Math.floor(lineWords.length / 2));
+                                return (1.0 - enterOf(mid)) * 10.0 + exitOf(mid) * 12.0;
+                            }
 
-                            Repeater {
-                                model: root.currentLineWords
+                            width: linesStackContainer.width
+                            height: lineFlow.height
+                            y: pushY
+                            z: 10 - index
 
-                                delegate: Item {
-                                    id: wordCell
-                                    required property int index
-                                    required property var modelData
+                            // Kept on for the line's whole life: toggling a layer mid-flight rebuilds it and hitches a frame
+                            layer.enabled: root.isPanelRenderable
+                            layer.effect: MultiEffect {
+                                blurEnabled: true
+                                blur: Math.min(1.0, lineItem.lineBlurPx / 16.0)
+                                blurMax: 16
+                                autoPaddingEnabled: true
+                            }
 
-                                    readonly property string wordText: modelData ? String(modelData.text || "") : ""
-                                    readonly property real peakScale: (root.currentWordScales && index < root.currentWordScales.length) ? root.currentWordScales[index] : 1.0
-                                    readonly property bool isShoutWord: peakScale > 1.15
-                                    property real shoutProgress: 0.0
+                            // Sequential reading head for this line's words
+                            readonly property int activeWordIndex: {
+                                var ws = lineWords;
+                                if (!ws || ws.length === 0) return -1;
+                                var tt = t;
+                                for (var i = 0; i < ws.length; i++) {
+                                    var w = ws[i];
+                                    if (tt < w.start) return i - 1;
+                                    if (tt < w.end) return i;
+                                }
+                                return ws.length;
+                            }
 
-                                    // Bezier Spline Monotonic Shout Growth:
-                                    // Tuyệt đối không bounce, không co rút ngược lại (shrink), tăng trưởng êm dịu C^1
-                                    NumberAnimation {
-                                        id: shoutAnim
-                                        target: wordCell
-                                        property: "shoutProgress"
-                                        to: 1.0
-                                        duration: Math.max(450, Math.min(750, Math.round(wordCell.wDur * 1000 * 1.15)))
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: [0.12, 0.88, 0.24, 1.0]
-                                    }
+                            Flow {
+                                id: lineFlow
+                                width: parent.width
+                                spacing: 8
 
-                                    function checkAndTriggerShout() {
-                                        if (isShoutWord && isSinging && shoutProgress < 0.99 && !shoutAnim.running) {
-                                            shoutAnim.restart();
-                                        }
-                                    }
+                                FontMetrics {
+                                    id: baseFontMetrics
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: lineItem.baseFont
+                                    font.bold: Font.DemiBold
+                                }
 
-                                    onIsSingingChanged: {
-                                        checkAndTriggerShout();
-                                    }
+                                readonly property real maxRowHeight: Math.round(lineItem.baseFont * 1.55 * 1.42)
+                                readonly property real baselineY: Math.round(lineItem.baseFont * 1.55 * 1.05)
 
-                                    onIsShoutWordChanged: {
-                                        checkAndTriggerShout();
-                                    }
+                                Repeater {
+                                    model: lineItem.lineWords
 
-                                    onIsPastChanged: {
-                                        if (isPast && isShoutWord && !shoutAnim.running) {
-                                            shoutProgress = 1.0;
-                                        }
-                                    }
+                                    delegate: Item {
+                                        id: wordCell
+                                        required property int index
+                                        required property var modelData
 
-                                    // Staggered Soft Ripple Wave Pop-in (chỉ áp dụng cho từ thường, không áp vào shout word)
-                                    property real rippleScale: 1.0
+                                        readonly property string wordText: modelData ? String(modelData.text || "") : ""
+                                        readonly property real peakScale: (lineItem.lineScales && index < lineItem.lineScales.length) ? lineItem.lineScales[index] : 1.0
+                                        readonly property bool isShoutWord: peakScale > 1.15
+                                        property real shoutProgress: 0.0
 
-                                    SequentialAnimation {
-                                        id: wordRippleAnim
-                                        running: false
-                                        PauseAnimation { duration: Math.min(200, wordCell.index * 20) }
-                                        NumberAnimation {
-                                            target: wordCell
-                                            property: "rippleScale"
-                                            from: 0.965
-                                            to: 1.014
-                                            duration: 190
-                                            easing.type: Easing.OutQuad
-                                        }
-                                        NumberAnimation {
-                                            target: wordCell
-                                            property: "rippleScale"
-                                            from: 1.014
-                                            to: 1.000
-                                            duration: 150
-                                            easing.type: Easing.InOutQuad
-                                        }
-                                    }
+                                        // Entrance / exit motion (Mochy GraphicsLayerScope.motion)
+                                        readonly property real enterE: lineItem.enterOf(index)
+                                        readonly property real exitO: lineItem.exitOf(index)
+                                        readonly property real motionY: (1.0 - enterE) * lineItem.liftPx * 0.55 - exitO * exitO * lineItem.liftPx * 0.9
+                                        readonly property real motionZoom: (0.94 + 0.06 * enterE) * (1.0 + 0.08 * exitO)
+                                        opacity: Math.max(0.0, Math.min(1.0, enterE * (1.0 - exitO)))
 
-                                    Connections {
-                                        target: root
-                                        function onLineChangeCounterChanged() {
-                                            wordCell.rippleScale = 0.965;
-                                            wordRippleAnim.restart();
-                                            if (wordCell.isShoutWord) {
-                                                if (wordCell.isPast) {
-                                                    shoutAnim.stop();
-                                                    wordCell.shoutProgress = 1.0;
-                                                } else if (wordCell.isSinging) {
-                                                    wordCell.shoutProgress = 0.0;
-                                                    wordCell.checkAndTriggerShout();
-                                                } else {
-                                                    shoutAnim.stop();
-                                                    wordCell.shoutProgress = 0.0;
-                                                }
-                                            } else {
-                                                shoutAnim.stop();
-                                                wordCell.shoutProgress = 0.0;
-                                            }
-                                        }
-                                    }
-
-                                    Component.onCompleted: {
-                                        wordCell.rippleScale = 0.965;
-                                        wordRippleAnim.restart();
-                                        if (wordCell.isShoutWord) {
-                                            if (wordCell.isPast) {
-                                                wordCell.shoutProgress = 1.0;
-                                            } else if (wordCell.isSinging) {
-                                                wordCell.checkAndTriggerShout();
-                                            }
-                                        }
-                                    }
-
-                                    readonly property real wStart: (modelData && modelData.start !== undefined) ? Number(modelData.start) : 0.0
-                                    readonly property real wEnd: (modelData && modelData.end !== undefined) ? Number(modelData.end) : (wStart + 0.1)
-                                    readonly property real wDur: Math.max(0.05, (modelData && modelData.duration !== undefined) ? Number(modelData.duration) : (wEnd - wStart))
-                                    readonly property bool isHeld: (modelData && modelData.isHeld !== undefined) ? !!modelData.isHeld : (wDur >= 0.85)
-
-                                    // Strict Monotonic Reading Head: Tuyệt đối không phóng to trước khi ca sĩ hát tới!
-                                    readonly property bool isPast: (root.activeWordIndex >= 0) && (wordCell.index < root.activeWordIndex || (wordCell.index === root.activeWordIndex && root.effectiveLyricTime >= wEnd))
-                                    readonly property bool isSinging: (root.activeWordIndex >= 0) && (wordCell.index === root.activeWordIndex) && (root.effectiveLyricTime >= wStart) && (root.effectiveLyricTime < wEnd)
-                                    readonly property real wordProgress: isPast ? 1.0 : (isSinging ? Math.max(0.0, Math.min(1.0, (root.effectiveLyricTime - wStart) / wDur)) : 0.0)
-
-                                    // C1 continuous smooth progress (exact AppleMusicWordFlow.qml)
-                                    property real smoothProg: 0.0
-                                    Behavior on smoothProg {
-                                        SmoothedAnimation { duration: 120; reversingMode: SmoothedAnimation.Immediate }
-                                    }
-                                    onWordProgressChanged: smoothProg = wordProgress
-
-                                    // Lagged Phosphor Bloom reader head: trails behind smoothProg to create comet glow effect (exact AppleMusicWordFlow.qml)
-                                    property real bloomProg: 0.0
-                                    Behavior on bloomProg {
-                                        SmoothedAnimation { duration: 240; reversingMode: SmoothedAnimation.Immediate }
-                                    }
-                                    onSmoothProgChanged: bloomProg = smoothProg
-                                    readonly property real bloomLagDelta: wordCell.isSinging ? (wordCell.smoothProg - wordCell.bloomProg) : 0.0
-
-                                    // Cubic Bezier & Easing for held note swell (exact AppleMusicWordFlow.qml)
-                                    function cubicBezier(p0, p1, p2, p3, t) {
-                                        var u = 1 - t;
-                                        return 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t;
-                                    }
-
-                                    function empEasing(x) {
-                                        if (x < 0.5) return cubicBezier(0.0, 0.3, 0.25, 1.0, x * 2.0);
-                                        return 1.0 - cubicBezier(0.0, 0.5, 0.6, 1.0, (x - 0.5) * 2.0);
-                                    }
-
-                                    readonly property real yCurve: isSinging ? (isHeld ? empEasing(smoothProg) : Math.sin(Math.PI * smoothProg)) : 0.0
-                                    readonly property real waveScale: 1.0 + (isHeld ? 0.045 : 0.010) * yCurve
-
-                                    // Shout word: phóng to mượt mà đơn điệu theo đường cong Bezier Spline [0.12, 0.88, 0.24, 1.0] không giật, không co lại!
-                                    // Từ thường: giữ nguyên tỉ lệ fitting và hiệu ứng ripple nhẹ khi câu xuất hiện
-                                    readonly property real effectiveScale: isShoutWord
-                                        ? (1.0 + (peakScale - 1.0) * shoutProgress)
-                                        : (peakScale * wordCell.rippleScale)
-
-                                    width: Math.round(charRow.implicitWidth * effectiveScale)
-                                    height: activeLineFlow.maxRowHeight
-
-                                    Item {
-                                        id: innerTransformWrap
-                                        x: Math.round((parent.width - charRow.implicitWidth) / 2)
-                                        y: Math.round(activeLineFlow.baselineY - baseFontMetrics.ascent)
-                                        width: charRow.implicitWidth
-                                        height: charRow.implicitHeight
-
+                                        // The whole line zooms about its left edge and middle, so words keep their places
                                         transform: [
                                             Scale {
-                                                xScale: wordCell.effectiveScale
-                                                yScale: wordCell.effectiveScale
-                                                origin.x: charRow.implicitWidth / 2
-                                                origin.y: baseFontMetrics.ascent
-                                            }
+                                                xScale: wordCell.motionZoom
+                                                yScale: wordCell.motionZoom
+                                                origin.x: -wordCell.x
+                                                origin.y: lineFlow.height / 2 - wordCell.y
+                                            },
+                                            Translate { y: wordCell.motionY }
                                         ]
 
-                                        // 1. Phosphor Bloom Glow with Lagged Comet Tail (exact AppleMusicWordFlow MultiEffect)
-                                        Loader {
-                                            id: glowLoader
-                                            anchors.fill: charRow
-                                            active: root.isPanelRenderable && wordCell.isSinging
-                                            visible: active
-                                            z: 0
-                                            sourceComponent: Component {
-                                                MultiEffect {
-                                                    source: charRow
-                                                    anchors.fill: parent
-                                                    shadowEnabled: true
-                                                    shadowColor: (root.accentColor && root.accentColor !== "") ? root.accentColor : "#ffffff"
-                                                    shadowBlur: 0.95
-                                                    shadowOpacity: wordCell.isSinging ? (0.92 * Math.sin(Math.PI * wordCell.smoothProg)) : 0.0
-                                                    shadowHorizontalOffset: -wordCell.bloomLagDelta * charRow.width * 0.45
-                                                    shadowVerticalOffset: 0
-                                                    shadowScale: 1.12
-                                                    visible: shadowOpacity > 0.01
-                                                }
+                                        // Monotonic shout growth: no bounce, never shrinks back
+                                        NumberAnimation {
+                                            id: shoutAnim
+                                            target: wordCell
+                                            property: "shoutProgress"
+                                            to: 1.0
+                                            duration: Math.max(450, Math.min(750, Math.round(wordCell.wDur * 1000 * 1.15)))
+                                            easing.type: Easing.BezierSpline
+                                            easing.bezierCurve: [0.12, 0.88, 0.24, 1.0]
+                                        }
+
+                                        function checkAndTriggerShout() {
+                                            if (isShoutWord && isSinging && shoutProgress < 0.99 && !shoutAnim.running) {
+                                                shoutAnim.restart();
+                                            }
+                                        }
+                                        onIsSingingChanged: checkAndTriggerShout()
+                                        onIsShoutWordChanged: checkAndTriggerShout()
+                                        onIsPastChanged: {
+                                            if (isPast && isShoutWord && !shoutAnim.running) shoutProgress = 1.0;
+                                        }
+                                        Component.onCompleted: {
+                                            if (isShoutWord) {
+                                                if (isPast) shoutProgress = 1.0;
+                                                else if (isSinging) checkAndTriggerShout();
                                             }
                                         }
 
-                                        // 2. Character Row with Persistent Rolling Wave Lift (exact AppleMusicWordFlow)
-                                        Row {
-                                            id: charRow
-                                            spacing: 0
-                                            z: 1
+                                        readonly property real wStart: (modelData && modelData.start !== undefined) ? Number(modelData.start) : 0.0
+                                        readonly property real wEnd: (modelData && modelData.end !== undefined) ? Number(modelData.end) : (wStart + 0.1)
+                                        readonly property real wDur: Math.max(0.05, (modelData && modelData.duration !== undefined) ? Number(modelData.duration) : (wEnd - wStart))
+                                        readonly property bool isHeld: (modelData && modelData.isHeld !== undefined) ? !!modelData.isHeld : (wDur >= 0.85)
 
-                                            Repeater {
-                                                model: (wordCell.wordText || "").split("")
+                                        // Strict monotonic reading head: never grows before the singer gets there
+                                        readonly property bool isPast: (lineItem.activeWordIndex >= 0) && (index < lineItem.activeWordIndex || (index === lineItem.activeWordIndex && lineItem.t >= wEnd))
+                                        readonly property bool isSinging: (lineItem.activeWordIndex >= 0) && (index === lineItem.activeWordIndex) && (lineItem.t >= wStart) && (lineItem.t < wEnd)
+                                        readonly property real wordProgress: isPast ? 1.0 : (isSinging ? Math.max(0.0, Math.min(1.0, (lineItem.t - wStart) / wDur)) : 0.0)
 
-                                                delegate: Item {
-                                                    id: charItem
-                                                    readonly property string ch: modelData
-                                                    readonly property int charIndex: index
-                                                    readonly property int charCount: Math.max(1, (wordCell.wordText || "").length)
+                                        // The clock is already per-frame smooth, so the sweep reads it directly
+                                        readonly property real smoothProg: wordProgress
+                                        // Bloom head trails the sweep by 120ms (comet glow)
+                                        readonly property real bloomProg: isSinging ? Math.max(0.0, Math.min(1.0, (lineItem.t - 0.12 - wStart) / wDur)) : 0.0
+                                        readonly property real bloomLagDelta: wordCell.isSinging ? (wordCell.smoothProg - wordCell.bloomProg) : 0.0
 
-                                                    readonly property real charFrom: charIndex / charCount
-                                                    readonly property real charTo: (charIndex + 1) / charCount
-                                                    readonly property real charProgress: wordCell.isPast ? 1.0 :
-                                                        (wordCell.isSinging ? Math.max(0.0, Math.min(1.0, (wordCell.smoothProg - charFrom) / Math.max(0.001, charTo - charFrom))) : 0.0)
+                                        function cubicBezier(p0, p1, p2, p3, x) {
+                                            var u = 1 - x;
+                                            return 3 * u * u * x * p1 + 3 * u * x * x * p2 + x * x * x;
+                                        }
+                                        function empEasing(x) {
+                                            if (x < 0.5) return cubicBezier(0.0, 0.3, 0.25, 1.0, x * 2.0);
+                                            return 1.0 - cubicBezier(0.0, 0.5, 0.6, 1.0, (x - 0.5) * 2.0);
+                                        }
 
-                                                    // Apple Wave Lift: Hermite curve w * w * (3.0 - 2.0 * w) for smooth -2.5px persistent lift (exact AppleMusicWordFlow.qml)
-                                                    property real liftProgress: (charProgress > 0.0 || wordCell.isPast) ? 1.0 : 0.0
-                                                    Behavior on liftProgress {
-                                                        NumberAnimation {
-                                                            duration: 750
-                                                            easing.type: Easing.BezierSpline
-                                                            easing.bezierCurve: [0.4, 0.0, 0.2, 1.0]
-                                                        }
+                                        readonly property real yCurve: isSinging ? (isHeld ? empEasing(smoothProg) : Math.sin(Math.PI * smoothProg)) : 0.0
+                                        readonly property real waveScale: 1.0 + (isHeld ? 0.045 : 0.010) * yCurve
+                                        readonly property real effectiveScale: isShoutWord ? (1.0 + (peakScale - 1.0) * shoutProgress) : peakScale
+
+                                        width: Math.round(charRow.implicitWidth * effectiveScale)
+                                        height: lineFlow.maxRowHeight
+
+                                        Item {
+                                            id: innerTransformWrap
+                                            x: Math.round((parent.width - charRow.implicitWidth) / 2)
+                                            y: Math.round(lineFlow.baselineY - baseFontMetrics.ascent)
+                                            width: charRow.implicitWidth
+                                            height: charRow.implicitHeight
+
+                                            transform: [
+                                                Scale {
+                                                    xScale: wordCell.effectiveScale
+                                                    yScale: wordCell.effectiveScale
+                                                    origin.x: charRow.implicitWidth / 2
+                                                    origin.y: baseFontMetrics.ascent
+                                                }
+                                            ]
+
+                                            Loader {
+                                                id: glowLoader
+                                                anchors.fill: charRow
+                                                active: root.isPanelRenderable && wordCell.isSinging
+                                                visible: active
+                                                z: 0
+                                                sourceComponent: Component {
+                                                    MultiEffect {
+                                                        source: charRow
+                                                        anchors.fill: parent
+                                                        shadowEnabled: true
+                                                        shadowColor: (root.accentColor && root.accentColor !== "") ? root.accentColor : "#ffffff"
+                                                        shadowBlur: 0.95
+                                                        shadowOpacity: wordCell.isSinging ? (0.92 * Math.sin(Math.PI * wordCell.smoothProg)) : 0.0
+                                                        shadowHorizontalOffset: -wordCell.bloomLagDelta * charRow.width * 0.45
+                                                        shadowVerticalOffset: 0
+                                                        shadowScale: 1.12
+                                                        visible: shadowOpacity > 0.01
                                                     }
-                                                    readonly property real hermiteLift: {
-                                                        var w = Math.max(0.0, Math.min(1.0, liftProgress));
-                                                        return w * w * (3.0 - 2.0 * w);
-                                                    }
+                                                }
+                                            }
 
-                                                    width: charText.implicitWidth
-                                                    height: charText.implicitHeight
+                                            Row {
+                                                id: charRow
+                                                spacing: 0
+                                                z: 1
 
-                                                    transform: [
-                                                        Translate { y: -charItem.hermiteLift * 2.5 },
-                                                        Scale {
-                                                            xScale: wordCell.isShoutWord ? 1.0 : (1.0 + (wordCell.waveScale - 1.0) * 0.5)
-                                                            yScale: wordCell.isShoutWord ? 1.0 : (1.0 + (wordCell.isHeld ? 0.06 : 0.04) * wordCell.yCurve)
-                                                            origin.x: charItem.width / 2
-                                                            origin.y: charItem.height
+                                                Repeater {
+                                                    model: (wordCell.wordText || "").split("")
+
+                                                    delegate: Item {
+                                                        id: charItem
+                                                        required property var modelData
+                                                        required property int index
+                                                        readonly property string ch: modelData
+                                                        readonly property int charCount: Math.max(1, (wordCell.wordText || "").length)
+                                                        readonly property real charFrom: index / charCount
+                                                        readonly property real charTo: (index + 1) / charCount
+                                                        readonly property real charProgress: wordCell.isPast ? 1.0 :
+                                                            (wordCell.isSinging ? Math.max(0.0, Math.min(1.0, (wordCell.smoothProg - charFrom) / Math.max(0.001, charTo - charFrom))) : 0.0)
+
+                                                        // Persistent rolling lift once a letter is sung
+                                                        property real liftProgress: (charProgress > 0.0 || wordCell.isPast) ? 1.0 : 0.0
+                                                        Behavior on liftProgress {
+                                                            NumberAnimation { duration: 750; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.4, 0.0, 0.2, 1.0] }
                                                         }
-                                                    ]
+                                                        readonly property real hermiteLift: {
+                                                            var w = Math.max(0.0, Math.min(1.0, liftProgress));
+                                                            return w * w * (3.0 - 2.0 * w);
+                                                        }
 
-                                                    Text {
-                                                        id: charText
-                                                        anchors.centerIn: parent
-                                                        text: ch
-                                                        font.family: Theme.fontFamily
-                                                        font.pixelSize: root.activeBaseFontSize
-                                                        font.bold: wordCell.effectiveScale > 1.2 ? true : Font.DemiBold
-                                                        color: {
-                                                            if (wordCell.isPast || charItem.charProgress >= 1.0) return "#ffffff";
-                                                            if (charItem.charProgress <= 0.0) return Qt.rgba(1.0, 1.0, 1.0, 0.38);
-                                                            var p = charItem.charProgress;
-                                                            var alpha = 0.38 + (1.0 - 0.38) * p;
-                                                            return Qt.rgba(1.0, 1.0, 1.0, alpha);
+                                                        width: charText.implicitWidth
+                                                        height: charText.implicitHeight
+
+                                                        transform: [
+                                                            Translate { y: -charItem.hermiteLift * 2.5 },
+                                                            Scale {
+                                                                xScale: wordCell.isShoutWord ? 1.0 : (1.0 + (wordCell.waveScale - 1.0) * 0.5)
+                                                                yScale: wordCell.isShoutWord ? 1.0 : (1.0 + (wordCell.isHeld ? 0.06 : 0.04) * wordCell.yCurve)
+                                                                origin.x: charItem.width / 2
+                                                                origin.y: charItem.height
+                                                            }
+                                                        ]
+
+                                                        Text {
+                                                            id: charText
+                                                            anchors.centerIn: parent
+                                                            text: charItem.ch
+                                                            font.family: Theme.fontFamily
+                                                            font.pixelSize: lineItem.baseFont
+                                                            font.bold: wordCell.effectiveScale > 1.2 ? true : Font.DemiBold
+                                                            color: {
+                                                                if (wordCell.isPast || charItem.charProgress >= 1.0) return "#ffffff";
+                                                                if (charItem.charProgress <= 0.0) return Qt.rgba(1.0, 1.0, 1.0, 0.38);
+                                                                return Qt.rgba(1.0, 1.0, 1.0, 0.38 + 0.62 * charItem.charProgress);
+                                                            }
                                                         }
                                                     }
                                                 }
