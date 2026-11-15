@@ -21,6 +21,7 @@ Item {
     property int panelStyle: 1 // 1: Flush Split-Rail, 2: Bento Glass Island
     property string activeTab: "lyrics" // "lyrics" | "queue"
     property var currentTracks: []
+    property real layoutDependency: 0.0 // Driven by host slide progress so LiquidGlass re-samples its backdrop offset
     readonly property real targetPanelWidth: Math.max(380, Math.min(460, Math.round((parent ? parent.width : 1200) * 0.34)))
 
     // Performance Gating (Zero-overhead: disables all shaders, FBOs, and lyric updates when hidden, closed, or in another app)
@@ -583,18 +584,19 @@ Item {
             id: backdropWrapper
             anchors.fill: parent
 
-            // Base deep dark tone
+            // Base deep dark tone (fallback only when the shared liquid backdrop is off)
             Rectangle {
                 anchors.fill: parent
-                visible: root.activeTab === "lyrics" || !queueLiquidBackdrop.visible
+                visible: root.activeTab === "lyrics" || !panelLiquidBackdrop.visible
                 color: root.panelStyle === 1 ? "#0e0f14" : "#0a0b10"
             }
 
-            // 1. Queue Mode: Seamless Frosted Continuation of Home Background (0 duplicate textures)
+            // Queue Mode: Seamless Frosted Continuation of the animated Home liquid backdrop (0 duplicate textures)
             LiquidGlass {
-                id: queueLiquidBackdrop
+                id: panelLiquidBackdrop
                 anchors.fill: parent
                 visible: root.activeTab === "queue" && root.isPanelRenderable
+                extraDependency: root.layoutDependency
                 backgroundSourceItem: root.backgroundSourceItem
                 radius: root.panelStyle === 1 ? 0 : 20
                 displacement: 12.0

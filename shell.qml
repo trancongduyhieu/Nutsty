@@ -2226,7 +2226,8 @@ Scope {
                     anchors.left: parent.left
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
-                    width: parent.width - mochySidePanel.width - (mochySidePanel.width > 1.0 ? (win.mochyPanelStyle === 1 ? 0 : 16) : 0)
+                    // final-width snap so HomeFeed flush-fit recomputes card count once, not per frame.
+                    width: parent.width - ((win.isMochySidePanelOpen && !win.isNowPlayingOpen) ? (mochySidePanel.targetPanelWidth + (win.mochyPanelStyle === 1 ? 0 : 16)) : 0)
                     visible: opacity > 0.01
                     opacity: win.isNowPlayingOpen ? 0.0 : 1.0
                     enabled: !win.isNowPlayingOpen
@@ -2548,19 +2549,23 @@ Scope {
                     anchors.bottomMargin: win.mochyPanelStyle === 1 ? 0 : 16
                     anchors.rightMargin: win.mochyPanelStyle === 1 ? 0 : 8
                     panelStyle: win.mochyPanelStyle
-                    clip: true
-                    width: (win.isMochySidePanelOpen && !win.isNowPlayingOpen) ? targetPanelWidth : 0
-                    visible: width > 1.0 && !win.isNowPlayingOpen
-                    opacity: (win.isMochySidePanelOpen && !win.isNowPlayingOpen) ? 1.0 : 0.0
-                    enabled: win.isMochySidePanelOpen && !win.isNowPlayingOpen
-                    Behavior on width {
+                    // Fixed width + transform slide: content never re-lays out per frame (no FBO realloc / cover reflow)
+                    width: targetPanelWidth
+                    property real revealProgress: (win.isMochySidePanelOpen && !win.isNowPlayingOpen) ? 1.0 : 0.0
+                    // Swiftify bounce on a transform-only value: overshoots on open, critically damped on close (no re-flash)
+                    Behavior on revealProgress {
                         SpringAnimation {
                             spring: 4
-                            damping: 0.32
-                            epsilon: 0.5
+                            damping: (win.isMochySidePanelOpen && !win.isNowPlayingOpen) ? 0.32 : 1.0
+                            epsilon: 0.002
                         }
                     }
-                    Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                    readonly property real occupiedWidth: width * Math.min(1.0, revealProgress)
+                    transform: Translate { x: (1.0 - mochySidePanel.revealProgress) * (mochySidePanel.width + 24) }
+                    visible: revealProgress > 0.001 && !win.isNowPlayingOpen
+                    opacity: Math.max(0.0, Math.min(1.0, revealProgress))
+                    layoutDependency: revealProgress
+                    enabled: win.isMochySidePanelOpen && !win.isNowPlayingOpen
                     z: 10
 
                     isEffectivelyActive: win.isWindowEffectivelyActive && win.isMochySidePanelOpen && !win.isNowPlayingOpen
@@ -2670,15 +2675,16 @@ Scope {
             anchors.bottomMargin: 16
             anchors.horizontalCenter: parent.horizontalCenter
             readonly property real targetCenterOffset: (win.isMochySidePanelOpen && !win.isNowPlayingOpen)
-                ? -Math.round((mochySidePanel.width + (win.mochyPanelStyle === 1 ? 0 : 16)) / 2)
+                ? -Math.round((mochySidePanel.targetPanelWidth + (win.mochyPanelStyle === 1 ? 0 : 16)) / 2)
                 : 0
             anchors.horizontalCenterOffset: targetCenterOffset
-            Behavior on anchors.horizontalCenterOffset { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+            // Targets bind to the FINAL panel width so these Behaviors run once instead of restarting every frame
+            Behavior on anchors.horizontalCenterOffset { SpringAnimation { spring: 4; damping: 0.32; epsilon: 0.5 } }
             readonly property real targetMaxAvailableWidth: (win.isMochySidePanelOpen && !win.isNowPlayingOpen)
-                ? (parent.width - mochySidePanel.width - (win.mochyPanelStyle === 1 ? 0 : 16) - 40)
+                ? (parent.width - mochySidePanel.targetPanelWidth - (win.mochyPanelStyle === 1 ? 0 : 16) - 40)
                 : (parent.width - 32)
             width: Math.min(win.isCoListeningActive ? 850 : 790, targetMaxAvailableWidth)
-            Behavior on width { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
+            Behavior on width { SpringAnimation { spring: 4; damping: 0.32; epsilon: 0.5 } }
             height: 60
             z: 50
             backgroundSourceItem: masterAppSurface

@@ -324,23 +324,23 @@ Rectangle {
             // Responsive Flush-fit: Exactly 3 cards when side panel is open, 5 cards when closed
             readonly property int cardVideoCount: Math.max(3, Math.round((availableContentWidth + 16) / 240))
             property real cardVideoWidth: (availableContentWidth - (cardVideoCount - 1) * 16) / cardVideoCount
-            Behavior on cardVideoWidth { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+            Behavior on cardVideoWidth { SpringAnimation { spring: 4; damping: 0.4; epsilon: 0.25 } }
             property real cardVideoHeight: Math.round((cardVideoWidth - 8) * 9 / 16) + 78
-            Behavior on cardVideoHeight { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+            Behavior on cardVideoHeight { SpringAnimation { spring: 4; damping: 0.4; epsilon: 0.25 } }
 
             // Square Carousel (1:1 Album/Playlist cards) - Flush-fit 100% width, zero edge gaps
             // Exactly 4 cards when side panel is open, 6 cards when closed
             readonly property int cardSquareCount: Math.max(4, Math.round((availableContentWidth + 16) / 180))
             property real cardSquareWidth: (availableContentWidth - (cardSquareCount - 1) * 16) / cardSquareCount
-            Behavior on cardSquareWidth { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+            Behavior on cardSquareWidth { SpringAnimation { spring: 4; damping: 0.4; epsilon: 0.25 } }
             property real cardSquareHeight: Math.round(cardSquareWidth - 8) + 78
-            Behavior on cardSquareHeight { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+            Behavior on cardSquareHeight { SpringAnimation { spring: 4; damping: 0.4; epsilon: 0.25 } }
 
             // Multi-row Track Grid (4 rows per column - "Bản cover & Phối lại")
             // Exactly 2 columns when side panel is open, 3 columns when closed
             readonly property int cardGridColCount: Math.max(2, Math.round((availableContentWidth + 14) / 340))
             property real cardGridColWidth: (availableContentWidth - (cardGridColCount - 1) * 14) / cardGridColCount
-            Behavior on cardGridColWidth { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+            Behavior on cardGridColWidth { SpringAnimation { spring: 4; damping: 0.4; epsilon: 0.25 } }
             readonly property real cardGridColHeight: 240
 
             property var activeFlickable: {
