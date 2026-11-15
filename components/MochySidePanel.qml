@@ -16,6 +16,7 @@ Item {
     property bool isLiked: false
     property color accentColor: Theme.accent
     property var activeLyrics: []
+    property bool isLoadingLyrics: false
     property string resolvedSquareImage: ""
     property Item backgroundSourceItem: null
     property int panelStyle: 1 // 1: Flush Split-Rail, 2: Bento Glass Island
@@ -640,18 +641,6 @@ Item {
                     GradientStop { position: 0.75; color: Qt.rgba(0.06, 0.06, 0.08, 0.82) }
                     GradientStop { position: 1.0; color: Qt.rgba(0.06, 0.06, 0.08, 0.94) }
                 }
-            }
-
-            // Outer Hairline Border adapted to panelStyle
-            Rectangle {
-                anchors.fill: parent
-                topLeftRadius: root.panelStyle === 1 ? 0 : 20
-                bottomLeftRadius: root.panelStyle === 1 ? 0 : 20
-                topRightRadius: 20
-                bottomRightRadius: 20
-                color: "transparent"
-                border.color: root.activeTab === "queue" ? Qt.rgba(1, 1, 1, 0.08) : (root.panelStyle === 1 ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(1, 1, 1, 0.16))
-                border.width: root.panelStyle === 1 ? 1 : 1.2
             }
         }
 
@@ -1346,7 +1335,26 @@ Item {
                         lineHeight: 1.15
                     }
 
+                    // While lyrics are being fetched: spinning, morphing shape instead of "no lyrics"
                     Row {
+                        visible: root.isLoadingLyrics
+                        spacing: 12
+                        ShapeLoader {
+                            anchors.verticalCenter: parent.verticalCenter
+                            size: 30
+                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.9)
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: I18n.tr("Đang tìm lời bài hát...", "Finding lyrics...")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 12
+                            color: Qt.rgba(1, 1, 1, 0.55)
+                        }
+                    }
+
+                    Row {
+                        visible: !root.isLoadingLyrics
                         spacing: 8
                         AppIcon {
                             anchors.verticalCenter: parent.verticalCenter
@@ -1641,6 +1649,9 @@ Item {
                     }
 
                     RowLayout {
+                        // Above the row-wide play MouseArea (z: 1): otherwise it swallowed the three-dot
+                        // button's click and played the track instead of opening the menu.
+                        z: 2
                         anchors.fill: parent
                         anchors.leftMargin: 8
                         anchors.rightMargin: 10
@@ -1755,33 +1766,14 @@ Item {
                 width: parent.width - 40
                 visible: root.upNextTracks.length === 0 && (root.currentTrack === null)
 
-                Column {
+                EmptyState {
                     anchors.centerIn: parent
-                    spacing: 12
-
-                    AppIcon {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        source: "../assets/icons/queue-music-symbolic.svg"
-                        iconSize: 36
-                        color: Qt.rgba(1, 1, 1, 0.20)
-                    }
-
-                    Text {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        text: I18n.tr("Hàng đợi trống", "Queue is empty")
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 14
-                        font.bold: true
-                        color: Qt.rgba(1, 1, 1, 0.50)
-                    }
-
-                    Text {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        text: I18n.tr("Chọn bài hát để bắt đầu danh sách phát", "Play a track to start the queue")
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 11
-                        color: Qt.rgba(1, 1, 1, 0.35)
-                    }
+                    width: Math.min(parent.width - 32, 340)
+                    icon: "../assets/icons/material/ms-queue_music.svg"
+                    shape: "clover"
+                    accentColor: root.accentColor
+                    title: I18n.tr("Hàng đợi trống", "Queue is empty")
+                    description: I18n.tr("Chọn bài hát để bắt đầu danh sách phát", "Play a track to start the queue")
                 }
             }
         }
@@ -1809,14 +1801,16 @@ Item {
     // -------------------------------------------------------------------------
     // OPTION 2: BENTO GLASS ISLAND LUMINOUS PERIMETER BORDER
     // -------------------------------------------------------------------------
-    Rectangle {
-        id: bentoPerimeterBorder
-        visible: root.isPanelRenderable && root.panelStyle === 2
+    // Single shared rim for BOTH tabs (lyrics + queue). Lives OUTSIDE the masked panelContainer layer so its
+    // own antialiased edge covers the mask edge (inside the mask the two AA edges clashed into black jaggies).
+    PanelRimBorder {
+        id: panelRim
+        visible: root.isPanelRenderable
         anchors.fill: parent
-        radius: 20
-        color: "transparent"
-        border.width: 1.2
-        border.color: Qt.rgba(1.0, 1.0, 1.0, 0.18)
         z: 100
+        accentColor: root.accentColor
+        topLeftRadius: root.panelStyle === 1 ? 0 : 20
+        bottomLeftRadius: root.panelStyle === 1 ? 0 : 20
+        borderWidth: root.panelStyle === 1 ? 1 : 1.2
     }
 }

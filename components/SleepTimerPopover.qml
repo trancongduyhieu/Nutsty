@@ -31,7 +31,19 @@ Item {
     signal setEndOfTrackRequested()
     signal cancelTimerRequested()
 
+    // (-1, -1) = default spot above the player dock; otherwise the card drops down from this point
+    property point dropAnchor: Qt.point(-1, -1)
+    readonly property bool isDropDown: dropAnchor.x >= 0
+
     function open() {
+        dropAnchor = Qt.point(-1, -1);
+        isCustomMode = false;
+        isOpen = true;
+    }
+
+    // Open below a header button; (gx, gy) is the button's bottom-left in this popover's coordinates
+    function openBelow(gx, gy) {
+        dropAnchor = Qt.point(gx, gy);
         isCustomMode = false;
         isOpen = true;
     }
@@ -77,14 +89,17 @@ Item {
         width: 290
         height: cardContent.implicitHeight + 24
 
-        // Exact anchor on top of centered bottomPlayer dock
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: 92 // 16px player margin + 66px dock height + 10px gap
-        anchors.right: parent.right
-        anchors.rightMargin: Math.round((parent.width - Math.min(600, parent.width - 48)) / 2 + 10)
+        // Default: exactly on top of the centred bottomPlayer dock (16px margin + 66px dock + 10px gap).
+        // Drop-down: under the header sleep button, clamped inside the window.
+        x: root.isDropDown
+           ? Math.max(12, Math.min(root.dropAnchor.x - 12, root.width - width - 12))
+           : root.width - width - Math.round((root.width - Math.min(600, root.width - 48)) / 2 + 10)
+        y: root.isDropDown
+           ? Math.min(root.dropAnchor.y + 8, root.height - height - 12)
+           : root.height - height - 92
 
         scale: root.isOpen ? 1.0 : 0.85
-        transformOrigin: Item.BottomRight
+        transformOrigin: root.isDropDown ? Item.TopLeft : Item.BottomRight
         Behavior on scale {
             NumberAnimation { duration: 220; easing.type: Easing.OutBack }
         }

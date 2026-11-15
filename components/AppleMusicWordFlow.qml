@@ -28,7 +28,9 @@ Item {
     }
 
     // Natural typographic space width matching static text (stops premature word wrapping)
-    property int wordSpacing: Math.max(5, Math.round(spaceMetrics.width))
+    // advanceWidth (not width): TextMetrics.width trims whitespace to ~0, which under-measured lines
+    // so the active flow skipped wraps that the static Text (advance-based layout) applied.
+    property int wordSpacing: Math.max(5, Math.round(spaceMetrics.advanceWidth))
 
     // Compensate for 60ms audio buffer latency so words light up on-beat
     readonly property real effectiveTime: root.currentTime + 0.06
@@ -104,7 +106,7 @@ Item {
                 globalIndex: i
             };
             wordMetrics.text = w.text || "";
-            var wW = wordMetrics.width;
+            var wW = wordMetrics.advanceWidth;
             var prevHadSpace = (curLine.length > 0) ? (curLine[curLine.length - 1].hasSpace !== false) : true;
             var gap = (curLine.length > 0 && prevHadSpace) ? root.wordSpacing : 0;
             var canBreak = (curLine.length > 0 && prevHadSpace);

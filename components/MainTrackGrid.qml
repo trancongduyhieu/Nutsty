@@ -1860,44 +1860,14 @@ Rectangle {
         visible: root.isDownloadsView && root.downloadsSubTab === "favorites" && (!root.sortedTracks || root.sortedTracks.length === 0) && (!root.favoritePlaylists || root.favoritePlaylists.length === 0) && root.albumMetadata === null
         z: 10
 
-        ColumnLayout {
+        EmptyState {
             anchors.centerIn: parent
-            spacing: 16
-
-            Rectangle {
-                Layout.alignment: Qt.AlignHCenter
-                width: 72
-                height: 72
-                radius: 36
-                color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
-                border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
-                border.width: 1
-
-                AppIcon {
-                    anchors.centerIn: parent
-                    anchors.verticalCenterOffset: 1
-                    source: "../assets/icons/emblem-favorite-symbolic.svg"
-                    iconSize: 32
-                    color: root.accentColor
-                }
-            }
-
-            Text {
-                Layout.alignment: Qt.AlignHCenter
-                text: I18n.tr("Chưa có bài hát yêu thích", "No favorite songs yet")
-                font.family: Theme.fontFamily
-                font.pixelSize: 18
-                font.bold: true
-                color: Theme.textPrimary
-            }
-
-            Text {
-                Layout.alignment: Qt.AlignHCenter
-                text: I18n.tr("Nhấn biểu tượng Trái tim trên thanh phát nhạc để lưu các bài hát bạn yêu thích vào đây.", "Click the Heart icon on the player bar to save your favorite songs here.")
-                font.family: Theme.fontFamily
-                font.pixelSize: 13
-                color: Theme.textSecondary
-            }
+            width: Math.min(parent.width - 32, 340)
+            icon: "../assets/icons/material/ms-favorite-fill.svg"
+            shape: "flower"
+            accentColor: root.accentColor
+            title: I18n.tr("Chưa có bài hát yêu thích", "No favorite songs yet")
+            description: I18n.tr("Nhấn biểu tượng Trái tim trên thanh phát nhạc để lưu các bài hát bạn yêu thích vào đây.", "Click the Heart icon on the player bar to save your favorite songs here.")
         }
     }
 

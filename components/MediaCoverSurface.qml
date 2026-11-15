@@ -20,6 +20,8 @@ Item {
     property bool autoCropBlackBars: true
     property bool showShadow: true
     property string overrideImage: ""
+    // URL of the static cover currently shown (used e.g. for glow colour sampling)
+    readonly property alias coverSource: bigCoverImg.source
     property string overrideAnimatedArtworkUrl: ""
     property color borderColor: Qt.rgba(1, 1, 1, 0.16)
     property real borderWidth: 1.0

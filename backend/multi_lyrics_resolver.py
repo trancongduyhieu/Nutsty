@@ -19,7 +19,7 @@ import time
 import base64
 import urllib.request
 import urllib.parse
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 import threading
 from typing import List, Dict, Any, Optional
 
@@ -38,6 +38,8 @@ CACHE_DIR = os.path.join(pc.get_cache_dir(), "lyrics")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 DEFAULT_TIMEOUT = 3.0
+OVERALL_BUDGET_SEC = 4.5  # whole parallel round, never longer even if a provider chains requests
+SETTLE_GRACE_SEC = 0.35   # wait this long for better candidates after the first studio word-level hit
 
 # ──────────────────────────────────────────────────────────────────────────────
 # SCRIPT & LANGUAGE ANALYSIS (Ported from Mochy-Music LyricsUtils.kt)
@@ -208,78 +210,94 @@ def fetch_youlyplus_candidate(title: str, artist: str = "") -> Optional[LyricsCa
         "https://lyricsplus.binimum.org/v2/lyrics/get",
         "https://lyricsplus.prjktla.my.id/v2/lyrics/get"
     ]
-    for clean_a in artist_variants:
+    def _attempt(ep, clean_a):
         params = {"title": clean_t}
         if clean_a:
             params["artist"] = clean_a
+        try:
+            url = f"{ep}?{urllib.parse.urlencode(params)}"
+            req = urllib.request.Request(url, headers={
+                "User-Agent": "Mochy (+https://github.com/realidkroo/Mochy-Music)",
+                "Accept": "application/json"
+            })
+            with urllib.request.urlopen(req, timeout=2.5) as resp:
+                data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+            items = data.get("lyrics", [])
+            if not items:
+                return None
 
-        for ep in endpoints:
-            try:
-                url = f"{ep}?{urllib.parse.urlencode(params)}"
-                req = urllib.request.Request(url, headers={
-                    "User-Agent": "Mochy (+https://github.com/realidkroo/Mochy-Music)",
-                    "Accept": "application/json"
-                })
-                with urllib.request.urlopen(req, timeout=2.5) as resp:
-                    data = json.loads(resp.read().decode("utf-8", errors="ignore"))
-                items = data.get("lyrics", [])
-                if not items:
-                    continue
+            lines = []
+            has_voice = False
+            voices = set()
+            for item in items:
+                t_ms = item.get("time", 0)
+                mins = (t_ms // 1000) // 60
+                secs = (t_ms // 1000) % 60
+                ms = t_ms % 1000
+                stamp = f"[{mins:02d}:{secs:02d}.{ms:03d}]"
+                singer = item.get("element", {}).get("singer", "")
+                if singer:
+                    has_voice = True
+                    voices.add(singer)
+                    marker = f"{{agent:{singer}}}"
+                else:
+                    marker = ""
 
-                lines = []
-                has_voice = False
-                voices = set()
-                for item in items:
-                    t_ms = item.get("time", 0)
-                    mins = (t_ms // 1000) // 60
-                    secs = (t_ms // 1000) % 60
-                    ms = t_ms % 1000
-                    stamp = f"[{mins:02d}:{secs:02d}.{ms:03d}]"
-                    singer = item.get("element", {}).get("singer", "")
-                    if singer:
-                        has_voice = True
-                        voices.add(singer)
-                        marker = f"{{agent:{singer}}}"
-                    else:
-                        marker = ""
+                syls = item.get("syllabus", [])
+                if syls:
+                    w_str = ""
+                    spaced_by_api = any(s.get("text", "").endswith(" ") for s in syls[:-1])
+                    for idx, s in enumerate(syls):
+                        sm = (s.get("time", 0) // 1000) // 60
+                        ss = (s.get("time", 0) // 1000) % 60
+                        sms = s.get("time", 0) % 1000
+                        stxt = s.get("text", "")
+                        if not spaced_by_api and idx < len(syls) - 1 and not stxt.endswith(" "):
+                            stxt += " "
+                        w_str += f"<{sm:02d}:{ss:02d}.{sms:03d}>{stxt}"
+                    lines.append(f"{stamp}{marker}{w_str.strip()}")
+                else:
+                    txt = item.get("text", "")
+                    lines.append(f"{stamp}{marker}{txt}")
 
-                    syls = item.get("syllabus", [])
-                    if syls:
-                        w_str = ""
-                        spaced_by_api = any(s.get("text", "").endswith(" ") for s in syls[:-1])
-                        for idx, s in enumerate(syls):
-                            sm = (s.get("time", 0) // 1000) // 60
-                            ss = (s.get("time", 0) // 1000) % 60
-                            sms = s.get("time", 0) % 1000
-                            stxt = s.get("text", "")
-                            if not spaced_by_api and idx < len(syls) - 1 and not stxt.endswith(" "):
-                                stxt += " "
-                            w_str += f"<{sm:02d}:{ss:02d}.{sms:03d}>{stxt}"
-                        lines.append(f"{stamp}{marker}{w_str.strip()}")
-                    else:
-                        txt = item.get("text", "")
-                        lines.append(f"{stamp}{marker}{txt}")
+            raw = "\n".join(lines)
+            if not raw.strip():
+                return None
 
-                raw = "\n".join(lines)
-                if not raw.strip():
-                    continue
+            sync_kind = detect_sync_kind(raw)
+            dom_script = dominant_script(raw)
+            has_duet = len(voices) > 1
 
-                sync_kind = detect_sync_kind(raw)
-                dom_script = dominant_script(raw)
-                has_duet = len(voices) > 1
+            return LyricsCandidate(
+                provider="YouLyPlus",
+                raw_lyrics=raw,
+                sync_kind=sync_kind,
+                script=dom_script,
+                duration_sec=None,
+                has_voice_tags=has_voice,
+                has_duet=has_duet,
+                is_ttml=False
+            )
+        except Exception:
+            return None
 
-                return LyricsCandidate(
-                    provider="YouLyPlus",
-                    raw_lyrics=raw,
-                    sync_kind=sync_kind,
-                    script=dom_script,
-                    duration_sec=None,
-                    has_voice_tags=has_voice,
-                    has_duet=has_duet,
-                    is_ttml=False
-                )
-            except Exception:
-                continue
+    # Race every endpoint x artist variant at once and take the first real answer: requests used
+    # to run one after another, so a dead mirror (2.5s timeout each) delayed every song.
+    jobs = [(ep, a) for a in artist_variants for ep in endpoints]
+    pool = ThreadPoolExecutor(max_workers=len(jobs), thread_name_prefix="nutsty_yly")
+    try:
+        pending = {pool.submit(_attempt, ep, a) for ep, a in jobs}
+        while pending:
+            done, pending = wait(pending, return_when=FIRST_COMPLETED)
+            for fut in done:
+                try:
+                    cand = fut.result()
+                except Exception:
+                    cand = None
+                if cand:
+                    return cand
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
     return None
 
 def fetch_simpmusic_candidate(video_id: str, title: str, artist: str, duration_sec: Optional[float] = None) -> Optional[LyricsCandidate]:
@@ -607,27 +625,32 @@ def fetch_all_candidates_parallel(
         if target_name:
             thunks.sort(key=lambda x: 0 if x[0] == target_name else 1)
 
-    with ThreadPoolExecutor(max_workers=7, thread_name_prefix="nutsty_lyr") as pool:
-        futures = {pool.submit(fn): name for name, fn in thunks}
-        has_top_tier_word = False
+    # No `with` block: its exit is shutdown(wait=True), which blocked on the slowest provider and
+    # made early-settle useless. as_completed(timeout=) also raised an uncaught TimeoutError that
+    # dropped the caller into a slow sequential re-query of every provider.
+    pool = ThreadPoolExecutor(max_workers=7, thread_name_prefix="nutsty_lyr")
+    try:
+        pending = {pool.submit(fn) for _, fn in thunks}
+        hard_deadline = time.time() + OVERALL_BUDGET_SEC
         settle_deadline = None
-
-        for fut in as_completed(futures, timeout=DEFAULT_TIMEOUT):
-            try:
-                res = fut.result()
+        while pending:
+            deadline = min(hard_deadline, settle_deadline) if settle_deadline else hard_deadline
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                break
+            done, pending = wait(pending, timeout=remaining, return_when=FIRST_COMPLETED)
+            for fut in done:
+                try:
+                    res = fut.result()
+                except Exception:
+                    continue
                 if res and res.raw_lyrics:
                     candidates.append(res)
-                    # Fast-path early settle: If a studio word-level candidate arrived,
-                    # don't wait for remaining slow network timeouts!
-                    if res.sync_kind == SyncKind.WORD and res.provider in ("YouLyPlus", "SimpMusic", "BetterLyrics", "Spotify"):
-                        has_top_tier_word = True
-                        if settle_deadline is None:
-                            settle_deadline = time.time() + 0.25
-            except Exception:
-                pass
-
-            if has_top_tier_word and settle_deadline and time.time() >= settle_deadline:
-                break
+                    # Studio word-level candidate arrived: give the others a short grace, then settle
+                    if settle_deadline is None and res.sync_kind == SyncKind.WORD and res.provider in ("YouLyPlus", "SimpMusic", "BetterLyrics", "Spotify"):
+                        settle_deadline = time.time() + SETTLE_GRACE_SEC
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
     # If all primary providers returned nothing, try YouTube captions fallback
     if not candidates and video_id:

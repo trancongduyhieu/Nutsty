@@ -1069,33 +1069,14 @@ Rectangle {
                 height: Math.max(280, historyFlickable.height - 80)
                 visible: !searchRoot.searchHistory || searchRoot.searchHistory.length === 0
 
-                ColumnLayout {
+                EmptyState {
                     anchors.centerIn: parent
-                    spacing: 12
-
-                    AppIcon {
-                        Layout.alignment: Qt.AlignHCenter
-                        source: "../assets/icons/document-open-recent-symbolic.svg"
-                        iconSize: 42
-                        color: Qt.rgba(searchRoot.accentColor.r, searchRoot.accentColor.g, searchRoot.accentColor.b, 0.35)
-                    }
-
-                    Text {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: I18n.tr("Chưa có lịch sử tìm kiếm", "No recent searches")
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 15
-                        font.weight: Font.DemiBold
-                        color: Theme.textSecondary
-                    }
-
-                    Text {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: I18n.tr("Các từ khóa bạn đã tìm kiếm sẽ xuất hiện ở đây", "Your recent search queries will appear here")
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 12
-                        color: Theme.textMuted
-                    }
+                    width: Math.min(parent.width - 32, 340)
+                    icon: "../assets/icons/material/ms-history.svg"
+                    shape: "cookie"
+                    accentColor: searchRoot.accentColor
+                    title: I18n.tr("Chưa có lịch sử tìm kiếm", "No recent searches")
+                    description: I18n.tr("Các từ khóa bạn đã tìm kiếm sẽ xuất hiện ở đây", "Your recent search queries will appear here")
                 }
             }
         }

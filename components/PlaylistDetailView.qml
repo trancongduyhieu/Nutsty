@@ -394,96 +394,21 @@ Rectangle {
             // Empty State (Centered in Viewport - ui-layout-design-rules)
             Item {
                 Layout.fillWidth: true
-                Layout.preferredHeight: emptyStateCol.implicitHeight + 80
+                Layout.preferredHeight: plEmptyState.implicitHeight + 80
                 Layout.topMargin: Math.max(30, (scrollArea.height - 240) / 4)
                 visible: root.playlistTracks.length === 0
 
-                ColumnLayout {
-                    id: emptyStateCol
+                EmptyState {
+                    id: plEmptyState
                     anchors.centerIn: parent
-                    width: Math.min(scrollArea.width, 480)
-                    spacing: 16
-
-                    Rectangle {
-                        Layout.alignment: Qt.AlignHCenter
-                        width: 72
-                        height: 72
-                        radius: 36
-                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
-                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28)
-                        border.width: 1
-
-                        AppIcon {
-                            anchors.centerIn: parent
-                            source: "../assets/icons/folder-music-symbolic.svg"
-                            iconSize: 34
-                            color: root.accentColor
-                        }
-                    }
-
-                    Text {
-                        Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignHCenter
-                        text: I18n.tr("Danh sách phát chưa có bài hát nào", "This playlist has no tracks yet")
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 18
-                        font.weight: Font.Bold
-                        color: "#ffffff"
-                    }
-
-                    Text {
-                        Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignHCenter
-                        text: I18n.tr("Tìm kiếm bài hát yêu thích để thêm ngay vào danh sách phát này", "Search and add your favorite songs directly to this playlist")
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 13
-                        color: Theme.textSecondary
-                        wrapMode: Text.WordWrap
-                    }
-
-                    // Call to action button: Search & Add Songs
-                    Rectangle {
-                        Layout.alignment: Qt.AlignHCenter
-                        Layout.topMargin: 8
-                        Layout.preferredHeight: 40
-                        Layout.preferredWidth: addSearchRow.implicitWidth + 32
-                        radius: 20
-                        color: addSearchArea.containsMouse ? Qt.lighter(root.accentColor, 1.15) : root.accentColor
-                        border.color: Qt.rgba(255, 255, 255, 0.25)
-                        border.width: 1
-
-                        Behavior on color { ColorAnimation { duration: 150 } }
-
-                        Row {
-                            id: addSearchRow
-                            anchors.centerIn: parent
-                            spacing: 8
-
-                            AppIcon {
-                                anchors.verticalCenter: parent.verticalCenter
-                                source: "../assets/icons/system-search-symbolic.svg"
-                                iconSize: 15
-                                color: "#000000"
-                            }
-
-                            Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: I18n.tr("Tìm & thêm bài hát", "Search & Add Songs")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 13
-                                font.weight: Font.Bold
-                                color: "#000000"
-                            }
-                        }
-
-                        MouseArea {
-                            id: addSearchArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.addTracksRequested(root.playlist)
-                        }
-                    }
+                    width: Math.min(parent.width - 32, 340)
+                    icon: "../assets/icons/material/ms-library_music-fill.svg"
+                    shape: "puffy"
+                    accentColor: root.accentColor
+                    title: I18n.tr("Danh sách phát chưa có bài hát nào", "This playlist has no tracks yet")
+                    description: I18n.tr("Tìm kiếm bài hát yêu thích để thêm ngay vào danh sách phát này", "Search and add your favorite songs directly to this playlist")
+                    actionText: I18n.tr("Tìm & thêm bài hát", "Search & Add Songs")
+                    onActionClicked: root.addTracksRequested(root.playlist)
                 }
             }
 

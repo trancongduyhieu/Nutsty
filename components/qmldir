@@ -38,6 +38,8 @@ ManageFriendsModal 1.0 ManageFriendsModal.qml
 MarqueeText 1.0 MarqueeText.qml
 MinimalistLyricsView 1.0 MinimalistLyricsView.qml
 MochySidePanel 1.0 MochySidePanel.qml
+PanelRimBorder 1.0 PanelRimBorder.qml
+NowPlayingControls 1.0 NowPlayingControls.qml
 NavArrowButton 1.0 NavArrowButton.qml
 NavSidebar 1.0 NavSidebar.qml
 ParticleBackground 1.0 ParticleBackground.qml
@@ -69,3 +71,7 @@ UserNoteDetailModal 1.0 UserNoteDetailModal.qml
 WhatsNewModal 1.0 WhatsNewModal.qml
 WindowsTaskbarLyrics 1.0 WindowsTaskbarLyrics.qml
 YTMusicNowPlayingView 1.0 YTMusicNowPlayingView.qml
+NowPlayingModeButton 1.0 NowPlayingModeButton.qml
+NowPlayingCtlButton 1.0 NowPlayingCtlButton.qml
+EmptyState 1.0 EmptyState.qml
+ShapeLoader 1.0 ShapeLoader.qml

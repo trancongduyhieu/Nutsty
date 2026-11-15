@@ -72,6 +72,10 @@ Item {
     signal seekRequested(real seconds)
     signal reqVolumeChange(real newVol)
     signal openDetailsRequested()
+    // Centre of the mini cover in `item` coordinates (origin of the Now Playing shape reveal)
+    function coverCenterIn(item) {
+        return miniCoverContainer.mapToItem(item, miniCoverContainer.width / 2, miniCoverContainer.height / 2);
+    }
     signal barClicked()
     signal lyricsClicked()
     signal queueClicked()

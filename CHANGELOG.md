@@ -2,16 +2,18 @@
 
 Tất cả các tính năng mới và cải tiến của Nutsty được lưu trữ tại đây.
 
-## [1.0.8] - 2026-11-10
+## [1.0.7] - 2026-11-15
 
 ### Added
-- **Đảo thể loại thông minh tại trung tâm thanh điều hướng (Dynamic Mood Island)**: Toàn bộ 11 thể loại cảm xúc được tích hợp tinh tế vào chính giữa thanh công cụ trên cùng. Ở trạng thái nghỉ, toàn bộ thể loại được thu gọn thành một viên ngọc nhỏ nhắn `[ Tất cả ]` ngay tại tâm màn hình. Khi nhấp chuột, thanh dock kính mờ nhẹ nhàng bung mở hiển thị trọn vẹn 11 thể loại cảm xúc kèm viên ngọc lướt êm ái theo thể loại được chọn, và tự động thu gọn lại sau 4.5 giây hoặc ngay khi chọn xong thể loại, giải phóng không gian trang chủ luôn rộng mở và thanh thoát.
+- **Đảo thể loại thông minh tại trung tâm thanh điều hướng (Dynamic Mood Island)**: Toàn bộ 11 thể loại cảm xúc được tích hợp tinh tế vào chính giữa thanh công cụ trên cùng. Ở trạng thái nghỉ, toàn bộ thể loại được thu gọn thành một viên ngọc nhỏ nhắn `[ Tất cả ]` ngay tại tâm màn hình. Khi nhấp chuột, thanh dock kính mờ nhẹ nhàng bung mở hiển thị trọn vẹn 11 thể loại cảm xúc kèm viên ngọc lướt êm ái theo thể loại được chọn, và tự động thu gọn lại sau 4.5 giây hoặc ngay khi chọn xong thể loại, giải phóng không gian trang chủ luôn rộng mở và thanh thoát. Đảo thể loại tự ẩn khi bạn mở màn hình Đang phát.
 - **Khôi phục hoạt ảnh gợn sóng nhịp nhàng cho bài hát (Mochy Ripple Wave Animation)**: Khôi phục trọn vẹn hiệu ứng gợn sóng xếp tầng khi tải trang chủ hoặc đổi thể loại cảm xúc. Từng thẻ bài hát lướt nhẹ từ dưới lên với độ trễ 35 mili-giây nhịp nhàng tạo chiều sâu thị giác sống động và nghệ thuật. Hiệu ứng chỉ xuất hiện một lần duy nhất khi nạp mới hoặc đổi thể loại, khi cuộn trang xem lại các bài hát đã tải sẽ hoàn toàn cố định và mượt mà.
-
-## [1.0.7] - 2026-11-10
-
-### Added
-- **Đảo thể loại thông minh bung mở & thu gọn (Dynamic Mood Island)**: Toàn bộ các thể loại cảm xúc được gom gọn thành một viên ngọc nhỏ nhắn `[ Tất cả ]` ở chính giữa trang chủ. Khi bấm vào, thanh dock kính mờ nhẹ nhàng bung mở hiển thị trọn vẹn 11 thể loại cảm xúc (kể cả thể loại "Tập trung") kèm viên ngọc lướt êm ái theo thể loại được chọn, và tự động thu gọn sau 4.5 giây giúp không gian nghe nhạc luôn thoáng đãng, tinh tế.
+- **Màn hình Đang phát mới phong cách tối giản**: Ảnh bìa vuông thu gọn nằm chính giữa, tỏa quầng sáng mềm mại mang đúng hai màu chủ đạo của ảnh bìa và tự đổi màu êm dịu khi chuyển bài. Tên bài hát, ca sĩ và bộ điều khiển trắng tinh giản được căn giữa gọn gàng ngay bên dưới.
+- **Thanh chuyển chế độ dạng viên nhộng**: Ở góc trên bên phải, bạn chuyển nhanh giữa Ảnh bìa, Lời bài hát và Danh sách chờ chỉ với một chạm. Nút Hẹn giờ tắt nhạc cũng nằm ngay tại đây, kèm chấm nhỏ báo hiệu khi hẹn giờ đang chạy.
+- **Thanh âm lượng cân đối**: Thanh âm lượng nằm gọn giữa nút phát ngẫu nhiên và nút lặp lại, hai đầu có biểu tượng loa nhỏ (bật/tắt tiếng) và loa lớn (tăng âm lượng) đối xứng hài hòa.
+- **Menu ba chấm đầy đủ**: Bấm nút ba chấm cạnh tên ca sĩ để yêu thích, thích, không thích bài hát hoặc chọn nhanh nguồn lời bài hát (Apple Music, Spotify, LRCLIB, KuGou...) mà không cần mở Cài đặt; lời bài hát được tải lại ngay theo nguồn vừa chọn.
+- **Biểu tượng chờ biến hình sinh động**: Khi đang tìm lời bài hát, một hình khối mềm mại vừa xoay vừa biến hình liên tục (bánh quy, bông hoa, cỏ bốn lá...) thay cho vòng xoay đơn điệu, kể cả trên bảng áp phích cạnh bên.
+- **Màn hình trống thân thiện**: Danh sách phát chưa có bài hát, mục yêu thích trống, hàng đợi trống hay lịch sử tìm kiếm trống đều có hình minh họa và lời gợi ý rõ ràng, kèm nút tìm và thêm bài hát ngay.
+- **Tìm lời bài hát nhanh hơn**: Mỗi lần tìm lời bài hát luôn kết thúc trong vòng vài giây và chọn ngay phiên bản chạy chữ theo từng từ tốt nhất, không còn phải chờ các nguồn chậm.
 - **Bảng áp phích nghệ thuật cạnh bên (Mochy Side Panel)**: Bấm vào thanh phát nhạc bên dưới để mở nhanh bảng áp phích trình diễn lời bài hát và ảnh bìa khổ lớn cạnh bên màn hình. Thanh phát nhạc tự động lướt sang trái và co giãn cân xứng nhường chỗ cho bảng áp phích, mang lại trải nghiệm xem lời bài hát sống động mà không che khuất danh sách nhạc.
 - **Chuyển động thanh phát nhạc nhịp nhàng & chống bấm nhanh**: Khi bạn chuyển đổi qua lại giữa các màn hình hoặc bấm liên tục vào thanh phát nhạc, thanh lướt êm dịu với độ mượt mà cao, loại bỏ hoàn toàn cảm giác giật cục hay trễ khung hình.
 - **Đồng bộ xóa bài hát tức thì khỏi thư viện**: Khi xóa bài hát tải về, bài hát sẽ biến mất ngay lập tức khỏi màn hình thư viện mà không cần tải lại trang, đồng thời tự động cập nhật danh sách và bộ nhớ đệm ngầm một cách liền mạch.
@@ -47,6 +49,8 @@ Tất cả các tính năng mới và cải tiến của Nutsty được lưu tr
 - **Phân tách hoàn hảo cử chỉ Nhấn giữ (Hold) và Nhấp nhanh (Click) trên thanh phát nhạc**: Khôi phục trọn vẹn khả năng nhấn giữ chuột trái ở bất kỳ đâu trên thanh phát nhạc để kích hoạt hiệu ứng quầng sáng Spotlight rực rỡ và phóng to nhẹ theo con trỏ chuột mà không bị kẹt bởi tiêu đề hay tên nghệ sĩ. Thao tác nhấp chuột nhanh sẽ mở/đóng bảng áp phích cạnh bên dứt khoát, và khi buông chuột sau khi nhấn giữ ngắm Spotlight thì thanh nhạc tự động thu về êm đềm mà không làm gián đoạn hay đóng/mở bảng áp phích ngoài ý muốn.
 
 ### Fixed
+- **Quầng sáng ảnh bìa tỏa tự nhiên**: Khắc phục hiện tượng quầng sáng quanh ảnh bìa bị chặn lại thành hình vuông khi tỏa xa, giờ ánh sáng lan mềm và bo tròn theo góc ảnh bìa.
+- **Lời bài hát xuống dòng chuẩn xác**: Sửa lỗi câu hát đang chạy chữ bị ngắt dòng khác với câu tĩnh, khiến chữ nhảy vị trí khi chuyển câu.
 - **Bố cục đáp ứng phẳng tuyệt đối cho hàng thẻ bài hát (Responsive Flush-Fit Carousel)**: Khắc phục triệt để hiện tượng mục "Nghe lại" (thẻ chữ nhật 16:9) và các hàng danh sách bài hát bị hở một khoảng trống lớn ở mép phải khi mở bảng áp phích hoặc bị xén dở dang khi mở rộng cửa sổ. Ứng dụng tự động tính toán số lượng thẻ vừa khít 100% bề rộng hiển thị theo tỷ lệ chuẩn, loại bỏ hoàn toàn tình trạng thẻ bị tàng hình vô lý, đảm bảo mọi hàng bài hát luôn dừng thẳng tắp sát mép nút điều hướng, chuẩn xác đến từng pixel ("không thiếu không dư").
 - **Tự động chuyển bài mượt mà không bị ngắt tiếng**: Khắc phục triệt để hiện tượng bài hát khi phát hết không tự động chuyển sang bài tiếp theo mà lại bị dừng khựng ở trạng thái nghỉ, đảm bảo âm nhạc luôn ngân vang liên tục và liền mạch.
 - **Khắc phục lỗi mất hiệu ứng quầng sáng Spotlight khi giữ chuột vào thanh phát nhạc**: Sửa triệt để xung đột sự kiện chuột giữa các vùng chữ và thân thanh phát, đảm bảo cử chỉ nhấn giữ để tỏa sáng và cử chỉ nhấp mở bảng áp phích luôn nhận lệnh chính xác và độc lập tuyệt đối.

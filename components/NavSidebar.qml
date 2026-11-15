@@ -596,33 +596,14 @@ Rectangle {
                         color: "transparent"
                         visible: (!root.queueTracks || root.queueTracks.length === 0) && !root.isLoadingRadio
 
-                        ColumnLayout {
+                        EmptyState {
                             anchors.centerIn: parent
-                            spacing: 8
-
-                            AppIcon {
-                                Layout.alignment: Qt.AlignHCenter
-                                source: "../assets/icons/view-queue-symbolic.svg"
-                                iconSize: 28
-                                color: Theme.textMuted
-                            }
-
-                            Text {
-                                text: I18n.tr("Hàng đợi trống", "Queue is empty")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 13
-                                font.bold: true
-                                color: Theme.textSecondary
-                                horizontalAlignment: Text.AlignHCenter
-                            }
-
-                            Text {
-                                text: I18n.tr("Chọn bài hát để bắt đầu", "Play a playlist or track to start")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 11
-                                color: Theme.textMuted
-                                horizontalAlignment: Text.AlignHCenter
-                            }
+                            width: Math.min(parent.width - 32, 340)
+                            icon: "../assets/icons/material/ms-queue_music.svg"
+                            shape: "clover"
+                            accentColor: root.accentColor
+                            title: I18n.tr("Hàng đợi trống", "Queue is empty")
+                            description: I18n.tr("Chọn bài hát để bắt đầu", "Play a playlist or track to start")
                         }
                     }
 

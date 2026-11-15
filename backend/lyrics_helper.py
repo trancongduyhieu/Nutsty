@@ -1422,3 +1422,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+    # Exit right away: a settled lyrics round leaves slow provider threads running, and a normal
+    # interpreter exit would join them (the UI already has its answer, the .lrc cache is written).
+    sys.stdout.flush()
+    os._exit(0)

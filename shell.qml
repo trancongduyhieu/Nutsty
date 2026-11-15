@@ -290,9 +290,9 @@ Scope {
     property bool toastVisible: false
     property string localApiUrl: "http://127.0.0.1:17890"
     property string notesApiUrl: Quickshell.env("NUTSTY_WORKER_URL") || "http://127.0.0.1:17890"
-    property string appVersion: "1.0.8"
-    property string latestVersion: "1.0.8"
-    property string lastSeenVersion: "1.0.8"
+    property string appVersion: "1.0.7"
+    property string latestVersion: "1.0.7"
+    property string lastSeenVersion: "1.0.7"
     property bool hasAppUpdate: false
     property bool isCheckingUpdate: false
     property string updateUrl: ""
@@ -1751,6 +1751,30 @@ Scope {
         return win.currentTracks[nextIdx] || null;
     }
 
+    // Lyrics prefetch (Mochy pattern): resolve the NEXT track's lyrics in the background while the
+    // current one plays, so lyrics_helper writes them to the persistent .lrc cache and the switch is instant.
+    onNextTrackChanged: lyricsPrefetchTimer.restart()
+    Timer {
+        id: lyricsPrefetchTimer
+        interval: 5000 // after the current track's own lyrics request has settled
+        repeat: false
+        onTriggered: {
+            var t = win.nextTrack;
+            if (!t || lyricsPrefetchProc.running) return;
+            var title = t.title || t.name || "";
+            if (title === "") return;
+            var path = t.path || t.file_path || t.filePath || "";
+            var dur = (t.duration && Number(t.duration) > 1) ? String(Math.round(Number(t.duration))) : "";
+            lyricsPrefetchProc.command = ["python3", "-u", win.appDir + "/backend/lyrics_helper.py",
+                                          title, t.artist || "", t.videoId || "", path, dur];
+            lyricsPrefetchProc.running = true;
+        }
+    }
+    Process {
+        id: lyricsPrefetchProc
+        running: false
+    }
+
     Shortcut {
         sequences: ["F11", "Shift+F11"]
         context: Qt.ApplicationShortcut
@@ -2054,6 +2078,7 @@ Scope {
                 selectedMood: win.selectedMood
                 onMoodSelected: (title, params) => win.selectMood(title, params)
                 isSidebarVisible: win.showSidebar
+                isNowPlayingOpen: win.isNowPlayingOpen
                 isMaximized: Boolean(win.visibility === 4 || win.maximized)
                 accentColor: win.accentColor
                 backgroundSourceItem: masterBackdropStack
@@ -2228,10 +2253,9 @@ Scope {
                     anchors.bottom: parent.bottom
                     // final-width snap so HomeFeed flush-fit recomputes card count once, not per frame.
                     width: parent.width - ((win.isMochySidePanelOpen && !win.isNowPlayingOpen) ? (mochySidePanel.targetPanelWidth + (win.mochyPanelStyle === 1 ? 0 : 16)) : 0)
-                    visible: opacity > 0.01
-                    opacity: win.isNowPlayingOpen ? 0.0 : 1.0
+                    // Stays rendered under the shape reveal; culled only once Now Playing fully covers it
+                    visible: !(win.isNowPlayingOpen && ytNowPlayingView.revealReach >= 0.999)
                     enabled: !win.isNowPlayingOpen
-                    Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutQuad } }
 
                     StackLayout {
                         id: centerStack
@@ -2578,6 +2602,7 @@ Scope {
                     isPlaying: win.isPlaying
                     accentColor: win.accentColor
                     activeLyrics: win.activeLyrics
+                    isLoadingLyrics: (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) ? ytNowPlayingView.isLoadingLyrics : false
                     resolvedSquareImage: win.currentResolvedCover
                     backgroundSourceItem: masterBackdropStack
 
@@ -2611,10 +2636,113 @@ Scope {
                     id: ytNowPlayingView
                     objectName: "ytMusicNowPlayingView"
                     anchors.fill: parent
-                    visible: opacity > 0.01
-                    opacity: win.isNowPlayingOpen ? 1.0 : 0.0
+                    visible: revealReach > 0.0
                     enabled: win.isNowPlayingOpen
-                    Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutQuad } }
+
+                    // Shape reveal (open/close): a random spinning petal grows from the window centre.
+                    // The layer exists only mid-animation, so the open view renders with zero overhead.
+                    property real revealReach: 0.0
+                    property real revealSpin: 0.0
+                    property real revealSpinTo: 0.0
+                    property vector4d revealShape: Qt.vector4d(8, 0.32, 0.45, 0)
+                    readonly property point revealOrigin: Qt.point(width / 2, height / 2)
+                    readonly property var revealShapes: [
+                        Qt.vector4d(9, 0.09, 1.0, 0),   // cookie9
+                        Qt.vector4d(6, 0.10, 1.0, 0),   // cookie6
+                        Qt.vector4d(4, 0.42, 0.55, 0),  // clover4
+                        Qt.vector4d(8, 0.28, 0.6, 0),   // clover8
+                        Qt.vector4d(8, 0.14, 2.2, 0),   // sunny
+                        Qt.vector4d(8, 0.26, 2.6, 0),   // verySunny
+                        Qt.vector4d(10, 0.16, 1.5, 0),  // softBurst
+                        Qt.vector4d(12, 0.24, 2.8, 0),  // burst
+                        Qt.vector4d(8, 0.32, 0.45, 0),  // flower
+                        Qt.vector4d(6, 0.18, 0.5, 0),   // puffy
+                        Qt.vector4d(5, 0.12, 3.0, 0),   // pentagon
+                        Qt.vector4d(6, 0.08, 4.0, 0)    // gem
+                    ]
+                    // Pixel radius that reaches the farthest window corner from the origin
+                    readonly property real revealFullRadius: {
+                        var ox = revealOrigin.x, oy = revealOrigin.y;
+                        var dx = Math.max(ox, width - ox), dy = Math.max(oy, height - oy);
+                        return Math.sqrt(dx * dx + dy * dy) / Math.max(0.05, 1.0 - revealShape.y) + 2;
+                    }
+
+                    function prepareReveal() {
+                        var s = revealShapes[Math.floor(Math.random() * revealShapes.length)];
+                        revealShape = s;
+                    }
+
+                    Connections {
+                        target: win
+                        function onIsNowPlayingOpenChanged() {
+                            revealCloseAnim.stop();
+                            revealOpenAnim.stop();
+                            if (win.isNowPlayingOpen) {
+                                if (ytNowPlayingView.revealReach <= 0.0) ytNowPlayingView.prepareReveal();
+                                ytNowPlayingView.revealSpinTo = ytNowPlayingView.revealSpin + Math.PI * 1.6;
+                                revealOpenAnim.start();
+                            } else {
+                                ytNowPlayingView.revealSpinTo = ytNowPlayingView.revealSpin + Math.PI * 1.4;
+                                revealCloseAnim.start();
+                            }
+                        }
+                    }
+                    SequentialAnimation {
+                        id: revealOpenAnim
+                        ParallelAnimation {
+                            SequentialAnimation {
+                                NumberAnimation { target: ytNowPlayingView; property: "revealReach"; to: 0.2; duration: 260; easing.type: Easing.OutBack; easing.overshoot: 2.4 }
+                                PauseAnimation { duration: 60 }
+                                NumberAnimation { target: ytNowPlayingView; property: "revealReach"; to: 1.0; duration: 280; easing.type: Easing.InBack; easing.overshoot: 1.2 }
+                            }
+                            NumberAnimation { target: ytNowPlayingView; property: "revealSpin"; to: ytNowPlayingView.revealSpinTo; duration: 600 }
+                        }
+                    }
+                    ParallelAnimation {
+                        id: revealCloseAnim
+                        NumberAnimation { target: ytNowPlayingView; property: "revealReach"; to: 0.0; duration: 520; easing.type: Easing.OutCubic }
+                        NumberAnimation { target: ytNowPlayingView; property: "revealSpin"; to: ytNowPlayingView.revealSpinTo; duration: 520; easing.type: Easing.OutCubic }
+                    }
+
+                    layer.enabled: revealReach > 0.0 && revealReach < 0.999
+                    layer.effect: ShaderEffect {
+                        property variant source
+                        property vector2d u_size: Qt.vector2d(ytNowPlayingView.width, ytNowPlayingView.height)
+                        property vector2d u_origin: Qt.vector2d(ytNowPlayingView.revealOrigin.x, ytNowPlayingView.revealOrigin.y)
+                        property vector4d u_shape: ytNowPlayingView.revealShape
+                        property real u_reach: ytNowPlayingView.revealReach * ytNowPlayingView.revealFullRadius
+                        property real u_spin: ytNowPlayingView.revealSpin
+                        fragmentShader: Qt.resolvedUrl("assets/shaders/shape_reveal.frag.qsb")
+                    }
+
+                    // Opaque copy of the app backdrop under the view while the shape mask is active:
+                    // the view itself is transparent (backdrop lives in masterBackdropStack).
+                    ShaderEffectSource {
+                        z: -1000
+                        anchors.fill: parent
+                        visible: ytNowPlayingView.layer.enabled
+                        live: visible
+                        sourceItem: visible ? masterBackdropStack : null
+                        sourceRect: visible ? ytNowPlayingView.mapToItem(masterBackdropStack, 0, 0, ytNowPlayingView.width, ytNowPlayingView.height) : Qt.rect(0, 0, 0, 0)
+                    }
+                    // The dark scrim and edge vignette sit outside masterBackdropStack; copy them too so the
+                    // inside of the petal is exactly as opaque as the settled view (not a brighter, clear blur).
+                    ShaderEffectSource {
+                        z: -999
+                        anchors.fill: parent
+                        visible: ytNowPlayingView.layer.enabled
+                        live: visible
+                        sourceItem: visible ? masterScrimOverlay : null
+                        sourceRect: visible ? ytNowPlayingView.mapToItem(masterScrimOverlay, 0, 0, ytNowPlayingView.width, ytNowPlayingView.height) : Qt.rect(0, 0, 0, 0)
+                    }
+                    ShaderEffectSource {
+                        z: -998
+                        anchors.fill: parent
+                        visible: ytNowPlayingView.layer.enabled
+                        live: visible
+                        sourceItem: visible ? ambientVignette : null
+                        sourceRect: visible ? ytNowPlayingView.mapToItem(ambientVignette, 0, 0, ytNowPlayingView.width, ytNowPlayingView.height) : Qt.rect(0, 0, 0, 0)
+                    }
 
                     track: win.currentTrack
                     appDir: win.appDir
@@ -2624,6 +2752,10 @@ Scope {
                     currentTime: win.currentTime
                     totalDuration: win.totalDuration
                     isPlaying: win.isPlaying
+                    isLoadingAudio: win.isLoadingAudio
+                    isShuffle: win.isShuffle
+                    isRepeat: win.isRepeat
+                    volume: win.volume
                     queueTracks: win.currentTracks
                     playingPlaylistTitle: win.playingSourceTitle || I18n.tr("Hàng đợi", "Queue")
                     accentColor: win.accentColor
@@ -2633,6 +2765,12 @@ Scope {
 
                     onExitListeningAlongRequested: win.exitListeningAlong()
                     onSeekRequested: sec => win.seekAudio(sec)
+                    onPlayPauseRequested: win.togglePlay()
+                    onNextRequested: win.playNext()
+                    onPrevRequested: win.playPrev()
+                    onShuffleToggleRequested: { win.isShuffle = !win.isShuffle; win.saveSettings(); }
+                    onRepeatToggleRequested: { win.isRepeat = !win.isRepeat; win.saveSettings(); }
+                    onVolumeChangeRequested: v => win.setVolume(v)
                     onPlayTrackRequested: (trk, index) => {
                         if (trk && ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId)) {
                             win.playOnlineTrack(trk, false);
@@ -2641,6 +2779,14 @@ Scope {
                         }
                     }
                     onTrackContextMenuRequested: (trk, gx, gy, isQ) => trackContextMenu.openAt(trk, gx, gy, isQ)
+                    onNowPlayingMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false, true)
+                    isSleepTimerActive: win.isSleepTimerActive
+                    sleepTimerRemainingSeconds: win.sleepTimerRemainingSeconds
+                    onSleepTimerRequested: anchorItem => {
+                        if (sleepTimerPopover.isOpen) { sleepTimerPopover.close(); return; }
+                        var pt = anchorItem.mapToItem(sleepTimerPopover, 0, anchorItem.height);
+                        sleepTimerPopover.openBelow(pt.x, pt.y);
+                    }
                     onPlaylistSelected: pl => {
                         win.handleSelectPlaylist(pl);
                         win.isNowPlayingOpen = false;
@@ -2687,6 +2833,8 @@ Scope {
             Behavior on width { SpringAnimation { spring: 4; damping: 0.32; epsilon: 0.5 } }
             height: 60
             z: 50
+            // Now Playing carries its own transport controls: unrender the bar (and its glass layer) while open
+            visible: !win.isNowPlayingOpen
             backgroundSourceItem: masterAppSurface
 
             currentTrack: win.currentTrack
@@ -2725,7 +2873,7 @@ Scope {
                 win.isMochySidePanelOpen = false;
                 win.isNowPlayingOpen = true;
                 if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) {
-                    ytNowPlayingView.activeTab = "lyrics";
+                    ytNowPlayingView.activeTab = "artwork";
                 }
             }
             onLyricsClicked: {
@@ -3241,6 +3389,21 @@ Scope {
             onAddToPlaylistRequested: (trk, plId) => win.addTrackToCustomPlaylist(plId, trk)
             onCreatePlaylistWithTrackRequested: trk => createPlaylistModal.openCreate([trk])
             onViewArtistRequested: trk => win.loadArtistDetails(trk.artist || trk.author)
+            onToggleFavoriteRequested: trk => {
+                if (win.isTrackLiked(trk)) win.removeTrackFromLiked(trk);
+                else win.addTrackToLiked(trk);
+            }
+            onLikeRequested: trk => {
+                var vid = trk.videoId || (trk.path && String(trk.path).startsWith("ytdl://") ? String(trk.path).replace("ytdl://", "") : "");
+                if (vid) PlaybackEngine.rateSong(win, vid, "LIKE");
+                if (!win.isTrackLiked(trk)) win.addTrackToLiked(trk);
+            }
+            onDislikeRequested: trk => win.handleDislikedTrack(trk)
+            onLyricsSourceSelected: src => {
+                win.lyricsSource = src;
+                win.saveSettings();
+                ytNowPlayingView.refetchLyricsSoon();
+            }
         }
 
         DownloadManager {

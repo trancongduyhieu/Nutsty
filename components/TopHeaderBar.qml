@@ -43,6 +43,8 @@ Rectangle {
     signal homeClicked()
     signal libraryClicked()
     signal settingsClicked()
+    // Now Playing covers the feed, so the mood island has nothing to filter there
+    property bool isNowPlayingOpen: false
     signal notificationsClicked(real xPos, real yPos)
     property int unreadNotificationsCount: 0
 
@@ -395,7 +397,7 @@ Rectangle {
         z: 12
         clip: true
         visible: opacity > 0.01
-        opacity: headerRoot.currentView === "home" ? 1.0 : 0.0
+        opacity: (headerRoot.currentView === "home" && !headerRoot.isNowPlayingOpen) ? 1.0 : 0.0
         Behavior on opacity { NumberAnimation { duration: 180 } }
 
         readonly property bool isExpanded: headerRoot.isMoodIslandExpanded

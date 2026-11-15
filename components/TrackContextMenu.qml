@@ -23,6 +23,26 @@ Item {
     property var dlMgr: null
     property var customPlaylists: []
     property bool isPlaylistSubmenuOpen: false
+    // Lyrics source picker: only offered when opened from the Now Playing "more" button
+    property bool showLyricsSource: false
+    property bool isLyricsSourceSubmenuOpen: false
+    readonly property string currentLyricsSource: (typeof win !== "undefined" && win && win.lyricsSource) ? win.lyricsSource : "auto"
+    readonly property var lyricsSourceOptions: [
+        { key: "auto", name: I18n.tr("Tự động", "Automatic") },
+        { key: "youlyplus", name: "YouLyPlus" },
+        { key: "simpmusic", name: "SimpMusic" },
+        { key: "betterlyrics", name: "Apple Music" },
+        { key: "spotify", name: "Spotify" },
+        { key: "lrclib", name: "LRCLIB" },
+        { key: "kugou", name: "KuGou" },
+        { key: "netease", name: "NetEase" },
+        { key: "youtube", name: I18n.tr("Phụ đề YouTube", "YouTube Subtitles") }
+    ]
+    function lyricsSourceName(key) {
+        for (var i = 0; i < lyricsSourceOptions.length; ++i)
+            if (lyricsSourceOptions[i].key === key) return lyricsSourceOptions[i].name;
+        return lyricsSourceOptions[0].name;
+    }
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
 
     Timer {
@@ -45,11 +65,28 @@ Item {
     signal addToPlaylistRequested(var track, string playlistId)
     signal createPlaylistWithTrackRequested(var track)
     signal viewArtistRequested(var track)
+    signal toggleFavoriteRequested(var track)
+    signal likeRequested(var track)
+    signal dislikeRequested(var track)
+    signal lyricsSourceSelected(string source)
 
-    function openAt(posTrack, xPos, yPos, queueItem) {
+    readonly property string trackVid: {
+        if (!track) return "";
+        if (track.videoId) return String(track.videoId);
+        if (track.path && String(track.path).startsWith("ytdl://")) return String(track.path).replace("ytdl://", "");
+        return "";
+    }
+    readonly property bool isFavorite: {
+        var rev = (typeof win !== "undefined" && win) ? win.likedSongsRevision : 0;
+        return rev >= 0 && !!track && typeof win !== "undefined" && win && typeof win.isTrackLiked === "function" && win.isTrackLiked(track);
+    }
+
+    function openAt(posTrack, xPos, yPos, queueItem, withLyricsSource) {
         closeTimer.stop();
         root.closingGuard = false;
         root.isPlaylistSubmenuOpen = false;
+        root.isLyricsSourceSubmenuOpen = false;
+        root.showLyricsSource = !!withLyricsSource;
         root.track = posTrack;
         root.isQueueItem = !!queueItem;
         root.targetX = xPos;
@@ -172,6 +209,88 @@ Item {
                 color: Qt.rgba(1, 1, 1, 0.08)
                 anchors.horizontalCenter: parent.horizontalCenter
                 visible: root.track !== null
+            }
+
+            // Rating: heart (favourites), like / dislike (YouTube Music rating)
+            MenuItemButton {
+                text: root.isFavorite ? I18n.tr("Bỏ khỏi Yêu thích", "Remove from Favorites") : I18n.tr("Thêm vào Yêu thích", "Add to Favorites")
+                iconSource: root.isFavorite ? "../assets/icons/material/ms-favorite-fill.svg" : "../assets/icons/material/ms-favorite.svg"
+                iconColor: root.isFavorite ? Qt.rgba(0.957, 0.247, 0.369, 1.0) : Theme.textSecondary
+                onClicked: {
+                    var t = root.track;
+                    root.closeMenu();
+                    if (t) root.toggleFavoriteRequested(t);
+                }
+            }
+
+            MenuItemButton {
+                visible: root.trackVid !== ""
+                text: I18n.tr("Thích", "Like")
+                iconSource: "../assets/icons/material/ms-thumb_up.svg"
+                onClicked: {
+                    var t = root.track;
+                    root.closeMenu();
+                    if (t) root.likeRequested(t);
+                }
+            }
+
+            MenuItemButton {
+                visible: root.trackVid !== ""
+                text: I18n.tr("Không thích", "Dislike")
+                iconSource: "../assets/icons/material/ms-thumb_down.svg"
+                onClicked: {
+                    var t = root.track;
+                    root.closeMenu();
+                    if (t) root.dislikeRequested(t);
+                }
+            }
+
+            Rectangle {
+                width: parent.width - 16
+                height: 1
+                color: Qt.rgba(1, 1, 1, 0.08)
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+
+            // Lyrics source (Now Playing only): expandable list, the active source is ticked
+            MenuItemButton {
+                visible: root.showLyricsSource
+                text: I18n.tr("Nguồn lời: ", "Lyrics source: ") + root.lyricsSourceName(root.currentLyricsSource)
+                iconSource: "../assets/icons/material/ms-lyrics.svg"
+                trailingIcon: "../assets/icons/material/ms-expand_more.svg"
+                trailingRotation: root.isLyricsSourceSubmenuOpen ? 180 : 0
+                onClicked: root.isLyricsSourceSubmenuOpen = !root.isLyricsSourceSubmenuOpen
+            }
+
+            Column {
+                visible: root.showLyricsSource && root.isLyricsSourceSubmenuOpen
+                width: parent.width
+                spacing: 2
+
+                Repeater {
+                    model: root.lyricsSourceOptions
+                    delegate: MenuItemButton {
+                        readonly property bool active: modelData.key === root.currentLyricsSource
+                        text: modelData.name
+                        iconSource: active ? "../assets/icons/material/ms-check.svg" : ""
+                        textColor: active ? root.accentColor : Theme.textPrimary
+                        iconColor: root.accentColor
+                        indent: 14
+                        onClicked: {
+                            var key = modelData.key;
+                            root.closeMenu();
+                            if (!active) root.lyricsSourceSelected(key);
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                visible: root.showLyricsSource
+                width: parent.width - 16
+                height: 1
+                color: Qt.rgba(1, 1, 1, 0.08)
+                anchors.horizontalCenter: parent.horizontalCenter
             }
 
             // Action 1: Play next
@@ -374,18 +493,28 @@ Item {
         property string iconSource: ""
         property color textColor: Theme.textPrimary
         property color iconColor: Theme.textSecondary
+        property string trailingIcon: ""
+        property real trailingRotation: 0
+        property real indent: 0
         signal clicked()
 
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 10
+            anchors.leftMargin: 10 + itemBtn.indent
             anchors.rightMargin: 10
             spacing: 10
 
-            AppIcon {
-                source: itemBtn.iconSource
-                color: btnHover.hovered ? itemBtn.textColor : itemBtn.iconColor
-                iconSize: 15
+            // Fixed 15px slot so rows without an icon (unticked sources) stay aligned
+            Item {
+                Layout.preferredWidth: 15
+                Layout.preferredHeight: 15
+                AppIcon {
+                    anchors.centerIn: parent
+                    visible: itemBtn.iconSource !== ""
+                    source: itemBtn.iconSource
+                    color: btnHover.hovered ? itemBtn.textColor : itemBtn.iconColor
+                    iconSize: 15
+                }
             }
 
             Text {
@@ -395,6 +524,15 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: 12
                 elide: Text.ElideRight
+            }
+
+            AppIcon {
+                visible: itemBtn.trailingIcon !== ""
+                source: itemBtn.trailingIcon
+                color: Theme.textSecondary
+                iconSize: 15
+                rotation: itemBtn.trailingRotation
+                Behavior on rotation { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
             }
         }
 

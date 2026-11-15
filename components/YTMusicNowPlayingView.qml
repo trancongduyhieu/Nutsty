@@ -14,14 +14,76 @@ Item {
     property real currentTime: 0.0
     property real totalDuration: 1.0
     property bool isPlaying: false
+    property bool isLoadingAudio: false
+    property bool isShuffle: false
+    property bool isRepeat: false
+    property real volume: 100
     property var queueTracks: []
     property string playingPlaylistTitle: I18n.tr("Hàng đợi", "Queue")
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
     property Item backgroundSourceItem: null
     property string appDir: (typeof win !== "undefined" && win && win.appDir) ? win.appDir : (Quickshell.env("NUTSTY_APP_DIR") || (Quickshell.env("HOME") + "/Applications/FrostifyLocal"))
 
-    property string activeTab: "lyrics" // "up_next" | "lyrics" | "related"
+    // Mood chips are not shown in the Swiftify-style queue panel, so their network fetch is off
+    readonly property bool moodChipsEnabled: false
+    property string activeTab: "artwork" // "artwork" | "lyrics" | "up_next"
+    readonly property bool isArtworkMode: activeTab === "artwork"
+    // Panel currently rendered on the right; lags activeTab during the swap cross-fade
+    property string shownPanel: "lyrics"
+    property string _prevTab: "artwork"
+
+    // Swiftify-like panel motion: open = slide in from the right + fade, close = slide out + fade,
+    // lyrics <-> up next = quick fade out, swap, slower decelerating fade in.
+    ParallelAnimation {
+        id: panelOpenAnim
+        NumberAnimation { target: rightPanel; property: "shift"; to: 0; duration: 320; easing.type: Easing.OutCubic }
+        NumberAnimation { target: rightPanel; property: "opacity"; to: 1; duration: 320; easing.type: Easing.OutCubic }
+    }
+    ParallelAnimation {
+        id: panelCloseAnim
+        NumberAnimation { target: rightPanel; property: "shift"; to: 1; duration: 260; easing.type: Easing.OutQuad }
+        NumberAnimation { target: rightPanel; property: "opacity"; to: 0; duration: 260; easing.type: Easing.OutQuad }
+    }
+    SequentialAnimation {
+        id: panelSwapAnim
+        property string nextPanel: "lyrics"
+        NumberAnimation { target: rightPanel; property: "opacity"; to: 0; duration: 160; easing.type: Easing.OutQuad }
+        ScriptAction { script: root.shownPanel = panelSwapAnim.nextPanel }
+        ParallelAnimation {
+            NumberAnimation { target: rightPanel; property: "opacity"; to: 1; duration: 380; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.05, 0.7, 0.1, 1.0, 1.0, 1.0] }
+            NumberAnimation { target: rightPanel; property: "shift"; to: 0; duration: 380; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.05, 0.7, 0.1, 1.0, 1.0, 1.0] }
+        }
+    }
+
+    function runPanelTransition(prev, next) {
+        panelOpenAnim.stop();
+        panelCloseAnim.stop();
+        panelSwapAnim.stop();
+        if (next === "artwork") {
+            panelCloseAnim.start();
+        } else if (prev === "artwork" || rightPanel.opacity < 0.05) {
+            root.shownPanel = next;
+            panelOpenAnim.start();
+        } else if (root.shownPanel !== next) {
+            panelSwapAnim.nextPanel = next;
+            panelSwapAnim.start();
+        } else {
+            panelOpenAnim.start();
+        }
+    }
+
+    Component.onCompleted: {
+        if (!root.isArtworkMode) {
+            root.shownPanel = root.activeTab;
+            rightPanel.shift = 0;
+            rightPanel.opacity = 1;
+        }
+        root._prevTab = root.activeTab;
+    }
+
     onActiveTabChanged: {
+        root.runPanelTransition(root._prevTab, activeTab);
+        root._prevTab = activeTab;
         if (activeTab === "lyrics") {
             root.followPlayback = true;
             userScrollTimer.stop();
@@ -247,32 +309,19 @@ Item {
         return "AAC • 128 kbps";
     }
 
-    readonly property string trackMetaSummary: {
-        if (!root.track) return "";
-        var parts = [];
-        if (root.audioQualityText && root.audioQualityText.trim() !== "") {
-            parts.push(root.audioQualityText.trim());
-        }
-        if (root.hasLyrics) {
-            var rawSrc = root.lyricsSource;
-            if (!rawSrc) {
-                rawSrc = root.isLyricsWordByWord ? "Spotify" : "LRCLIB";
-            }
-            var srcName = formatLyricSourceName(rawSrc);
-            if (srcName) {
-                if (root.isLyricsWordByWord) {
-                    parts.push(I18n.tr("Từng từ một được cung cấp bởi ", "Word-by-word lyrics provided by ") + srcName);
-                } else {
-                    parts.push(I18n.tr("Lời bài hát được cung cấp bởi ", "Lyrics provided by ") + srcName);
-                }
-            }
-        }
-        return parts.join(" • ");
+    // Lyrics credit, shown as a footer after the last lyric line (Mochy-like: it scrolls in as the song ends).
+    // Audio quality moved to the middle of the progress bar (NowPlayingControls.qualityText).
+    readonly property string lyricsCreditText: {
+        if (!root.track || !root.hasLyrics) return "";
+        var rawSrc = root.lyricsSource;
+        if (!rawSrc) rawSrc = root.isLyricsWordByWord ? "Spotify" : "LRCLIB";
+        var srcName = formatLyricSourceName(rawSrc);
+        if (!srcName) return "";
+        return root.isLyricsWordByWord
+            ? I18n.tr("Lời từng từ được cung cấp bởi ", "Word-by-word lyrics provided by ") + srcName
+            : I18n.tr("Lời bài hát được cung cấp bởi ", "Lyrics provided by ") + srcName;
     }
 
-    property var relatedData: null
-    property bool isLoadingRelated: false
-    property string lastRelatedTrackId: ""
 
     property string currentLikeStatus: "INDIFFERENT"
     property var dislikedSongsMap: ({})
@@ -343,9 +392,25 @@ Item {
     signal seekRequested(real seconds)
     signal playTrackRequested(var trk, int index)
     signal trackContextMenuRequested(var trk, real globalX, real globalY, bool isQueue)
+    // The cover "more" button: same menu plus the lyrics source picker
+    signal nowPlayingMenuRequested(var trk, real globalX, real globalY)
+    // Sleep timer lives in the mode switcher (Swiftify-like); the host opens the popover under it
+    signal sleepTimerRequested(Item anchorItem)
+    property bool isSleepTimerActive: false
+    property int sleepTimerRemainingSeconds: 0
+
+    // Settings are written by a detached process, so give it a moment before the helper re-reads them.
+    function refetchLyricsSoon() { lyricsRefetchTimer.restart(); }
+    Timer { id: lyricsRefetchTimer; interval: 450; repeat: false; onTriggered: root.fetchLyrics() }
     signal playlistSelected(var pl)
     signal artistSelected(string name, string channelId)
     signal collapseRequested()
+    signal playPauseRequested()
+    signal nextRequested()
+    signal prevRequested()
+    signal shuffleToggleRequested()
+    signal repeatToggleRequested()
+    signal volumeChangeRequested(real newVol)
     signal rateSongRequested(string videoId, string rating)
     signal songDisliked(var trk)
     signal downloadRequested(var trk)
@@ -434,7 +499,6 @@ Item {
 
         root.lyricsSource = "";
         fetchLyrics();
-        fetchRelatedContent();
         fetchAnimatedArtwork();
         delayedAudioSpecsTimer.restart();
 
@@ -692,7 +756,6 @@ Item {
         } else {
             isLoadingLyrics = false;
             hasLyrics = false;
-            if (activeTab === "lyrics") activeTab = "up_next";
         }
     }
 
@@ -718,34 +781,22 @@ Item {
                         }
                         root.lyricsSource = src;
                         Qt.callLater(function() { root.updateActiveLyric(true); });
-                        if (root.activeTab !== "up_next" && root.activeTab !== "related") {
-                            root.activeTab = "lyrics";
-                        }
                     } else {
                         root.activeLyrics = [];
                         root.hasLyrics = false;
                         root.lyricsSource = "";
                         root.isLoadingLyrics = false;
-                        if (root.activeTab === "lyrics") {
-                            root.activeTab = "up_next";
-                        }
                     }
                 } catch (e) {
                     root.activeLyrics = [];
                     root.hasLyrics = false;
                     root.lyricsSource = "";
                     root.isLoadingLyrics = false;
-                    if (root.activeTab === "lyrics") {
-                        root.activeTab = "up_next";
-                    }
                 }
             }
         }
         onExited: (code, status) => {
             root.isLoadingLyrics = false;
-            if (!root.hasLyrics && root.activeTab === "lyrics") {
-                root.activeTab = "up_next";
-            }
         }
     }
 
@@ -873,46 +924,8 @@ Item {
     }
 
 
-    function fetchRelatedContent() {
-        if (!track) return;
-        var vid = track.videoId || "";
-        var title = track.title || track.name || "";
-        var artist = track.artist || "";
-        var tId = vid || (title + "_" + artist);
-        if (tId === lastRelatedTrackId && relatedData) return;
-
-        lastRelatedTrackId = tId;
-        isLoadingRelated = true;
-        relatedProc.running = false;
-        relatedProc.command = [
-            "python3", "-u",
-            root.appDir + "/backend/ytmusic_helper.py",
-            "song_related", vid, title, artist
-        ];
-        relatedProc.running = true;
-    }
-
-    Process {
-        id: relatedProc
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: data => {
-                if (!data || data.trim() === "") return;
-                try {
-                    var parsed = JSON.parse(data);
-                    root.relatedData = parsed;
-                    root.isLoadingRelated = false;
-                } catch (e) {
-                    root.isLoadingRelated = false;
-                }
-            }
-        }
-        onExited: (code, status) => {
-            root.isLoadingRelated = false;
-        }
-    }
-
     function fetchMoodChips() {
+        if (!root.moodChipsEnabled) return;
         if (!root.track) {
             root.moodChips = [];
             root.selectedMoodIndex = 0;
@@ -1066,38 +1079,132 @@ Item {
     }
 
     // =========================================================================
-    // MAIN 2-COLUMN SPLIT SCREEN (50% Left Artwork/Video | 50% Right Tabs)
+    // MAIN AREA: left cluster (cover + info + controls) and the right panel (lyrics / up next).
+    // Absolutely positioned so mode switches animate like Swiftify: the cluster glides between
+    // centred and compact with an expressive spring curve, the panel slides in from the right.
     // =========================================================================
-    RowLayout {
+    Item {
+        id: mainArea
         anchors.fill: parent
         z: 1
         anchors.leftMargin: root.width >= 1200 ? 48 : 24
         anchors.rightMargin: root.width >= 1200 ? 48 : 24
         anchors.topMargin: 12
-        anchors.bottomMargin: 84
-        spacing: root.width >= 1200 ? 48 : 28
+        anchors.bottomMargin: 24
+
+        readonly property real gap: root.width >= 1200 ? 48 : 28
+        readonly property real compactLeftW: Math.round((width - gap) * 0.4)
+        // 0 = artwork mode (cluster centred), 1 = panel mode (cluster compact on the left)
+        property real panelT: root.isArtworkMode ? 0 : 1
+        Behavior on panelT {
+            NumberAnimation { duration: 500; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.38, 1.21, 0.22, 1.0, 1.0, 1.0] }
+        }
 
         // =====================================================================
-        // COLUMN 1: LEFT AREA (Mode Switcher + Big Artwork / Video + Song Title)
+        // LEFT CLUSTER: Big Artwork / Video + Song Title + Controls
         // =====================================================================
         ColumnLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.preferredWidth: parent.width * 0.46
+            id: leftColumn
+            x: 0
+            y: 0
+            width: mainArea.width + (mainArea.compactLeftW - mainArea.width) * mainArea.panelT
+            height: mainArea.height
             spacing: 16
-            Layout.alignment: Qt.AlignHCenter
+            readonly property real blockWidth: coverArtworkWrapper.width
 
             // Central Media Display: Big Square Artwork (Clean HD Retina)
             Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.alignment: Qt.AlignCenter
+                // Keep the cover (and its halo) clear of the collapse button in the top-left corner.
+                Layout.topMargin: 52
 
                 Item {
                     id: coverArtworkWrapper
                     anchors.centerIn: parent
-                    width: Math.min(parent.width - 24, Math.min(parent.height - 24, 460))
+                    // Smaller than the slot so the glow halo has room to bloom around it.
+                    width: Math.max(200, Math.min(parent.width - 96, parent.height - 72, 420 - 80 * Math.min(1, mainArea.panelT)))
                     height: width
+
+                    // Halo: two soft rounded-rect shadows in the cover's own two main colours, slightly
+                    // offset in opposite directions (the approach Swiftify uses). SDF shadows have no blur
+                    // buffer to clip, so the glow is never cut into a square and costs nothing while still.
+                    property color glowPrimary: Qt.rgba(1, 1, 1, 1)
+                    property color glowSecondary: Qt.rgba(1, 1, 1, 1)
+                    readonly property real glowRadius: 78
+                    readonly property real glowIntensity: 0.8
+                    Behavior on glowPrimary { ColorAnimation { duration: 600 } }
+                    Behavior on glowSecondary { ColorAnimation { duration: 600 } }
+
+                    RectangularShadow {
+                        anchors.fill: coverSurface
+                        z: -1
+                        radius: 16
+                        spread: 4
+                        blur: coverArtworkWrapper.glowRadius
+                        offset: Qt.vector2d(-0.22 * coverArtworkWrapper.glowRadius, 0.12 * coverArtworkWrapper.glowRadius)
+                        color: Qt.rgba(coverArtworkWrapper.glowPrimary.r, coverArtworkWrapper.glowPrimary.g, coverArtworkWrapper.glowPrimary.b, coverArtworkWrapper.glowIntensity)
+                    }
+                    RectangularShadow {
+                        anchors.fill: coverSurface
+                        z: -1
+                        radius: 16
+                        spread: 4
+                        blur: coverArtworkWrapper.glowRadius * 0.82
+                        offset: Qt.vector2d(0.24 * coverArtworkWrapper.glowRadius, -0.08 * coverArtworkWrapper.glowRadius)
+                        color: Qt.rgba(coverArtworkWrapper.glowSecondary.r, coverArtworkWrapper.glowSecondary.g, coverArtworkWrapper.glowSecondary.b, coverArtworkWrapper.glowIntensity * 0.72)
+                    }
+
+                    // Cover colour sampling: the cover is loaded again at 16x16 and drawn into a Canvas; the
+                    // chroma-weighted average of its left and right halves gives the primary / secondary colours.
+                    Canvas {
+                        id: glowSampler
+                        width: 16; height: 16
+                        opacity: 0
+                        enabled: false
+                        property string src: coverSurface.coverSource ? coverSurface.coverSource.toString() : ""
+                        onSrcChanged: { if (src !== "") { if (isImageLoaded(src)) requestPaint(); else loadImage(src); } }
+                        onImageLoaded: requestPaint()
+                        onAvailableChanged: if (available && src !== "") { if (isImageLoaded(src)) requestPaint(); else loadImage(src); }
+                        onPaint: {
+                            if (src === "" || !isImageLoaded(src)) return;
+                            var ctx = getContext("2d");
+                            ctx.clearRect(0, 0, 16, 16);
+                            ctx.drawImage(src, 0, 0, 16, 16);
+                            var d = ctx.getImageData(0, 0, 16, 16).data;
+                            var acc = [[0, 0, 0, 0], [0, 0, 0, 0]];
+                            for (var y = 0; y < 16; ++y) {
+                                for (var x = 0; x < 16; ++x) {
+                                    var o = (y * 16 + x) * 4;
+                                    if (d[o + 3] < 128) continue;
+                                    var r = d[o] / 255, g = d[o + 1] / 255, b = d[o + 2] / 255;
+                                    var w = 0.15 + Math.max(r, g, b) - Math.min(r, g, b);
+                                    var a = acc[x < 8 ? 0 : 1];
+                                    a[0] += r * w; a[1] += g * w; a[2] += b * w; a[3] += w;
+                                }
+                            }
+                            // Average colour -> HSL, then push saturation up and keep lightness in a glowing range
+                            function vivid(a) {
+                                if (a[3] <= 0) return null;
+                                var r = a[0] / a[3], g = a[1] / a[3], b = a[2] / a[3];
+                                var mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, h = 0, sat = 0;
+                                if (mx > mn) {
+                                    var dd = mx - mn;
+                                    sat = l > 0.5 ? dd / (2 - mx - mn) : dd / (mx + mn);
+                                    if (mx === r) h = (g - b) / dd + (g < b ? 6 : 0);
+                                    else if (mx === g) h = (b - r) / dd + 2;
+                                    else h = (r - g) / dd + 4;
+                                    h /= 6;
+                                }
+                                return Qt.hsla(h, Math.min(1, sat * 1.6 + 0.12), Math.max(0.45, Math.min(0.62, l)), 1);
+                            }
+                            var c0 = vivid(acc[0]), c1 = vivid(acc[1]);
+                            if (!c0 || !c1) return;   // nothing drawn yet: keep the previous colours
+                            coverArtworkWrapper.glowPrimary = c0;
+                            coverArtworkWrapper.glowSecondary = c1;
+                                }
+                    }
 
                     MediaCoverSurface {
                         id: coverSurface
@@ -1114,33 +1221,37 @@ Item {
                 }
             }
 
-            // 3. Track Details Row (Title, Artist, Like / Action Buttons)
+            // 3. Track Details (Swiftify-like, centred): title, then artist with an inline "more" button
             ColumnLayout {
                 Layout.fillWidth: true
-                Layout.maximumWidth: 460
+                Layout.maximumWidth: leftColumn.blockWidth
                 Layout.alignment: Qt.AlignHCenter
                 spacing: 6
 
                 Text {
                     Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
                     text: root.track ? (root.track.title || root.track.name || "") : I18n.tr("Chưa chọn bài hát", "No track playing")
                     font.family: Theme.fontFamily
-                    font.pixelSize: 22
+                    font.pixelSize: 26
                     font.bold: true
                     color: "#ffffff"
                     elide: Text.ElideRight
                 }
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
+                Row {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.maximumWidth: leftColumn.blockWidth
+                    spacing: 4
 
                     Text {
-                        Layout.fillWidth: true
+                        id: artistText
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Math.min(implicitWidth, leftColumn.blockWidth - moreBtn.width - 8)
                         text: root.track ? (root.track.artist || I18n.tr("Nghệ sĩ chưa rõ", "Unknown Artist")) : ""
                         font.family: Theme.fontFamily
-                        font.pixelSize: 15
-                        font.bold: true
+                        font.pixelSize: 17
+                        font.weight: Font.DemiBold
                         color: Qt.rgba(1, 1, 1, 0.65)
                         elide: Text.ElideRight
 
@@ -1155,349 +1266,69 @@ Item {
                         }
                     }
 
-                    RowLayout {
-                        Layout.alignment: Qt.AlignHCenter
-                        spacing: 14
-
-                        // 1. Like Pure Frameless Button
-                        Rectangle {
-                            id: likeBtn
-                            width: 36; height: 36
-                            radius: 18
-                            color: likeH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.08) : "transparent"
-                            Behavior on color { ColorAnimation { duration: 120 } }
-
-                            HoverHandler { id: likeH }
-
-                            AppIcon {
-                                anchors.centerIn: parent
-                                source: "../assets/icons/thumb-up-symbolic.svg"
-                                iconSize: 18
-                                scale: likeH.hovered ? 1.10 : 1.0
-                                Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
-                                color: root.currentLikeStatus === "LIKE" ? root.accentColor : (likeH.hovered ? "#ffffff" : Theme.textSecondary)
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.toggleLike()
-                            }
-                        }
-
-                        // 2. Dislike Pure Frameless Button
-                        Rectangle {
-                            id: dislikeBtn
-                            width: 36; height: 36
-                            radius: 18
-                            color: dislikeH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.08) : "transparent"
-                            Behavior on color { ColorAnimation { duration: 120 } }
-
-                            HoverHandler { id: dislikeH }
-
-                            AppIcon {
-                                anchors.centerIn: parent
-                                source: "../assets/icons/thumb-down-symbolic.svg"
-                                iconSize: 18
-                                scale: dislikeH.hovered ? 1.10 : 1.0
-                                Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
-                                color: root.currentLikeStatus === "DISLIKE" ? "#ff5252" : (dislikeH.hovered ? "#ffffff" : Theme.textSecondary)
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.dislikeCurrentTrack()
-                            }
-                        }
-
-                        // 3. Download Pure Frameless Button
-                        Rectangle {
-                            id: dlBtn
-                            width: 36; height: 36
-                            radius: 18
-                            color: dlH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.08) : "transparent"
-                            Behavior on color { ColorAnimation { duration: 120 } }
-
-                            property string vid: {
-                                if (!root.track) return "";
-                                if (root.track.videoId) return root.track.videoId;
-                                if (root.track.path && root.track.path.startsWith("ytdl://")) return root.track.path.replace("ytdl://", "");
-                                return "";
-                            }
-                            property int dlRev: (typeof downloadManager !== "undefined" && downloadManager) ? downloadManager.revision : 0
-                            property bool isDl: (dlRev >= 0 && typeof downloadManager !== "undefined" && downloadManager && vid) ? Boolean(downloadManager.isDownloading(vid)) : false
-                            property real dlProg: (dlRev >= 0 && typeof downloadManager !== "undefined" && downloadManager && vid && downloadManager.getProgress(vid) !== undefined) ? downloadManager.getProgress(vid) : -1
-                            property bool isDone: (dlRev >= 0 && typeof downloadManager !== "undefined" && downloadManager) ? Boolean(downloadManager.isDownloaded(vid, root.track)) : false
-
-                            HoverHandler { id: dlH }
-
-                            ToolTip.visible: dlH.hovered
-                            ToolTip.text: parent.isDl
-                                ? I18n.tr("Hủy tải xuống", "Cancel download")
-                                : (parent.isDone
-                                    ? I18n.tr("Xóa khỏi thư viện tải về", "Remove downloaded track")
-                                    : I18n.tr("Tải bài hát", "Download track"))
-                            ToolTip.delay: 350
-
-                            DownloadingSpinner {
-                                anchors.centerIn: parent
-                                visible: parent.isDl
-                                running: parent.isDl
-                                iconSize: 18
-                                progress: parent.dlProg
-                                color: root.accentColor
-                            }
-
-                            AppIcon {
-                                anchors.centerIn: parent
-                                visible: !parent.isDl && parent.isDone
-                                source: "../assets/icons/emblem-ok-symbolic.svg"
-                                iconSize: 18
-                                scale: dlH.hovered ? 1.10 : 1.0
-                                Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
-                                color: root.accentColor
-                            }
-
-                            AppIcon {
-                                anchors.centerIn: parent
-                                visible: !parent.isDl && !parent.isDone
-                                source: "../assets/icons/download-symbolic.svg"
-                                iconSize: 18
-                                scale: dlH.hovered ? 1.10 : 1.0
-                                Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
-                                color: dlH.hovered ? "#ffffff" : Theme.textSecondary
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    if (parent.isDl) {
-                                        if (typeof downloadManager !== "undefined" && downloadManager) {
-                                            downloadManager.cancel(parent.vid);
-                                        }
-                                    } else if (parent.isDone) {
-                                        if (typeof downloadManager !== "undefined" && downloadManager) {
-                                            downloadManager.deleteDownloaded(parent.vid, root.track);
-                                        }
-                                    } else {
-                                        root.downloadCurrentTrack();
-                                    }
-                                }
-                            }
-                        }
-
-                        // 4. Plus (+) Add to Playlist / Queue Pure Frameless Button
-                        Rectangle {
-                            id: plusBtn
-                            width: 36; height: 36
-                            radius: 18
-                            color: plusH.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.08) : "transparent"
-                            Behavior on color { ColorAnimation { duration: 120 } }
-
-                            HoverHandler { id: plusH }
-
-                            AppIcon {
-                                anchors.centerIn: parent
-                                source: "../assets/icons/list-add-symbolic.svg"
-                                iconSize: 18
-                                scale: plusH.hovered ? 1.10 : 1.0
-                                Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
-                                color: plusH.hovered ? "#ffffff" : Theme.textSecondary
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    if (root.track) {
-                                        var pt = plusBtn.mapToItem(null, 0, plusBtn.height + 4);
-                                        root.trackContextMenuRequested(root.track, pt.x, pt.y, false);
-                                    }
-                                }
+                    NowPlayingCtlButton {
+                        id: moreBtn
+                        anchors.verticalCenter: parent.verticalCenter
+                        size: 32
+                        iconScale: 0.7
+                        icon: "../assets/icons/material/ms-more_vert.svg"
+                        onClicked: {
+                            if (root.track) {
+                                var pt = moreBtn.mapToItem(null, 0, moreBtn.height + 4);
+                                root.nowPlayingMenuRequested(root.track, pt.x, pt.y);
                             }
                         }
                     }
                 }
+            }
 
-                // 3. Audio Quality & Lyrics Source Meta Row
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 6
-                    visible: root.track !== null && metaSummaryText.text.length > 0
-
-                    Text {
-                        id: metaSummaryText
-                        Layout.fillWidth: true
-                        text: root.trackMetaSummary
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 12
-                        font.weight: Font.Medium
-                        color: Qt.rgba(1.0, 1.0, 1.0, 0.45)
-                        elide: Text.ElideRight
-                    }
-                }
+            NowPlayingControls {
+                Layout.fillWidth: true
+                Layout.maximumWidth: leftColumn.blockWidth
+                Layout.alignment: Qt.AlignHCenter
+                currentTime: root.currentTime
+                totalDuration: root.totalDuration
+                isPlaying: root.isPlaying
+                isLoadingAudio: root.isLoadingAudio
+                isShuffle: root.isShuffle
+                isRepeat: root.isRepeat
+                volume: root.volume
+                qualityText: root.track ? root.audioQualityText : ""
+                onSeekRequested: sec => root.seekRequested(sec)
+                onPlayPauseClicked: root.playPauseRequested()
+                onNextClicked: root.nextRequested()
+                onPrevClicked: root.prevRequested()
+                onShuffleClicked: root.shuffleToggleRequested()
+                onRepeatClicked: root.repeatToggleRequested()
+                onVolumeChangeRequested: v => root.volumeChangeRequested(v)
             }
 
             Item { Layout.preferredHeight: 4 }
         }
 
         // =====================================================================
-        // COLUMN 2: RIGHT AREA (Tabs Bar: [ UP NEXT | LYRICS | RELATED ])
+        // RIGHT PANEL: [ UP NEXT | LYRICS ]; opacity / shift are driven by the panel animations
         // =====================================================================
         ColumnLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.preferredWidth: parent.width * 0.54
+            id: rightPanel
+            property real shift: 1.0
+            x: mainArea.compactLeftW + mainArea.gap + shift * 72
+            y: 0
+            width: mainArea.width - mainArea.compactLeftW - mainArea.gap
+            height: mainArea.height
+            opacity: 0.0
+            visible: opacity > 0.001
             spacing: 12
 
-            // 1. YouTube Music Tab Switcher Bar
-            Item {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 44
-
-                Row {
-                    id: tabsRow
-                    anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: 28
-
-                    // TAB 1: UP NEXT
-                    Item {
-                        id: upNextTabItem
-                        height: 36
-                        width: upNextTxt.implicitWidth + 8
-
-                        Text {
-                            id: upNextTxt
-                            anchors.centerIn: parent
-                            text: I18n.tr("TIẾP THEO", "UP NEXT")
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 13
-                            font.bold: true
-                            font.letterSpacing: 0.6
-                            color: root.activeTab === "up_next" ? "#ffffff" : (upNextMouse.containsMouse ? "#ffffff" : Theme.textSecondary)
-                        }
-
-                        MouseArea {
-                            id: upNextMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.activeTab = "up_next"
-                        }
-                    }
-
-                    // TAB 2: LYRICS
-                    Item {
-                        id: lyricsTabItem
-                        height: 36
-                        width: lyricsRow.implicitWidth + 8
-                        opacity: root.hasLyrics ? 1.0 : (root.isLoadingLyrics ? 0.7 : 0.35)
-                        enabled: root.hasLyrics || root.isLoadingLyrics
-
-                        Row {
-                            id: lyricsRow
-                            anchors.centerIn: parent
-                            spacing: 6
-
-                            Text {
-                                id: lyricsTxt
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: I18n.tr("LỜI BÀI HÁT", "LYRICS")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 13
-                                font.bold: true
-                                font.letterSpacing: 0.6
-                                color: root.activeTab === "lyrics" ? "#ffffff" : (lyricsMouse.containsMouse ? "#ffffff" : Theme.textSecondary)
-                            }
-
-                            CircularSpinner {
-                                anchors.verticalCenter: parent.verticalCenter
-                                size: 10
-                                strokeWidth: 1.5
-                                color: root.accentColor
-                                running: root.isLoadingLyrics
-                                visible: root.isLoadingLyrics
-                            }
-                        }
-
-                        MouseArea {
-                            id: lyricsMouse
-                            anchors.fill: parent
-                            hoverEnabled: root.hasLyrics || root.isLoadingLyrics
-                            cursorShape: (root.hasLyrics || root.isLoadingLyrics) ? Qt.PointingHandCursor : Qt.ArrowCursor
-                            onClicked: {
-                                if (root.hasLyrics || root.isLoadingLyrics) {
-                                    root.activeTab = "lyrics";
-                                }
-                            }
-                        }
-                    }
-
-                    // TAB 3: RELATED
-                    Item {
-                        id: relatedTabItem
-                        height: 36
-                        width: relatedTxt.implicitWidth + 8
-
-                        Text {
-                            id: relatedTxt
-                            anchors.centerIn: parent
-                            text: I18n.tr("LIÊN QUAN", "RELATED")
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 13
-                            font.bold: true
-                            font.letterSpacing: 0.6
-                            color: root.activeTab === "related" ? "#ffffff" : (relatedMouse.containsMouse ? "#ffffff" : Theme.textSecondary)
-                        }
-
-                        MouseArea {
-                            id: relatedMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                root.activeTab = "related";
-                                if (!root.relatedData) {
-                                    root.fetchRelatedContent();
-                                }
-                            }
-                        }
-                    }
-                }
-
-
-                // Active Tab Sliding Indicator Bar
-                Rectangle {
-                    id: tabIndicator
-                    anchors.bottom: parent.bottom
-                    height: 2.5
-                    radius: 1.25
-                    color: root.accentColor
-
-                    readonly property var currentTabObj: {
-                        if (root.activeTab === "up_next") return upNextTabItem;
-                        if (root.activeTab === "lyrics") return lyricsTabItem;
-                        return relatedTabItem;
-                    }
-
-                    x: currentTabObj ? currentTabObj.x : 0
-                    width: currentTabObj ? currentTabObj.width : 50
-
-                    Behavior on color { ColorAnimation { duration: 450; easing.type: Easing.OutQuad } }
-                    Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
-                    Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
-                }
-            }
+            // Header room for the floating mode switcher (top-right)
+            Item { Layout.fillWidth: true; Layout.preferredHeight: 52 }
 
             // 2. Tab Content Stack: [ UP NEXT | LYRICS | RELATED ]
             StackLayout {
                 id: tabContentStack
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                currentIndex: root.activeTab === "up_next" ? 0 : (root.activeTab === "lyrics" ? 1 : 2)
+                currentIndex: root.shownPanel === "up_next" ? 0 : 1
 
                 // =============================================================
                 // TAB 1 VIEW: UP NEXT (Playing Queue)
@@ -1510,499 +1341,204 @@ Item {
                         anchors.fill: parent
                         spacing: 8
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 8
-
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 2
-
-                                Text {
-                                    text: I18n.tr("Phát từ", "Playing from")
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 11
-                                    color: Theme.textMuted
-                                }
-
-                                Text {
-                                    text: root.playingPlaylistTitle || I18n.tr("Hàng đợi tự động", "Automix Queue")
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 14
-                                    font.bold: true
-                                    color: "#ffffff"
-                                    elide: Text.ElideRight
-                                }
-                            }
-                        }
-
-                        // Mood Filter Chips (YouTube Music Up Next Pills - Separated Capsules with Sliding Liquid Glass Lens)
-                        Item {
-                            id: moodChipsContainer
-                            Layout.fillWidth: true
-                            implicitHeight: (root.moodChips.length > 0 || root.isLoadingMoodChips) ? 38 : 0
-                            visible: implicitHeight > 0
-
-                            // Auto-scroll continuous timers
-                            Timer {
-                                id: leftScrollTimer
-                                interval: 16
-                                repeat: true
-                                running: false
-                                onTriggered: {
-                                    moodFlickable.contentX = Math.max(0, moodFlickable.contentX - 6);
-                                    if (moodFlickable.contentX <= 0) running = false;
-                                }
-                            }
-
-                            Timer {
-                                id: rightScrollTimer
-                                interval: 16
-                                repeat: true
-                                running: false
-                                onTriggered: {
-                                    var maxScroll = Math.max(0, moodFlickable.contentWidth - moodFlickable.width);
-                                    moodFlickable.contentX = Math.min(maxScroll, moodFlickable.contentX + 6);
-                                    if (moodFlickable.contentX >= maxScroll) running = false;
-                                }
-                            }
-
-                            // Horizontal Scrollable Chips
-                            Flickable {
-                                id: moodFlickable
-                                anchors.fill: parent
-                                contentWidth: moodChipsRow.width + 16
-                                contentHeight: height
-                                boundsBehavior: Flickable.StopAtBounds
-                                flickableDirection: Flickable.HorizontalFlick
-                                pixelAligned: true
-                                clip: true
-
-                                DragHandler {
-                                    target: null
-                                    xAxis.enabled: true
-                                    yAxis.enabled: false
-                                    cursorShape: Qt.OpenHandCursor
-                                    property real startContentX: 0
-                                    onActiveChanged: {
-                                        if (active) {
-                                            startContentX = moodFlickable.contentX;
-                                        }
-                                    }
-                                    onTranslationChanged: {
-                                        if (active) {
-                                            var maxScroll = Math.max(0, moodFlickable.contentWidth - moodFlickable.width);
-                                            moodFlickable.contentX = Math.max(0, Math.min(maxScroll, startContentX - translation.x));
-                                        }
-                                    }
-                                }
-
-                                WheelHandler {
-                                    target: moodFlickable
-                                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                                    onWheel: event => {
-                                        var delta = (event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x);
-                                        moodFlickable.contentX = Math.max(0, Math.min(moodFlickable.contentWidth - moodFlickable.width, moodFlickable.contentX - delta));
-                                    }
-                                }
-
-                                readonly property real accentLuminance: (0.299 * root.accentColor.r + 0.587 * root.accentColor.g + 0.114 * root.accentColor.b)
-
-                                // Ambient drop shadow for the sliding active Keo 502 gel capsule
-                                Rectangle {
-                                    x: activeChipIndicator.x
-                                    y: activeChipIndicator.y + 2
-                                    width: activeChipIndicator.width
-                                    height: activeChipIndicator.height
-                                    radius: activeChipIndicator.radius
-                                    color: "#50000000"
-                                    visible: activeChipIndicator.width > 0
-                                    z: 1
-                                }
-
-                                // Sliding Keo 502 Glossy Gel Capsule (Fluid Meniscus, Rich Solid-Glass Contrast, ZERO glare streaks!)
-                                Rectangle {
-                                    id: activeChipIndicator
-                                    height: 28
-                                    radius: 14
-                                    y: (moodFlickable.height - height) / 2
-                                    z: 2
-                                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.90)
-                                    border.color: Qt.rgba(root.accentColor.r * 1.15, root.accentColor.g * 1.15, root.accentColor.b * 1.15, 0.95)
-                                    border.width: 1
-                                    visible: width > 0
-
-                                    // Inner Meniscus Specular Rim (Tension highlight without bleaching text)
-                                    Rectangle {
-                                        anchors.fill: parent
-                                        anchors.margins: 1
-                                        radius: 13
-                                        color: "transparent"
-                                        border.color: Qt.rgba(1.0, 1.0, 1.0, moodFlickable.accentLuminance > 0.55 ? 0.35 : 0.22)
-                                        border.width: 1
-                                    }
-
-                                    Behavior on x { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
-                                    Behavior on width { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
-                                    Behavior on color { ColorAnimation { duration: 200 } }
-                                    Behavior on border.color { ColorAnimation { duration: 200 } }
-                                }
-
-                                // Separated Mood Chips Row
-                                Row {
-                                    id: moodChipsRow
-                                    spacing: 8
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    z: 5
-                                    onWidthChanged: Qt.callLater(moodFlickable.updateActiveIndicator)
-
-                                    Repeater {
-                                        id: chipRepeater
-                                        model: root.moodChips
-                                        delegate: Item {
-                                            id: chipItem
-                                            height: 28
-                                            width: chipLabel.implicitWidth + 24
-                                            readonly property bool isSelected: index === root.selectedMoodIndex
-                                            readonly property bool isHovered: chipMouse.containsMouse
-
-                                            onXChanged: {
-                                                if (isSelected) activeChipIndicator.x = chipItem.x;
-                                            }
-                                            onWidthChanged: {
-                                                if (isSelected) activeChipIndicator.width = chipItem.width;
-                                            }
-                                            onIsSelectedChanged: {
-                                                if (isSelected) {
-                                                    activeChipIndicator.x = chipItem.x;
-                                                    activeChipIndicator.width = chipItem.width;
-                                                }
-                                            }
-                                            Component.onCompleted: {
-                                                if (isSelected) {
-                                                    activeChipIndicator.x = chipItem.x;
-                                                    activeChipIndicator.width = chipItem.width;
-                                                }
-                                            }
-
-                                            // Standalone Inactive Dark Glass Capsule (Zero white glare streaks, clean optical glass)
-                                            Rectangle {
-                                                anchors.fill: parent
-                                                radius: 14
-                                                color: chipItem.isHovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16) : Qt.rgba(1.0, 1.0, 1.0, 0.06)
-                                                border.width: 1
-                                                border.color: chipItem.isHovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35) : Qt.rgba(1.0, 1.0, 1.0, 0.10)
-                                                opacity: chipItem.isSelected ? 0.0 : 1.0
-                                                scale: (chipItem.isHovered && !chipItem.isSelected) ? 1.03 : 1.0
-
-                                                Behavior on opacity { NumberAnimation { duration: 150 } }
-                                                Behavior on color { ColorAnimation { duration: 150 } }
-                                                Behavior on border.color { ColorAnimation { duration: 150 } }
-                                                Behavior on scale { NumberAnimation { duration: 120 } }
-                                            }
-
-                                            Text {
-                                                id: chipLabel
-                                                anchors.centerIn: parent
-                                                text: I18n.formatMoodChipTitle(modelData.title || "")
-                                                font.family: Theme.fontFamily
-                                                font.pixelSize: 12
-                                                font.weight: chipItem.isSelected ? Font.Bold : Font.DemiBold
-                                                color: chipItem.isSelected 
-                                                       ? (moodFlickable.accentLuminance > 0.55 ? "#0f0f11" : "#ffffff") 
-                                                       : (chipItem.isHovered ? "#ffffff" : Qt.rgba(1.0, 1.0, 1.0, 0.70))
-                                                Behavior on color { ColorAnimation { duration: 120 } }
-                                            }
-
-                                            MouseArea {
-                                                id: chipMouse
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: root.selectMoodChip(index)
-                                            }
-                                        }
-                                    }
-
-                                    // Skeleton loading pills when fetching chips
-                                    Repeater {
-                                        model: (root.isLoadingMoodChips && root.moodChips.length === 0) ? [50, 75, 65, 80] : 0
-                                        delegate: Rectangle {
-                                            height: 28
-                                            width: modelData + 20
-                                            radius: 14
-                                            color: Qt.rgba(1.0, 1.0, 1.0, 0.08)
-                                            border.color: Qt.rgba(1.0, 1.0, 1.0, 0.06)
-                                            border.width: 1
-
-                                            SequentialAnimation on opacity {
-                                                loops: Animation.Infinite
-                                                running: root.visible && root.isLoadingMoodChips
-                                                NumberAnimation { from: 0.35; to: 0.75; duration: 650; easing.type: Easing.InOutQuad }
-                                                NumberAnimation { from: 0.75; to: 0.35; duration: 650; easing.type: Easing.InOutQuad }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                function updateActiveIndicator() {
-                                    var itm = chipRepeater.itemAt(root.selectedMoodIndex);
-                                    if (itm) {
-                                        activeChipIndicator.x = itm.x;
-                                        activeChipIndicator.width = itm.width;
-                                        return;
-                                    }
-                                    for (var i = 0; i < chipRepeater.count; ++i) {
-                                        var candidate = chipRepeater.itemAt(i);
-                                        if (candidate && candidate.isSelected) {
-                                            activeChipIndicator.x = candidate.x;
-                                            activeChipIndicator.width = candidate.width;
-                                            break;
-                                        }
-                                    }
-                                }
-
-                                Component.onCompleted: Qt.callLater(updateActiveIndicator)
-                            }
-
-                            Connections {
-                                target: root
-                                function onSelectedMoodIndexChanged() {
-                                    moodFlickable.updateActiveIndicator();
-                                }
-                                function onMoodChipsChanged() {
-                                    Qt.callLater(moodFlickable.updateActiveIndicator);
-                                }
-                            }
-
-                            Connections {
-                                target: I18n
-                                function onLocaleChanged() {
-                                    Qt.callLater(moodFlickable.updateActiveIndicator);
-                                }
-                            }
-
-                            // Left Edge Hover-to-scroll Zone (Clean, Invisible)
-                            Item {
-                                id: leftMoodScrim
-                                anchors.left: parent.left
-                                anchors.top: parent.top
-                                anchors.bottom: parent.bottom
-                                width: 28
-                                z: 30
-                                visible: moodFlickable.contentX > 4
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    propagateComposedEvents: true
-                                    onEntered: leftScrollTimer.running = true
-                                    onExited: leftScrollTimer.running = false
-                                    onPressed: (mouse) => { mouse.accepted = false; }
-                                }
-                            }
-
-                            // Right Edge Hover-to-scroll Zone (Clean, Invisible)
-                            Item {
-                                id: rightMoodScrim
-                                anchors.right: parent.right
-                                anchors.top: parent.top
-                                anchors.bottom: parent.bottom
-                                width: 28
-                                z: 30
-                                visible: moodFlickable.contentWidth > moodFlickable.width && moodFlickable.contentX < moodFlickable.contentWidth - moodFlickable.width - 4
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    propagateComposedEvents: true
-                                    onEntered: rightScrollTimer.running = true
-                                    onExited: rightScrollTimer.running = false
-                                    onPressed: (mouse) => { mouse.accepted = false; }
-                                }
-                            }
-                        }
+                        Item { Layout.fillHeight: true }
 
                         ListView {
                             id: queueListView
                             Layout.fillWidth: true
-                            Layout.fillHeight: true
+                            Layout.maximumWidth: 640
+                            // Swiftify-like: a compact window (about six rows) centred beside the cover
+                            Layout.preferredHeight: Math.min(parent.height, 80 * 6.5 + topMargin + bottomMargin)
                             clip: true
-                            spacing: 4
+                            spacing: 10
+                            topMargin: 24
+                            bottomMargin: 24
+                            cacheBuffer: 420
                             opacity: root.isLoadingMoodQueue ? 0.45 : 1.0
                             Behavior on opacity { NumberAnimation { duration: 150 } }
                             model: root.queueTracks
 
+                            function sameTrack(a, b) {
+                                if (!a || !b) return false;
+                                if (typeof win !== "undefined" && typeof win.isSameTrack === "function") return win.isSameTrack(a, b);
+                                return (a.id && b.id && a.id === b.id) || (a.videoId && b.videoId && a.videoId === b.videoId)
+                                    || (a.path && b.path && a.path === b.path)
+                                    || (a.title && b.title && a.title === b.title && a.artist && b.artist && a.artist === b.artist);
+                            }
+                            readonly property int currentQueueIndex: {
+                                var q = root.queueTracks;
+                                if (!q || !root.track) return -1;
+                                for (var i = 0; i < q.length; ++i) if (sameTrack(q[i], root.track)) return i;
+                                return -1;
+                            }
+                            function focusCurrent() {
+                                if (currentQueueIndex >= 0) positionViewAtIndex(currentQueueIndex, ListView.Beginning);
+                            }
+                            onCurrentQueueIndexChanged: if (!moving && root.shownPanel === "up_next") Qt.callLater(focusCurrent)
+
+                            // Staggered rise-in of the rows below the current one each time the queue panel appears
+                            property real introT: 1.0
+                            NumberAnimation { id: queueIntroAnim; target: queueListView; property: "introT"; from: 0; to: 1; duration: 780 }
+                            Connections {
+                                target: root
+                                function onShownPanelChanged() {
+                                    if (root.shownPanel === "up_next") {
+                                        Qt.callLater(queueListView.focusCurrent);
+                                        queueIntroAnim.restart();
+                                    }
+                                }
+                            }
+
+                            // Rows dissolve into the top / bottom edges while scrolling (own edge_fade shader)
+                            readonly property real fadePx: 56
+                            layer.enabled: contentHeight > height
+                            layer.effect: ShaderEffect {
+                                property variant source
+                                property real u_top: queueListView.atYBeginning ? 0.0 : Math.min(0.45, queueListView.fadePx / Math.max(1, queueListView.height))
+                                property real u_bottom: queueListView.atYEnd ? 0.0 : Math.min(0.45, queueListView.fadePx / Math.max(1, queueListView.height))
+                                Behavior on u_top { NumberAnimation { duration: 180 } }
+                                Behavior on u_bottom { NumberAnimation { duration: 180 } }
+                                fragmentShader: Qt.resolvedUrl("../assets/shaders/edge_fade.frag.qsb")
+                            }
+
                             delegate: Column {
                                 id: delegateCol
                                 width: queueListView.width
-                                spacing: 4
+                                spacing: 10
 
-                                // Section Header: Gợi ý tiếp theo (Radio Suggestions Separator - Complaint #5)
-                                Item {
-                                    width: delegateCol.width
-                                    height: 34
-                                    visible: Boolean(modelData && modelData.isRadioSuggestion && (index === 0 || (root.queueTracks && root.queueTracks[index - 1] && !root.queueTracks[index - 1].isRadioSuggestion)))
-
-                                    RowLayout {
-                                        anchors.fill: parent
-                                        anchors.leftMargin: 6
-                                        anchors.rightMargin: 10
-                                        spacing: 10
-
-                                        Text {
-                                            text: I18n.tr("Gợi ý tiếp theo (Radio)", "Up Next (Radio Suggestions)")
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: 11
-                                            font.bold: true
-                                            color: root.accentColor
-                                        }
-
-                                        Rectangle {
-                                            Layout.fillWidth: true
-                                            height: 1
-                                            color: Qt.rgba(255, 255, 255, 0.12)
-                                        }
-                                    }
+                                readonly property bool isCurrent: index === queueListView.currentQueueIndex
+                                // Intro progress: 30 ms step per row after the current one, 420 ms settle each
+                                readonly property real introE: {
+                                    var rel = Math.max(0, Math.min(12, index - Math.max(0, queueListView.currentQueueIndex)));
+                                    var p = Math.max(0, Math.min(1, (queueListView.introT * 780 - rel * 30) / 420));
+                                    return 1 - Math.pow(1 - p, 3);
                                 }
+                                opacity: introE
+                                transform: Translate { y: 12 * (1 - delegateCol.introE) }
 
                                 Rectangle {
                                     id: qRow
                                     width: delegateCol.width
-                                    height: 48
-                                    radius: 8
-                                    readonly property bool isCurrent: Boolean(root.track && modelData && (
-                                        (typeof win !== "undefined" && typeof win.isSameTrack === "function") 
-                                            ? win.isSameTrack(modelData, root.track)
-                                            : (
-                                                (modelData.id && root.track.id && modelData.id === root.track.id) ||
-                                                (modelData.videoId && root.track.videoId && modelData.videoId === root.track.videoId) ||
-                                                (modelData.path && root.track.path && modelData.path === root.track.path) ||
-                                                (modelData.title && root.track.title && modelData.title === root.track.title && modelData.artist && root.track.artist && modelData.artist === root.track.artist)
-                                            )
-                                    ))
-                                    color: isCurrent 
-                                           ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) 
-                                           : (qRowMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent")
-                                    border.width: 0
+                                    height: 70
+                                    radius: 14
+                                    readonly property bool isCurrent: delegateCol.isCurrent
+                                    color: Qt.rgba(1, 1, 1, isCurrent ? 0.07 : (qRowMouse.containsMouse ? 0.04 : 0.0))
+                                    Behavior on color { ColorAnimation { duration: 140 } }
 
-                                    Behavior on color { ColorAnimation { duration: 120 } }
-
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 6
-                                    anchors.rightMargin: 10
-                                    spacing: 10
-
-                                    Item {
-                                        Layout.preferredWidth: 36
-                                        Layout.preferredHeight: 36
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 8
+                                        anchors.rightMargin: 12
+                                        spacing: 14
 
                                         RoundedImage {
-                                            anchors.fill: parent
-                                            radius: 6
+                                            Layout.preferredWidth: 54
+                                            Layout.preferredHeight: 54
+                                            radius: 8
                                             source: modelData.image || ""
                                             fillMode: Image.PreserveAspectCrop
-                                            fallbackIcon: "../assets/icons/media-optical-audio-symbolic.svg"
-                                        }
-
-                                            Rectangle {
-                                                anchors.fill: parent
-                                                radius: 6
-                                                color: Qt.rgba(0, 0, 0, 0.55)
-                                                visible: qRow.isCurrent && root.isPlaying
-
-                                                Row {
-                                                    anchors.centerIn: parent
-                                                    spacing: 2
-                                                    Repeater {
-                                                        model: 3
-                                                        Rectangle {
-                                                            width: 2.5
-                                                            height: 10 + (index % 2) * 5
-                                                            radius: 1.2
-                                                            color: root.accentColor
-                                                            SequentialAnimation on height {
-                                                                running: root.visible && root.activeTab === "up_next" && qRow.isCurrent && root.isPlaying
-                                                                loops: Animation.Infinite
-                                                                NumberAnimation { from: 4; to: 14; duration: 320 + index * 120; easing.type: Easing.InOutQuad }
-                                                                NumberAnimation { from: 14; to: 4; duration: 320 + index * 120; easing.type: Easing.InOutQuad }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-
-                                            // 1px Hairline Border Overlay on top of cover image
-                                            Rectangle {
-                                                anchors.fill: parent
-                                                radius: 6
-                                                color: "transparent"
-                                                border.color: Qt.rgba(1.0, 1.0, 1.0, 0.12)
-                                                border.width: 1
-                                                z: 2
-                                            }
+                                            fallbackIcon: "../assets/icons/material/ms-music_note.svg"
                                         }
 
                                         ColumnLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 2
-
-                                        Text {
                                             Layout.fillWidth: true
-                                            text: modelData.title || modelData.name || I18n.tr("Không xác định", "Unknown")
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: 13
-                                            font.bold: true
-                                            color: qRow.isCurrent ? root.accentColor : "#ffffff"
-                                            elide: Text.ElideRight
-                                        }
+                                            spacing: 3
 
-                                        Text {
-                                            Layout.fillWidth: true
-                                            text: modelData.artist || I18n.tr("Nghệ sĩ chưa rõ", "Unknown Artist")
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: 11
-                                            color: Theme.textSecondary
-                                            elide: Text.ElideRight
-                                        }
-                                    }
-
-                                    Text {
-                                        text: {
-                                            if (modelData && modelData.duration && modelData.duration !== "--:--") return modelData.duration;
-                                            if (qRow.isCurrent && root.totalDuration > 1.0) {
-                                                var m = Math.floor(root.totalDuration / 60);
-                                                var s = Math.floor(root.totalDuration % 60);
-                                                return m + ":" + (s < 10 ? "0" : "") + s;
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: modelData.title || modelData.name || I18n.tr("Không xác định", "Unknown")
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 15
+                                                font.weight: qRow.isCurrent ? Font.Bold : Font.DemiBold
+                                                color: "#ffffff"
+                                                elide: Text.ElideRight
                                             }
-                                            return "";
-                                        }
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 11
-                                        color: Theme.textMuted
-                                    }
-                                }
 
-                                MouseArea {
-                                    id: qRowMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: mouse => {
-                                        if (mouse.button === Qt.RightButton) {
-                                            var gPos = mapToItem(root, mouse.x, mouse.y);
-                                            root.trackContextMenuRequested(modelData, gPos.x, gPos.y, true);
-                                        } else {
-                                            root.playTrackRequested(modelData, index);
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: modelData.artist || I18n.tr("Nghệ sĩ chưa rõ", "Unknown Artist")
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 13
+                                                font.weight: Font.Medium
+                                                color: Qt.rgba(1, 1, 1, 0.6)
+                                                elide: Text.ElideRight
+                                            }
+                                        }
+
+                                        Item {
+                                            Layout.preferredWidth: 40
+                                            Layout.preferredHeight: 40
+
+                                            // Current row: speaker glyph in the accent colour
+                                            AppIcon {
+                                                anchors.centerIn: parent
+                                                visible: qRow.isCurrent && !qRowMouse.containsMouse
+                                                source: "../assets/icons/material/ms-volume_up-fill.svg"
+                                                iconSize: 22
+                                                color: root.accentColor
+                                                opacity: root.isPlaying ? 1.0 : 0.55
+                                                Behavior on opacity { NumberAnimation { duration: 160 } }
+                                            }
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                visible: !qRow.isCurrent && !qRowMouse.containsMouse && text.length > 0
+                                                text: (modelData && modelData.duration && modelData.duration !== "--:--") ? modelData.duration : ""
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 12
+                                                font.weight: Font.Medium
+                                                font.features: { "tnum": 1 }
+                                                color: Qt.rgba(1, 1, 1, 0.45)
+                                            }
+
+                                            NowPlayingCtlButton {
+                                                id: qMoreBtn
+                                                anchors.centerIn: parent
+                                                visible: qRowMouse.containsMouse
+                                                size: 36
+                                                icon: "../assets/icons/material/ms-more_horiz.svg"
+                                                onClicked: {
+                                                    var gPos = qMoreBtn.mapToItem(root, 0, qMoreBtn.height + 4);
+                                                    root.trackContextMenuRequested(modelData, gPos.x, gPos.y, true);
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: qRowMouse
+                                        anchors.fill: parent
+                                        z: -1
+                                        hoverEnabled: true
+                                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: mouse => {
+                                            if (mouse.button === Qt.RightButton) {
+                                                var gPos = mapToItem(root, mouse.x, mouse.y);
+                                                root.trackContextMenuRequested(modelData, gPos.x, gPos.y, true);
+                                            } else {
+                                                root.playTrackRequested(modelData, index);
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
+
+                        Item { Layout.fillHeight: true }
                     }
-                }
+
+                    EmptyState {
+                        anchors.centerIn: parent
+                        anchors.verticalCenterOffset: 30
+                        width: Math.min(parent.width - 40, 320)
+                        visible: (!root.queueTracks || root.queueTracks.length === 0) && !root.isLoadingMoodQueue
+                        icon: "../assets/icons/material/ms-queue_music.svg"
+                        shape: "clover"
+                        accentColor: root.accentColor
+                        title: I18n.tr("Hàng đợi trống", "Queue is empty")
+                        description: I18n.tr("Phát một bài hát hoặc danh sách để xem các bài tiếp theo.", "Play a song or a playlist to see what comes next.")
+                    }
                 }
 
                 // =============================================================
@@ -2029,6 +1565,32 @@ Item {
                         highlightMoveDuration: 0
                         cacheBuffer: 300
                         model: root.activeLyrics
+
+                        // Lyrics credit after the last line (Mochy-like): fades in once the final line is reached
+                        footer: Item {
+                            width: lyricsView.width
+                            height: root.lyricsCreditText.length > 0 ? 96 : 0
+                            readonly property real lastLineTime: {
+                                var l = root.activeLyrics;
+                                if (!l || l.length === 0) return 0;
+                                var t = l[l.length - 1].time;
+                                return (t !== undefined && isFinite(t)) ? t : 0;
+                            }
+                            Text {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.topMargin: 28
+                                text: root.lyricsCreditText
+                                wrapMode: Text.WordWrap
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 14
+                                font.weight: Font.DemiBold
+                                color: Qt.rgba(1, 1, 1, 0.5)
+                                opacity: root.currentTime >= parent.lastLineTime - 1.5 ? 1.0 : 0.0
+                                Behavior on opacity { NumberAnimation { duration: 600; easing.type: Easing.OutCubic } }
+                            }
+                        }
 
                         onMovementStarted: {
                             smoothRecenterAnim.stop();
@@ -2372,502 +1934,104 @@ Item {
                             }
                         }
                     }
-                }
 
-                // =============================================================
-                // TAB 3 VIEW: RELATED (You Might Also Like + Recommended Playlists)
-                // =============================================================
-                Flickable {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    contentWidth: width
-                    contentHeight: relatedContentCol.implicitHeight + 40
-                    clip: true
-                    boundsBehavior: Flickable.StopAtBounds
+                    ShapeLoader {
+                        anchors.centerIn: parent
+                        visible: root.isLoadingLyrics && !root.hasLyrics
+                        size: 52
+                        color: Qt.rgba(1, 1, 1, 0.85)
+                    }
 
-                    ColumnLayout {
-                        id: relatedContentCol
-                        width: parent.width
-                        spacing: 24
-
-                        // Section 1: You might also like
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 12
-
-                            Text {
-                                text: I18n.tr("Có thể bạn sẽ thích", "You might also like")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 16
-                                font.bold: true
-                                color: "#ffffff"
-                            }
-
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 6
-
-                                Repeater {
-                                    model: (root.relatedData && root.relatedData.you_might_also_like) ? root.relatedData.you_might_also_like.slice(0, 6) : 0
-
-                                    Rectangle {
-                                        Layout.fillWidth: true
-                                        height: 50
-                                        radius: 8
-                                        color: relTrackMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
-                                        border.width: 0
-
-                                        RowLayout {
-                                            anchors.fill: parent
-                                            anchors.leftMargin: 8
-                                            anchors.rightMargin: 12
-                                            spacing: 10
-
-                                            RoundedImage {
-                                                Layout.preferredWidth: 36
-                                                Layout.preferredHeight: 36
-                                                radius: 6
-                                                source: modelData.image || ""
-                                                sourceSize: Qt.size(72, 72)
-                                                asynchronous: true
-                                                fillMode: Image.PreserveAspectCrop
-                                                autoCropBlackBars: true
-                                                fallbackIcon: "../assets/icons/media-optical-audio-symbolic.svg"
-                                                fallbackIconSize: 16
-                                            }
-
-                                            ColumnLayout {
-                                                Layout.fillWidth: true
-                                                spacing: 2
-
-                                                Text {
-                                                    Layout.fillWidth: true
-                                                    text: modelData.title || modelData.name || ""
-                                                    font.family: Theme.fontFamily
-                                                    font.pixelSize: 13
-                                                    font.bold: true
-                                                    color: "#ffffff"
-                                                    elide: Text.ElideRight
-                                                }
-
-                                                Text {
-                                                    Layout.fillWidth: true
-                                                    text: modelData.artist || ""
-                                                    font.family: Theme.fontFamily
-                                                    font.pixelSize: 11
-                                                    color: Theme.textSecondary
-                                                    elide: Text.ElideRight
-                                                }
-                                            }
-
-                                            Text {
-                                                text: modelData.duration || ""
-                                                font.family: Theme.fontFamily
-                                                font.pixelSize: 11
-                                                color: Theme.textMuted
-                                            }
-                                        }
-
-                                        MouseArea {
-                                            id: relTrackMouse
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: {
-                                                root.playTrackRequested(modelData, -1);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Section 2: Recommended playlists (Horizontal Carousel)
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 12
-                            visible: root.relatedData && root.relatedData.recommended_playlists && root.relatedData.recommended_playlists.length > 0
-
-                            Text {
-                                text: I18n.tr("Danh sách phát đề xuất", "Recommended playlists")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 16
-                                font.bold: true
-                                color: "#ffffff"
-                            }
-
-                            Item {
-                                id: recPlContainer
-                                Layout.fillWidth: true
-                                height: 180
-                                clip: true
-
-                                // Auto-scroll continuous timers
-                                Timer {
-                                    id: leftRecPlScrollTimer
-                                    interval: 16
-                                    repeat: true
-                                    running: false
-                                    onTriggered: {
-                                        recPlFlickable.contentX = Math.max(0, recPlFlickable.contentX - 8);
-                                        if (recPlFlickable.contentX <= 0) running = false;
-                                    }
-                                }
-
-                                Timer {
-                                    id: rightRecPlScrollTimer
-                                    interval: 16
-                                    repeat: true
-                                    running: false
-                                    onTriggered: {
-                                        var maxScroll = recPlFlickable.contentWidth - recPlFlickable.width;
-                                        recPlFlickable.contentX = Math.min(maxScroll, recPlFlickable.contentX + 8);
-                                        if (recPlFlickable.contentX >= maxScroll) running = false;
-                                    }
-                                }
-
-                                // Left Edge Hover-to-scroll Zone (Clean, Invisible)
-                                Item {
-                                    id: leftRecPlScrim
-                                    anchors.left: parent.left
-                                    anchors.top: parent.top
-                                    anchors.bottom: parent.bottom
-                                    width: 36
-                                    z: 10
-                                    visible: recPlFlickable.contentX > 4
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        propagateComposedEvents: true
-                                        onEntered: leftRecPlScrollTimer.running = true
-                                        onExited: leftRecPlScrollTimer.running = false
-                                        onPressed: (mouse) => { mouse.accepted = false; }
-                                    }
-                                }
-
-                                // Right Edge Hover-to-scroll Zone (Clean, Invisible)
-                                Item {
-                                    id: rightRecPlScrim
-                                    anchors.right: parent.right
-                                    anchors.top: parent.top
-                                    anchors.bottom: parent.bottom
-                                    width: 36
-                                    z: 10
-                                    visible: recPlFlickable.contentWidth > recPlFlickable.width && recPlFlickable.contentX < recPlFlickable.contentWidth - recPlFlickable.width - 4
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        propagateComposedEvents: true
-                                        onEntered: rightRecPlScrollTimer.running = true
-                                        onExited: rightRecPlScrollTimer.running = false
-                                        onPressed: (mouse) => { mouse.accepted = false; }
-                                    }
-                                }
-
-                                Flickable {
-                                    id: recPlFlickable
-                                    anchors.fill: parent
-                                    contentWidth: recPlRow.implicitWidth + 24
-                                    contentHeight: height
-                                    flickableDirection: Flickable.HorizontalFlick
-                                    boundsBehavior: Flickable.StopAtBounds
-                                    clip: true
-
-                                    DragHandler {
-                                        target: null
-                                        xAxis.enabled: true
-                                        yAxis.enabled: false
-                                        cursorShape: Qt.OpenHandCursor
-                                        property real startContentX: 0
-                                        onActiveChanged: {
-                                            if (active) {
-                                                startContentX = recPlFlickable.contentX;
-                                            }
-                                        }
-                                        onTranslationChanged: {
-                                            if (active) {
-                                                var maxScroll = Math.max(0, recPlFlickable.contentWidth - recPlFlickable.width);
-                                                recPlFlickable.contentX = Math.max(0, Math.min(maxScroll, startContentX - translation.x));
-                                            }
-                                        }
-                                    }
-
-                                    WheelHandler {
-                                        target: recPlFlickable
-                                        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                                        onWheel: event => {
-                                            var delta = (event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x);
-                                            recPlFlickable.contentX = Math.max(0, Math.min(recPlFlickable.contentWidth - recPlFlickable.width, recPlFlickable.contentX - delta));
-                                        }
-                                    }
-
-                                    RowLayout {
-                                        id: recPlRow
-                                        spacing: 14
-                                        anchors.verticalCenter: parent.verticalCenter
-
-                                        Repeater {
-                                            model: (root.relatedData && root.relatedData.recommended_playlists) ? root.relatedData.recommended_playlists : []
-
-                                            Rectangle {
-                                                Layout.preferredWidth: 130
-                                                Layout.preferredHeight: 175
-                                                radius: 10
-                                                color: recPlMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(1, 1, 1, 0.03)
-                                                border.color: Qt.rgba(1, 1, 1, 0.08)
-                                                border.width: 1
-
-                                                ColumnLayout {
-                                                    anchors.fill: parent
-                                                    anchors.margins: 8
-                                                    spacing: 6
-
-                                                    RoundedImage {
-                                                        Layout.preferredWidth: 114
-                                                        Layout.preferredHeight: 114
-                                                        radius: 8
-                                                        source: modelData.image || ""
-                                                        sourceSize: Qt.size(240, 240)
-                                                        asynchronous: true
-                                                        fillMode: Image.PreserveAspectCrop
-                                                        autoCropBlackBars: true
-                                                        fallbackIcon: "../assets/icons/folder-music-symbolic.svg"
-                                                        fallbackIconSize: 32
-                                                    }
-
-                                                    Text {
-                                                        Layout.fillWidth: true
-                                                        text: modelData.title || ""
-                                                        font.family: Theme.fontFamily
-                                                        font.pixelSize: 12
-                                                        font.bold: true
-                                                        color: "#ffffff"
-                                                        elide: Text.ElideRight
-                                                        maximumLineCount: 2
-                                                    }
-
-                                                    Text {
-                                                        Layout.fillWidth: true
-                                                        text: modelData.description || I18n.tr("Danh sách phát", "Playlist")
-                                                        font.family: Theme.fontFamily
-                                                        font.pixelSize: 10
-                                                        color: Theme.textMuted
-                                                        elide: Text.ElideRight
-                                                    }
-                                                }
-
-                                                MouseArea {
-                                                    id: recPlMouse
-                                                    anchors.fill: parent
-                                                    hoverEnabled: true
-                                                    cursorShape: Qt.PointingHandCursor
-                                                    onClicked: root.playlistSelected(modelData)
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Section 3: Similar artists
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 12
-                            visible: root.relatedData && root.relatedData.similar_artists && root.relatedData.similar_artists.length > 0
-
-                            Text {
-                                text: I18n.tr("Nghệ sĩ tương tự", "Similar artists")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 16
-                                font.bold: true
-                                color: "#ffffff"
-                            }
-
-                            Item {
-                                id: simArtContainer
-                                Layout.fillWidth: true
-                                height: 130
-                                clip: true
-
-                                // Auto-scroll continuous timers
-                                Timer {
-                                    id: leftArtScrollTimer
-                                    interval: 16
-                                    repeat: true
-                                    running: false
-                                    onTriggered: {
-                                        artFlickable.contentX = Math.max(0, artFlickable.contentX - 8);
-                                        if (artFlickable.contentX <= 0) running = false;
-                                    }
-                                }
-
-                                Timer {
-                                    id: rightArtScrollTimer
-                                    interval: 16
-                                    repeat: true
-                                    running: false
-                                    onTriggered: {
-                                        var maxScroll = artFlickable.contentWidth - artFlickable.width;
-                                        artFlickable.contentX = Math.min(maxScroll, artFlickable.contentX + 8);
-                                        if (artFlickable.contentX >= maxScroll) running = false;
-                                    }
-                                }
-
-                                // Left Edge Hover-to-scroll Zone (Clean, Invisible)
-                                Item {
-                                    id: leftArtScrim
-                                    anchors.left: parent.left
-                                    anchors.top: parent.top
-                                    anchors.bottom: parent.bottom
-                                    width: 36
-                                    z: 10
-                                    visible: artFlickable.contentX > 4
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        propagateComposedEvents: true
-                                        onEntered: leftArtScrollTimer.running = true
-                                        onExited: leftArtScrollTimer.running = false
-                                        onPressed: (mouse) => { mouse.accepted = false; }
-                                    }
-                                }
-
-                                // Right Edge Hover-to-scroll Zone (Clean, Invisible)
-                                Item {
-                                    id: rightArtScrim
-                                    anchors.right: parent.right
-                                    anchors.top: parent.top
-                                    anchors.bottom: parent.bottom
-                                    width: 36
-                                    z: 10
-                                    visible: artFlickable.contentWidth > artFlickable.width && artFlickable.contentX < artFlickable.contentWidth - artFlickable.width - 4
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        propagateComposedEvents: true
-                                        onEntered: rightArtScrollTimer.running = true
-                                        onExited: rightArtScrollTimer.running = false
-                                        onPressed: (mouse) => { mouse.accepted = false; }
-                                    }
-                                }
-
-                                Flickable {
-                                    id: artFlickable
-                                    anchors.fill: parent
-                                    contentWidth: artRow.implicitWidth + 24
-                                    contentHeight: height
-                                    flickableDirection: Flickable.HorizontalFlick
-                                    boundsBehavior: Flickable.StopAtBounds
-                                    clip: true
-
-                                    DragHandler {
-                                        target: null
-                                        xAxis.enabled: true
-                                        yAxis.enabled: false
-                                        cursorShape: Qt.OpenHandCursor
-                                        property real startContentX: 0
-                                        onActiveChanged: {
-                                            if (active) {
-                                                startContentX = artFlickable.contentX;
-                                            }
-                                        }
-                                        onTranslationChanged: {
-                                            if (active) {
-                                                var maxScroll = Math.max(0, artFlickable.contentWidth - artFlickable.width);
-                                                artFlickable.contentX = Math.max(0, Math.min(maxScroll, startContentX - translation.x));
-                                            }
-                                        }
-                                    }
-
-                                    WheelHandler {
-                                        target: artFlickable
-                                        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                                        onWheel: event => {
-                                            var delta = (event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x);
-                                            artFlickable.contentX = Math.max(0, Math.min(artFlickable.contentWidth - artFlickable.width, artFlickable.contentX - delta));
-                                        }
-                                    }
-
-                                    RowLayout {
-                                        id: artRow
-                                        spacing: 16
-                                        anchors.verticalCenter: parent.verticalCenter
-
-                                        Repeater {
-                                            model: (root.relatedData && root.relatedData.similar_artists) ? root.relatedData.similar_artists : []
-
-                                            Item {
-                                                width: 90
-                                                height: 120
-
-                                                ColumnLayout {
-                                                    anchors.fill: parent
-                                                    spacing: 6
-
-                                                    Item {
-                                                        Layout.preferredWidth: 76
-                                                        Layout.preferredHeight: 76
-                                                        Layout.alignment: Qt.AlignHCenter
-
-                                                        RoundedImage {
-                                                            anchors.fill: parent
-                                                            radius: 38
-                                                            source: modelData.image || ""
-                                                            fillMode: Image.PreserveAspectCrop
-                                                            initialsText: modelData.name || modelData.title || ""
-                                                        }
-
-                                                        Rectangle {
-                                                            anchors.fill: parent
-                                                            radius: 38
-                                                            color: "transparent"
-                                                            border.color: simArtMouse.containsMouse ? root.accentColor : Qt.rgba(1, 1, 1, 0.15)
-                                                            border.width: 1.5
-                                                        }
-                                                    }
-
-                                                    Text {
-                                                        Layout.fillWidth: true
-                                                        text: modelData.name || ""
-                                                        font.family: Theme.fontFamily
-                                                        font.pixelSize: 11
-                                                        font.bold: true
-                                                        color: simArtMouse.containsMouse ? root.accentColor : "#ffffff"
-                                                        elide: Text.ElideRight
-                                                        horizontalAlignment: Text.AlignHCenter
-                                                    }
-
-                                                    Text {
-                                                        Layout.fillWidth: true
-                                                        text: modelData.subscribers || I18n.tr("Nghệ sĩ", "Artist")
-                                                        font.family: Theme.fontFamily
-                                                        font.pixelSize: 10
-                                                        color: Theme.textMuted
-                                                        elide: Text.ElideRight
-                                                        horizontalAlignment: Text.AlignHCenter
-                                                    }
-                                                }
-
-                                                MouseArea {
-                                                    id: simArtMouse
-                                                    anchors.fill: parent
-                                                    hoverEnabled: true
-                                                    cursorShape: Qt.PointingHandCursor
-                                                    onClicked: root.artistSelected(modelData.name, modelData.channelId || "")
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                    EmptyState {
+                        anchors.centerIn: parent
+                        width: Math.min(parent.width - 40, 340)
+                        visible: root.track !== null && !root.hasLyrics && !root.isLoadingLyrics
+                        icon: "../assets/icons/material/ms-lyrics-fill.svg"
+                        shape: "cookie"
+                        accentColor: root.accentColor
+                        title: I18n.tr("Không có lời bài hát", "Lyrics unavailable")
+                        description: I18n.tr("Chưa tìm thấy lời cho bài này.", "We couldn't find lyrics for this song.")
                     }
                 }
+
+            }
+        }
+    }
+
+    // =========================================================================
+    // TOP CHROME: collapse (top-left) + mode switcher pill (top-right, Swiftify-like)
+    // =========================================================================
+
+    Rectangle {
+        id: collapseBtn
+        z: 5
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.leftMargin: root.width >= 1200 ? 40 : 18
+        anchors.topMargin: 14
+        width: 40; height: 40; radius: 20
+        color: Qt.rgba(1, 1, 1, collapseH.hovered ? 0.16 : 0.08)
+        border.width: 1
+        border.color: Qt.rgba(1, 1, 1, 0.10)
+        Behavior on color { ColorAnimation { duration: 140 } }
+        HoverHandler { id: collapseH }
+        ToolTip.visible: collapseH.hovered
+        ToolTip.text: I18n.tr("Thu nhỏ", "Collapse")
+        ToolTip.delay: 400
+        AppIcon {
+            anchors.centerIn: parent
+            source: "../assets/icons/material/ms-expand_more.svg"
+            iconSize: 24
+            color: "#ffffff"
+        }
+        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.collapseRequested() }
+    }
+
+    Rectangle {
+        id: modeSwitcher
+        z: 5
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.rightMargin: root.width >= 1200 ? 40 : 18
+        anchors.topMargin: 14
+        width: modeRow.implicitWidth + 10
+        height: 46
+        radius: 23
+        // Swiftify-like frosted pill: light translucent fill + hairline, no dark accent tint
+        color: Qt.rgba(1, 1, 1, 0.10)
+        border.width: 1
+        border.color: Qt.rgba(1, 1, 1, 0.14)
+        Row {
+            id: modeRow
+            anchors.centerIn: parent
+            spacing: 4
+            NowPlayingModeButton {
+                icon: "../assets/icons/material/ms-image-fill.svg"; tip: I18n.tr("Ảnh bìa", "Artwork")
+                active: root.activeTab === "artwork"; accent: root.accentColor
+                onClicked: root.activeTab = "artwork"
+            }
+            NowPlayingModeButton {
+                icon: "../assets/icons/material/ms-lyrics-fill.svg"; tip: I18n.tr("Lời bài hát", "Lyrics")
+                active: root.activeTab === "lyrics"; accent: root.accentColor
+                onClicked: root.activeTab = "lyrics"
+            }
+            NowPlayingModeButton {
+                icon: "../assets/icons/material/ms-queue_music.svg"; tip: I18n.tr("Tiếp theo", "Up next")
+                active: root.activeTab === "up_next"; accent: root.accentColor
+                onClicked: root.activeTab = "up_next"
+            }
+            NowPlayingModeButton {
+                id: sleepModeBtn
+                icon: "../assets/icons/material/ms-bedtime.svg"
+                badge: root.isSleepTimerActive
+                tip: {
+                    if (!root.isSleepTimerActive) return I18n.tr("Hẹn giờ tắt nhạc", "Sleep timer");
+                    var sec = Math.max(0, root.sleepTimerRemainingSeconds);
+                    if (sec <= 0) return I18n.tr("Tắt sau khi hết bài", "Stops after this track");
+                    var m = Math.floor(sec / 60), r = sec % 60;
+                    return I18n.tr("Tắt nhạc sau ", "Stops in ") + m + ":" + (r < 10 ? "0" : "") + r;
+                }
+                onClicked: root.sleepTimerRequested(sleepModeBtn)
             }
         }
     }
