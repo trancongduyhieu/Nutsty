@@ -25,6 +25,8 @@ Item {
     property int panelStyle: 1 // 1: Flush Split-Rail, 2: Bento Glass Island
     property string activeTab: "lyrics" // "lyrics" | "queue"
     property var currentTracks: []
+    property var listeningAlongFriend: null
+    property var activeCoListenersDetails: []
     property real layoutDependency: 0.0 // Driven by host slide progress so LiquidGlass re-samples its backdrop offset
     readonly property real targetPanelWidth: Math.max(380, Math.min(460, Math.round((parent ? parent.width : 1200) * 0.34)))
 
@@ -41,6 +43,11 @@ Item {
     signal toggleLikeRequested()
     signal trackPlayRequested(var track, int index)
     signal trackContextMenuRequested(var track, real gx, real gy)
+    signal tabRequested(string tab)
+    signal listenAlongRequested()
+    signal coListenersRequested(real globalX, real globalY)
+    signal exitListeningAlongRequested()
+    signal sendChatMessageRequested(string messageText)
 
     readonly property var upNextTracks: {
         if (!root.currentTracks || root.currentTracks.length === 0) return [];
@@ -774,9 +781,8 @@ Item {
         }
 
         // =====================================================================
-        // LAYER D: BOTTOM DOCK CONTAINER (RESERVED FOR ACTION BUTTONS)
-        // Fixed at the bottom margin: anchors.bottom: parent.bottom, bottomMargin: 20
-        // Song Title and Artist removed as requested to prepare for future buttons.
+        // LAYER D: BOTTOM DOCK, SimpMusic-style action row shared by both tabs:
+        // Lyrics | [ Listen Along · Listeners · Comment ] | Up Next
         // =====================================================================
         Item {
             id: bottomDock
@@ -786,8 +792,9 @@ Item {
             anchors.leftMargin: 24
             anchors.rightMargin: 24
             anchors.bottomMargin: 20
-            height: 0
+            height: actionDock.height
             z: 10
+
         }
 
         // =====================================================================
@@ -1310,7 +1317,7 @@ Item {
                 anchors.topMargin: 8
                 anchors.leftMargin: 12
                 anchors.rightMargin: 12
-                anchors.bottomMargin: 12
+                anchors.bottomMargin: actionDock.height + actionDock.anchors.bottomMargin + 12
                 clip: true
                 spacing: 4
                 boundsBehavior: Flickable.StopAtBounds
@@ -1631,6 +1638,35 @@ Item {
                     title: I18n.tr("Hàng đợi trống", "Queue is empty")
                     description: I18n.tr("Chọn bài hát để bắt đầu danh sách phát", "Play a track to start the queue")
                 }
+            }
+        }
+
+        // Action row lives at panelContainer level so it stays visible on both tabs;
+        // bottomDock inside lyricsView only reserves its space for the lyric canvas.
+        Item {
+            id: actionDock
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.leftMargin: 24
+            anchors.rightMargin: 24
+            anchors.bottomMargin: 20
+            height: actionRow.implicitHeight
+            z: 30
+
+            NowPlayingActionRow {
+                id: actionRow
+                anchors.fill: parent
+                activeTab: root.activeTab === "queue" ? "up_next" : root.activeTab
+                accentColor: root.accentColor
+                listeningAlongFriend: root.listeningAlongFriend
+                activeCoListenersDetails: root.activeCoListenersDetails
+                onLyricsClicked: root.tabRequested("lyrics")
+                onQueueClicked: root.tabRequested(root.activeTab === "queue" ? "lyrics" : "queue")
+                onListenAlongClicked: root.listenAlongRequested()
+                onListenersClicked: (gx, gy) => root.coListenersRequested(gx, gy)
+                onLeaveListeningAlongClicked: root.exitListeningAlongRequested()
+                onSendChatMessage: text => root.sendChatMessageRequested(text)
             }
         }
     }

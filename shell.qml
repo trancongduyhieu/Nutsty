@@ -2692,6 +2692,13 @@ Scope {
                     isLiked: win.isCurrentTrackLiked
 
                     onCloseRequested: win.isMochySidePanelOpen = false
+                    listeningAlongFriend: win.listeningAlongFriend
+                    activeCoListenersDetails: win.activeCoListenersDetails
+                    onTabRequested: tab => win.mochyActiveTab = tab
+                    onListenAlongRequested: manageFriendsModalLoader.ensure().openModal()
+                    onCoListenersRequested: (tx, ty) => coListenersPopover.openAt(win.activeCoListenersDetails, tx, ty)
+                    onExitListeningAlongRequested: win.exitListeningAlong()
+                    onSendChatMessageRequested: text => win.sendChatMessage(text)
                     onOpenDetailsRequested: {
                         win.isMochySidePanelOpen = false;
                         win.isNowPlayingOpen = true;
@@ -2844,10 +2851,6 @@ Scope {
                     accentColor: win.accentColor
                     backgroundSourceItem: masterBackdropStack
                     listeningAlongFriend: win.listeningAlongFriend
-                    activeCoListenersDetails: win.activeCoListenersDetails
-                    onListenAlongRequested: manageFriendsModalLoader.ensure().openModal()
-                    onCoListenersRequested: (tx, ty) => coListenersPopover.openAt(win.activeCoListenersDetails, tx, ty)
-                    onSendChatMessageRequested: text => win.sendChatMessage(text)
                     lyricsRomanizationEnabled: win.lyricsRomanizationEnabled
                     mixUpcoming: win.mixUpcoming
                     mixActive: win.mixActive
