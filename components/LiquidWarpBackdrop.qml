@@ -114,10 +114,12 @@ Item {
     }
 
     // GPU 2D Liquid Warp ShaderEffect: warps the 48x48 textures with slow, gentle 2D fluid waves
+    // Uses layer.effect so MultiEffect renders directly on top of the active, properly sized ShaderEffect,
+    // guaranteeing dynamic resizing in both fullscreen and windowed modes without FBO coordinate drift.
     ShaderEffect {
         id: warpEffect
         anchors.fill: parent
-        visible: false
+        visible: root.frontImg.status === Image.Ready
 
         property var source: root.frontImg
         property var source2: root.backReady ? root.backImg : root.frontImg
@@ -127,19 +129,16 @@ Item {
         property real u_mix: root.backReady ? root.mixT : 0.0
 
         fragmentShader: Qt.resolvedUrl("../assets/shaders/liquid_warp.frag.qsb")
-    }
 
-    // MultiEffect: true hardware 2-pass Gaussian blur (blurMax: 64) dissolves edges and text into haze
-    MultiEffect {
-        id: finalAtmosphere
-        anchors.fill: parent
-        source: warpEffect
-        visible: root.frontImg.status === Image.Ready
-        blurEnabled: true
-        blur: 1.0
-        blurMax: 64
-        saturation: 1.45
-        brightness: -0.04
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            blurEnabled: true
+            blur: 1.0
+            blurMax: 64
+            saturation: 1.45
+            brightness: -0.04
+            autoPaddingEnabled: false
+        }
     }
 
     // Fallback subtle dark atmosphere while the very first artwork loads
