@@ -3,6 +3,7 @@ AnimeMVKineticLyrics 1.0 AnimeMVKineticLyrics.qml
 AppIcon 1.0 AppIcon.qml
 AppleMusicDesktopLyrics 1.0 AppleMusicDesktopLyrics.qml
 AppleMusicWordFlow 1.0 AppleMusicWordFlow.qml
+AutoMixBridge 1.0 AutoMixBridge.qml
 ArtistDetailView 1.0 ArtistDetailView.qml
 BackingVocalLine 1.0 BackingVocalLine.qml
 BonesHost 1.0 BonesHost.qml

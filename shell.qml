@@ -132,6 +132,9 @@ Scope {
     property string playingPlaylistId: ""
     property string playingSourceTitle: ""
     property bool isLoadingAudio: false
+    // What the UI shows: during an AutoMix/crossfade hand-off the outgoing track is still audible,
+    // so the play button keeps its pause icon instead of a loading spinner
+    readonly property bool uiLoadingAudio: isLoadingAudio && mixActive === null
     property var selectedCustomPlaylist: null
 
     property real trackChangeTimestamp: 0
@@ -173,6 +176,39 @@ Scope {
     }
     property bool lyricsRomanizationEnabled: true
     property bool animatedCoverEnabled: true
+    // Crossfade & AutoMix (player_daemon.py crossfade_play / automix_plan)
+    property bool crossfadeEnabled: false
+    property int crossfadeSeconds: 6
+    property bool autoMixEnabled: false
+    property var autoMixPlan: null
+    property string autoMixRequestedKey: ""
+    property string crossfadeTriggeredKey: ""
+    property bool crossfadeArmed: false
+    property var crossfadeArmedPlan: null
+    property double crossfadeArmedAt: 0
+    property string crossfadeHandoverPath: ""
+    property double crossfadeHandoverUntil: 0
+    property string lastMpvPath: ""
+    property var shuffleNextPick: null
+    // AutoMix transition card state (Now Playing): the upcoming blend and the one in progress
+    property var mixUpcoming: null
+    property var mixActive: null
+    property string coverPrefetchKey: ""
+    function prefetchTrackCover(trk) {
+        if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) ytNowPlayingView.prefetchCoverArt(trk);
+    }
+    // AutoMix backdrop hand-over: the liquid background keeps the outgoing artwork until the audio
+    // blend starts, then floods to the new one along the blend (-1 = not mixing, normal crossfade)
+    property real mixBackdropP: -1
+    FrameAnimation {
+        running: win.mixActive !== null
+        onTriggered: {
+            var m = win.mixActive;
+            var t = Date.now();
+            if (!m || t > m.blendAtMs + m.durMs + 400 || PlaybackEngine.trackKeyOf(win.currentTrack) !== m.toKey) { win.mixBackdropP = -1; win.mixActive = null; return; }
+            win.mixBackdropP = Math.max(0, Math.min(1, (t - m.blendAtMs) / Math.max(500, m.durMs)));
+        }
+    }
     property int desktopLyricsPreset: 2 // 1: Cinematic Serif, 2: Apple Music 5-Line Parametric, 3: Minimal Glide, 4: Motion Typography
     property int desktopLyricsCustomX: -1
     property int desktopLyricsCustomY: -1
@@ -1960,6 +1996,7 @@ Scope {
                     id: songAtmosphereEffect
                     anchors.fill: parent
                     source: win.getTrackCoverUrl(win.currentTrack)
+                    driveProgress: win.mixBackdropP
                     running: Boolean(win.isPlaying && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive)))
                     zoom: 1.6
                     darkScrim: 0.0
@@ -2275,7 +2312,7 @@ Scope {
                             isLoading: win.isLoadingHome
                             currentTrack: win.currentTrack
                             isPlaying: win.isPlaying
-                            isLoadingAudio: win.isLoadingAudio
+                            isLoadingAudio: win.uiLoadingAudio
                             accentColor: win.accentColor
                             accountName: win.authAccountName
                             accountThumb: win.currentUserAvatar
@@ -2309,7 +2346,7 @@ Scope {
                             tracks: (win.currentView === "library") ? (mainGrid.downloadsSubTab === "favorites" ? win.likedTracksList : (mainGrid.downloadsSubTab === "tracks" ? win.allTracks : win.browsingTracks)) : win.browsingTracks
                             currentTrack: win.currentTrack
                             isPlaying: win.isPlaying
-                            isLoadingAudio: win.isLoadingAudio
+                            isLoadingAudio: win.uiLoadingAudio
                             sectionTitle: win.mainSectionTitle
                             isLoading: win.isSearchingYT
                             albumMetadata: win.currentAlbumMetadata
@@ -2455,7 +2492,7 @@ Scope {
                             accentColor: win.accentColor
                             currentTrack: win.currentTrack
                             isPlaying: win.isPlaying
-                            isLoadingAudio: win.isLoadingAudio
+                            isLoadingAudio: win.uiLoadingAudio
                             viewMode: win.searchViewMode
                             backgroundSourceItem: masterBackdropStack
 
@@ -2528,7 +2565,7 @@ Scope {
                             playlist: win.selectedCustomPlaylist
                             currentTrack: win.currentTrack
                             isPlaying: win.isPlaying
-                            isLoadingAudio: win.isLoadingAudio
+                            isLoadingAudio: win.uiLoadingAudio
                             accentColor: win.accentColor
 
                             onBackRequested: {
@@ -2754,7 +2791,7 @@ Scope {
                     currentTime: win.currentTime
                     totalDuration: win.totalDuration
                     isPlaying: win.isPlaying
-                    isLoadingAudio: win.isLoadingAudio
+                    isLoadingAudio: win.uiLoadingAudio
                     isShuffle: win.isShuffle
                     isRepeat: win.isRepeat
                     volume: win.volume
@@ -2764,6 +2801,8 @@ Scope {
                     backgroundSourceItem: masterBackdropStack
                     listeningAlongFriend: win.listeningAlongFriend
                     lyricsRomanizationEnabled: win.lyricsRomanizationEnabled
+                    mixUpcoming: win.mixUpcoming
+                    mixActive: win.mixActive
 
                     onExitListeningAlongRequested: win.exitListeningAlong()
                     onSeekRequested: sec => win.seekAudio(sec)
@@ -2844,7 +2883,7 @@ Scope {
             resolvedSquareImage: win.currentResolvedCover
             isLiked: win.isCurrentTrackLiked
             isPlaying: win.isPlaying
-            isLoadingAudio: win.isLoadingAudio
+            isLoadingAudio: win.uiLoadingAudio
             currentTime: win.currentTime
             totalDuration: win.totalDuration
             volume: win.volume
@@ -3126,6 +3165,9 @@ Scope {
             lyricsRomanizationEnabled: win.lyricsRomanizationEnabled
             animatedCoverEnabled: win.animatedCoverEnabled
             canvasPreference: win.canvasPreference
+            crossfadeEnabled: win.crossfadeEnabled
+            crossfadeSeconds: win.crossfadeSeconds
+            autoMixEnabled: win.autoMixEnabled
             lyricsPreset: win.desktopLyricsPreset
             customX: win.desktopLyricsCustomX
             customY: win.desktopLyricsCustomY
@@ -3180,6 +3222,20 @@ Scope {
             }
             onToggleSyncHistoryRequested: enabled => {
                 win.syncHistoryToGoogle = enabled;
+                win.saveSettings();
+            }
+            onToggleCrossfadeRequested: enabled => {
+                win.crossfadeEnabled = enabled;
+                win.saveSettings();
+            }
+            onSelectCrossfadeSecondsRequested: secs => {
+                win.crossfadeSeconds = secs;
+                win.saveSettings();
+            }
+            onToggleAutoMixRequested: enabled => {
+                win.autoMixEnabled = enabled;
+                win.autoMixPlan = null;
+                win.autoMixRequestedKey = "";
                 win.saveSettings();
             }
             onToggleAnimatedCoverRequested: enabled => {
@@ -3794,6 +3850,9 @@ Scope {
             if (obj.lyricsSource !== undefined && typeof obj.lyricsSource === "string") {
                 win.lyricsSource = obj.lyricsSource;
             }
+            if (obj.crossfadeEnabled !== undefined) win.crossfadeEnabled = !!obj.crossfadeEnabled;
+            if (obj.crossfadeSeconds !== undefined) win.crossfadeSeconds = Math.max(2, Math.min(12, parseInt(obj.crossfadeSeconds) || 6));
+            if (obj.autoMixEnabled !== undefined) win.autoMixEnabled = !!obj.autoMixEnabled;
             if (obj.liquidGlassPreset !== undefined) win.liquidGlassPreset = obj.liquidGlassPreset;
             if (obj.liquidGlassBlur !== undefined) win.liquidGlassBlur = obj.liquidGlassBlur;
             if (obj.liquidGlassDisplacement !== undefined) win.liquidGlassDisplacement = obj.liquidGlassDisplacement;
@@ -3847,6 +3906,9 @@ Scope {
             downloadQuality: win.downloadQuality,
             spotifySpdc: win.spotifySpdc,
             lyricsSource: win.lyricsSource,
+            crossfadeEnabled: win.crossfadeEnabled,
+            crossfadeSeconds: win.crossfadeSeconds,
+            autoMixEnabled: win.autoMixEnabled,
             liquidGlassPreset: win.liquidGlassPreset,
             liquidGlassBlur: win.liquidGlassBlur,
             liquidGlassDisplacement: win.liquidGlassDisplacement,
@@ -4651,6 +4713,34 @@ Scope {
         }
     }
 
+    // AutoMix: one loudness analysis per track, about a minute before it ends
+    Process {
+        id: autoMixProc
+        property string planKey: ""
+        property string nextKey: ""
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try {
+                    var plan = JSON.parse(data);
+                    if (plan && plan.ok) {
+                        plan.key = autoMixProc.planKey;
+                        plan.nextKey = autoMixProc.nextKey;
+                        win.autoMixPlan = plan;
+                    }
+                } catch(e) {}
+            }
+        }
+    }
+
+    function requestAutoMixPlan(key, nextKey, nextPath, nextTitle, nextArtist, baseSeconds) {
+        autoMixProc.running = false;
+        autoMixProc.planKey = key;
+        autoMixProc.nextKey = nextKey;
+        autoMixProc.command = ["python3", win.appDir + "/backend/player_daemon.py", "automix_plan", nextPath || "", nextTitle || "", nextArtist || "", String(baseSeconds)];
+        autoMixProc.running = true;
+    }
+
     Timer {
         id: prewarmTimer
         interval: 4000
@@ -4799,6 +4889,29 @@ Scope {
         id: frostifyIpc
         target: "frostify"
         function testShufflePlay() { mainGrid.shufflePlayRequested(); }
+        // Preview the AutoMix card without waiting for a track end: "upcoming" | "active" | "clear"
+        function testAutoMixCard(phase: string): string {
+            // Nothing queued: show the card with two library tracks (nothing starts playing)
+            if (!win.currentTrack && phase !== "clear") {
+                var lib = (win.allTracks || []).filter(t => t && (t.image || t.cover));
+                if (lib.length >= 2) { win.currentTracks = lib.slice(0, 6); win.currentTrack = lib[0]; }
+            }
+            var list = win.currentTracks || [];
+            var cur = win.currentTrack;
+            var other = null;
+            for (var i = 0; i < list.length; ++i) { if (!win.isSameTrack(list[i], cur)) { other = list[i]; break; } }
+            if (!other) other = (win.allTracks || []).find(t => t && (t.image || t.cover) && !win.isSameTrack(t, cur)) || null;
+            win.mixUpcoming = null;
+            win.mixActive = null;
+            if (!cur || !other || phase === "clear") return "queue=" + list.length + " cur=" + !!cur + " other=" + !!other;
+            var key = t => PlaybackEngine.trackKeyOf(t);
+            if (phase === "active") {
+                win.mixActive = { from: other, to: cur, fromKey: key(other), toKey: key(cur), blendAtMs: Date.now() + 2500, durMs: 9000 };
+            } else {
+                win.mixUpcoming = { from: cur, to: other, fromKey: key(cur), toKey: key(other), fadeAtMs: Date.now() + 9000, durMs: 8000 };
+            }
+            return phase + " " + key(cur) + " -> " + key(other);
+        }
         function toggleLike() { win.toggleLikeCurrentTrack(); }
         function toggleVolumePopup() { bottomPlayer.isVolumePopupOpen = !bottomPlayer.isVolumePopupOpen; }
         function toggleMochyPanel() {

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 import "."
 
 // Transport block for the Now Playing view (the playerbar is unrendered while it is open).
@@ -19,6 +20,7 @@ ColumnLayout {
     property bool isRepeat: false
     property real volume: 100
     property string qualityText: ""
+    property bool mixing: false   // AutoMix is blending: "Cooking" with a light sweep replaces the specs
 
     signal seekRequested(real seconds)
     signal playPauseClicked()
@@ -105,11 +107,52 @@ ColumnLayout {
             width: Math.max(0, parent.width - 2 * Math.max(elapsedText.width, totalText.width) - 24)
             horizontalAlignment: Text.AlignHCenter
             text: ctl.qualityText
-            visible: text.length > 0
+            opacity: ctl.mixing ? 0 : 1
+            Behavior on opacity { NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
+            visible: text.length > 0 && opacity > 0.01
             elide: Text.ElideRight
             font.family: Theme.fontFamily; font.pixelSize: 11; font.weight: Font.DemiBold
             font.letterSpacing: 0.4
             color: Qt.rgba(1, 1, 1, 0.5)
+        }
+        // "Cooking" (AutoMix is blending): the word rests dim and a soft band of light sweeps across it left to right
+        // (text_shimmer.frag), so each letter lights up and dims again on every pass
+        Item {
+            id: mixLabel
+            anchors.centerIn: parent
+            width: mixBase.implicitWidth
+            height: mixBase.implicitHeight
+            opacity: ctl.mixing ? 1 : 0
+            visible: opacity > 0.01
+            Behavior on opacity { NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
+            property real sweep: 0
+            NumberAnimation on sweep {
+                from: 0; to: 1; duration: 1600; loops: Animation.Infinite
+                easing.type: Easing.InOutSine
+                running: mixLabel.visible && ctl.mixing
+            }
+            Text {
+                id: mixBase
+                text: I18n.tr("Cooking", "Cooking")
+                font.family: Theme.fontFamily; font.pixelSize: 12; font.weight: Font.DemiBold
+                font.letterSpacing: 0.6
+                color: "#ffffff"
+            }
+            ShaderEffectSource {
+                id: mixTex
+                sourceItem: mixBase
+                hideSource: true
+                live: true
+                visible: false
+            }
+            ShaderEffect {
+                anchors.fill: mixBase
+                property var source: mixTex
+                property real u_sweep: mixLabel.sweep
+                property real u_band: 0.32
+                property real u_base: 0.42
+                fragmentShader: Qt.resolvedUrl("../assets/shaders/text_shimmer.frag.qsb")
+            }
         }
         Text {
             id: totalText

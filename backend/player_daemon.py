@@ -18,6 +18,11 @@ except (ImportError, ValueError):
     import platform_compat as pc
 
 try:
+    from . import crossfade_engine as xf
+except (ImportError, ValueError):
+    import crossfade_engine as xf
+
+try:
     from . import ytmusic_helper
 except (ImportError, ValueError):
     try:
@@ -111,6 +116,29 @@ def is_mpv_running():
         return pc.is_process_running("mpv.exe")
     return pc.is_process_running(MPV_TITLE)
 
+def _mpv_stream_args(ytdl_fmt, user_agent=DEFAULT_UA):
+    """Network/ytdl flags shared by the main mpv and the crossfade tail mpv."""
+    args = [
+        f"--ytdl-format={ytdl_fmt}",
+        "--ytdl-raw-options=extractor-args=youtube:player_client=android",
+        f"--user-agent={user_agent}",
+        "--referrer=https://www.youtube.com/",
+    ]
+    ytdl_bin = pc.get_binary_path("yt-dlp")
+    if ytdl_bin and os.path.exists(ytdl_bin):
+        safe_ytdl = ytdl_bin.replace("\\", "/")
+        args.append(f"--script-opts=ytdl_hook-ytdl_path={safe_ytdl}")
+    try:
+        import ytmusic_helper as _yh
+        cookie_file = _yh.get_exported_cookie_file()
+        if cookie_file and os.path.exists(cookie_file):
+            safe_cookie = cookie_file.replace("\\", "/")
+            args.append(f"--cookies-file={safe_cookie}")
+            args.append(f"--ytdl-raw-options=cookies={safe_cookie},extractor-args=youtube:player_client=android")
+    except Exception:
+        pass
+    return args
+
 def ensure_mpv():
     """Ensure background MPV process is running with IPC socket safely without process thrashing"""
     with _MPV_LOCK:
@@ -152,7 +180,6 @@ def ensure_mpv():
         ytdl_fmt = YTDL_FORMAT_MAP.get(streaming_quality, "774/141/251/140/bestaudio/best")
 
         mpv_bin = pc.get_binary_path("mpv")
-        ytdl_bin = pc.get_binary_path("yt-dlp")
         ipc_arg = pc.get_mpv_ipc_arg(IPC_TYPE, IPC_TARGET)
 
         mpv_cache_dir = os.path.join(pc.get_cache_dir(), "mpv_stream_cache")
@@ -180,25 +207,9 @@ def ensure_mpv():
             f"--title={MPV_TITLE}",
             "--loop-playlist=no",
             "--gapless-audio=yes",
-            f"--ytdl-format={ytdl_fmt}",
-            "--ytdl-raw-options=extractor-args=youtube:player_client=android",
-            f"--user-agent={DEFAULT_UA}",
-            "--referrer=https://www.youtube.com/",
             f"--log-file={LOG_FILE}"
         ]
-        if ytdl_bin and os.path.exists(ytdl_bin):
-            safe_ytdl = ytdl_bin.replace("\\", "/")
-            cmd.append(f"--script-opts=ytdl_hook-ytdl_path={safe_ytdl}")
-
-        try:
-            import ytmusic_helper
-            cookie_file = ytmusic_helper.get_exported_cookie_file()
-            if cookie_file and os.path.exists(cookie_file):
-                safe_cookie = cookie_file.replace("\\", "/")
-                cmd.append(f"--cookies-file={safe_cookie}")
-                cmd.append(f"--ytdl-raw-options=cookies={safe_cookie},extractor-args=youtube:player_client=android")
-        except Exception:
-            pass
+        cmd.extend(_mpv_stream_args(ytdl_fmt))
 
         popen_kwargs = pc.get_daemon_popen_kwargs()
         subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **popen_kwargs)
@@ -344,7 +355,8 @@ def find_local_downloaded_file(vid="", title="", artist=""):
             pass
     return None
 
-def resolve_media_path(file_path, title="", artist="", force_fresh=False, my_epoch=0):
+def resolve_media_path(file_path, title="", artist="", force_fresh=False, my_epoch=0, ua_out=None):
+    """ua_out: pass a dict to receive the stream user-agent instead of applying it to the main mpv."""
     if not file_path:
         return file_path
     if file_path.startswith("ytdl://") or "youtube.com/watch" in file_path or "youtu.be/" in file_path:
@@ -385,7 +397,9 @@ def resolve_media_path(file_path, title="", artist="", force_fresh=False, my_epo
                         cached = None
                     else:
                         ua = cached.get("user_agent")
-                        if ua:
+                        if ua and isinstance(ua_out, dict):
+                            ua_out["user_agent"] = ua
+                        elif ua:
                             try:
                                 send_mpv_cmd(["set_property", "user-agent", ua])
                             except Exception:
@@ -404,7 +418,9 @@ def resolve_media_path(file_path, title="", artist="", force_fresh=False, my_epo
 
             if res and res.get("stream_url"):
                 ua = res.get("user_agent")
-                if ua:
+                if ua and isinstance(ua_out, dict):
+                    ua_out["user_agent"] = ua
+                elif ua:
                     try:
                         send_mpv_cmd(["set_property", "user-agent", ua])
                     except Exception:
@@ -523,6 +539,207 @@ def fade_out_and_pause(duration=5.0):
     send_mpv_cmd(["set_property", "pause", True])
     # Restore original volume safely so next session starts normal
     send_mpv_cmd(["set_property", "volume", current_vol])
+
+def _is_online_path(file_path):
+    return file_path.startswith("ytdl://") or "youtube.com" in file_path or "youtu.be" in file_path
+
+
+def _target_vid_of(file_path):
+    vid = file_path.replace("ytdl://", "") if _is_online_path(file_path) else ""
+    if "watch?v=" in vid:
+        vid = vid.split("watch?v=")[1].split("&")[0]
+    return vid
+
+
+def _resolve_for_crossfade(file_path, title, artist, my_epoch=0):
+    """Resolve the incoming track without touching the main mpv's user-agent.
+    Returns (stream_url, user_agent, local_or_original_path, target_vid)."""
+    target_vid = _target_vid_of(file_path)
+    if target_vid:
+        local_match = find_local_downloaded_file(target_vid, title, artist)
+        if local_match and os.path.exists(local_match):
+            return local_match, DEFAULT_UA, local_match, target_vid
+        ua_box = {}
+        url = resolve_media_path(file_path, title, artist, my_epoch=my_epoch, ua_out=ua_box)
+        return url, ua_box.get("user_agent") or DEFAULT_UA, file_path, target_vid
+    return file_path, DEFAULT_UA, file_path, ""
+
+
+def _media_duration(url):
+    """Duration of the incoming track without opening it: the 'dur' parameter of a
+    googlevideo stream URL, or the tags of a local file. 0.0 when unknown."""
+    if not url:
+        return 0.0
+    try:
+        if os.path.exists(url):
+            try:
+                import mutagen
+                info = mutagen.File(url)
+                if info and info.info and info.info.length:
+                    return float(info.info.length)
+            except Exception:
+                pass
+            # Cached streams are WebM, which mutagen cannot read: ask mpv (always bundled)
+            kwargs = pc.get_daemon_popen_kwargs()
+            kwargs.pop("start_new_session", None)
+            out = subprocess.run([pc.get_binary_path("mpv"), "--no-config", "--no-video", "--ao=null",
+                                  "--length=0.05", "--term-playing-msg=NUTSTY_DUR=${=duration}", url],
+                                 capture_output=True, text=True, timeout=6, **kwargs).stdout
+            for line in out.splitlines():
+                if line.startswith("NUTSTY_DUR="):
+                    return float(line.split("=", 1)[1] or 0.0)
+            return 0.0
+        from urllib.parse import urlparse, parse_qs
+        dur = parse_qs(urlparse(url).query).get("dur")
+        return float(dur[0]) if dur else 0.0
+    except Exception:
+        return 0.0
+
+
+def automix_plan(next_path, title, artist, base_seconds):
+    """Analyse the end of the playing track and the start of the next one."""
+    main = get_mpv_properties_batch(["path", "duration", "user-agent"])
+    out_url = main.get("path") or ""
+    out_dur = float(main.get("duration") or 0.0)
+    if not out_url or out_dur < 20.0:
+        return {"ok": False, "reason": "no-track"}
+    fmt = YTDL_FORMAT_MAP.get(get_current_streaming_quality(), "774/141/251/140/bestaudio/best")
+    window = min(45.0, out_dur)
+    out_levels = xf.decode_levels(out_url, out_dur - window, window,
+                                  _mpv_stream_args(fmt, main.get("user-agent") or DEFAULT_UA), TEMP_DIR, "out")
+    in_levels = []
+    in_duration = 0.0
+    if next_path:
+        in_url, in_ua, _, _ = _resolve_for_crossfade(next_path, title, artist)
+        if in_url:
+            in_levels = xf.decode_levels(in_url, 0.0, 25.0, _mpv_stream_args(fmt, in_ua), TEMP_DIR, "in")
+            in_duration = _media_duration(in_url)
+    plan = xf.build_plan(out_levels, out_dur - window, out_dur, in_levels, base_seconds)
+    plan["out_duration"] = out_dur
+    plan["in_duration"] = round(in_duration, 2)
+    return plan
+
+
+def _switch_main_to(stream_target, in_ua, file_path, target_vid, meta, fade_in, in_start, my_epoch, keep_paused=False):
+    """Load the incoming track on the main mpv with a sample-accurate fade-in."""
+    global _CURRENT_PLAYING_VID, _CURRENT_PLAYING_PATH
+    is_online = bool(target_vid) and not os.path.exists(stream_target)
+    try:
+        with open(PLAYBACK_STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump({"state": "loading" if is_online else "playing", "path": file_path,
+                       "target_vid": target_vid, "timestamp": time.time(), "epoch": my_epoch}, f)
+    except Exception:
+        pass
+    if in_ua:
+        send_mpv_cmd(["set_property", "user-agent", in_ua])
+    opts = {"af": xf.fade_filter("in", in_start, fade_in)}
+    if in_start > 0:
+        opts["start"] = f"{in_start:.2f}"
+    res = xf.loadfile_with_options(IPC_TYPE, IPC_TARGET, stream_target, opts)
+    if res.get("error") != "success":
+        send_mpv_cmd(["loadfile", stream_target, "replace"])
+    send_mpv_cmd(["set_property", "loop-file", "no"])
+    if not keep_paused:
+        send_mpv_cmd(["set_property", "pause", False])
+    _CURRENT_PLAYING_VID = target_vid
+    _CURRENT_PLAYING_PATH = file_path
+    if meta and meta.get("title"):
+        send_mpv_cmd(["set_property", "force-media-title", f"{meta['title']} - {meta.get('artist', '')}".strip(" -")])
+    else:
+        send_mpv_cmd(["set_property", "force-media-title", ""])
+
+
+def crossfade_play(file_path, title, artist, art, my_epoch, fade_at, fade_dur, in_start):
+    """Blend the playing track into file_path.
+
+    Timeline: the tail mpv opens the outgoing stream paused at the blend point,
+    the main mpv keeps playing until it reaches that point, then the tail takes
+    over the outgoing audio (fading out) and the main mpv switches to the
+    incoming track (fading in). Any pause, skip or seek drops the tail and
+    keeps the incoming track, the way SimpMusic does.
+    """
+    def plain_play():
+        execute_command(["play", file_path, title, artist, art, str(my_epoch)])
+
+    main = get_mpv_properties_batch(["path", "time-pos", "duration", "volume", "mute", "pause", "user-agent"])
+    out_url = main.get("path") or ""
+    out_dur = float(main.get("duration") or 0.0)
+    if not out_url or main.get("pause") is True or out_dur < 20.0 or main.get("time-pos") is None:
+        return plain_play()
+
+    record_active_play_epoch(my_epoch, file_path, _target_vid_of(file_path))
+    stream_target, in_ua, file_path, target_vid = _resolve_for_crossfade(file_path, title, artist, my_epoch)
+    if not is_play_epoch_active(my_epoch) or not stream_target:
+        return
+    meta = update_current_track_metadata(file_path, title, artist, art)
+
+    pos = float(get_mpv_property("time-pos") or 0.0)
+    tail_start = max(float(fade_at), pos + 1.6)
+    dur = min(float(fade_dur), out_dur - tail_start - 0.2)
+    in_start = max(0.0, float(in_start))
+    if dur < 1.5:
+        # Too close to the end for a blend: switch now with a short fade-in
+        _switch_main_to(stream_target, in_ua, file_path, target_vid, meta, 1.5, in_start, my_epoch)
+        return
+
+    fmt = YTDL_FORMAT_MAP.get(get_current_streaming_quality(), "774/141/251/140/bestaudio/best")
+    tail_type, tail_addr = xf.tail_target(PROFILE_SUFFIX)
+    tail_ready = xf.spawn_tail(TEMP_DIR, PROFILE_SUFFIX, _mpv_stream_args(fmt, main.get("user-agent") or DEFAULT_UA),
+                               main.get("volume") or 100.0, bool(main.get("mute")))
+    if tail_ready:
+        xf.loadfile_with_options(tail_type, tail_addr, out_url, {
+            "start": f"{tail_start:.3f}", "af": xf.fade_filter("out", tail_start, dur)})
+        tail_ready = False
+        deadline = time.time() + 6.0
+        while time.time() < deadline:
+            if xf.ipc_get(tail_type, tail_addr, "time-pos", 0.3) is not None:
+                tail_ready = True
+                break
+            cur = get_mpv_property("time-pos")
+            if cur is None or float(cur) > tail_start - 0.05 or not is_play_epoch_active(my_epoch):
+                break
+            time.sleep(0.05)
+
+    try:
+        # Hold until the main mpv reaches the blend point
+        while is_play_epoch_active(my_epoch):
+            cur = get_mpv_properties_batch(["time-pos", "pause"])
+            if cur.get("pause") is True:
+                # Paused before the blend: line up the next track, still paused
+                xf.kill_tail(TEMP_DIR, PROFILE_SUFFIX)
+                _switch_main_to(stream_target, in_ua, file_path, target_vid, meta, 0.3, in_start, my_epoch, keep_paused=True)
+                return
+            t = cur.get("time-pos")
+            if t is None or float(t) >= tail_start - 0.02:
+                break
+            time.sleep(max(0.004, min(0.05, (tail_start - float(t)) * 0.5)))
+        if not is_play_epoch_active(my_epoch):
+            return
+
+        if tail_ready:
+            xf.ipc_call(tail_type, tail_addr, ["set_property", "pause", False], timeout=0.3)
+        _switch_main_to(stream_target, in_ua, file_path, target_vid, meta, dur, in_start, my_epoch)
+        if not tail_ready:
+            return
+
+        # Ride the blend: mirror the user's volume, drop the tail on pause/skip/seek
+        switched = time.time()
+        while time.time() - switched < dur + 0.6:
+            time.sleep(0.05)
+            if not is_play_epoch_active(my_epoch):
+                break
+            cur = get_mpv_properties_batch(["pause", "volume", "mute", "time-pos"])
+            if cur.get("pause") is True:
+                break
+            t = cur.get("time-pos")
+            if t is not None and abs(float(t) - (in_start + time.time() - switched)) > 3.0:
+                break
+            if cur.get("volume") is not None:
+                xf.ipc_call(tail_type, tail_addr, ["set_property", "volume", cur.get("volume")], timeout=0.2)
+                xf.ipc_call(tail_type, tail_addr, ["set_property", "mute", bool(cur.get("mute"))], timeout=0.2)
+    finally:
+        xf.kill_tail(TEMP_DIR, PROFILE_SUFFIX)
+
 
 def get_status_dict():
     is_loading = False
@@ -650,6 +867,7 @@ def execute_command(args):
     action = args[0].lower()
 
     if action == "play" and len(args) > 1:
+        xf.kill_tail(TEMP_DIR, PROFILE_SUFFIX)
         epoch_arg = 0
         if len(args) > 5:
             try:
@@ -832,6 +1050,7 @@ def execute_command(args):
         except Exception:
             pass
         send_mpv_cmd(["set_property", "pause", True])
+        xf.kill_tail(TEMP_DIR, PROFILE_SUFFIX)
         print("Paused playback")
 
     elif action == "resume":
@@ -866,6 +1085,7 @@ def execute_command(args):
         print("Resumed playback")
 
     elif action == "stop":
+        xf.kill_tail(TEMP_DIR, PROFILE_SUFFIX)
         send_mpv_cmd(["stop"])
 
     elif action == "seek" and len(args) > 1:
@@ -894,6 +1114,26 @@ def execute_command(args):
                 ytmusic_helper.resolve_stream_url(vid)
             except Exception:
                 pass
+
+    elif action == "crossfade_play" and len(args) > 8:
+        try:
+            ep = int(args[5])
+        except ValueError:
+            ep = int(time.time() * 1000)
+        try:
+            crossfade_play(args[1], args[2], args[3], args[4], ep, float(args[6]), float(args[7]), float(args[8]))
+        except Exception as e:
+            sys.stderr.write(f"[player_daemon] crossfade failed, falling back: {e}\n")
+            xf.kill_tail(TEMP_DIR, PROFILE_SUFFIX)
+            execute_command(["play", args[1], args[2], args[3], args[4], args[5]])
+
+    elif action == "automix_plan" and len(args) > 1:
+        base = float(args[4]) if len(args) > 4 else 6.0
+        try:
+            plan = automix_plan(args[1], args[2] if len(args) > 2 else "", args[3] if len(args) > 3 else "", base)
+        except Exception as e:
+            plan = {"ok": False, "reason": str(e)}
+        print(json.dumps(plan))
 
     elif action == "status":
         print(get_status_json())

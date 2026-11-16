@@ -67,7 +67,7 @@ Item {
         source: sheen
         maskEnabled: true
         maskSource: sheenFade
-        maskThresholdMin: 0.0
+        maskThresholdMin: 0.5 // with spread 1 this is smoothstep(0, 1): a real fade, not a hard cut
         maskSpreadAtMin: 1.0
         autoPaddingEnabled: false
     }

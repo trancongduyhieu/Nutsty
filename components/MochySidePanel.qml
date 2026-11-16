@@ -625,8 +625,10 @@ Item {
                     brightness: 0.12
                     maskEnabled: true
                     maskSource: coverGlowMask
-                    // MultiEffect masks are a hard threshold by default; spread makes the gradient a real fade
-                    maskThresholdMin: 0.0
+                    // MultiEffect maps mask alpha through smoothstep(t*(1+s)-s, t*(1+s)). Only t=0.5, s=1
+                    // gives smoothstep(0, 1): a real fade. t=0 makes any alpha > 0 fully opaque, so the
+                    // glow ended in a hard edge at the bottom of this item.
+                    maskThresholdMin: 0.5
                     maskSpreadAtMin: 1.0
                     autoPaddingEnabled: false
                     opacity: 0.85

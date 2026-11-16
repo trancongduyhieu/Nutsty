@@ -122,6 +122,151 @@ function findLocalDownloadedTrack(win, trk) {
     return null;
 }
 
+// -----------------------------------------------------------------------------
+// Crossfade & AutoMix (backend: player_daemon.py crossfade_play / automix_plan)
+// The blend starts a little before its fade point so the daemon has time to
+// open the outgoing tail; the UI switches to the next track at that moment.
+// -----------------------------------------------------------------------------
+var CROSSFADE_LEAD_SEC = 3.0;
+var CROSSFADE_MIN_TRACK_SEC = 30.0;
+
+function trackKeyOf(trk) {
+    if (!trk) return "";
+    return extractTrackVideoId(trk) || trk.path || trk.title || trk.name || "";
+}
+
+function dispatchPlay(win, path, title, artist, image, epoch) {
+    var base = ["python3", win.appDir + "/backend/player_daemon.py"];
+    var plan = win.crossfadeArmedPlan;
+    var armed = win.crossfadeArmed && plan && (Date.now() - (win.crossfadeArmedAt || 0) < 4000);
+    win.crossfadeArmed = false;
+    win.crossfadeArmedPlan = null;
+    if (armed) {
+        Quickshell.execDetached(base.concat(["crossfade_play", path, title, artist, image, String(epoch),
+            String(plan.fade_at), String(plan.duration), String(plan.in_start || 0)]));
+    } else {
+        win.crossfadeHandoverUntil = 0;
+        Quickshell.execDetached(base.concat(["play", path, title, artist, image, String(epoch)]));
+    }
+}
+
+// Next track the queue will play; shuffle picks are remembered so the
+// AutoMix analysis and the real switch agree on the same song.
+function peekNextTrack(win) {
+    if (!win.currentTrack || !win.currentTracks || win.currentTracks.length === 0) return null;
+    var curIdx = win.currentTracks.findIndex(t => win.isSameTrack(t, win.currentTrack));
+    if (curIdx === -1) return win.currentTracks[0];
+    if (win.isShuffle && win.currentTracks.length > 1) {
+        var curKey = trackKeyOf(win.currentTrack);
+        var pick = win.shuffleNextPick;
+        if (pick && pick.fromKey === curKey && pick.index < win.currentTracks.length && pick.index !== curIdx) {
+            return win.currentTracks[pick.index];
+        }
+        var idx = curIdx;
+        while (idx === curIdx) idx = Math.floor(Math.random() * win.currentTracks.length);
+        win.shuffleNextPick = { fromKey: curKey, index: idx };
+        return win.currentTracks[idx];
+    }
+    var nextIdx = curIdx + 1;
+    if (nextIdx >= win.currentTracks.length) nextIdx = 0;
+    return win.currentTracks[nextIdx];
+}
+
+function playablePathOf(win, trk) {
+    if (!trk) return "";
+    var localMatch = win.findLocalDownloadedTrack ? win.findLocalDownloadedTrack(trk) : null;
+    if (localMatch && localMatch.path) return localMatch.path;
+    var vid = extractTrackVideoId(trk);
+    if (vid) return "ytdl://" + vid;
+    return trk.path || "";
+}
+
+// From 80% of a track, resolve and decode the next track's artwork in the background so the
+// switch (AutoMix or a plain advance) shows the right cover at once
+function maybePrefetchNextCover(win) {
+    var dur = win.totalDuration;
+    if (!(dur > 0) || win.currentTime < dur * 0.8) return;
+    var key = trackKeyOf(win.currentTrack);
+    if (!key) return;
+    var nextTrk = peekNextTrack(win);
+    if (!nextTrk) return;
+    var pairKey = key + ">" + trackKeyOf(nextTrk);   // queue edits after 80% get a new prefetch
+    if (win.coverPrefetchKey === pairKey) return;
+    win.coverPrefetchKey = pairKey;
+    if (typeof win.prefetchTrackCover === "function") win.prefetchTrackCover(nextTrk);
+}
+
+// Seconds before the blend starts that the Now Playing view shows the upcoming track
+var MIX_PREVIEW_SEC = 14.0;
+
+function clearMixUpcoming(win) {
+    if (win.mixUpcoming) win.mixUpcoming = null;
+}
+
+// Publish the upcoming mix for the Now Playing view. Reassigned only when something
+// visible changes, so bindings don't re-evaluate on every status tick.
+function publishMixUpcoming(win, nextTrk, leadSec, blendSec) {
+    var fadeAtMs = Date.now() + leadSec * 1000;
+    var cur = win.mixUpcoming;
+    var fromKey = trackKeyOf(win.currentTrack), toKey = trackKeyOf(nextTrk);
+    if (cur && cur.fromKey === fromKey && cur.toKey === toKey && Math.abs(cur.fadeAtMs - fadeAtMs) < 400
+            && Math.abs(cur.durMs - blendSec * 1000) < 50) return;
+    win.mixUpcoming = { from: win.currentTrack, to: nextTrk, fromKey: fromKey, toKey: toKey,
+                        fadeAtMs: fadeAtMs, durMs: blendSec * 1000 };
+}
+
+function maybeStartCrossfade(win, seekGrace) {
+    if (!win.crossfadeEnabled || win.isRepeat || win.listeningAlongFriend) { clearMixUpcoming(win); return false; }
+    if (win.isLoadingAudio || !win.isPlaying || seekGrace) return false;
+    if (win.isSleepTimerActive && win.sleepTimerMode === "end_of_track") { clearMixUpcoming(win); return false; }
+    var dur = win.totalDuration;
+    if (!(dur >= CROSSFADE_MIN_TRACK_SEC)) { clearMixUpcoming(win); return false; }
+    var key = trackKeyOf(win.currentTrack);
+    if (!key || win.crossfadeTriggeredKey === key) return false;
+    var nextTrk = peekNextTrack(win);
+    if (!nextTrk || win.isSameTrack(nextTrk, win.currentTrack)) { clearMixUpcoming(win); return false; }
+
+    var base = Math.max(2, Math.min(12, win.crossfadeSeconds || 6));
+    var remaining = dur - win.currentTime;
+    var plan = { fade_at: dur - base, duration: base, in_start: 0 };
+    if (win.autoMixEnabled) {
+        if (win.autoMixRequestedKey !== key && remaining <= 70 && remaining > base + CROSSFADE_LEAD_SEC + 2) {
+            win.autoMixRequestedKey = key;
+            win.requestAutoMixPlan(key, trackKeyOf(nextTrk), playablePathOf(win, nextTrk), nextTrk.title || nextTrk.name || "", nextTrk.artist || "", base);
+        }
+        var ap = win.autoMixPlan;
+        if (ap && ap.ok && ap.key === key) {
+            plan = { fade_at: ap.fade_at, duration: ap.duration, in_start: ap.nextKey === trackKeyOf(nextTrk) ? (ap.in_start || 0) : 0 };
+        }
+    }
+    var leadSec = plan.fade_at - win.currentTime;
+    if (leadSec <= MIX_PREVIEW_SEC && remaining > 2.0) publishMixUpcoming(win, nextTrk, leadSec, plan.duration);
+    else clearMixUpcoming(win);
+    if (win.currentTime < plan.fade_at - CROSSFADE_LEAD_SEC || remaining <= 2.0) return false;
+
+    win.crossfadeTriggeredKey = key;
+    win.crossfadeArmedPlan = plan;
+    win.crossfadeArmedAt = Date.now();
+    win.crossfadeArmed = true;
+    // Until mpv reports the incoming file, status still describes the outgoing one
+    win.crossfadeHandoverPath = win.lastMpvPath || "";
+    win.crossfadeHandoverUntil = win.crossfadeHandoverPath ? Date.now() + 15000 : 0;
+    win.shuffleNextPick = null;
+    // The blend itself starts when the outgoing track reaches fade_at (the daemon waits for it)
+    win.mixActive = { from: win.currentTrack, to: nextTrk, fromKey: key, toKey: trackKeyOf(nextTrk),
+                      blendAtMs: Date.now() + Math.max(0.3, leadSec) * 1000, durMs: plan.duration * 1000 };
+    win.mixUpcoming = null;
+    triggerRapidTrackSwitch(win, nextTrk);
+    // The AutoMix analysis already measured the incoming track: show its length right away
+    // instead of 0:00 until mpv opens the file
+    var apd = win.autoMixPlan;
+    if (!(win.totalDuration > 0) && apd && apd.ok && apd.key === key && apd.nextKey === trackKeyOf(nextTrk)
+            && apd.in_duration > 0) {
+        win.totalDuration = apd.in_duration;
+    }
+    return true;
+}
+
 function playOnlineTrack(win, trk, startRadio, radioProc, prewarmTimer, pollTimer) {
     if (!trk) return;
     if (win.listeningAlongFriend && !win.isSyncingFromFriend && !win.guestCanControlHost) {
@@ -220,7 +365,7 @@ function playOnlineTrack(win, trk, startRadio, radioProc, prewarmTimer, pollTime
     var tTitle = trk.title || trk.name || (localMatch ? (localMatch.title || localMatch.name || "") : "");
     var tArtist = trk.artist || (localMatch ? (localMatch.artist || "") : "");
     var tImage = trk.image || trk.cover || (localMatch ? (localMatch.image || "") : "");
-    Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "play", streamPath, tTitle, tArtist, tImage, String(currentEpoch)]);
+    dispatchPlay(win, streamPath, tTitle, tArtist, tImage, currentEpoch);
     win.syncNowPlaying(true);
     if (!win.isSyncingFromFriend) {
         if (win.activeCoListeners && win.activeCoListeners.length > 0) {
@@ -306,7 +451,7 @@ function playTrack(win, trk, pollTimer) {
     var tTitle = trk.title || trk.name || "";
     var tArtist = trk.artist || "";
     var tImage = trk.image || "";
-    Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "play", trk.path, tTitle, tArtist, tImage, String(currentEpoch)]);
+    dispatchPlay(win, trk.path, tTitle, tArtist, tImage, currentEpoch);
     win.syncNowPlaying(true);
     if (!win.isSyncingFromFriend) {
         if (win.activeCoListeners && win.activeCoListeners.length > 0) {
@@ -386,7 +531,9 @@ function togglePlay(win, pollTimer) {
 
 function triggerRapidTrackSwitch(win, targetTrack) {
     if (!targetTrack) return;
-    if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.pauseImmediate) {
+    if (win.crossfadeArmed) {
+        // Crossfade: the outgoing track keeps playing until the blend point
+    } else if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.pauseImmediate) {
         __NutstyBridge.pauseImmediate();
     } else {
         Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
@@ -437,10 +584,16 @@ function playNext(win) {
     if (curIdx === -1) {
         nextIdx = 0;
     } else if (win.isShuffle && win.currentTracks.length > 1) {
-        nextIdx = curIdx;
-        while (nextIdx === curIdx) {
-            nextIdx = Math.floor(Math.random() * win.currentTracks.length);
+        var pick = win.shuffleNextPick;
+        if (pick && pick.fromKey === trackKeyOf(win.currentTrack) && pick.index < win.currentTracks.length && pick.index !== curIdx) {
+            nextIdx = pick.index;
+        } else {
+            nextIdx = curIdx;
+            while (nextIdx === curIdx) {
+                nextIdx = Math.floor(Math.random() * win.currentTracks.length);
+            }
         }
+        win.shuffleNextPick = null;
     } else {
         nextIdx = curIdx + 1;
         if (nextIdx >= win.currentTracks.length) {
@@ -551,32 +704,32 @@ function rateSong(win, vid, rating) {
 
 function handleDislikedTrack(win, trk) {
     if (!trk) return;
-    var vid = trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
+    var vidOf = function (t) {
+        if (!t) return "";
+        var v = t.videoId || (t.path && t.path.startsWith("ytdl://") ? t.path.replace("ytdl://", "") : "");
+        return v ? String(v).replace("ytdl://", "").replace("yt_", "").trim() : "";
+    };
+    var vid = vidOf(trk);
     if (vid) {
         win.rateSong(vid, "DISLIKE");
     }
-    var newQueue = [];
-    for (var i = 0; i < win.currentTracks.length; i++) {
-        var t = win.currentTracks[i];
-        var tVid = t.videoId || (t.path && t.path.startsWith("ytdl://") ? t.path.replace("ytdl://", "") : "");
-        if (tVid !== vid) {
-            newQueue.push(t);
-        }
-    }
-    win.currentTracks = newQueue;
+    var isCurrent = win.isSameTrack(trk, win.currentTrack) || (!!vid && vid === vidOf(win.currentTrack));
+    var remaining = (win.currentTracks || []).filter(function (t) {
+        return vid ? vidOf(t) !== vid : !win.isSameTrack(t, trk);
+    });
 
-    var newBrowse = [];
-    for (var j = 0; j < win.browsingTracks.length; j++) {
-        var bt = win.browsingTracks[j];
-        var bVid = bt.videoId || (bt.path && bt.path.startsWith("ytdl://") ? bt.path.replace("ytdl://", "") : "");
-        if (bVid !== vid) {
-            newBrowse.push(bt);
-        }
-    }
-    win.browsingTracks = newBrowse;
-    if (win.currentTracks && win.currentTracks.length > 0) {
+    // Skip to the track after the disliked one while it is still in the queue, so playNext
+    // can find its position (removing it first made playNext fall back to the queue start)
+    if (isCurrent && remaining.length > 0) {
         win.playNext();
-    } else {
+    }
+
+    win.currentTracks = remaining;
+    win.browsingTracks = (win.browsingTracks || []).filter(function (t) {
+        return vid ? vidOf(t) !== vid : !win.isSameTrack(t, trk);
+    });
+
+    if (isCurrent && remaining.length === 0) {
         win.isPlaying = false;
         win.currentTrack = null;
         Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
@@ -768,6 +921,14 @@ function trackPlayback(win, trk, playbackTrackingProc) {
 function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileView) {
     try {
         var s = JSON.parse(data);
+        if (win.crossfadeHandoverUntil > 0) {
+            if (Date.now() < win.crossfadeHandoverUntil && s.path && s.path === win.crossfadeHandoverPath) {
+                return;
+            }
+            win.crossfadeHandoverUntil = 0;
+            win.crossfadeHandoverPath = "";
+        }
+        if (s.path) win.lastMpvPath = s.path;
         if (s.audio_specs && typeof s.audio_specs === "object") {
             win.audioSpecs = s.audio_specs;
         }
@@ -964,6 +1125,8 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
 
         // Auto-advance / Repeat khi het bai
         var seekGraceAdv = Date.now() - (win.lastSeekTimestamp || 0) < 2500;
+        maybePrefetchNextCover(win);
+        if (maybeStartCrossfade(win, seekGraceAdv)) return;
         var isNearEnd = !seekGraceAdv && win.totalDuration > 3 && win.currentTime >= (win.totalDuration - 1.0);
         var isEofStopped = !seekGraceAdv && (!s.is_playing && !s.is_paused && win.totalDuration > 3 && win.currentTime >= (win.totalDuration - 4.0));
         if (!win.isLoadingAudio && (win.isPlaying || isEofStopped) && (isNearEnd || isEofStopped)) {

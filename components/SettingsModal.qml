@@ -23,6 +23,9 @@ Rectangle {
     property bool isProcessing: false
     property bool syncHistoryToGoogle: true
     property bool animatedCoverEnabled: true
+    property bool crossfadeEnabled: false
+    property int crossfadeSeconds: 6
+    property bool autoMixEnabled: false
     property string canvasPreference: "apple_first"
     property int currentTab: 0 // 0: Google Account, 1: Desktop Lyrics
     property bool desktopLyricsEnabled: true
@@ -304,6 +307,9 @@ Rectangle {
     signal toggleSyncHistoryRequested(bool enabled)
 
     signal toggleAnimatedCoverRequested(bool enabled)
+    signal toggleCrossfadeRequested(bool enabled)
+    signal selectCrossfadeSecondsRequested(int seconds)
+    signal toggleAutoMixRequested(bool enabled)
     signal saveCanvasPreferenceRequested(string pref)
     signal toggleDesktopLyricsRequested(bool enabled)
     signal toggleTaskbarLyricsRequested(bool enabled)
@@ -1797,6 +1803,210 @@ Rectangle {
                             onClicked: {
                                 root.syncHistoryToGoogle = !root.syncHistoryToGoogle;
                                 root.toggleSyncHistoryRequested(root.syncHistoryToGoogle);
+                            }
+                        }
+                    }
+                }
+
+                // =============================================================
+                // Crossfade & AutoMix (smooth track transitions)
+                // =============================================================
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 46
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: toggleCrossfade.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Chuyển bài mượt mà", "Crossfade")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Bài đang phát nhỏ dần trong lúc bài kế tiếp to dần lên", "The current song fades out while the next one fades in")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    Rectangle {
+                        id: toggleCrossfade
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 44
+                        height: 24
+                        radius: 12
+                        color: root.crossfadeEnabled ? root.accentColor : Qt.rgba(255, 255, 255, 0.14)
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        Rectangle {
+                            width: 18
+                            height: 18
+                            radius: 9
+                            color: "#ffffff"
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: root.crossfadeEnabled ? parent.width - width - 3 : 3
+                            Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            preventStealing: false
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                root.crossfadeEnabled = !root.crossfadeEnabled;
+                                root.toggleCrossfadeRequested(root.crossfadeEnabled);
+                            }
+                        }
+                    }
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 46
+                    visible: root.crossfadeEnabled && !root.autoMixEnabled
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: crossfadeChips.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Thời lượng chuyển bài", "Crossfade length")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Khoảng thời gian hai bài hòa vào nhau", "How long the two songs overlap")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    Row {
+                        id: crossfadeChips
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 6
+
+                        Repeater {
+                            model: [3, 6, 9, 12]
+                            delegate: Rectangle {
+                                required property int modelData
+                                readonly property bool selected: root.crossfadeSeconds === modelData
+                                width: 54
+                                height: 26
+                                radius: 13
+                                color: selected ? root.accentColor
+                                     : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, chipMouse.containsMouse ? 0.26 : 0.14)
+                                Behavior on color { ColorAnimation { duration: 150 } }
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: I18n.tr(modelData + " giây", modelData + " s")
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    font.bold: parent.selected
+                                    color: "#ffffff"
+                                }
+
+                                MouseArea {
+                                    id: chipMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root.crossfadeSeconds = modelData;
+                                        root.selectCrossfadeSecondsRequested(modelData);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 46
+                    visible: root.crossfadeEnabled
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: toggleAutoMix.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Tự động hòa trộn", "AutoMix")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Nghe độ lớn của từng bài để chọn lúc chuyển, bỏ qua đoạn im lặng đầu và cuối bài", "Reads each song's loudness to pick the blend point and skip silent intros and endings")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    Rectangle {
+                        id: toggleAutoMix
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 44
+                        height: 24
+                        radius: 12
+                        color: root.autoMixEnabled ? root.accentColor : Qt.rgba(255, 255, 255, 0.14)
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        Rectangle {
+                            width: 18
+                            height: 18
+                            radius: 9
+                            color: "#ffffff"
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: root.autoMixEnabled ? parent.width - width - 3 : 3
+                            Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            preventStealing: false
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                root.autoMixEnabled = !root.autoMixEnabled;
+                                root.toggleAutoMixRequested(root.autoMixEnabled);
                             }
                         }
                     }

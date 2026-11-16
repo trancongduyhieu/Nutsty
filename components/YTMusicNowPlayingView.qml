@@ -431,6 +431,9 @@ Item {
     signal exitListeningAlongRequested()
 
     property var listeningAlongFriend: null
+    // AutoMix transition card (see AutoMixBridge.qml)
+    property var mixUpcoming: null
+    property var mixActive: null
 
     FileView {
         id: dislikedFileView
@@ -639,6 +642,93 @@ Item {
         return img;
     }
 
+    // ---- Square cover lookup (shared by the current track and AutoMix prefetch) ----------------
+    // One cache per session keyed like the resolver, so the next track's artwork can be resolved
+    // and decoded before the switch and the main cover never shows the previous track's image.
+    property var coverCache: ({})
+    property var coverInflight: ({})
+    property int coverCacheRev: 0
+
+    function coverInfoOf(trk) {
+        if (!trk) return null;
+        var tTitle = (trk.title || trk.name || "").trim();
+        var tArtist = (trk.artist || "").trim();
+        var tVid = trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
+        var tImg = root.getRawTrackImage(trk);
+        // If videoId is missing, extract it directly from YouTube image URL
+        if (!tVid && tImg && tImg.indexOf("i.ytimg.com") !== -1) {
+            var m = tImg.match(/vi\/([a-zA-Z0-9_-]{11})\//);
+            if (m && m[1]) tVid = m[1];
+        }
+        return { title: tTitle, artist: tArtist, vid: tVid, img: tImg, key: (tVid ? tVid : (tTitle + "_" + tArtist)) };
+    }
+    function storeCover(key, r) {
+        var c = root.coverCache;
+        c[key] = r;
+        root.coverCache = c;
+        root.coverCacheRev++;
+    }
+    // Resolved artwork for a track if it is already known, else "" (bind with coverCacheRev)
+    function cachedCoverFor(trk) {
+        var info = coverInfoOf(trk);
+        var c = info ? root.coverCache[info.key] : null;
+        return (c && c.url) ? c.url : "";
+    }
+    // Same answer resolveCoverArt would give; cb(result, info) with result {url, isSquare}
+    function lookupCover(trk, cb) {
+        var info = coverInfoOf(trk);
+        if (!info) return;
+        var hit = root.coverCache[info.key];
+        if (hit) { if (cb) cb(hit, info); return; }
+        // Tier 0: Already native square Google CDN image
+        if (info.img && (info.img.indexOf("googleusercontent.com") !== -1 || info.img.indexOf("ggpht.com") !== -1)) {
+            storeCover(info.key, { url: root.getHighResImage(info.img), isSquare: true });
+        } else if (info.img && (info.img.startsWith("/") || info.img.startsWith("file://"))) {
+            // Local embedded artwork file (extracted jpg/png in local filesystem)
+            storeCover(info.key, { url: info.img, isSquare: true });
+        }
+        hit = root.coverCache[info.key];
+        if (hit) { if (cb) cb(hit, info); return; }
+
+        var waiting = root.coverInflight[info.key];
+        if (waiting) { if (cb) waiting.push(cb); return; }
+        root.coverInflight[info.key] = cb ? [cb] : [];
+        function finish(r, cacheIt) {
+            if (cacheIt) storeCover(info.key, r);
+            var cbs = root.coverInflight[info.key] || [];
+            delete root.coverInflight[info.key];
+            for (var i = 0; i < cbs.length; ++i) cbs[i](r, info);
+        }
+        // Tier 1: Query resident HTTP daemon /api/resolve_cover for official 1:1 square artwork
+        var apiUrl = "http://127.0.0.1:17890/api/resolve_cover?" +
+                     "title=" + encodeURIComponent(info.title) +
+                     "&artist=" + encodeURIComponent(info.artist) +
+                     "&videoId=" + encodeURIComponent(info.vid) +
+                     "&current=" + encodeURIComponent(info.img);
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", apiUrl);
+        xhr.timeout = 8000;
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE) return;
+            if (xhr.status !== 200) { finish({ url: "", isSquare: false }, false); return; }
+            try {
+                var res = JSON.parse(xhr.responseText);
+                if (res && res.url) finish({ url: root.getHighResImage(res.url), isSquare: res.is_square === true }, true);
+                else finish({ url: "", isSquare: false }, true);
+            } catch (e) {
+                finish({ url: "", isSquare: false }, false);
+            }
+        };
+        xhr.ontimeout = function() { finish({ url: "", isSquare: false }, false); };
+        xhr.send();
+    }
+    // Background prefetch for the next track: resolve it, then decode it at the main cover's size
+    function prefetchCoverArt(trk) {
+        lookupCover(trk, function(r, info) {
+            coverPreloader.source = coverSurface.formatImageUrl(r.url || root.getHighResImage(info.img));
+        });
+    }
+
     function resolveCoverArt(trk) {
         if (!trk) {
             root.resolvedSquareImage = "";
@@ -648,102 +738,30 @@ Item {
             root.lastResolvedCoverKey = "";
             return;
         }
-
-        var tTitle = (trk.title || trk.name || "").trim();
-        var tArtist = (trk.artist || "").trim();
-        var tVid = trk.videoId || (trk.path && trk.path.startsWith("ytdl://") ? trk.path.replace("ytdl://", "") : "");
-        var tImg = root.getRawTrackImage(trk);
-
-        // If videoId is missing, extract it directly from YouTube image URL
-        if (!tVid && tImg && tImg.indexOf("i.ytimg.com") !== -1) {
-            var m = tImg.match(/vi\/([a-zA-Z0-9_-]{11})\//);
-            if (m && m[1]) {
-                tVid = m[1];
-            }
-        }
-
-        var coverKey = (tVid ? tVid : (tTitle + "_" + tArtist));
-
-        if (root.lastResolvedCoverKey === coverKey && (root.resolvedSquareImage !== "" || root.resolvedIsSquare)) {
+        var info = coverInfoOf(trk);
+        if (root.lastResolvedCoverKey === info.key && (root.resolvedSquareImage !== "" || root.resolvedIsSquare)) {
             return;
         }
-        root.lastResolvedCoverKey = coverKey;
+        root.lastResolvedCoverKey = info.key;
         root.squareImageFailed = false;
         root.highResFailed = false;
-
-        // Tier 0: Already native square Google CDN image
-        if (tImg && (tImg.indexOf("googleusercontent.com") !== -1 || tImg.indexOf("ggpht.com") !== -1)) {
-            var up = root.getHighResImage(tImg);
-            root.resolvedSquareImage = up;
-            root.resolvedIsSquare = true;
-            root.squareCoverResolved(up, true);
-            return;
+        // Never keep showing the previous track's artwork while this one resolves
+        if (!root.coverCache[info.key]) {
+            root.resolvedSquareImage = "";
+            root.resolvedIsSquare = false;
         }
-
-        // Local embedded artwork file (extracted jpg/png in local filesystem)
-        if (tImg && (tImg.startsWith("/") || tImg.startsWith("file://"))) {
-            root.resolvedSquareImage = tImg;
-            root.resolvedIsSquare = true;
-            root.squareCoverResolved(tImg, true);
-            return;
-        }
-
-        // Tier 1: Query resident HTTP daemon /api/resolve_cover for official 1:1 square artwork
-        var apiUrl = "http://127.0.0.1:17890/api/resolve_cover?" +
-                     "title=" + encodeURIComponent(tTitle) +
-                     "&artist=" + encodeURIComponent(tArtist) +
-                     "&videoId=" + encodeURIComponent(tVid) +
-                     "&current=" + encodeURIComponent(tImg);
-
-        var xhr = new XMLHttpRequest();
-        xhr.open("GET", apiUrl);
-        xhr.timeout = 8000;
-        xhr.onreadystatechange = function() {
-            if (xhr.readyState === XMLHttpRequest.DONE) {
-                if (xhr.status === 200) {
-                    try {
-                        var res = JSON.parse(xhr.responseText);
-                        if (root.lastResolvedCoverKey === coverKey) {
-                            if (res && res.url && res.is_square === true) {
-                                var resUrl = root.getHighResImage(res.url);
-                                root.resolvedSquareImage = resUrl;
-                                root.resolvedIsSquare = true;
-                                root.squareCoverResolved(resUrl, true);
-                            } else if (res && res.url) {
-                                var fallbackUrl = root.getHighResImage(res.url);
-                                root.resolvedSquareImage = fallbackUrl;
-                                root.resolvedIsSquare = false;
-                                root.squareCoverResolved(fallbackUrl, false);
-                            } else {
-                                root.resolvedSquareImage = "";
-                                root.resolvedIsSquare = false;
-                                root.squareCoverResolved(tImg, false);
-                            }
-                        }
-                    } catch (e) {
-                        if (root.lastResolvedCoverKey === coverKey) {
-                            root.resolvedSquareImage = "";
-                            root.resolvedIsSquare = false;
-                            root.squareCoverResolved(tImg, false);
-                        }
-                    }
-                } else {
-                    if (root.lastResolvedCoverKey === coverKey) {
-                        root.resolvedSquareImage = "";
-                        root.resolvedIsSquare = false;
-                        root.squareCoverResolved(tImg, false);
-                    }
-                }
-            }
-        };
-        xhr.ontimeout = function() {
-            if (root.lastResolvedCoverKey === coverKey) {
+        lookupCover(trk, function(r, inf) {
+            if (root.lastResolvedCoverKey !== inf.key) return;
+            if (r.url) {
+                root.resolvedSquareImage = r.url;
+                root.resolvedIsSquare = r.isSquare;
+                root.squareCoverResolved(r.url, r.isSquare);
+            } else {
                 root.resolvedSquareImage = "";
                 root.resolvedIsSquare = false;
-                root.squareCoverResolved(tImg, false);
+                root.squareCoverResolved(inf.img, false);
             }
-        };
-        xhr.send();
+        });
     }
 
     function fetchLyrics() {
@@ -1139,6 +1157,16 @@ Item {
                     // Smaller than the slot so the glow halo has room to bloom around it.
                     width: Math.max(200, Math.min(parent.width - 96, parent.height - 72, 420 - 80 * Math.min(1, mainArea.panelT)))
                     height: width
+                    // AutoMix stages the cover like an app switcher (see AutoMixBridge.qml)
+                    transform: [
+                        Scale {
+                            origin.x: coverArtworkWrapper.width / 2
+                            origin.y: coverArtworkWrapper.height / 2
+                            xScale: autoMix.mainScale
+                            yScale: autoMix.mainScale
+                        },
+                        Translate { x: autoMix.mainShift }
+                    ]
 
                     // Halo: two soft rounded-rect shadows in the cover's own two main colours, slightly
                     // offset in opposite directions (the approach Swiftify uses). SDF shadows have no blur
@@ -1232,6 +1260,42 @@ Item {
                         appDir: root.appDir
                     }
                 }
+
+                // Decodes the next track's artwork ahead of time with the main cover's exact request
+                // (same URL and size), so the switch reuses the cached pixmap instead of loading
+                RoundedImage {
+                    id: coverPreloader
+                    visible: false
+                    width: 1
+                    height: 1
+                    asynchronous: true
+                    sourceSize: Qt.size(1200, 1200)
+                    autoCropBlackBars: coverSurface.autoCropBlackBars
+                }
+
+                // AutoMix: the next track and the particle stream around the cover (artwork mode only)
+                AutoMixBridge {
+                    id: autoMix
+                    anchors.fill: parent
+                    z: 2
+                    track: root.track
+                    mixUpcoming: root.mixUpcoming
+                    mixActive: root.mixActive
+                    isPlaying: root.isPlaying
+                    shown: mainArea.panelT < 0.5
+                    coverSize: coverArtworkWrapper.width
+                    coverRadius: coverSurface.radius
+                    onPrefetchRequested: trk => root.prefetchCoverArt(trk)
+                    mainReady: coverSurface.coverStatus === Image.Ready
+                    mainSurface: coverSurface
+                    nextImage: {
+                        root.coverCacheRev;
+                        var u = root.cachedCoverFor(autoMix.nextTrack);
+                        return u ? coverSurface.formatImageUrl(u) : "";
+                    }
+                    mainColor: coverArtworkWrapper.glowPrimary
+                    accentColor: root.accentColor
+                }
             }
 
             // 3. Track Details (Swiftify-like, centred): title, then artist with an inline "more" button
@@ -1307,6 +1371,7 @@ Item {
                 isRepeat: root.isRepeat
                 volume: root.volume
                 qualityText: root.track ? root.audioQualityText : ""
+                mixing: autoMix.mixing
                 onSeekRequested: sec => root.seekRequested(sec)
                 onPlayPauseClicked: root.playPauseRequested()
                 onNextClicked: root.nextRequested()

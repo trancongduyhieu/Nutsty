@@ -5,6 +5,10 @@ Tất cả các tính năng mới và cải tiến của Nutsty được lưu tr
 ## [1.0.7] - 2026-11-15
 
 ### Added
+- **Chuyển bài mượt mà**: Bật trong Cài đặt để bài đang phát nhỏ dần trong lúc bài kế tiếp to dần lên, không còn khoảng lặng giữa hai bài. Bạn chọn thời lượng hòa trộn 3, 6, 9 hoặc 12 giây. Khi bạn tạm dừng, chuyển bài hay tua giữa chừng, bài mới được giữ lại ngay lập tức.
+- **Tự động hòa trộn**: Ứng dụng nghe trước đoạn cuối của bài đang phát và đoạn đầu của bài kế tiếp để chọn đúng lúc chuyển: bài kết thúc đột ngột thì hòa nhanh, bài có đoạn nhỏ dần dài thì hòa chậm, đồng thời bỏ qua khoảng im lặng ở đầu và cuối bài. Hoạt động với cả nhạc trực tuyến lẫn nhạc đã tải về.
+- **Chuyển bài kiểu đa nhiệm khi hòa trộn**: Gần cuối bài, bìa đĩa đang phát thu nhỏ lại và trượt sang trái, bìa bài tiếp theo trượt vào bên phải với cùng kích thước, những hạt sáng mang màu hai bìa bay qua lại giữa chúng. Khi hòa trộn xong, bìa bài cũ trượt đi và bìa bài mới phóng to về giữa, mượt như khi vuốt chuyển ứng dụng trên điện thoại.
+- **Chữ "Cooking" khi đang hòa trộn**: Trong lúc hai bài hòa vào nhau, dòng thông số âm thanh dưới thanh thời gian được thay bằng chữ "Cooking" với một vệt sáng lướt từ trái sang phải, rồi trở lại như cũ khi chuyển bài xong.
 - **Lời bài hát bảng cạnh bên chuyển câu đa dạng như Mochy**: Khi giữa hai câu có khoảng nghỉ, câu cũ bay lên tan biến và câu mới trồi lên đúng vị trí đó. Khi hai câu hát nối liền nhau, câu sau chờ sẵn bên dưới rồi trượt lên thế chỗ khi câu trên bay đi. Từng chữ lần lượt hiện ra, phóng nhẹ và hết nhòe; khi rời đi thì mờ dần, bay lên và nhòe đi, chạy mượt theo đúng tần số làm tươi của màn hình.
 - **Chữ sáng dần theo từng ký tự đúng nhịp hát**: Lời bài hát trên bảng cạnh bên sáng lên theo từng chữ cái đúng khoảnh khắc ca sĩ hát tới, không còn sáng cả từ một lúc hay giật cục. Khi tua bài hay mở bảng giữa chừng, câu đang hát cũng hiện ra nhẹ nhàng thay vì bật lên đột ngột.
 - **Chọn nguồn lời bài hát ngay trong menu ba chấm**: Mỗi nguồn hiển thị có lời hay không và loại chạy chữ (theo từng từ hoặc theo từng câu) trước khi bạn chọn; danh sách dài có thể cuộn gọn gàng.
@@ -56,6 +60,13 @@ Tất cả các tính năng mới và cải tiến của Nutsty được lưu tr
 
 ### Fixed
 - **Lời bài hát tiếng Việt bị tách chữ**: Sửa lỗi một số nguồn lời tách rời chữ cái như "n à o", giờ hiển thị đúng thành "nào".
+- **Bảng bên lời bài hát**: Vùng ánh màu dưới bìa đĩa giờ mờ dần mượt mà, không còn bị cắt ngang thành một vệt tối ở gần cuối bảng.
+- **Ảnh bìa khi chuyển bài**: Ảnh bìa của bài kế tiếp được chuẩn bị sẵn từ lúc bài đang phát còn khoảng 20%, nên khi chuyển bài không còn hiện nhầm ảnh bìa bài cũ, không nháy và không bị trống.
+- **Bìa bên trái khi hòa trộn**: Bìa bài đang chuyển đi không còn thỉnh thoảng hiện nhầm ảnh của bài mới, và cả hai bìa chỉ hiện ảnh gọn gàng, không kèm chữ bên dưới.
+- **Nút phát và thời lượng khi hòa trộn**: Trong lúc hai bài hòa vào nhau, nút phát vẫn hiện đang phát thay vì quay vòng chờ, và độ dài của bài mới hiện ngay thay vì 0:00.
+- **Bìa bên trái không còn kẹt hình cũ**: Nếu bạn mở màn hình phát nhạc giữa lúc đang hòa trộn, bìa bên trái hiện đúng ảnh của bài đang chuyển đi thay vì một khung hình cũ của lần chuyển bài trước.
+- **Bỏ qua bài không thích**: Khi bấm "Không thích" bài đang phát, ứng dụng chuyển sang bài kế tiếp trong hàng đợi thay vì quay lại phát bài đầu tiên.
+- **Nền phía sau khi chuyển bài**: Nền màu chảy theo ảnh bìa giờ chuyển dần sang màu bài mới như chất lỏng đổi màu thay vì đổi đột ngột; khi hòa trộn, nền đổi màu cùng nhịp với âm thanh và hiệu ứng bìa đĩa.
 - **Thể loại ở hai đầu thanh không còn lòi ra ngoài**: Các thể loại ở mép thanh được cắt gọn theo đường bo tròn, không còn viền đen bao quanh.
 - **Quầng sáng ảnh bìa không còn vệt trắng**: Ánh sáng tỏa xuống dưới ảnh bìa mờ dần mềm mại thay vì bị cắt thành một mép thẳng trắng xóa.
 - **Quầng sáng ảnh bìa tỏa tự nhiên**: Khắc phục hiện tượng quầng sáng quanh ảnh bìa bị chặn lại thành hình vuông khi tỏa xa, giờ ánh sáng lan mềm và bo tròn theo góc ảnh bìa.
