@@ -185,6 +185,7 @@ BACKEND_MAP = {
     "browser_login.py": "browser_login",
     "spotify_importer.py": "spotify_importer",
     "updater.py": "updater",
+    "cache_manager.py": "cache_manager",
     "nutsty-library": "library",
     "nutsty-library.exe": "library",
 }

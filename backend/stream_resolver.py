@@ -226,31 +226,14 @@ def find_audio_disk_cache(video_id):
             return p
     return None
 
-def trim_audio_cache(max_size_mb=1200, target_size_mb=900):
-    """Evict oldest accessed audio files when disk cache exceeds max_size_mb."""
+def trim_audio_cache():
+    """Keep the disk cache under the user's limit (Settings > Cache), evicting least recently used media."""
     try:
-        if not os.path.exists(AUDIO_CACHE_DIR):
-            return
-        files = []
-        total_size = 0
-        for entry in os.scandir(AUDIO_CACHE_DIR):
-            if entry.is_file() and not entry.name.endswith(".tmp"):
-                st = entry.stat()
-                files.append((entry.path, st.st_size, st.st_mtime))
-                total_size += st.st_size
-
-        max_bytes = max_size_mb * 1024 * 1024
-        target_bytes = target_size_mb * 1024 * 1024
-        if total_size > max_bytes:
-            files.sort(key=lambda x: x[2])
-            for path, sz, _ in files:
-                try:
-                    os.remove(path)
-                    total_size -= sz
-                    if total_size <= target_bytes:
-                        break
-                except Exception:
-                    pass
+        try:
+            from . import cache_manager
+        except ImportError:
+            import cache_manager
+        cache_manager.enforce_limit()
     except Exception:
         pass
 

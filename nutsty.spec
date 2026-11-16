@@ -84,6 +84,7 @@ hidden_imports = [
     'library',
     'palette_extractor',
     'lyrics_helper',
+    'cache_manager',
     'playlist_manager',
     'ytmusic_helper',
     'social_notes',

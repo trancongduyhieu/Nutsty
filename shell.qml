@@ -179,6 +179,20 @@ Scope {
     // Crossfade & AutoMix (player_daemon.py crossfade_play / automix_plan)
     property bool crossfadeEnabled: false
     property int crossfadeSeconds: 6
+    // Disk cache (Settings > Cache): size limit in MB (1-2 GB) and the latest usage report
+    property int cacheLimitMb: 1536
+    property var cacheUsage: null
+    property bool cacheBusy: false
+    property bool cacheClearPending: false
+    function runCacheCommand(args) {
+        if (cacheProc.running) {
+            if (args[0] === "clear") { win.cacheClearPending = true; win.cacheBusy = true; }
+            return;
+        }
+        win.cacheBusy = args[0] === "clear"; // only a user clean-up shows the busy state; limit trims run silently
+        cacheProc.command = ["python3", "-u", win.appDir + "/backend/cache_manager.py"].concat(args);
+        cacheProc.running = true;
+    }
     property bool autoMixEnabled: false
     property var autoMixPlan: null
     property string mixNextDurationKey: ""
@@ -710,6 +724,25 @@ Scope {
             return true;
         }
         return false;
+    }
+
+    Process {
+        id: cacheProc
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try { win.cacheUsage = JSON.parse(data); } catch (e) { console.log("cacheProc parse error:", e); }
+            }
+        }
+        onExited: {
+            if (win.cacheClearPending) {
+                // a limit trim was running when the user hit Clean up: stay busy and run the clean-up next
+                win.cacheClearPending = false;
+                Qt.callLater(() => win.runCacheCommand(["clear"]));
+            } else {
+                win.cacheBusy = false;
+            }
+        }
     }
 
     Process {
@@ -3179,6 +3212,9 @@ Scope {
             crossfadeEnabled: win.crossfadeEnabled
             crossfadeSeconds: win.crossfadeSeconds
             autoMixEnabled: win.autoMixEnabled
+            cacheLimitMb: win.cacheLimitMb
+            cacheUsage: win.cacheUsage
+            cacheBusy: win.cacheBusy
             lyricsPreset: win.desktopLyricsPreset
             customX: win.desktopLyricsCustomX
             customY: win.desktopLyricsCustomY
@@ -3243,6 +3279,13 @@ Scope {
                 win.crossfadeSeconds = secs;
                 win.saveSettings();
             }
+            onRefreshCacheUsageRequested: win.runCacheCommand(["usage"])
+            onSelectCacheLimitRequested: mb => {
+                win.cacheLimitMb = mb;
+                win.saveSettings();
+                win.runCacheCommand(["enforce", String(mb)]);
+            }
+            onClearCacheRequested: win.runCacheCommand(["clear"])
             onToggleAutoMixRequested: enabled => {
                 win.autoMixEnabled = enabled;
                 win.autoMixPlan = null;
@@ -3862,6 +3905,7 @@ Scope {
                 win.lyricsSource = obj.lyricsSource;
             }
             if (obj.crossfadeEnabled !== undefined) win.crossfadeEnabled = !!obj.crossfadeEnabled;
+            if (obj.cacheLimitMb !== undefined) win.cacheLimitMb = [1024, 1536, 2048].indexOf(parseInt(obj.cacheLimitMb)) >= 0 ? parseInt(obj.cacheLimitMb) : 1536;
             if (obj.crossfadeSeconds !== undefined) win.crossfadeSeconds = Math.max(2, Math.min(12, parseInt(obj.crossfadeSeconds) || 6));
             if (obj.autoMixEnabled !== undefined) win.autoMixEnabled = !!obj.autoMixEnabled;
             if (obj.liquidGlassPreset !== undefined) win.liquidGlassPreset = obj.liquidGlassPreset;
@@ -3919,6 +3963,7 @@ Scope {
             lyricsSource: win.lyricsSource,
             crossfadeEnabled: win.crossfadeEnabled,
             crossfadeSeconds: win.crossfadeSeconds,
+            cacheLimitMb: win.cacheLimitMb,
             autoMixEnabled: win.autoMixEnabled,
             liquidGlassPreset: win.liquidGlassPreset,
             liquidGlassBlur: win.liquidGlassBlur,

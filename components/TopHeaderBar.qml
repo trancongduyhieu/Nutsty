@@ -448,12 +448,24 @@ Rectangle {
             anchors.fill: topMoodFlickable
             visible: false
             layer.enabled: true
+            // The capsule mask also carries the scroll edge fades, so they follow the round caps
+            // (square overlay rectangles lit the corners outside the pill)
+            readonly property real fadeFrac: width > 0 ? 24 / width : 0
+            readonly property bool fadeLeft: topMoodFlickable.contentWidth > topMoodFlickable.width && topMoodFlickable.contentX > 4
+            readonly property bool fadeRight: topMoodFlickable.contentWidth > topMoodFlickable.width
+                && topMoodFlickable.contentX < topMoodFlickable.contentWidth - topMoodFlickable.width - 4
             Rectangle {
                 anchors.fill: parent
                 anchors.topMargin: 4
                 anchors.bottomMargin: 4
                 radius: height / 2
-                color: "#ffffff"
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: moodScrollMask.fadeLeft ? "transparent" : "#ffffff" }
+                    GradientStop { position: moodScrollMask.fadeFrac; color: "#ffffff" }
+                    GradientStop { position: 1.0 - moodScrollMask.fadeFrac; color: "#ffffff" }
+                    GradientStop { position: 1.0; color: moodScrollMask.fadeRight ? "transparent" : "#ffffff" }
+                }
             }
         }
 
@@ -475,6 +487,7 @@ Rectangle {
             layer.effect: MultiEffect {
                 maskEnabled: true
                 maskSource: moodScrollMask
+                maskSpreadAtMin: 1.0 // read the mask's alpha smoothly so the edge fades stay soft
                 autoPaddingEnabled: false
             }
             interactive: contentWidth > width && dynamicMoodIsland.isExpanded
@@ -590,35 +603,6 @@ Rectangle {
             }
 
             Component.onCompleted: Qt.callLater(updateActiveIndicator)
-        }
-
-        // Optical Edge Fade Overlays
-        Rectangle {
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            width: 24
-            z: 10
-            visible: dynamicMoodIsland.isExpanded && topMoodFlickable.contentWidth > topMoodFlickable.width && topMoodFlickable.contentX > 4
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop { position: 0.0; color: dynamicMoodIsland.color }
-                GradientStop { position: 1.0; color: "transparent" }
-            }
-        }
-
-        Rectangle {
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            width: 24
-            z: 10
-            visible: dynamicMoodIsland.isExpanded && topMoodFlickable.contentWidth > topMoodFlickable.width && (topMoodFlickable.contentX < topMoodFlickable.contentWidth - topMoodFlickable.width - 4)
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop { position: 0.0; color: "transparent" }
-                GradientStop { position: 1.0; color: dynamicMoodIsland.color }
-            }
         }
 
         // Smart Auto-Collapse Timer: 4500ms idle timer

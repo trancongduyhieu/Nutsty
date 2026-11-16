@@ -26,6 +26,23 @@ Rectangle {
     property bool crossfadeEnabled: false
     property int crossfadeSeconds: 6
     property bool autoMixEnabled: false
+    property int cacheLimitMb: 1536
+    property var cacheUsage: null
+    property bool cacheBusy: false
+    // Clean-up feedback: total before the click, then "Freed N MB" for a moment once the new usage arrives
+    property real cacheBeforeClear: -1
+    property real cacheFreedBytes: 0
+    property bool cacheJustCleaned: false
+    // Finish feedback only when a clean-up the user started has fully ended (limit trims never set busy)
+    onCacheBusyChanged: {
+        if (!root.cacheBusy && root.cacheBeforeClear >= 0 && root.cacheUsage) {
+            root.cacheFreedBytes = Math.max(0, root.cacheBeforeClear - root.cacheUsage.total);
+            root.cacheBeforeClear = -1;
+            root.cacheJustCleaned = true;
+            cacheDoneTimer.restart();
+        }
+    }
+    Timer { id: cacheDoneTimer; interval: 2400; onTriggered: root.cacheJustCleaned = false }
     property string canvasPreference: "apple_first"
     property int currentTab: 0 // 0: Google Account, 1: Desktop Lyrics
     property bool desktopLyricsEnabled: true
@@ -65,6 +82,7 @@ Rectangle {
     signal openWhatsNewRequested()
 
     onVisibleChanged: {
+        if (visible) root.refreshCacheUsageRequested();
         if (!visible) {
             closeAllDropdowns();
             if (root.isProcessing) {
@@ -310,6 +328,9 @@ Rectangle {
     signal toggleCrossfadeRequested(bool enabled)
     signal selectCrossfadeSecondsRequested(int seconds)
     signal toggleAutoMixRequested(bool enabled)
+    signal refreshCacheUsageRequested()
+    signal selectCacheLimitRequested(int mb)
+    signal clearCacheRequested()
     signal saveCanvasPreferenceRequested(string pref)
     signal toggleDesktopLyricsRequested(bool enabled)
     signal toggleTaskbarLyricsRequested(bool enabled)
@@ -379,6 +400,20 @@ Rectangle {
         if (a === "left") return I18n.tr("Bên trái", "Left");
         if (a === "right") return I18n.tr("Bên phải", "Right");
         return I18n.tr("Căn giữa", "Center");
+    }
+
+    function formatBytes(b) {
+        var n = Number(b) || 0;
+        if (n >= 1073741824) return (n / 1073741824).toFixed(2).replace(".", I18n.tr(",", ".")) + " GB";
+        if (n >= 1048576) return Math.round(n / 1048576) + " MB";
+        if (n >= 1024) return Math.round(n / 1024) + " KB";
+        return n + " B";
+    }
+
+    function formatLimit(mb) {
+        var gb = mb / 1024;
+        var txt = (gb % 1 === 0) ? String(gb) : gb.toFixed(1).replace(".", I18n.tr(",", "."));
+        return txt + " GB";
     }
 
     function closeAllDropdowns() {
@@ -2007,6 +2042,276 @@ Rectangle {
                             onClicked: {
                                 root.autoMixEnabled = !root.autoMixEnabled;
                                 root.toggleAutoMixRequested(root.autoMixEnabled);
+                            }
+                        }
+                    }
+                }
+
+                // =============================================================
+                // Disk cache: usage, size limit and cleanup (cache_manager.py)
+                // =============================================================
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 62
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: clearCacheBtn.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 4
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Bộ nhớ đệm", "Cache")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            width: parent.width
+                            readonly property var u: root.cacheUsage
+                            text: !u ? I18n.tr("Đang tính dung lượng...", "Calculating size...")
+                                : I18n.tr("Đang dùng " + root.formatBytes(u.total) + " / " + root.formatLimit(root.cacheLimitMb)
+                                          + "  ·  Nhạc " + root.formatBytes(u.audio) + ", ảnh " + root.formatBytes(u.images) + ", lời " + root.formatBytes(u.lyrics),
+                                          "Using " + root.formatBytes(u.total) + " of " + root.formatLimit(root.cacheLimitMb)
+                                          + "  ·  Music " + root.formatBytes(u.audio) + ", images " + root.formatBytes(u.images) + ", lyrics " + root.formatBytes(u.lyrics))
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                            elide: Text.ElideRight
+                        }
+
+                        Rectangle {
+                            width: parent.width
+                            height: 4
+                            radius: 2
+                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
+
+                            Rectangle {
+                                readonly property real ratio: root.cacheUsage
+                                    ? Math.min(1, root.cacheUsage.total / (root.cacheLimitMb * 1048576)) : 0
+                                width: parent.width * ratio
+                                height: parent.height
+                                radius: 2
+                                color: ratio > 0.95 ? Qt.rgba(244 / 255, 63 / 255, 94 / 255, 0.9) : root.accentColor
+                                Behavior on width { NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
+                            }
+                        }
+                    }
+
+                    // Tonal clean-up button: hover state layer, press ripple from the click point,
+                    // a spinner while cleaning and a check with the freed size when done
+                    Rectangle {
+                        id: clearCacheBtn
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        height: 32
+                        width: clearCacheRow.implicitWidth + 28
+                        radius: 16
+                        clip: true
+                        readonly property color tint: Qt.rgba(244 / 255, 63 / 255, 94 / 255, 1)
+                        color: Qt.rgba(tint.r, tint.g, tint.b, root.cacheJustCleaned ? 0.18 : 0.12)
+                        scale: clearCacheMouse.pressed ? 0.96 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                        Behavior on width { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                        Behavior on color { ColorAnimation { duration: 200 } }
+
+                        // State layer
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: parent.radius
+                            color: clearCacheBtn.tint
+                            opacity: root.cacheBusy ? 0 : (clearCacheMouse.pressed ? 0.16 : (clearCacheMouse.containsMouse ? 0.10 : 0))
+                            Behavior on opacity { NumberAnimation { duration: 150 } }
+                        }
+
+                        // Ripple
+                        Rectangle {
+                            id: cacheRipple
+                            property real cx: 0
+                            property real cy: 0
+                            property real r: 0
+                            x: cx - r; y: cy - r
+                            width: r * 2; height: r * 2
+                            radius: r
+                            color: clearCacheBtn.tint
+                            opacity: 0
+                        }
+                        ParallelAnimation {
+                            id: cacheRippleAnim
+                            NumberAnimation { target: cacheRipple; property: "r"; from: 0; to: clearCacheBtn.width; duration: 520; easing.type: Easing.OutCubic }
+                            NumberAnimation { target: cacheRipple; property: "opacity"; from: 0.22; to: 0; duration: 520; easing.type: Easing.OutQuad }
+                        }
+
+                        Row {
+                            id: clearCacheRow
+                            anchors.centerIn: parent
+                            spacing: 7
+
+                            Item {
+                                width: 15
+                                height: 15
+                                anchors.verticalCenter: parent.verticalCenter
+
+                                Image {
+                                    id: cacheIconIdle
+                                    anchors.centerIn: parent
+                                    source: root.cacheJustCleaned ? "../assets/icons/emblem-ok-symbolic.svg" : "../assets/icons/user-trash-symbolic.svg"
+                                    sourceSize: Qt.size(15, 15)
+                                    width: 15
+                                    height: 15
+                                    opacity: root.cacheBusy ? 0 : 1
+                                    scale: root.cacheBusy ? 0.6 : 1
+                                    Behavior on opacity { NumberAnimation { duration: 180 } }
+                                    Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutBack } }
+                                    layer.enabled: true
+                                    layer.effect: MultiEffect { colorization: 1.0; colorizationColor: "#fda4af" }
+                                }
+
+                                CircularSpinner {
+                                    anchors.centerIn: parent
+                                    size: 14
+                                    strokeWidth: 2
+                                    color: "#fda4af"
+                                    running: root.cacheBusy
+                                    opacity: root.cacheBusy ? 1 : 0
+                                    Behavior on opacity { NumberAnimation { duration: 180 } }
+                                }
+                            }
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: root.cacheBusy ? I18n.tr("Đang dọn", "Cleaning")
+                                    : (root.cacheJustCleaned ? I18n.tr("Đã giải phóng " + root.formatBytes(root.cacheFreedBytes), "Freed " + root.formatBytes(root.cacheFreedBytes))
+                                                             : I18n.tr("Dọn dẹp", "Clean up"))
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                font.weight: Font.DemiBold
+                                color: "#fda4af"
+                            }
+                        }
+
+                        MouseArea {
+                            id: clearCacheMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            enabled: !root.cacheBusy
+                            cursorShape: Qt.PointingHandCursor
+                            onPressed: mouse => {
+                                cacheRipple.cx = mouse.x;
+                                cacheRipple.cy = mouse.y;
+                                cacheRippleAnim.restart();
+                            }
+                            onClicked: {
+                                root.cacheJustCleaned = false;
+                                root.cacheBeforeClear = root.cacheUsage ? root.cacheUsage.total : 0;
+                                root.clearCacheRequested();
+                            }
+                        }
+                    }
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 46
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: cacheLimitChips.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Dung lượng tối đa", "Maximum size")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Khi đầy, bài lâu chưa nghe lại sẽ được xóa trước", "When full, songs you haven't replayed in a while are removed first")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    // Segmented selector: one track, a highlight that slides to the chosen size
+                    Rectangle {
+                        id: cacheLimitChips
+                        readonly property var choices: [1024, 1536, 2048]
+                        readonly property real segW: 64
+                        readonly property int selIndex: Math.max(0, choices.indexOf(root.cacheLimitMb))
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: segW * choices.length + 6
+                        height: 32
+                        radius: 16
+                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
+
+                        Rectangle {
+                            x: 3 + cacheLimitChips.selIndex * cacheLimitChips.segW
+                            y: 3
+                            width: cacheLimitChips.segW
+                            height: parent.height - 6
+                            radius: height / 2
+                            color: root.accentColor
+                            Behavior on x { NumberAnimation { duration: 340; easing.type: Easing.OutCubic } }
+                        }
+
+                        Row {
+                            x: 3
+                            y: 3
+                            Repeater {
+                                model: cacheLimitChips.choices
+                                delegate: Item {
+                                    required property int modelData
+                                    required property int index
+                                    readonly property bool selected: index === cacheLimitChips.selIndex
+                                    width: cacheLimitChips.segW
+                                    height: cacheLimitChips.height - 6
+
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: height / 2
+                                        color: root.accentColor
+                                        opacity: !parent.selected && segMouse.containsMouse ? 0.16 : 0
+                                        Behavior on opacity { NumberAnimation { duration: 150 } }
+                                    }
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: root.formatLimit(parent.modelData)
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 12
+                                        font.weight: parent.selected ? Font.DemiBold : Font.Normal
+                                        color: "#ffffff"
+                                        opacity: parent.selected ? 1.0 : 0.72
+                                        Behavior on opacity { NumberAnimation { duration: 200 } }
+                                    }
+
+                                    MouseArea {
+                                        id: segMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            if (root.cacheLimitMb === parent.modelData) return;
+                                            root.cacheLimitMb = parent.modelData;
+                                            root.selectCacheLimitRequested(parent.modelData);
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
