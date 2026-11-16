@@ -9,8 +9,10 @@ import json
 
 try:
     from . import ytmusic_helper
+    from . import youtube_comments
 except (ImportError, ValueError):
     import ytmusic_helper
+    import youtube_comments
 
 
 def handle_get_auth_status(handler):
@@ -69,6 +71,45 @@ def handle_get_playlist(handler, query):
             sys.stderr.write(f"[handle_get_playlist custom error]: {e}\n")
     data = ytmusic_helper.get_playlist_tracks(pl_id)
     handler._send_json(data, 200)
+
+
+def handle_get_comments(handler, query):
+    video_id = query.get("videoId", [""])[0]
+    if not video_id:
+        handler._send_json({"error": "missing videoId"}, 400)
+        return
+    try:
+        handler._send_json(youtube_comments.get_comments(video_id), 200)
+    except Exception as e:
+        sys.stderr.write(f"[comments error]: {e}\n")
+        handler._send_json({"error": str(e), "comments": []}, 500)
+
+
+def handle_get_comments_page(handler, query):
+    token = query.get("token", [""])[0]
+    if not token:
+        handler._send_json({"error": "missing token"}, 400)
+        return
+    try:
+        handler._send_json(youtube_comments.get_page(token), 200)
+    except Exception as e:
+        sys.stderr.write(f"[comments page error]: {e}\n")
+        handler._send_json({"error": str(e), "comments": []}, 500)
+
+
+def handle_post_comment(handler, req_json, reply=False):
+    req_json = req_json if isinstance(req_json, dict) else {}
+    params = (req_json.get("params") or "").strip()
+    text = (req_json.get("text") or "").strip()
+    if not params or not text:
+        handler._send_json({"success": False, "error": "missing params or text"}, 400)
+        return
+    try:
+        fn = youtube_comments.create_reply if reply else youtube_comments.create_comment
+        handler._send_json(fn(params, text), 200)
+    except Exception as e:
+        sys.stderr.write(f"[comment post error]: {e}\n")
+        handler._send_json({"success": False, "error": str(e)}, 500)
 
 
 def handle_get_artist_shuffle(handler, query):

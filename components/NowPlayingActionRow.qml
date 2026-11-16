@@ -2,8 +2,8 @@ import QtQuick
 import QtQuick.Controls.Basic
 import "."
 
-// SimpMusic-style action row at the bottom of the Mochy side panel: Lyrics on the left, Up Next on the right.
-// The middle is kept for YouTube comments; Listen Along controls live in the playerbar.
+// SimpMusic-style action row at the bottom of the Mochy side panel: Lyrics on the left, YouTube
+// comments in the middle, Up Next on the right. Listen Along controls live in the playerbar.
 Item {
     id: root
 
@@ -11,10 +11,11 @@ Item {
     property color accentColor: "#ffffff"
 
     signal lyricsClicked()
+    signal commentsClicked()
     signal queueClicked()
 
     implicitHeight: 44
-    implicitWidth: 2 * lyricsBtn.width + 120
+    implicitWidth: 3 * lyricsBtn.width + 120
 
     NowPlayingCtlButton {
         id: lyricsBtn
@@ -29,6 +30,21 @@ Item {
         ToolTip.text: I18n.tr("Lời bài hát", "Lyrics")
         ToolTip.delay: 350
         HoverHandler { id: lyricsBtnH }
+    }
+
+    NowPlayingCtlButton {
+        id: commentsBtn
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.verticalCenter: parent.verticalCenter
+        size: 40
+        icon: "../assets/icons/material/ms-forum.svg"
+        toggle: true
+        on: root.activeTab === "comments"
+        onClicked: root.commentsClicked()
+        ToolTip.visible: commentsBtnH.hovered
+        ToolTip.text: I18n.tr("Bình luận", "Comments")
+        ToolTip.delay: 350
+        HoverHandler { id: commentsBtnH }
     }
 
     NowPlayingCtlButton {

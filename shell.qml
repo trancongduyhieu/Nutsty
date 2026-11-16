@@ -1804,7 +1804,7 @@ Scope {
     property bool isNowPlayingOpen: false
     property alias showAmberolDetails: win.isNowPlayingOpen
     property bool isMochySidePanelOpen: false
-    property string mochyActiveTab: "lyrics" // "lyrics" | "queue"
+    property string mochyActiveTab: "lyrics" // "lyrics" | "queue" | "comments"
     property int mochyPanelStyle: 2 // 1: Flush Split-Rail, 2: Bento Glass Island (User Choice)
     onIsNowPlayingOpenChanged: {
         if (win.isNowPlayingOpen) {
@@ -2692,6 +2692,7 @@ Scope {
                     isLiked: win.isCurrentTrackLiked
 
                     onCloseRequested: win.isMochySidePanelOpen = false
+                    isLoggedIn: win.isAuthLoggedIn
                     onTabRequested: tab => win.mochyActiveTab = tab
                     onOpenDetailsRequested: {
                         win.isMochySidePanelOpen = false;

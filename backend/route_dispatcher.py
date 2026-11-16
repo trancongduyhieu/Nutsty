@@ -90,6 +90,10 @@ def dispatch_request(method, path, query_dict, body_str):
             music_routes.handle_get_filter_search(handler, query_dict)
         elif clean_path == "/api/playlist":
             music_routes.handle_get_playlist(handler, query_dict)
+        elif clean_path == "/api/comments":
+            music_routes.handle_get_comments(handler, query_dict)
+        elif clean_path == "/api/comments/page":
+            music_routes.handle_get_comments_page(handler, query_dict)
         elif clean_path == "/api/artist_shuffle":
             music_routes.handle_get_artist_shuffle(handler, query_dict)
         elif clean_path == "/api/resolve_cover":
@@ -154,6 +158,10 @@ def dispatch_request(method, path, query_dict, body_str):
                 handler._send_json(res, 200 if res.get("success") else 400)
             except Exception as e:
                 handler._send_json({"success": False, "error": str(e)}, 500)
+        elif clean_path == "/api/comments/create":
+            music_routes.handle_post_comment(handler, req_json)
+        elif clean_path == "/api/comments/reply":
+            music_routes.handle_post_comment(handler, req_json, reply=True)
         elif clean_path == "/api/spotify/auto-sync":
             music_routes.handle_post_spotify_auto_sync(handler)
         elif clean_path == "/api/spotify/validate":

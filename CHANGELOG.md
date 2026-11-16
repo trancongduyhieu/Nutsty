@@ -5,6 +5,7 @@ Tất cả các tính năng mới và cải tiến của Nutsty được lưu tr
 ## [1.0.7] - 2026-11-15
 
 ### Added
+- **Bình luận YouTube ngay trong bảng bên phải**: Nút mới ở giữa đáy bảng bên phải mở danh sách bình luận của bài đang nghe, kèm ảnh đại diện, thời gian, lượt thích và dấu bình luận đã ghim. Cuộn xuống để xem thêm, bấm vào một bình luận để xem các phản hồi. Khi đã đăng nhập Google, bạn có thể viết bình luận hoặc trả lời người khác ngay tại đó.
 - **Chuyển bài mượt mà**: Bật trong Cài đặt để bài đang phát nhỏ dần trong lúc bài kế tiếp to dần lên, không còn khoảng lặng giữa hai bài. Bạn chọn thời lượng hòa trộn 3, 6, 9 hoặc 12 giây. Khi bạn tạm dừng, chuyển bài hay tua giữa chừng, bài mới được giữ lại ngay lập tức.
 - **Tự động hòa trộn**: Ứng dụng nghe trước đoạn cuối của bài đang phát và đoạn đầu của bài kế tiếp để chọn đúng lúc chuyển: bài kết thúc đột ngột thì hòa nhanh, bài có đoạn nhỏ dần dài thì hòa chậm, đồng thời bỏ qua khoảng im lặng ở đầu và cuối bài. Hoạt động với cả nhạc trực tuyến lẫn nhạc đã tải về.
 - **Chuyển bài kiểu đa nhiệm khi hòa trộn**: Gần cuối bài, bìa đĩa đang phát thu nhỏ lại và trượt sang trái, bìa bài tiếp theo trượt vào bên phải với cùng kích thước, những hạt sáng mang màu hai bìa bay qua lại giữa chúng. Khi hòa trộn xong, bìa bài cũ trượt đi và bìa bài mới phóng to về giữa, mượt như khi vuốt chuyển ứng dụng trên điện thoại.

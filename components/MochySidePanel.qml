@@ -23,7 +23,8 @@ Item {
     property double syncStamp: 0
     property Item backgroundSourceItem: null
     property int panelStyle: 1 // 1: Flush Split-Rail, 2: Bento Glass Island
-    property string activeTab: "lyrics" // "lyrics" | "queue"
+    property string activeTab: "lyrics" // "lyrics" | "queue" | "comments"
+    property bool isLoggedIn: false
     property var currentTracks: []
     property real layoutDependency: 0.0 // Driven by host slide progress so LiquidGlass re-samples its backdrop offset
     readonly property real targetPanelWidth: Math.max(380, Math.min(460, Math.round((parent ? parent.width : 1200) * 0.34)))
@@ -471,7 +472,7 @@ Item {
             LiquidGlass {
                 id: panelLiquidBackdrop
                 anchors.fill: parent
-                visible: root.activeTab === "queue" && root.isPanelRenderable
+                visible: (root.activeTab === "queue" || root.activeTab === "comments") && root.isPanelRenderable
                 extraDependency: root.layoutDependency
                 backgroundSourceItem: root.backgroundSourceItem
                 radius: root.panelStyle === 1 ? 0 : 20
@@ -1634,6 +1635,25 @@ Item {
             }
         }
 
+        // =====================================================================
+        // VIEW 3: YOUTUBE COMMENTS
+        // =====================================================================
+        MochyCommentsView {
+            id: commentsView
+            anchors.fill: parent
+            visible: opacity > 0.01
+            opacity: root.activeTab === "comments" ? 1.0 : 0.0
+            scale: root.activeTab === "comments" ? 1.0 : 0.94
+            Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+            Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+            videoId: root.currentTrack && root.currentTrack.videoId ? root.currentTrack.videoId : ""
+            accentColor: root.accentColor
+            isLoggedIn: root.isLoggedIn
+            active: root.activeTab === "comments" && root.isPanelRenderable
+            bottomInset: actionDock.height + actionDock.anchors.bottomMargin + 12
+            onCloseRequested: root.closeRequested()
+        }
+
         // Action row lives at panelContainer level so it stays visible on both tabs;
         // bottomDock inside lyricsView only reserves its space for the lyric canvas.
         Item {
@@ -1653,6 +1673,7 @@ Item {
                 activeTab: root.activeTab
                 accentColor: root.accentColor
                 onLyricsClicked: root.tabRequested("lyrics")
+                onCommentsClicked: root.tabRequested(root.activeTab === "comments" ? "lyrics" : "comments")
                 onQueueClicked: root.tabRequested(root.activeTab === "queue" ? "lyrics" : "queue")
             }
         }
