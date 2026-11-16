@@ -24,6 +24,10 @@ Scope {
         property bool isWindowActive: true
         // Set by launcher_win.py when D3D11 falls back to the CPU rasterizer (VMs without a GPU driver)
         readonly property bool softwareRendering: Quickshell.env("NUTSTY_SOFTWARE_RENDER") === "1"
+        // Settings > Lite mode: "auto" follows softwareRendering, "on" / "off" force it either way.
+        // Effects read liteMode, never softwareRendering directly
+        property string liteModePreference: "auto"
+        readonly property bool liteMode: liteModePreference === "on" || (liteModePreference === "auto" && softwareRendering)
         readonly property bool isWindowEffectivelyActive: win.visible && (typeof win.minimized !== "undefined" ? !win.minimized : true) && win.isWindowActive
 
         Connections {
@@ -1791,8 +1795,8 @@ Scope {
     // Adaptive Throttling: 40ms (25 FPS) when active or desktop lyrics enabled; 250ms (4 FPS) when unfocused
     Timer {
         id: smoothProgressTimer
-        // CPU rasterizer: every tick repaints the whole window, so 4 FPS there too
-        interval: ((win.isWindowEffectivelyActive || win.desktopLyricsEnabled) && !win.softwareRendering) ? 40 : 250
+        // Lite mode: every tick repaints the whole window, so 4 FPS there too
+        interval: ((win.isWindowEffectivelyActive || win.desktopLyricsEnabled) && !win.liteMode) ? 40 : 250
         repeat: true
         running: (win.visible || win.desktopLyricsEnabled) && win.isPlaying
                  && ((!win.isLoadingAudio && win.lastSyncTimestamp > 0) || (win.isLoadingAudio && win.mixActive !== null))
@@ -1921,7 +1925,7 @@ Scope {
         id: windowCornerMask
         anchors.fill: parent
         visible: false
-        layer.enabled: !(win.maximized || win.fullscreen) && !win.softwareRendering
+        layer.enabled: !(win.maximized || win.fullscreen) && !(win.liteMode && Qt.platform.os === "windows")
         layer.smooth: true
 
         Rectangle {
@@ -1959,9 +1963,9 @@ Scope {
             acceptedButtons: Qt.NoButton
             onPositionChanged: win.triggerUserActiveBoost()
         }
-        // CPU rasterizer: this layer re-renders the whole window on any change; the Win32 window
-        // region from launcher_win.py already rounds the corners there
-        layer.enabled: !(win.maximized || win.fullscreen) && !win.softwareRendering
+        // Lite mode on Windows: this layer re-renders the whole window on any change, and the Win32
+        // window region from launcher_win.py already rounds the corners there (Linux still needs it)
+        layer.enabled: !(win.maximized || win.fullscreen) && !(win.liteMode && Qt.platform.os === "windows")
         layer.smooth: true
         layer.effect: MultiEffect {
             maskEnabled: true
@@ -3234,6 +3238,8 @@ Scope {
             crossfadeEnabled: win.crossfadeEnabled
             crossfadeSeconds: win.crossfadeSeconds
             scrollEdgeFadeEnabled: Theme.scrollEdgeFadeEnabled
+            liteMode: win.liteModePreference
+            liteModeAutoActive: win.softwareRendering
             autoMixEnabled: win.autoMixEnabled
             cacheLimitMb: win.cacheLimitMb
             cacheUsage: win.cacheUsage
@@ -3300,6 +3306,10 @@ Scope {
             }
             onToggleScrollEdgeFadeRequested: enabled => {
                 Theme.scrollEdgeFadeEnabled = enabled;
+                win.saveSettings();
+            }
+            onSelectLiteModeRequested: mode => {
+                win.liteModePreference = mode;
                 win.saveSettings();
             }
             onSelectCrossfadeSecondsRequested: secs => {
@@ -3976,6 +3986,7 @@ Scope {
             }
             if (obj.crossfadeEnabled !== undefined) win.crossfadeEnabled = !!obj.crossfadeEnabled;
             if (obj.scrollEdgeFadeEnabled !== undefined) Theme.scrollEdgeFadeEnabled = !!obj.scrollEdgeFadeEnabled;
+            if (["auto", "on", "off"].indexOf(obj.liteMode) >= 0) win.liteModePreference = obj.liteMode;
             if (obj.cacheLimitMb !== undefined) win.cacheLimitMb = [1024, 1536, 2048].indexOf(parseInt(obj.cacheLimitMb)) >= 0 ? parseInt(obj.cacheLimitMb) : 1536;
             if (obj.crossfadeSeconds !== undefined) win.crossfadeSeconds = Math.max(2, Math.min(12, parseInt(obj.crossfadeSeconds) || 6));
             if (obj.autoMixEnabled !== undefined) win.autoMixEnabled = !!obj.autoMixEnabled;
@@ -4035,6 +4046,7 @@ Scope {
             crossfadeEnabled: win.crossfadeEnabled,
             crossfadeSeconds: win.crossfadeSeconds,
             scrollEdgeFadeEnabled: Theme.scrollEdgeFadeEnabled,
+            liteMode: win.liteModePreference,
             cacheLimitMb: win.cacheLimitMb,
             autoMixEnabled: win.autoMixEnabled,
             liquidGlassPreset: win.liquidGlassPreset,

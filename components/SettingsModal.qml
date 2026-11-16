@@ -25,6 +25,9 @@ Rectangle {
     property bool animatedCoverEnabled: true
     property bool crossfadeEnabled: false
     property bool scrollEdgeFadeEnabled: true
+    // "auto" | "on" | "off"; liteModeAutoActive says whether Auto currently resolves to on (no GPU)
+    property string liteMode: "auto"
+    property bool liteModeAutoActive: false
     property int crossfadeSeconds: 6
     property bool autoMixEnabled: false
     property int cacheLimitMb: 1536
@@ -328,6 +331,7 @@ Rectangle {
     signal toggleAnimatedCoverRequested(bool enabled)
     signal toggleCrossfadeRequested(bool enabled)
     signal toggleScrollEdgeFadeRequested(bool enabled)
+    signal selectLiteModeRequested(string mode)
     signal selectCrossfadeSecondsRequested(int seconds)
     signal toggleAutoMixRequested(bool enabled)
     signal refreshCacheUsageRequested()
@@ -2312,6 +2316,117 @@ Rectangle {
                                             if (root.cacheLimitMb === parent.modelData) return;
                                             root.cacheLimitMb = parent.modelData;
                                             root.selectCacheLimitRequested(parent.modelData);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // =============================================================
+                // Lite mode (Auto / On / Off): drops the effects that repaint the whole window
+                // =============================================================
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 46
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: liteModeChips.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Chế độ nhẹ", "Lite mode")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            width: parent.width
+                            text: root.liteMode === "auto"
+                                  ? (root.liteModeAutoActive
+                                     ? I18n.tr("Đang bật vì máy không có card đồ họa", "On because this computer has no graphics card")
+                                     : I18n.tr("Tự bật khi máy không có card đồ họa", "Turns on by itself when there is no graphics card"))
+                                  : I18n.tr("Tắt nền chuyển động và hiệu ứng nặng để đỡ giật, mát máy", "Turns off the moving background and heavy effects so the app runs smoother and cooler")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    // Segmented selector, same look as the cache size picker
+                    Rectangle {
+                        id: liteModeChips
+                        readonly property var choices: ["auto", "on", "off"]
+                        readonly property real segW: 64
+                        readonly property int selIndex: Math.max(0, choices.indexOf(root.liteMode))
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: segW * choices.length + 6
+                        height: 32
+                        radius: 16
+                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
+
+                        Rectangle {
+                            x: 3 + liteModeChips.selIndex * liteModeChips.segW
+                            y: 3
+                            width: liteModeChips.segW
+                            height: parent.height - 6
+                            radius: height / 2
+                            color: root.accentColor
+                            Behavior on x { NumberAnimation { duration: 340; easing.type: Easing.OutCubic } }
+                        }
+
+                        Row {
+                            x: 3
+                            y: 3
+                            Repeater {
+                                model: liteModeChips.choices
+                                delegate: Item {
+                                    required property string modelData
+                                    required property int index
+                                    readonly property bool selected: index === liteModeChips.selIndex
+                                    width: liteModeChips.segW
+                                    height: liteModeChips.height - 6
+
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: height / 2
+                                        color: root.accentColor
+                                        opacity: !parent.selected && liteSegMouse.containsMouse ? 0.16 : 0
+                                        Behavior on opacity { NumberAnimation { duration: 150 } }
+                                    }
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: parent.modelData === "auto" ? I18n.tr("Tự động", "Auto")
+                                              : parent.modelData === "on" ? I18n.tr("Bật", "On")
+                                              : I18n.tr("Tắt", "Off")
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 12
+                                        font.weight: parent.selected ? Font.DemiBold : Font.Normal
+                                        color: "#ffffff"
+                                        opacity: parent.selected ? 1.0 : 0.72
+                                        Behavior on opacity { NumberAnimation { duration: 200 } }
+                                    }
+
+                                    MouseArea {
+                                        id: liteSegMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            if (root.liteMode === parent.modelData) return;
+                                            root.liteMode = parent.modelData;
+                                            root.selectLiteModeRequested(parent.modelData);
                                         }
                                     }
                                 }

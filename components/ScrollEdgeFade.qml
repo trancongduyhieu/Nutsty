@@ -20,9 +20,9 @@ Item {
 
     readonly property bool overflows: flickable !== null
         && (horizontal ? flickable.contentWidth > flickable.width + 1 : flickable.contentHeight > flickable.height + 1)
-    // Off on the CPU rasterizer: any change inside the list re-renders the whole layer and mask
-    readonly property bool softwareRendering: typeof win !== "undefined" && win && Boolean(win.softwareRendering)
-    readonly property bool active: Theme.scrollEdgeFadeEnabled && !softwareRendering && when && overflows && flickable.visible
+    // Off in Lite mode: any change inside the list re-renders the whole layer and mask
+    readonly property bool liteMode: typeof win !== "undefined" && win && Boolean(win.liteMode)
+    readonly property bool active: Theme.scrollEdgeFadeEnabled && !liteMode && when && overflows && flickable.visible
     readonly property bool fadeStart: flickable !== null && (horizontal ? !flickable.atXBeginning : !flickable.atYBeginning)
     readonly property bool fadeEnd: flickable !== null && (horizontal ? !flickable.atXEnd : !flickable.atYEnd)
     readonly property real span: horizontal ? width : height
