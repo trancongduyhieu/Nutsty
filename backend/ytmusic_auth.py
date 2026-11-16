@@ -387,6 +387,7 @@ def extract_account_details_from_client(yt, headers=None):
 
 _AUTH_STATUS_CACHE = None
 _AUTH_STATUS_CACHE_TS = 0.0
+_AUTH_STATUS_CACHE_MTIME = 0.0
 
 def invalidate_auth_status_cache():
     global _AUTH_STATUS_CACHE, _AUTH_STATUS_CACHE_TS
@@ -399,6 +400,16 @@ def get_auth_status():
         return {"logged_in": False, "name": "", "thumb": "", "email": ""}
     
     now = time.time()
+    # Resident route workers each keep this cache: a sign-in or sign-out handled by another
+    # process rewrites AUTH_FILE, so a changed mtime invalidates it immediately
+    global _AUTH_STATUS_CACHE_MTIME
+    try:
+        auth_mtime = os.path.getmtime(AUTH_FILE)
+    except OSError:
+        auth_mtime = 0.0
+    if auth_mtime != _AUTH_STATUS_CACHE_MTIME:
+        _AUTH_STATUS_CACHE = None
+        _AUTH_STATUS_CACHE_MTIME = auth_mtime
     if _AUTH_STATUS_CACHE is not None and (now - _AUTH_STATUS_CACHE_TS < 60.0):
         return _AUTH_STATUS_CACHE
 

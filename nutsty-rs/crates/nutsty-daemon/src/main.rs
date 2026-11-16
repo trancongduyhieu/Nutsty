@@ -1,14 +1,16 @@
 //! Nutsty High-Performance Native Resident Daemon (`nutsty-daemon`)
 //! Ultra-lightweight HTTP router (< 5MB RAM) listening on 127.0.0.1:17890.
 //! Handles hot-path routes (MPV status, RAM purge, palette, library) natively with 0ms overhead,
-//! and dispatches external routes (YouTube Music, Social, Spotify) to Python subprocesses.
+//! and dispatches external routes (YouTube Music, Social, Spotify) to a small pool of warm
+//! Python workers (`route_dispatcher.py --serve`), falling back to a one-shot subprocess.
 
 use serde_json::json;
 use std::env;
 use std::fs;
-use std::io::Read;
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::io::{BufRead, BufReader, Read, Write};
+use std::path::{Path, PathBuf};
+use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -29,9 +31,153 @@ fn trim_system_memory() {
     }
 }
 
+// ── Warm Python worker pool ─────────────────────────────────────────────────
+// Spawning python3 per request cost ~0.8 s (interpreter + ytmusicapi imports) and lost every
+// in-process cache. Workers stay warm, take one JSON line per request and answer with one line.
+// A worker exits by itself when idle (10 min) or recycled (500 requests); it is respawned lazily.
+const POOL_SIZE: usize = 2;
+const WORKER_TIMEOUT: Duration = Duration::from_secs(120);
+const BUSY_WAIT: Duration = Duration::from_millis(400);
+
+fn python_cmd() -> &'static str {
+    if cfg!(windows) { "python" } else { "python3" }
+}
+
+fn no_console(cmd: &mut Command) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    #[cfg(not(windows))]
+    let _ = cmd;
+}
+
+struct Worker {
+    child: Child,
+    stdin: ChildStdin,
+    lines: Receiver<String>,
+}
+
+impl Worker {
+    fn spawn(script: &Path) -> Option<Worker> {
+        let mut cmd = Command::new(python_cmd());
+        cmd.arg(script)
+            .arg("--serve")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit());
+        no_console(&mut cmd);
+        let mut child = cmd.spawn().ok()?;
+        let stdin = child.stdin.take()?;
+        let stdout = child.stdout.take()?;
+        let (tx, rx) = mpsc::channel();
+        thread::spawn(move || {
+            for line in BufReader::new(stdout).lines() {
+                match line {
+                    Ok(l) => {
+                        if tx.send(l).is_err() {
+                            break;
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+        Some(Worker { child, stdin, lines: rx })
+    }
+
+    /// Ok(line) on success; Err(true) when the worker died before reading the request (safe to
+    /// retry), Err(false) when it failed mid-request.
+    fn call(&mut self, payload: &str) -> Result<String, bool> {
+        if self.stdin.write_all(payload.as_bytes()).is_err() || self.stdin.write_all(b"\n").is_err() || self.stdin.flush().is_err() {
+            return Err(true);
+        }
+        match self.lines.recv_timeout(WORKER_TIMEOUT) {
+            Ok(line) => Ok(line),
+            // EOF right away: the worker had just exited (idle / recycled) and never saw it
+            Err(RecvTimeoutError::Disconnected) => Err(true),
+            Err(RecvTimeoutError::Timeout) => Err(false),
+        }
+    }
+
+    fn kill(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+struct WorkerPool {
+    script: PathBuf,
+    slots: Vec<Mutex<Option<Worker>>>,
+}
+
+impl WorkerPool {
+    fn new(script: PathBuf) -> Self {
+        WorkerPool { script, slots: (0..POOL_SIZE).map(|_| Mutex::new(None)).collect() }
+    }
+
+    fn prewarm(&self) {
+        if let Ok(mut slot) = self.slots[0].lock()
+            && slot.is_none()
+        {
+            *slot = Worker::spawn(&self.script);
+        }
+    }
+
+    fn call_slot(&self, slot: &mut Option<Worker>, payload: &str) -> Option<String> {
+        for _attempt in 0..2 {
+            if slot.is_none() {
+                *slot = Worker::spawn(&self.script);
+            }
+            let worker = slot.as_mut()?;
+            match worker.call(payload) {
+                Ok(line) => return Some(line),
+                Err(retry) => {
+                    worker.kill();
+                    *slot = None;
+                    if !retry {
+                        return None;
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Stateful routes (update download, Spotify import progress) live in worker 0's memory, so
+    /// they always go there; others take any idle worker. None when every worker stays busy for BUSY_WAIT.
+    fn dispatch(&self, payload: &str, pinned: bool) -> Option<String> {
+        if pinned {
+            let mut slot = self.slots[0].lock().ok()?;
+            return self.call_slot(&mut slot, payload);
+        }
+        // Most answers come from caches in a few ms: wait briefly for a free worker before
+        // paying a cold one-shot interpreter
+        let deadline = std::time::Instant::now() + BUSY_WAIT;
+        loop {
+            for m in self.slots.iter().rev() {
+                if let Ok(mut slot) = m.try_lock() {
+                    return self.call_slot(&mut slot, payload);
+                }
+            }
+            if std::time::Instant::now() >= deadline {
+                return None;
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+}
+
+fn is_pinned_route(raw_url: &str) -> bool {
+    let path = raw_url.split('?').next().unwrap_or("");
+    path.starts_with("/api/update") || path == "/api/check_update" || path.starts_with("/api/spotify")
+}
+
 struct AppState {
     app_dir: PathBuf,
     pending_ui_action: Mutex<Option<serde_json::Value>>,
+    pool: WorkerPool,
 }
 
 fn resolve_app_dir() -> PathBuf {
@@ -143,6 +289,16 @@ fn handle_open_url(url_str: &str) -> bool {
     false
 }
 
+fn parse_dispatch_output(stdout_str: &str) -> (u16, String) {
+    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(stdout_str) {
+        let status = parsed.get("status").and_then(|s| s.as_u64()).unwrap_or(200) as u16;
+        let body = parsed.get("body").and_then(|b| b.as_str()).unwrap_or("{}");
+        (status, body.to_string())
+    } else {
+        (200, stdout_str.trim().to_string())
+    }
+}
+
 fn dispatch_to_python(state: &AppState, method: &str, raw_url: &str, body_str: &str) -> (u16, String) {
     let script_path = state.app_dir.join("backend").join("route_dispatcher.py");
     if !script_path.exists() {
@@ -155,13 +311,18 @@ fn dispatch_to_python(state: &AppState, method: &str, raw_url: &str, body_str: &
         "body": body_str
     });
 
-    let python_cmd = if cfg!(windows) { "python" } else { "python3" };
-    let mut child = match Command::new(python_cmd)
-        .arg(&script_path)
+    if let Some(line) = state.pool.dispatch(&payload.to_string(), is_pinned_route(raw_url)) {
+        return parse_dispatch_output(&line);
+    }
+
+    // Every warm worker busy (or failing): one-shot subprocess, the original path
+    let mut cmd = Command::new(python_cmd());
+    cmd.arg(&script_path)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
+        .stderr(Stdio::piped());
+    no_console(&mut cmd);
+    let mut child = match cmd.spawn()
     {
         Ok(c) => c,
         Err(e) => {
@@ -170,7 +331,6 @@ fn dispatch_to_python(state: &AppState, method: &str, raw_url: &str, body_str: &
     };
 
     if let Some(mut stdin) = child.stdin.take() {
-        use std::io::Write;
         let _ = serde_json::to_writer(&mut stdin, &payload);
         let _ = stdin.write_all(b"\n");
     }
@@ -187,14 +347,7 @@ fn dispatch_to_python(state: &AppState, method: &str, raw_url: &str, body_str: &
         return (500, json!({"error": format!("Python dispatcher error: {err_msg}")}).to_string());
     }
 
-    let stdout_str = String::from_utf8_lossy(&output.stdout);
-    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&stdout_str) {
-        let status = parsed.get("status").and_then(|s| s.as_u64()).unwrap_or(200) as u16;
-        let body = parsed.get("body").and_then(|b| b.as_str()).unwrap_or("{}");
-        (status, body.to_string())
-    } else {
-        (200, stdout_str.trim().to_string())
-    }
+    parse_dispatch_output(&String::from_utf8_lossy(&output.stdout))
 }
 
 fn handle_request(state: Arc<AppState>, mut request: tiny_http::Request) {
@@ -357,6 +510,7 @@ fn main() {
     let state = Arc::new(AppState {
         app_dir: app_dir.clone(),
         pending_ui_action: Mutex::new(None),
+        pool: WorkerPool::new(app_dir.join("backend").join("route_dispatcher.py")),
     });
 
     let addr = format!("{HOST}:{PORT}");
@@ -375,8 +529,18 @@ fn main() {
 
     println!("nutsty-daemon: Ready on http://{addr} (AppDir: {})", app_dir.display());
 
+    // Warm the first worker now so the first Home / Mood request does not pay the Python start
+    {
+        let st = Arc::clone(&state);
+        thread::spawn(move || st.pool.prewarm());
+    }
+
+    // One thread per request: a slow YouTube Music call no longer queues every other route behind it
     for request in server.incoming_requests() {
-        handle_request(Arc::clone(&state), request);
-        trim_system_memory();
+        let st = Arc::clone(&state);
+        thread::spawn(move || {
+            handle_request(st, request);
+            trim_system_memory();
+        });
     }
 }

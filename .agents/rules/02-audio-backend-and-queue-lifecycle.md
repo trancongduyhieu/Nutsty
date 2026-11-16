@@ -90,3 +90,8 @@ Tài liệu đặc tả chuyên sâu về hệ thống daemon phát nhạc, giao
 - **Fast-path 0 giây**: `handle_post_spotify_auto_sync` và `handle_post_auth_auto_sync` ưu tiên kiểm tra session hợp lệ trong `nutsty_settings.json` / `ytmusic_auth.json` trước khi kích hoạt browser window, triệt tiêu hoàn toàn hiện tượng bắt người dùng đăng nhập lại lặp đi lặp lại.
 
 
+
+## 11. Warm Python Worker Pool (`nutsty-daemon` → `route_dispatcher.py --serve`)
+- **Tệp**: `nutsty-rs/crates/nutsty-daemon/src/main.rs` (`WorkerPool`), `backend/route_dispatcher.py` (`serve`). Daemon xử lý mỗi request trên 1 thread, giữ 2 worker Python sống (1 dòng JSON vào / 1 dòng ra); cache hit ~1 ms thay vì ~0,8 s spawn + import `ytmusicapi`.
+- **Vòng đời**: worker 0 prewarm lúc daemon bật; tự thoát khi rảnh 10 phút, sau 500 request, hoặc khi có `backend/*.py` mới hơn lúc nạp (sửa code / updater) → spawn lại lười. Cả 2 bận > 400 ms → fallback one-shot cũ.
+- **Footgun**: `/api/update*`, `/api/check_update`, `/api/spotify*` giữ tiến trình trong RAM nên **luôn pin worker 0**. Cache trong module phải chịu được nhiều tiến trình (auth status theo mtime `AUTH_FILE`, `online_tracks` reload theo mtime + merge khi ghi). Handler `print()` đi stderr; stdout là kênh trả lời. `bin/*.exe` Windows phải build lại mới có pool.

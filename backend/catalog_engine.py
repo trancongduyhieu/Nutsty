@@ -194,13 +194,46 @@ _ONLINE_TRACKS_LOCK = threading.Lock()
 _ONLINE_TRACKS_DIRTY = False
 _LAST_TRACKS_FLUSH_TIME = 0.0
 
+_ONLINE_TRACKS_MTIME = 0.0
+
+
+def _online_tracks_mtime():
+    try:
+        return os.path.getmtime(ONLINE_TRACKS_FILE)
+    except OSError:
+        return 0.0
+
+
 def _get_online_tracks_dict():
-    global _ONLINE_TRACKS_MEM_CACHE
-    if _ONLINE_TRACKS_MEM_CACHE is None:
+    # A resident route worker lives for many requests while other processes (player daemon,
+    # the other worker) also write this file: reload when it changed on disk
+    global _ONLINE_TRACKS_MEM_CACHE, _ONLINE_TRACKS_MTIME
+    mtime = _online_tracks_mtime()
+    if _ONLINE_TRACKS_MEM_CACHE is None or (mtime != _ONLINE_TRACKS_MTIME and not _ONLINE_TRACKS_DIRTY):
         with _ONLINE_TRACKS_LOCK:
-            if _ONLINE_TRACKS_MEM_CACHE is None:
+            if _ONLINE_TRACKS_MEM_CACHE is None or (mtime != _ONLINE_TRACKS_MTIME and not _ONLINE_TRACKS_DIRTY):
                 _ONLINE_TRACKS_MEM_CACHE = load_json(ONLINE_TRACKS_FILE, {})
+                _ONLINE_TRACKS_MTIME = mtime
     return _ONLINE_TRACKS_MEM_CACHE
+
+
+def _save_online_tracks_locked(data):
+    """Write the cache merged with entries other processes added since it was loaded."""
+    global _ONLINE_TRACKS_MTIME
+    if _online_tracks_mtime() != _ONLINE_TRACKS_MTIME:
+        for k, v in load_json(ONLINE_TRACKS_FILE, {}).items():
+            data.setdefault(k, v)
+    save_json(ONLINE_TRACKS_FILE, data, indent=None)
+    _ONLINE_TRACKS_MTIME = _online_tracks_mtime()
+
+
+def flush_online_tracks():
+    global _ONLINE_TRACKS_DIRTY
+    if not _ONLINE_TRACKS_DIRTY or _ONLINE_TRACKS_MEM_CACHE is None:
+        return
+    with _ONLINE_TRACKS_LOCK:
+        _ONLINE_TRACKS_DIRTY = False
+        _save_online_tracks_locked(_ONLINE_TRACKS_MEM_CACHE)
 
 def cache_online_tracks(tracks):
     global _ONLINE_TRACKS_DIRTY, _LAST_TRACKS_FLUSH_TIME
@@ -228,7 +261,7 @@ def cache_online_tracks(tracks):
             if _ONLINE_TRACKS_DIRTY and (now - _LAST_TRACKS_FLUSH_TIME > 3.0):
                 _LAST_TRACKS_FLUSH_TIME = now
                 _ONLINE_TRACKS_DIRTY = False
-                save_json(ONLINE_TRACKS_FILE, data, indent=None)
+                _save_online_tracks_locked(data)
     except Exception:
         pass
 

@@ -1,8 +1,15 @@
 #!/usr/bin/env python3
 """
 Nutsty CLI Route Dispatcher
-Dispatches ephemeral HTTP requests from the Rust nutsty-daemon to Python handlers
-(music_routes, social_routes, updater) without keeping a resident Python daemon in RAM.
+Dispatches HTTP requests from the Rust nutsty-daemon to Python handlers
+(music_routes, social_routes, updater).
+
+Two modes:
+  --serve   resident worker kept warm by nutsty-daemon: one JSON request per stdin line,
+            one JSON response per stdout line. Saves the ~0.8 s Python start + imports per
+            request. Exits after IDLE_EXIT_SEC without work (returns the RAM) or after
+            MAX_REQUESTS (recycles slow leaks, like gunicorn max_requests); the daemon respawns it.
+  default   one request from stdin (or CLI args), then exit.
 """
 import os
 import sys
@@ -189,20 +196,109 @@ def dispatch_request(method, path, query_dict, body_str):
     }
 
 
+def _handle_payload(req):
+    method = req.get("method", "GET").upper()
+    raw_url = req.get("url", req.get("path", "/"))
+    parsed = urlparse(raw_url)
+    return dispatch_request(method, parsed.path, parse_qs(parsed.query), req.get("body", ""))
+
+
+IDLE_EXIT_SEC = 600
+MAX_REQUESTS = 500
+
+
+def _background_busy():
+    """True while an update download or Spotify import started by this worker is running."""
+    for mod_name, attr in (("updater", "direct_updater"), ("spotify_importer", "importer")):
+        mod = sys.modules.get(mod_name) or sys.modules.get(f"backend.{mod_name}")
+        job = getattr(mod, attr, None) if mod else None
+        if job is not None and getattr(job, "active", False):
+            return True
+    return False
+
+
+def _exit_worker():
+    while _background_busy():
+        import time
+        time.sleep(2)
+    try:
+        flush = getattr(sys.modules.get("catalog_engine"), "flush_online_tracks", None)
+        if flush:
+            flush()
+    except Exception:
+        pass
+    os._exit(0)
+
+
+def _code_changed_since(started):
+    """True when a backend .py file changed after this worker loaded (dev edit or applied update)."""
+    try:
+        for entry in os.scandir(BACKEND_DIR):
+            if entry.name.endswith(".py") and entry.stat().st_mtime > started:
+                return True
+    except OSError:
+        pass
+    return False
+
+
+def serve():
+    import threading
+    import time
+    # The real stdout is the response channel: handler prints go to stderr instead
+    out = os.fdopen(os.dup(sys.stdout.fileno()), "w", encoding="utf-8")
+    sys.stdout = sys.stderr
+    state = {"last": time.monotonic(), "busy": False}
+    lock = threading.Lock()
+
+    def idle_watch():
+        while True:
+            time.sleep(15)
+            with lock:
+                if (not state["busy"] and time.monotonic() - state["last"] > IDLE_EXIT_SEC
+                        and not _background_busy()):
+                    _exit_worker()
+
+    threading.Thread(target=idle_watch, daemon=True).start()
+    started = time.time()
+    served = 0
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        with lock:
+            state["busy"] = True
+        try:
+            res = _handle_payload(json.loads(line))
+        except Exception as e:
+            res = {"status": 500, "headers": {"Content-Type": "application/json"}, "body": json.dumps({"error": str(e)})}
+        out.write(json.dumps(res, ensure_ascii=False) + "\n")
+        out.flush()
+        served += 1
+        with lock:
+            state["busy"] = False
+            state["last"] = time.monotonic()
+        # Recycle only between jobs: an update download / Spotify import keeps this worker serving
+        if (served >= MAX_REQUESTS or _code_changed_since(started)) and not _background_busy():
+            break
+    # stdin closed (daemon gone) or recycled: finish any update / import first
+    _exit_worker()
+
+
 def main():
+    # nutsty-daemon writes UTF-8 JSON; Windows would otherwise decode stdin as cp1252
+    try:
+        sys.stdin.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+    if "--serve" in sys.argv[1:]:
+        serve()
+        return
     # Read invocation payload from stdin if available, or CLI arguments
     if not sys.stdin.isatty():
         try:
             raw_input = sys.stdin.read()
             if raw_input.strip():
-                req = json.loads(raw_input)
-                method = req.get("method", "GET").upper()
-                raw_url = req.get("url", req.get("path", "/"))
-                parsed = urlparse(raw_url)
-                path = parsed.path
-                query = parse_qs(parsed.query)
-                body = req.get("body", "")
-                res = dispatch_request(method, path, query, body)
+                res = _handle_payload(json.loads(raw_input))
                 print(json.dumps(res, ensure_ascii=False))
                 return
         except Exception as e:
