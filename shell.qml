@@ -812,8 +812,11 @@ Scope {
         id: authServerProc
         command: [win.appDir + "/bin/nutsty-daemon"]
         running: (typeof __NutstyBridge === "undefined")
+        // Every profile window shares one daemon. Exit code 0 means another window owns the port;
+        // stay on standby and retry, so this window takes over when that window closes.
         onExited: (exitCode, exitStatus) => {
-            if (exitCode !== 0 && typeof __NutstyBridge === "undefined") {
+            if (typeof __NutstyBridge === "undefined") {
+                restartAuthServerTimer.interval = exitCode === 0 ? 5000 : 1500;
                 restartAuthServerTimer.restart();
             }
         }
@@ -4895,7 +4898,10 @@ Scope {
                 };
             }
             if (statusXhr.readyState === XMLHttpRequest.UNSENT || statusXhr.readyState === XMLHttpRequest.DONE) {
-                statusXhr.open("GET", (win.localApiUrl || "http://127.0.0.1:17890") + "/api/player/status", true);
+                // The daemon is shared by every profile window; the profile picks which mpv it reads
+                var statusProfile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
+                statusXhr.open("GET", (win.localApiUrl || "http://127.0.0.1:17890") + "/api/player/status"
+                               + (statusProfile ? "?profile=" + encodeURIComponent(statusProfile) : ""), true);
                 try {
                     statusXhr.send();
                 } catch(e) {
@@ -5062,6 +5068,23 @@ Scope {
         }
         function getAccentColorInfo() {
             console.log("[NutstyAccent]", "accentColor:", win.accentColor, "songAccentColor:", win.songAccentColor, "wallpaperAccentColor:", win.wallpaperAccentColor, "isPlaying:", win.isPlaying, "track:", win.currentTrack ? win.currentTrack.title : "null", "cover:", win.currentTrack ? win.currentTrack.image : "null");
+        }
+
+        function testPostNote(text: string) { win.postDailyNote(text, null); }
+        function testDeleteNote() { win.deleteMyNote(); }
+        function getSocialState(): string {
+            var f = win.listeningAlongFriend;
+            return JSON.stringify({
+                host: f ? (f.tag || f.user_email || f.user_name || "?") : null,
+                coListeners: win.activeCoListeners || [],
+                allowControl: win.allowCoListenerControl,
+                guestCanControlHost: win.guestCanControlHost,
+                track: win.currentTrack ? (win.currentTrack.title || "") : null,
+                time: Math.round(win.currentTime),
+                playing: win.isPlaying,
+                myNote: win.myLatestNote ? (win.myLatestNote.note_text || "(track)") : null,
+                friendNotes: (win.friendsNotes || []).map(function(n) { return (n.user_name || "?") + ":" + (n.note_text || "(track)"); })
+            });
         }
 
         function testSendChatMessage(text: string) {

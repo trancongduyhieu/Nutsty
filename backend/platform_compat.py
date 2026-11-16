@@ -305,6 +305,64 @@ def connect_mpv_socket(ipc_type: str, address, timeout: float = 2.0):
         s.connect(address)
         return s
 
+def _title_pattern(title: str) -> str:
+    """pgrep/pkill regex for an exact --title= value.
+
+    A bare substring would also match longer titles: "nutsty-audio" matches "nutsty-audio_user2",
+    so one profile could see, or kill, another profile's mpv.
+    """
+    import re
+    return f"--title={re.escape(title)}( |$)"
+
+
+class InterprocessLock:
+    """Exclusive lock on a file, shared by every process that opens the same path.
+
+    The player CLI runs as many short-lived processes; a threading.Lock cannot stop two of them
+    from spawning mpv at the same moment.
+    """
+
+    def __init__(self, path):
+        self.path = str(path)
+        self._fh = None
+
+    def __enter__(self):
+        self._fh = open(self.path, "a+b")
+        try:
+            if IS_WINDOWS:
+                import msvcrt
+                self._fh.seek(0)
+                while True:
+                    try:
+                        msvcrt.locking(self._fh.fileno(), msvcrt.LK_LOCK, 1)
+                        break
+                    except OSError:
+                        time.sleep(0.05)
+            else:
+                import fcntl
+                fcntl.flock(self._fh.fileno(), fcntl.LOCK_EX)
+        except Exception:
+            pass
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            if IS_WINDOWS:
+                import msvcrt
+                self._fh.seek(0)
+                msvcrt.locking(self._fh.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(self._fh.fileno(), fcntl.LOCK_UN)
+        except Exception:
+            pass
+        try:
+            self._fh.close()
+        except Exception:
+            pass
+        return False
+
+
 def is_process_running(name_or_title: str) -> bool:
     """Check if process with title or image name is currently active."""
     if IS_WINDOWS:
@@ -318,7 +376,7 @@ def is_process_running(name_or_title: str) -> bool:
             return False
     else:
         try:
-            res = subprocess.run(["pgrep", "-f", f"title={name_or_title}"], capture_output=True, text=True, timeout=2)
+            res = subprocess.run(["pgrep", "-f", "--", _title_pattern(name_or_title)], capture_output=True, text=True, timeout=2)
             return res.returncode == 0 and bool(res.stdout.strip())
         except Exception:
             return False
@@ -334,7 +392,7 @@ def kill_process(name_or_title: str):
             pass
     else:
         try:
-            subprocess.run(["pkill", "-9", "-f", f"title={name_or_title}"], capture_output=True, timeout=3)
+            subprocess.run(["pkill", "-9", "-f", "--", _title_pattern(name_or_title)], capture_output=True, timeout=3)
         except Exception:
             pass
 

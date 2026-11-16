@@ -141,7 +141,7 @@ def _mpv_stream_args(ytdl_fmt, user_agent=DEFAULT_UA):
 
 def ensure_mpv():
     """Ensure background MPV process is running with IPC socket safely without process thrashing"""
-    with _MPV_LOCK:
+    with _MPV_LOCK, pc.InterprocessLock(os.path.join(TEMP_DIR, f"nutsty_mpv_spawn{PROFILE_SUFFIX}.lock")):
         # 1. If socket responds, we are good
         try:
             s = pc.connect_mpv_socket(IPC_TYPE, IPC_TARGET, timeout=0.8)

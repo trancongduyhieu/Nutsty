@@ -290,9 +290,33 @@ function fetchFriendsDataFast(win, callback) {
     xhr.send();
 }
 
+// A post/delete of my own note bumps _noteMutationSeq. A notes fetch that started before the
+// mutation finished carries the old my_note and must not overwrite the optimistic value.
+var _noteMutationSeq = 0;
+var _noteMutationsInFlight = 0;
+var _notesRefetchQueued = false;
+
+function _finishNoteMutation(win) {
+    _noteMutationSeq++;
+    _noteMutationsInFlight = Math.max(0, _noteMutationsInFlight - 1);
+    fetchFriendsNotesFast(win);
+}
+
 function fetchFriendsNotesFast(win) {
-    if (win.isFetchingNotesFast) return;
+    if (win.isFetchingNotesFast) {
+        _notesRefetchQueued = true;
+        return;
+    }
     win.isFetchingNotesFast = true;
+    _notesRefetchQueued = false;
+    var seqAtStart = _noteMutationSeq;
+    var _finished = false;
+    var _done = function() {
+        if (_finished) return;
+        _finished = true;
+        win.isFetchingNotesFast = false;
+        if (_notesRefetchQueued) Qt.callLater(function() { fetchFriendsNotesFast(win); });
+    };
 
     var email = win.getCurrentUserEmail();
     var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
@@ -304,15 +328,11 @@ function fetchFriendsNotesFast(win) {
     var xhr = new XMLHttpRequest();
     xhr.open("GET", url, true);
     xhr.timeout = 8000;
-    xhr.ontimeout = function() {
-        win.isFetchingNotesFast = false;
-    };
-    xhr.onerror = function() {
-        win.isFetchingNotesFast = false;
-    };
+    xhr.ontimeout = _done;
+    xhr.onerror = _done;
     xhr.onreadystatechange = function() {
         if (xhr.readyState === XMLHttpRequest.DONE) {
-            win.isFetchingNotesFast = false;
+            _done();
             if (xhr.status === 200) {
                 try {
                     var parsed = JSON.parse(xhr.responseText);
@@ -320,7 +340,7 @@ function fetchFriendsNotesFast(win) {
                         if (Array.isArray(parsed.notes)) {
                             win.friendsNotes = parsed.notes;
                         }
-                        if (parsed.my_note !== undefined) {
+                        if (parsed.my_note !== undefined && _noteMutationsInFlight === 0 && seqAtStart === _noteMutationSeq) {
                             win.myLatestNote = parsed.my_note;
                         }
 
@@ -441,6 +461,76 @@ function setAllowCoListenerControl(win, allowed) {
         : I18n.tr("Đã khóa quyền điều khiển chung (Chỉ Host điều khiển)", "Disabled shared control (Host only)"));
 }
 
+// Who sent a playback event, relative to the current listen-along session:
+// "host" (the friend I listen along with), "listener" (someone listening along with me) or "".
+// Only "join" may add a listener; anything else from outside the session is stale and ignored,
+// otherwise a late seek/pause from an old host turns it into a phantom listener that controls us.
+function sessionRole(win, ev) {
+    if (!ev) return "";
+    var keys = {};
+    [ev.from_id, ev.from_email, ev.from_tag, ev.user_id, ev.tag].forEach(function(k) {
+        var s = String(k || "").trim().toLowerCase();
+        if (s) keys[s] = true;
+    });
+    function matches(obj) {
+        if (!obj) return false;
+        if (typeof obj !== "object") return !!keys[String(obj).trim().toLowerCase()];
+        var cand = [obj.user_id, obj.id, obj.tag, obj.email, obj.user_email];
+        for (var i = 0; i < cand.length; i++) {
+            var c = String(cand[i] || "").trim().toLowerCase();
+            if (c && keys[c]) return true;
+        }
+        return false;
+    }
+    if (win.listeningAlongFriend && matches(win.listeningAlongFriend)) return "host";
+    var lists = [win.activeCoListeners || [], win.activeCoListenersDetails || []];
+    for (var l = 0; l < lists.length; l++) {
+        for (var j = 0; j < lists[l].length; j++) {
+            if (matches(lists[l][j])) return "listener";
+        }
+    }
+    return "";
+}
+
+// Guests send a join heartbeat every ~10 s while listening along. A listener that has been silent
+// for LISTENER_TIMEOUT_MS closed the app or lost the connection without sending "leave".
+var LISTENER_TIMEOUT_MS = 35000;
+var _listenerSeenAt = {};
+
+function _touchListener(win, ev) {
+    if (sessionRole(win, ev) !== "listener") return;
+    var list = win.activeCoListeners || [];
+    var keys = [ev.from_id, ev.from_email, ev.from_tag].map(function(k) { return String(k || "").trim().toLowerCase(); });
+    for (var i = 0; i < list.length; i++) {
+        var entry = String(list[i] || "").trim().toLowerCase();
+        if (entry && keys.indexOf(entry) !== -1) _listenerSeenAt[entry] = Date.now();
+    }
+}
+
+function _pruneSilentListeners(win) {
+    var list = win.activeCoListeners || [];
+    if (list.length === 0) return;
+    var now = Date.now();
+    var gone = [];
+    for (var i = 0; i < list.length; i++) {
+        var entry = String(list[i] || "").trim().toLowerCase();
+        if (!_listenerSeenAt[entry]) _listenerSeenAt[entry] = now;
+        else if (now - _listenerSeenAt[entry] > LISTENER_TIMEOUT_MS) gone.push(entry);
+    }
+    if (gone.length === 0) return;
+    win.activeCoListeners = list.filter(function(e) { return gone.indexOf(String(e || "").trim().toLowerCase()) === -1; });
+    var removedNames = [];
+    win.activeCoListenersDetails = (win.activeCoListenersDetails || []).filter(function(d) {
+        var em = String(d.email || d.tag || "").trim().toLowerCase();
+        if (gone.indexOf(em) !== -1) { removedNames.push(d.name || em); return false; }
+        return true;
+    });
+    for (var g = 0; g < gone.length; g++) delete _listenerSeenAt[gone[g]];
+    if (coListenersPopover.visible) coListenersPopover.openAt(win.activeCoListenersDetails);
+    var who = removedNames.length > 0 ? removedNames.join(", ") : I18n.tr("Bạn bè", "Friend");
+    win.showToast(I18n.tr(who + " đã mất kết nối khỏi phòng nghe cùng", who + " dropped out of the listening session"));
+}
+
 function ensureCoListenerRegistered(win, ev, showJoinToast) {
     if (!ev) return false;
     if (win.listeningAlongFriend) {
@@ -456,6 +546,7 @@ function ensureCoListenerRegistered(win, ev, showJoinToast) {
     var rawUserId = peer.user_id;
     var jEmail = rawEmail.toLowerCase();
     if (!jEmail) return false;
+    _listenerSeenAt[jEmail] = Date.now();
 
     if (ev.event === "join") {
         win.listeningAlongFriend = null;
@@ -522,6 +613,7 @@ function pollSocialEventsFast(win) {
                     for (var i = 0; i < events.length; i++) {
                         var ev = events[i];
                         if (!ev) continue;
+                        _touchListener(win, ev);
                         if (ev.event === "join") {
                             var isNew = win.ensureCoListenerRegistered(ev, true);
                             var isHb = (ev.data && ev.data.heartbeat === true);
@@ -569,8 +661,9 @@ function pollSocialEventsFast(win) {
                                 win.showToast(I18n.tr(fromName + " đã dừng nghe cùng bạn", fromName + " stopped listening along with you"));
                             }
                         } else if (ev.event === "pause") {
-                            win.ensureCoListenerRegistered(ev, true);
-                            if (!win.listeningAlongFriend && !win.allowCoListenerControl) {
+                            var role = sessionRole(win, ev);
+                            if (!role) continue;
+                            if (role === "listener" && !win.allowCoListenerControl) {
                                 _forceResyncUnauthorizedGuest(win, ev);
                                 continue;
                             }
@@ -586,8 +679,9 @@ function pollSocialEventsFast(win) {
                             var pName = ev.from_name || I18n.tr("Bạn bè", "Friend");
                             win.showToast(I18n.tr(pName + " đã tạm dừng bài hát", pName + " paused playback"));
                         } else if (ev.event === "play" || ev.event === "resume") {
-                            win.ensureCoListenerRegistered(ev, true);
-                            if (!win.listeningAlongFriend && !win.allowCoListenerControl) {
+                            var role = sessionRole(win, ev);
+                            if (!role) continue;
+                            if (role === "listener" && !win.allowCoListenerControl) {
                                 _forceResyncUnauthorizedGuest(win, ev);
                                 continue;
                             }
@@ -602,8 +696,9 @@ function pollSocialEventsFast(win) {
                             var rName = ev.from_name || I18n.tr("Bạn bè", "Friend");
                             win.showToast(I18n.tr(rName + " đã tiếp tục phát bài hát", rName + " resumed playback"));
                         } else if (ev.event === "seek") {
-                            win.ensureCoListenerRegistered(ev, true);
-                            if (!win.listeningAlongFriend && !win.allowCoListenerControl) {
+                            var role = sessionRole(win, ev);
+                            if (!role) continue;
+                            if (role === "listener" && !win.allowCoListenerControl) {
                                 _forceResyncUnauthorizedGuest(win, ev);
                                 continue;
                             }
@@ -625,8 +720,9 @@ function pollSocialEventsFast(win) {
                                 win.showToast(I18n.tr(skName + " đã tua đến " + timeStr, skName + " seeked to " + timeStr));
                             }
                         } else if (ev.event === "track_change") {
-                            win.ensureCoListenerRegistered(ev, true);
-                            var canAcceptTrackChange = (win.listeningAlongFriend !== null) || win.allowCoListenerControl;
+                            var tcRole = sessionRole(win, ev);
+                            if (!tcRole) continue;
+                            var canAcceptTrackChange = tcRole === "host" || win.allowCoListenerControl;
                             if (!canAcceptTrackChange) {
                                 _forceResyncUnauthorizedGuest(win, ev);
                                 continue;
@@ -654,7 +750,6 @@ function pollSocialEventsFast(win) {
                                 }
                             }
                         } else if (ev.event === "track_suggest") {
-                            win.ensureCoListenerRegistered(ev, true);
                             if (ev.data && ev.data.track) {
                                 var sFrom = ev.from_name || I18n.tr("Bạn bè", "Friend");
                                 var sAvatar = ev.from_avatar || "";
@@ -668,7 +763,6 @@ function pollSocialEventsFast(win) {
                                 suggestTrackToast.showSuggestion(sFrom, sAvatar, ev.data.track);
                             }
                         } else if (ev.event === "chat_message") {
-                            win.ensureCoListenerRegistered(ev, true);
                             var cFrom = ev.from_name || I18n.tr("Bạn bè", "Friend");
                             var cAvatar = ev.from_avatar || "";
                             var cText = (ev.data && ev.data.text) ? ev.data.text : (ev.data && ev.data.message ? ev.data.message : "");
@@ -697,6 +791,7 @@ function pollSocialEventsFast(win) {
                             win.fetchFriendsNotesFast();
                         }
                     }
+                    _pruneSilentListeners(win);
                 } catch(e) {}
             }
         }
@@ -735,6 +830,7 @@ function postDailyNote(win, text, track) {
         accent_color: win.songAccentColor ? win.songAccentColor.toString() : ""
     } : null;
 
+    _noteMutationsInFlight++;
     win.myLatestNote = {
         note_text: cleanText,
         track: trackObj,
@@ -770,16 +866,16 @@ function postDailyNote(win, text, track) {
                     }
                 } catch(e) {}
             }
-            win.fetchFriendsNotesFast();
+            _finishNoteMutation(win);
             if (typeof win.fetchFriendsList === "function") win.fetchFriendsList();
         }
     };
     xhr.send(JSON.stringify(payload));
     win.syncNowPlaying(true);
-    Qt.callLater(function() { win.fetchFriendsNotesFast(); });
 }
 
 function deleteMyNote(win) {
+    _noteMutationsInFlight++;
     win.myLatestNote = null;
     var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
     var email = win.getCurrentUserEmail();
@@ -790,12 +886,11 @@ function deleteMyNote(win) {
     xhr.setRequestHeader("Content-Type", "application/json");
     xhr.onreadystatechange = function() {
         if (xhr.readyState === XMLHttpRequest.DONE) {
-            win.fetchFriendsNotesFast();
+            _finishNoteMutation(win);
             if (typeof win.fetchFriendsList === "function") win.fetchFriendsList();
         }
     };
     xhr.send(JSON.stringify({ profile: profile, user_email: email }));
-    Qt.callLater(function() { win.fetchFriendsNotesFast(); });
     win.showToast(I18n.tr("Đã xóa ghi chú", "Note deleted"));
 }
 

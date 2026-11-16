@@ -71,8 +71,36 @@ impl Default for PlayerStatusOutput {
     }
 }
 
+thread_local! {
+    static PROFILE_OVERRIDE: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Profile whose mpv socket and state files this thread talks to: an override set by
+/// `with_profile` (the shared daemon serves every profile window), else `NUTSTY_PROFILE`.
+fn current_profile() -> String {
+    PROFILE_OVERRIDE
+        .with(|p| p.borrow().clone())
+        .unwrap_or_else(|| env::var("NUTSTY_PROFILE").unwrap_or_default())
+        .trim()
+        .to_lowercase()
+}
+
+/// Runs `f` against another profile's mpv. Names outside [a-z0-9_-] are ignored, so a query
+/// parameter can never point the socket path outside the temp dir.
+pub fn with_profile<T>(profile: &str, f: impl FnOnce() -> T) -> T {
+    let clean = profile.trim().to_lowercase();
+    let valid = clean.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+    if !valid {
+        return f();
+    }
+    let prev = PROFILE_OVERRIDE.with(|p| p.replace(Some(clean)));
+    let out = f();
+    PROFILE_OVERRIDE.with(|p| *p.borrow_mut() = prev);
+    out
+}
+
 pub fn get_socket_path() -> PathBuf {
-    let profile = env::var("NUTSTY_PROFILE").unwrap_or_default().trim().to_lowercase();
+    let profile = current_profile();
     let suffix = if profile.is_empty() {
         String::new()
     } else {
@@ -84,7 +112,7 @@ pub fn get_socket_path() -> PathBuf {
 }
 
 pub fn get_state_file_path() -> PathBuf {
-    let profile = env::var("NUTSTY_PROFILE").unwrap_or_default().trim().to_lowercase();
+    let profile = current_profile();
     let suffix = if profile.is_empty() {
         String::new()
     } else {
@@ -96,7 +124,7 @@ pub fn get_state_file_path() -> PathBuf {
 }
 
 pub fn get_abort_file_path() -> PathBuf {
-    let profile = env::var("NUTSTY_PROFILE").unwrap_or_default().trim().to_lowercase();
+    let profile = current_profile();
     let suffix = if profile.is_empty() {
         String::new()
     } else {
@@ -127,7 +155,7 @@ pub fn send_mpv_command_single(cmd: Value) -> Option<Value> {
 
 #[cfg(windows)]
 pub fn get_pipe_path() -> String {
-    let profile = env::var("NUTSTY_PROFILE").unwrap_or_default().trim().to_lowercase();
+    let profile = current_profile();
     let suffix = if profile.is_empty() {
         String::new()
     } else {

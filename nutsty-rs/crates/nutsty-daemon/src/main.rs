@@ -395,7 +395,12 @@ fn handle_request(state: Arc<AppState>, mut request: tiny_http::Request) {
     if method == "GET" {
         match path.as_str() {
             "/api/player/status" => {
-                let status = nutsty_bridge::get_player_status_output();
+                let profile = parsed_url
+                    .query_pairs()
+                    .find(|(k, _)| k == "profile")
+                    .map(|(_, v)| v.into_owned())
+                    .unwrap_or_default();
+                let status = nutsty_bridge::with_profile(&profile, nutsty_bridge::get_player_status_output);
                 let body = serde_json::to_string(&status).unwrap_or_else(|_| "{}".to_string());
                 send_raw_json(request, 200, body);
                 return;
