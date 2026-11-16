@@ -25,6 +25,7 @@ Item {
     property real coverRadius: 16
     property color mainColor: Qt.rgba(1, 1, 1, 1)
     property color accentColor: Theme.accent
+    property url prevImage: ""      // the outgoing track's resolved artwork (left card fallback when no snapshot was taken)
     property url nextImage: ""      // the next track's resolved artwork (prefetched; what the main cover will show)
     property bool mainReady: true   // the main cover has its artwork decoded
     property Item mainSurface: null // the main cover item, mirrored live so the swap can freeze its last frame
@@ -148,6 +149,8 @@ Item {
         var k = cardS, d = slotD, off = cardW * 0.9;
         if (p === "pre") {
             nextTrack = mixUpcoming ? mixUpcoming.to : nextTrack;
+            // The left card loads the outgoing artwork now (hidden), so it is ready at the swap
+            prevTrack = track;
             streamFromPrev = false;
             instant = true;
             nextCard.ox = d + off; nextCard.s = k * 0.9; nextCard.op = 0; nextCard.altOn = true;
@@ -226,8 +229,22 @@ Item {
         running: root.pendingNextFade
         onTriggered: { root.pendingNextFade = false; nextCard.op = 0; }
     }
-    onCoverSizeChanged: if (phase !== "idle") apply(phase, phase === "mix" ? "pre" : phase)
-    onWidthChanged: if (phase !== "idle") apply(phase, phase === "mix" ? "pre" : phase)
+    // A size change (the layout often reflows when the new track arrives) only moves the cards to
+    // their new slots. Re-running apply() here would restart the staging and re-arm the live
+    // snapshot after the switch, so the left card would mirror the new track's cover
+    function relayout() {
+        var k = cardS, d = slotD;
+        if (phase === "pre") {
+            nextCard.ox = d; nextCard.s = k;
+            mainShift = -d; mainScale = k;
+        } else if (phase === "mix") {
+            prevCard.ox = -d; prevCard.s = k;
+            if (nextCard.op > 0) { nextCard.ox = d; nextCard.s = k; }
+            mainShift = d; mainScale = k;
+        }
+    }
+    onCoverSizeChanged: relayout()
+    onWidthChanged: relayout()
 
     // ---- Geometry ----------------------------------------------------------------------
     readonly property real cx: width / 2
@@ -261,7 +278,16 @@ Item {
         height: size
         x: root.cx + ox - width / 2
         y: root.cy - height / 2
-        opacity: op
+        // Never show the empty placeholder: the card waits (transparent) until its artwork is
+        // decoded, then fades in. A track with no artwork at all shows the placeholder after a moment
+        readonly property bool artReady: baseImg.status === Image.Ready
+            || (card.altOn && String(card.altSource) !== "" && altImg.status === Image.Ready)
+        property bool artGiveUp: false
+        onTrkChanged: artGiveUp = false
+        Timer { interval: 1400; running: card.op > 0.005 && !card.artReady && !card.artGiveUp; onTriggered: card.artGiveUp = true }
+        property real artT: (artReady || artGiveUp) ? 1 : 0
+        Behavior on artT { enabled: !root.instant; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+        opacity: op * artT
         visible: op > 0.005
 
         RectangularShadow {
@@ -272,6 +298,7 @@ Item {
             color: Qt.rgba(card.sampled.r, card.sampled.g, card.sampled.b, 0.5)
         }
         RoundedImage {
+            id: baseImg
             anchors.fill: parent
             radius: root.coverRadius * card.s
             source: root.imageOf(card.trk)
@@ -287,7 +314,7 @@ Item {
             anchors.fill: parent
             radius: root.coverRadius * card.s
             source: card.altSource
-            sourceSize: Qt.size(512, 512)
+            sourceSize: Qt.size(1200, 1200)   // same request as the main cover / preloader: a cache hit, no reload
             borderColor: Qt.rgba(1, 1, 1, 0.14)
             borderWidth: 1
             placeholderColor: "transparent"
@@ -406,6 +433,8 @@ Item {
     Card {
         id: prevCard
         trk: root.prevTrack
+        altSource: root.prevImage
+        altOn: true
         caption: I18n.tr("ĐANG CHUYỂN TỪ", "MIXING FROM")
         showCaption: false   // the left card is artwork only
     }
@@ -440,7 +469,7 @@ Item {
         smooth: true
         mipmap: true
         textureSize: root.mainSurface ? Qt.size(Math.ceil(root.mainSurface.width), Math.ceil(root.mainSurface.height)) : Qt.size(1, 1)
-        opacity: root.snapOn ? prevCard.opacity : (root.snapShow ? 1 : 0)
+        opacity: root.snapOn ? prevCard.op : (root.snapShow ? 1 : 0)
         visible: opacity > 0.005 && sourceItem !== null
     }
 }

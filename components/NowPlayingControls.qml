@@ -117,42 +117,14 @@ ColumnLayout {
         }
         // "Cooking" (AutoMix is blending): the word rests dim and a soft band of light sweeps across it left to right
         // (text_shimmer.frag), so each letter lights up and dims again on every pass
-        Item {
+        ShimmerText {
             id: mixLabel
             anchors.centerIn: parent
-            width: mixBase.implicitWidth
-            height: mixBase.implicitHeight
+            text: I18n.tr("Cooking", "Cooking")
+            running: ctl.mixing
             opacity: ctl.mixing ? 1 : 0
             visible: opacity > 0.01
             Behavior on opacity { NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
-            property real sweep: 0
-            NumberAnimation on sweep {
-                from: 0; to: 1; duration: 1600; loops: Animation.Infinite
-                easing.type: Easing.InOutSine
-                running: mixLabel.visible && ctl.mixing
-            }
-            Text {
-                id: mixBase
-                text: I18n.tr("Cooking", "Cooking")
-                font.family: Theme.fontFamily; font.pixelSize: 12; font.weight: Font.DemiBold
-                font.letterSpacing: 0.6
-                color: "#ffffff"
-            }
-            ShaderEffectSource {
-                id: mixTex
-                sourceItem: mixBase
-                hideSource: true
-                live: true
-                visible: false
-            }
-            ShaderEffect {
-                anchors.fill: mixBase
-                property var source: mixTex
-                property real u_sweep: mixLabel.sweep
-                property real u_band: 0.32
-                property real u_base: 0.42
-                fragmentShader: Qt.resolvedUrl("../assets/shaders/text_shimmer.frag.qsb")
-            }
         }
         Text {
             id: totalText

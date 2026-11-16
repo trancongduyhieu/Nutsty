@@ -741,6 +741,19 @@ def crossfade_play(file_path, title, artist, art, my_epoch, fade_at, fade_dur, i
         xf.kill_tail(TEMP_DIR, PROFILE_SUFFIX)
 
 
+def _prev_track_ident(new_path=""):
+    """target_vid/path of the last state write, so pause/resume keep the track identity
+    (only when the track itself is unchanged)."""
+    try:
+        with open(PLAYBACK_STATE_FILE, "r", encoding="utf-8") as f:
+            st = json.load(f)
+        if new_path and st.get("path", "") != new_path:
+            return {}
+        return {"path": st.get("path", ""), "target_vid": st.get("target_vid", "")}
+    except Exception:
+        return {}
+
+
 def get_status_dict():
     is_loading = False
     target_vid = ""
@@ -1046,7 +1059,7 @@ def execute_command(args):
         ensure_mpv()
         try:
             with open(PLAYBACK_STATE_FILE, "w", encoding="utf-8") as f:
-                json.dump({"state": "paused", "timestamp": time.time()}, f)
+                json.dump({**_prev_track_ident(), "state": "paused", "timestamp": time.time()}, f)
         except Exception:
             pass
         send_mpv_cmd(["set_property", "pause", True])
@@ -1063,7 +1076,7 @@ def execute_command(args):
         try:
             if os.path.exists(PLAYBACK_STATE_FILE):
                 with open(PLAYBACK_STATE_FILE, "w", encoding="utf-8") as f:
-                    json.dump({"state": "playing", "path": target_file or path or "", "timestamp": time.time()}, f)
+                    json.dump({**_prev_track_ident(target_file), "state": "playing", "path": target_file or path or "", "timestamp": time.time()}, f)
         except Exception:
             pass
 
@@ -1126,6 +1139,15 @@ def execute_command(args):
             sys.stderr.write(f"[player_daemon] crossfade failed, falling back: {e}\n")
             xf.kill_tail(TEMP_DIR, PROFILE_SUFFIX)
             execute_command(["play", args[1], args[2], args[3], args[4], args[5]])
+
+    elif action == "media_duration" and len(args) > 1:
+        # Length of an upcoming track, so the player can show it the moment a blend switches to it
+        try:
+            url, _, _, _ = _resolve_for_crossfade(args[1], args[2] if len(args) > 2 else "", args[3] if len(args) > 3 else "")
+            dur = _media_duration(url) if url else 0.0
+        except Exception:
+            dur = 0.0
+        print(json.dumps({"duration": round(dur, 2)}))
 
     elif action == "automix_plan" and len(args) > 1:
         base = float(args[4]) if len(args) > 4 else 6.0

@@ -181,6 +181,8 @@ Scope {
     property int crossfadeSeconds: 6
     property bool autoMixEnabled: false
     property var autoMixPlan: null
+    property string mixNextDurationKey: ""
+    property real mixNextDuration: 0
     property string autoMixRequestedKey: ""
     property string crossfadeTriggeredKey: ""
     property bool crossfadeArmed: false
@@ -1743,8 +1745,16 @@ Scope {
         id: smoothProgressTimer
         interval: (win.isWindowEffectivelyActive || win.desktopLyricsEnabled) ? 40 : 250
         repeat: true
-        running: (win.visible || win.desktopLyricsEnabled) && win.isPlaying && !win.isLoadingAudio && win.lastSyncTimestamp > 0
+        running: (win.visible || win.desktopLyricsEnabled) && win.isPlaying
+                 && ((!win.isLoadingAudio && win.lastSyncTimestamp > 0) || (win.isLoadingAudio && win.mixActive !== null))
         onTriggered: {
+            // AutoMix blend: the incoming song starts at a known moment (blendAtMs) and offset (inStart),
+            // so its clock runs from there before mpv reports the new file, instead of sitting at 0:00
+            if (win.isLoadingAudio && win.mixActive) {
+                var m = win.mixActive;
+                win.currentTime = (m.inStart || 0) + Math.max(0, (Date.now() - m.blendAtMs) / 1000.0);
+                return;
+            }
             var elapsed = (Date.now() - win.lastSyncTimestamp) / 1000.0;
             var newT = win.lastSyncTime + elapsed;
             if (win.totalDuration > 0 && newT > win.totalDuration) {
@@ -2877,6 +2887,7 @@ Scope {
             // Now Playing carries its own transport controls: unrender the bar (and its glass layer) while open
             visible: !win.isNowPlayingOpen
             backgroundSourceItem: masterAppSurface
+            mixing: ytNowPlayingView.autoMixing
 
             currentTrack: win.currentTrack
             audioSpecs: win.audioSpecs
@@ -4731,6 +4742,32 @@ Scope {
                 } catch(e) {}
             }
         }
+    }
+
+    // Length of the track a blend is about to switch to (measured once, during the mix preview)
+    Process {
+        id: mixDurProc
+        property string forKey: ""
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try {
+                    var r = JSON.parse(data);
+                    if (!(r && r.duration > 0) || mixDurProc.forKey !== win.mixNextDurationKey) return;
+                    win.mixNextDuration = r.duration;
+                    // Arrived after the switch: fill in the length while the blend is still loading
+                    if (win.mixActive && win.isLoadingAudio && !(win.totalDuration > 0)
+                            && PlaybackEngine.trackKeyOf(win.currentTrack) === mixDurProc.forKey)
+                        win.totalDuration = r.duration;
+                } catch(e) {}
+            }
+        }
+    }
+    function requestMixNextDuration(key, path, title, artist) {
+        mixDurProc.running = false;
+        mixDurProc.forKey = key;
+        mixDurProc.command = ["python3", win.appDir + "/backend/player_daemon.py", "media_duration", path || "", title || "", artist || ""];
+        mixDurProc.running = true;
     }
 
     function requestAutoMixPlan(key, nextKey, nextPath, nextTitle, nextArtist, baseSeconds) {

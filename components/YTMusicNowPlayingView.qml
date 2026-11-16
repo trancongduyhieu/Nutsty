@@ -15,6 +15,8 @@ Item {
     property real totalDuration: 1.0
     property bool isPlaying: false
     property bool isLoadingAudio: false
+    // True while AutoMix is blending two songs (drives the "Cooking" labels here and on the player bar)
+    readonly property bool autoMixing: autoMix.mixing
     property bool isShuffle: false
     property bool isRepeat: false
     property real volume: 100
@@ -1288,6 +1290,11 @@ Item {
                     onPrefetchRequested: trk => root.prefetchCoverArt(trk)
                     mainReady: coverSurface.coverStatus === Image.Ready
                     mainSurface: coverSurface
+                    prevImage: {
+                        root.coverCacheRev;
+                        var u = root.cachedCoverFor(autoMix.prevTrack);
+                        return u ? coverSurface.formatImageUrl(u) : "";
+                    }
                     nextImage: {
                         root.coverCacheRev;
                         var u = root.cachedCoverFor(autoMix.nextTrack);

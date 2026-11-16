@@ -29,6 +29,19 @@ Item {
     property real scrubTime: 0.0
     property bool isScrubbingVolume: false
     property bool isLoadingAudio: false
+    property bool mixing: false // AutoMix is blending: the centre shows "Cooking" in place of the audio specs
+    // "Cooking" stays for the whole blend, however long the AutoMix settings make it, and leaves once the
+    // new track has fully taken over. "mixing" can blink off for a moment while the engine switches tracks,
+    // so it only counts as finished after staying off briefly
+    property bool cookingShown: false
+    onMixingChanged: {
+        if (mixing) { cookingHideDelay.stop(); cookingShown = true; }
+        else cookingHideDelay.restart();
+    }
+    Timer { id: cookingHideDelay; interval: 450; onTriggered: root.cookingShown = false }
+    // 0 = title + cover, 1 = "Cooking": drives the push-up handover between the two
+    property real cookT: cookingShown ? 1 : 0
+    Behavior on cookT { NumberAnimation { duration: 560; easing.type: Easing.OutCubic } }
     property bool isSleepTimerActive: false
     property var listeningAlongFriend: null
     property var activeCoListenersDetails: []
@@ -87,12 +100,12 @@ Item {
     signal toggleLikeClicked()
     signal openVolumePopoverRequested()
 
-    readonly property bool isBodyHovered: (backgroundDragArea.containsMouse || centerHoverHandler.hovered) && !miniCoverMouse.containsMouse && !root.isScrubbingProgress && !miniProgressBarMouse.containsMouse
+    readonly property bool isBodyHovered: (backgroundDragArea.containsMouse || centerHoverHandler.hovered) && !miniCoverHover.hovered && !root.isScrubbingProgress && !miniProgressBarHover.hovered
 
     property alias volumeButtonAnchorItem: volumeButtonAnchor
 
     function fmtTime(sec) {
-        if (!sec || sec < 0) return "0:00";
+        if (!sec || sec < 0) return "00:00";
         var m = Math.floor(sec / 60);
         var s = Math.floor(sec % 60);
         return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
@@ -499,9 +512,12 @@ Item {
                 }
             }
 
-            readonly property bool showScrubber: (centerHoverHandler.hovered || miniProgressBarMouse.containsMouse || root.isScrubbingProgress) && !miniCoverMouse.containsMouse
+            // Hover shows the timeline (old behaviour). While AutoMix blends, the timeline with "Cooking" holds
+            // until the new track has taken over, then the centre returns to title + cover
+            readonly property bool showScrubber: ((centerHoverHandler.hovered || miniProgressBarHover.hovered || root.isScrubbingProgress) && !miniCoverHover.hovered) || root.cookingShown
             property real infoAlpha: showScrubber ? 0.0 : 1.0
-            Behavior on infoAlpha { NumberAnimation { duration: 220; easing.type: Easing.InOutQuad } }
+            // The Cooking handover is slower than a hover so the push-up motion reads clearly
+            Behavior on infoAlpha { NumberAnimation { duration: (root.cookingShown || root.cookT > 0.01) ? 420 : 220; easing.type: Easing.InOutQuad } }
 
             // --- State A: Artwork (32x32, bo 6dp) + Track Title & Artist (Rest State) ---
             RowLayout {
@@ -510,6 +526,9 @@ Item {
                 spacing: 10
                 opacity: centerSectionBox.infoAlpha
                 visible: opacity > 0.01
+                // Cooking handover: title + cover lift away as "Cooking" rises in, and settle back down after
+                transform: Translate { y: -9 * root.cookT }
+                scale: 1.0 - 0.04 * root.cookT
 
                 // Thumbnail Artwork (32x32, radius 6px) with Spring Hover-Zoom & open_in_full overlay
                 Item {
@@ -520,9 +539,9 @@ Item {
                     Item {
                         id: miniCoverScalable
                         anchors.fill: parent
-                        scale: miniCoverMouse.containsMouse ? 1.15 : 1.0
+                        scale: miniCoverHover.hovered ? 1.15 : 1.0
                         transformOrigin: Item.Center
-                        z: miniCoverMouse.containsMouse ? 10 : 1
+                        z: miniCoverHover.hovered ? 10 : 1
 
                         Behavior on scale {
                             SpringAnimation {
@@ -537,7 +556,7 @@ Item {
                             anchors.fill: parent
                             anchors.margins: -3
                             radius: 8
-                            color: Qt.rgba(0, 0, 0, miniCoverMouse.containsMouse ? 0.55 : 0.0)
+                            color: Qt.rgba(0, 0, 0, miniCoverHover.hovered ? 0.55 : 0.0)
                             z: -1
                             Behavior on color { ColorAnimation { duration: 160 } }
                         }
@@ -576,7 +595,7 @@ Item {
                             anchors.fill: parent
                             radius: 6
                             color: Qt.rgba(0, 0, 0, 0.40)
-                            opacity: miniCoverMouse.containsMouse ? 1.0 : 0.0
+                            opacity: miniCoverHover.hovered ? 1.0 : 0.0
                             Behavior on opacity { NumberAnimation { duration: 140 } }
                         }
 
@@ -586,8 +605,8 @@ Item {
                             source: "../assets/icons/open-in-full-symbolic.svg"
                             iconSize: 15
                             color: "#ffffff"
-                            opacity: miniCoverMouse.containsMouse ? 1.0 : 0.0
-                            scale: miniCoverMouse.containsMouse ? 1.0 : 0.7
+                            opacity: miniCoverHover.hovered ? 1.0 : 0.0
+                            scale: miniCoverHover.hovered ? 1.0 : 0.7
                             Behavior on opacity { NumberAnimation { duration: 140 } }
                             Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutBack } }
                         }
@@ -597,11 +616,15 @@ Item {
                             anchors.fill: parent
                             radius: 6
                             color: "transparent"
-                            border.color: miniCoverMouse.containsMouse ? Qt.rgba(1.0, 1.0, 1.0, 0.45) : Qt.rgba(1.0, 1.0, 1.0, 0.18)
+                            border.color: miniCoverHover.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.45) : Qt.rgba(1.0, 1.0, 1.0, 0.18)
                             border.width: 1
                             Behavior on border.color { ColorAnimation { duration: 140 } }
                         }
                     }
+
+                    // Same reason as miniProgressBarHover: a click here hides the bar (Now Playing opens), which can
+                    // leave MouseArea.containsMouse stuck; HoverHandler reports leaving reliably
+                    HoverHandler { id: miniCoverHover }
 
                     MouseArea {
                         id: miniCoverMouse
@@ -665,11 +688,28 @@ Item {
                     color: Qt.rgba(1, 1, 1, 0.70)
                 }
 
+                // AutoMix blending: "Cooking" takes the audio-specs spot for the whole blend; afterwards
+                // hovering shows the normal audio specs again
+                ShimmerText {
+                    anchors.centerIn: parent
+                    text: I18n.tr("Cooking", "Cooking")
+                    pixelSize: 11
+                    running: root.cookingShown
+                    opacity: root.cookT
+                    visible: opacity > 0.01
+                    // Rises from below with its letters drawing together, and sinks back as they spread on exit
+                    letterSpacing: 0.6 + 2.4 * (1.0 - root.cookT)
+                    scale: 0.86 + 0.14 * root.cookT
+                    transform: Translate { y: 9 * (1.0 - root.cookT) }
+                }
+
                 // Audio Quality Line (Center: Clean Optical Icon + Text, True Optical Horizontal Center)
                 Row {
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 4
+                    opacity: 1.0 - root.cookT
+                    visible: opacity > 0.01
 
                     AppIcon {
                         anchors.verticalCenter: parent.verticalCenter
@@ -754,12 +794,18 @@ Item {
                     }
                 }
 
+                // Hover is read from a HoverHandler: after a press-drag-release seek, MouseArea.containsMouse can
+                // stay true once the pointer has left (Wayland), which pinned the bar on the timeline view
+                HoverHandler { id: miniProgressBarHover }
+
                 MouseArea {
                     id: miniProgressBarMouse
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    enabled: !!root.currentTrack && root.totalDuration > 0
+                    // Never toggle enabled with the duration: disabling a hovered MouseArea leaves containsMouse
+                    // stuck true (the bar then stays on the timeline view). Guard the seek instead.
+                    enabled: !!root.currentTrack
 
                     function updateSeek(mx) {
                         var f = Math.max(0.0, Math.min(1.0, mx / width));
@@ -767,6 +813,7 @@ Item {
                     }
 
                     onPressed: mouse => {
+                        if (!(root.totalDuration > 0)) return;
                         root.isScrubbingProgress = true;
                         updateSeek(mouse.x);
                     }

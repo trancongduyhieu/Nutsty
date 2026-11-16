@@ -205,6 +205,11 @@ function clearMixUpcoming(win) {
 
 // Publish the upcoming mix for the Now Playing view. Reassigned only when something
 // visible changes, so bindings don't re-evaluate on every status tick.
+// True when trk is the song an armed AutoMix blend is switching to
+function isMixSwitchTo(win, trk) {
+    return Boolean(win.crossfadeArmed && win.mixActive && trk && trackKeyOf(trk) === win.mixActive.toKey);
+}
+
 function publishMixUpcoming(win, nextTrk, leadSec, blendSec) {
     var fadeAtMs = Date.now() + leadSec * 1000;
     var cur = win.mixUpcoming;
@@ -213,6 +218,12 @@ function publishMixUpcoming(win, nextTrk, leadSec, blendSec) {
             && Math.abs(cur.durMs - blendSec * 1000) < 50) return;
     win.mixUpcoming = { from: win.currentTrack, to: nextTrk, fromKey: fromKey, toKey: toKey,
                         fadeAtMs: fadeAtMs, durMs: blendSec * 1000 };
+    // Measure the incoming track ahead of the blend when its length is not known yet
+    if (extractTrackDuration(nextTrk) <= 0 && win.mixNextDurationKey !== toKey) {
+        win.mixNextDurationKey = toKey;
+        win.mixNextDuration = 0;
+        win.requestMixNextDuration(toKey, playablePathOf(win, nextTrk), nextTrk.title || nextTrk.name || "", nextTrk.artist || "");
+    }
 }
 
 function maybeStartCrossfade(win, seekGrace) {
@@ -254,7 +265,8 @@ function maybeStartCrossfade(win, seekGrace) {
     win.shuffleNextPick = null;
     // The blend itself starts when the outgoing track reaches fade_at (the daemon waits for it)
     win.mixActive = { from: win.currentTrack, to: nextTrk, fromKey: key, toKey: trackKeyOf(nextTrk),
-                      blendAtMs: Date.now() + Math.max(0.3, leadSec) * 1000, durMs: plan.duration * 1000 };
+                      blendAtMs: Date.now() + Math.max(0.3, leadSec) * 1000, durMs: plan.duration * 1000,
+                      inStart: plan.in_start || 0 };
     win.mixUpcoming = null;
     triggerRapidTrackSwitch(win, nextTrk);
     // The AutoMix analysis already measured the incoming track: show its length right away
@@ -263,6 +275,9 @@ function maybeStartCrossfade(win, seekGrace) {
     if (!(win.totalDuration > 0) && apd && apd.ok && apd.key === key && apd.nextKey === trackKeyOf(nextTrk)
             && apd.in_duration > 0) {
         win.totalDuration = apd.in_duration;
+    }
+    if (!(win.totalDuration > 0) && win.mixNextDurationKey === trackKeyOf(nextTrk) && win.mixNextDuration > 0) {
+        win.totalDuration = win.mixNextDuration;
     }
     return true;
 }
@@ -337,9 +352,13 @@ function playOnlineTrack(win, trk, startRadio, radioProc, prewarmTimer, pollTime
     win.currentTime = 0.0;
     win.lastSyncTime = 0.0;
     win.lastSyncTimestamp = Date.now();
-    win.isLoadingAudio = !hasLocalFile;
+    // AutoMix switch: the incoming song is not audible until the blend point. Stay "loading" so the
+    // blend clock drives the time, and keep the length already measured for it
+    var mixSwitch = isMixSwitchTo(win, trk);
+    var keptDur = mixSwitch ? win.totalDuration : 0;
+    win.isLoadingAudio = mixSwitch || !hasLocalFile;
     var initDur = extractTrackDuration(trk);
-    win.totalDuration = initDur > 0 ? initDur : 0.0;
+    win.totalDuration = initDur > 0 ? initDur : (keptDur > 0 ? keptDur : 0.0);
     win.isPlaying = true;
 
     if (win.syncHistoryToGoogle) {
@@ -439,9 +458,12 @@ function playTrack(win, trk, pollTimer) {
     win.currentTime = 0.0;
     win.lastSyncTime = 0.0;
     win.lastSyncTimestamp = Date.now();
-    win.isLoadingAudio = false;
+    var mixSwitch = isMixSwitchTo(win, trk);
+    var keptDur = mixSwitch ? win.totalDuration : 0;
+    win.isLoadingAudio = mixSwitch;
     var localDur = extractTrackDuration(trk);
     win.totalDuration = localDur > 0 ? localDur : ((trk.durationMs || 0) / 1000.0);
+    if (!(win.totalDuration > 0) && keptDur > 0) win.totalDuration = keptDur;
     win.isPlaying = true;
 
     if (win.syncHistoryToGoogle) {
@@ -948,7 +970,8 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
             }
             var hasStarted = Boolean((s.is_playing && (s.time_pos > 0.05 || !s.is_loading)) || (s.time_pos && s.time_pos > 0.3));
             if (!hasStarted) {
-                win.currentTime = 0.0;
+                // During a blend the clock runs on its own from the known blend point (smoothProgressTimer)
+                if (!win.mixActive) win.currentTime = 0.0;
                 return;
             }
             win.isLoadingAudio = false;
@@ -1038,7 +1061,8 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
         var navActive = Boolean(win.rapidNavDebounceTimer && win.rapidNavDebounceTimer.running);
         var trackChangeElapsed = Date.now() - (win.trackChangeTimestamp || 0);
         var seekGraceCheck = Date.now() - (win.lastSeekTimestamp || 0) < 3000;
-        if (s.is_playing && !win.isLoadingAudio && win.currentTrack && !navActive && !seekGraceCheck && trackChangeElapsed > 6000) {
+        var mixBusy = Boolean(win.mixActive || win.crossfadeArmed || (win.crossfadeHandoverUntil > 0 && Date.now() < win.crossfadeHandoverUntil));
+        if (s.is_playing && !win.isLoadingAudio && win.currentTrack && !navActive && !seekGraceCheck && !mixBusy && trackChangeElapsed > 6000) {
             var curVid = extractTrackVideoId(win.currentTrack);
             var mpvVid = "";
             if (s.filename && s.filename.endsWith(".opus")) {
@@ -1075,6 +1099,10 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
                     } else if (!s.target_vid || s.target_vid === curVid) {
                         isTrackMatched = true;
                     }
+                } else if (curVid && !s.target_vid && !mpvVid) {
+                    // A downloaded local copy (human-readable filename) carries no video id: without positive
+                    // evidence of a different track, trust it instead of restarting the song from 0.
+                    isTrackMatched = true;
                 } else if (!curVid && !win.currentTrack.path) {
                     isTrackMatched = true;
                 }

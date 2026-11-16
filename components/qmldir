@@ -76,3 +76,4 @@ NowPlayingModeButton 1.0 NowPlayingModeButton.qml
 NowPlayingCtlButton 1.0 NowPlayingCtlButton.qml
 EmptyState 1.0 EmptyState.qml
 ShapeLoader 1.0 ShapeLoader.qml
+ShimmerText 1.0 ShimmerText.qml
