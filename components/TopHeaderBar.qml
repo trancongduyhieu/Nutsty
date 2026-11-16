@@ -407,6 +407,12 @@ Rectangle {
             moodTextSum = sum;
         }
         width: isExpanded ? expandedTargetWidth : compactWidth
+        // Once the island has finished opening, bring the selected mood into view
+        // (it may sit past the right end, e.g. "Tâm trạng", and would otherwise open cut off)
+        onWidthChanged: {
+            if (isExpanded && Math.abs(width - expandedTargetWidth) < 0.5)
+                Qt.callLater(topMoodFlickable.revealSelected);
+        }
 
         Behavior on width {
             NumberAnimation {
@@ -633,6 +639,13 @@ Rectangle {
                 if (Math.abs(target - contentX) < 0.5) return;
                 moodRevealAnim.to = target;
                 moodRevealAnim.restart();
+            }
+
+            function revealSelected() {
+                for (var i = 0; i < moodRepeater.count; ++i) {
+                    var itm = moodRepeater.itemAt(i);
+                    if (itm && itm.isSelected) { revealChip(itm); return; }
+                }
             }
 
             function updateActiveIndicator() {
