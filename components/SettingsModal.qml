@@ -24,6 +24,7 @@ Rectangle {
     property bool syncHistoryToGoogle: true
     property bool animatedCoverEnabled: true
     property bool crossfadeEnabled: false
+    property bool scrollEdgeFadeEnabled: true
     property int crossfadeSeconds: 6
     property bool autoMixEnabled: false
     property int cacheLimitMb: 1536
@@ -326,6 +327,7 @@ Rectangle {
 
     signal toggleAnimatedCoverRequested(bool enabled)
     signal toggleCrossfadeRequested(bool enabled)
+    signal toggleScrollEdgeFadeRequested(bool enabled)
     signal selectCrossfadeSecondsRequested(int seconds)
     signal toggleAutoMixRequested(bool enabled)
     signal refreshCacheUsageRequested()
@@ -2313,6 +2315,72 @@ Rectangle {
                                         }
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+
+                // =============================================================
+                // Scroll edge fade (lists fade out at the edges they can scroll past)
+                // =============================================================
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 46
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: toggleScrollEdgeFade.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Mờ dần ở mép khi cuộn", "Fade edges while scrolling")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Tắt đi nếu máy yếu bị giật khi cuộn", "Turn off if scrolling stutters on a slower computer")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    Rectangle {
+                        id: toggleScrollEdgeFade
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 44
+                        height: 24
+                        radius: 12
+                        color: root.scrollEdgeFadeEnabled ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18)
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        Rectangle {
+                            width: 18
+                            height: 18
+                            radius: 9
+                            color: "#ffffff"
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: root.scrollEdgeFadeEnabled ? parent.width - width - 3 : 3
+                            Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            preventStealing: false
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                root.scrollEdgeFadeEnabled = !root.scrollEdgeFadeEnabled;
+                                root.toggleScrollEdgeFadeRequested(root.scrollEdgeFadeEnabled);
                             }
                         }
                     }

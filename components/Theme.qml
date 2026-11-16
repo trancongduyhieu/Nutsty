@@ -3,6 +3,9 @@ import QtQuick
 
 QtObject {
     // Nutsty Dark Modern Theme Colors
+    // Settings > scroll edge fade; off saves one GPU layer per scrolling list on weak machines
+    property bool scrollEdgeFadeEnabled: true
+
     readonly property color bgApp: "#121212"          // Deep black window background
     readonly property color bgCard: "#181818"         // Card background
     readonly property color bgCardHover: "#282828"    // Card hover state

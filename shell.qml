@@ -3215,6 +3215,7 @@ Scope {
             canvasPreference: win.canvasPreference
             crossfadeEnabled: win.crossfadeEnabled
             crossfadeSeconds: win.crossfadeSeconds
+            scrollEdgeFadeEnabled: Theme.scrollEdgeFadeEnabled
             autoMixEnabled: win.autoMixEnabled
             cacheLimitMb: win.cacheLimitMb
             cacheUsage: win.cacheUsage
@@ -3277,6 +3278,10 @@ Scope {
             }
             onToggleCrossfadeRequested: enabled => {
                 win.crossfadeEnabled = enabled;
+                win.saveSettings();
+            }
+            onToggleScrollEdgeFadeRequested: enabled => {
+                Theme.scrollEdgeFadeEnabled = enabled;
                 win.saveSettings();
             }
             onSelectCrossfadeSecondsRequested: secs => {
@@ -3937,6 +3942,7 @@ Scope {
                 win.lyricsSource = obj.lyricsSource;
             }
             if (obj.crossfadeEnabled !== undefined) win.crossfadeEnabled = !!obj.crossfadeEnabled;
+            if (obj.scrollEdgeFadeEnabled !== undefined) Theme.scrollEdgeFadeEnabled = !!obj.scrollEdgeFadeEnabled;
             if (obj.cacheLimitMb !== undefined) win.cacheLimitMb = [1024, 1536, 2048].indexOf(parseInt(obj.cacheLimitMb)) >= 0 ? parseInt(obj.cacheLimitMb) : 1536;
             if (obj.crossfadeSeconds !== undefined) win.crossfadeSeconds = Math.max(2, Math.min(12, parseInt(obj.crossfadeSeconds) || 6));
             if (obj.autoMixEnabled !== undefined) win.autoMixEnabled = !!obj.autoMixEnabled;
@@ -3995,6 +4001,7 @@ Scope {
             lyricsSource: win.lyricsSource,
             crossfadeEnabled: win.crossfadeEnabled,
             crossfadeSeconds: win.crossfadeSeconds,
+            scrollEdgeFadeEnabled: Theme.scrollEdgeFadeEnabled,
             cacheLimitMb: win.cacheLimitMb,
             autoMixEnabled: win.autoMixEnabled,
             liquidGlassPreset: win.liquidGlassPreset,

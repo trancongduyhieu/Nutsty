@@ -20,7 +20,7 @@ Item {
 
     readonly property bool overflows: flickable !== null
         && (horizontal ? flickable.contentWidth > flickable.width + 1 : flickable.contentHeight > flickable.height + 1)
-    readonly property bool active: when && overflows && flickable.visible
+    readonly property bool active: Theme.scrollEdgeFadeEnabled && when && overflows && flickable.visible
     readonly property bool fadeStart: flickable !== null && (horizontal ? !flickable.atXBeginning : !flickable.atYBeginning)
     readonly property bool fadeEnd: flickable !== null && (horizontal ? !flickable.atXEnd : !flickable.atYEnd)
     readonly property real span: horizontal ? width : height

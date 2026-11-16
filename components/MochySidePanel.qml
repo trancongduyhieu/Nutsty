@@ -28,7 +28,6 @@ Item {
     // Corner radius declared once; everything nested derives from it (R_inner = R_outer - inset)
     readonly property real panelRadius: 24
     readonly property real dockInset: 8
-    readonly property bool isListTab: root.activeTab === "queue" || root.activeTab === "comments"
     property var currentTracks: []
     property real layoutDependency: 0.0 // Driven by host slide progress so LiquidGlass re-samples its backdrop offset
     readonly property real targetPanelWidth: Math.max(380, Math.min(460, Math.round((parent ? parent.width : 1200) * 0.34)))
@@ -457,65 +456,24 @@ Item {
         }
 
         // =====================================================================
-        // LAYER A: COVER GRADIENT BACKDROP (HEAVY PROGRESSIVE BLUR)
-        // Deep liquid blurred artwork behind the entire panel.
-        // "ở trên rõ ở dưới làm mờ cho expressive lyric"
+        // LAYER A: LIQUID GLASS BACKDROP
+        // One see-through glass material behind every tab (lyrics, comments, up next),
+        // tinted dark enough for long text.
         // =====================================================================
         Item {
             id: backdropWrapper
             anchors.fill: parent
 
-            // Base deep dark tone, shown through when there is no cover
+            // Base deep dark tone, shown while the glass is not rendering
             Rectangle {
                 anchors.fill: parent
                 color: root.panelStyle === 1 ? "#0e0f14" : "#0a0b10"
             }
 
-            // Blurred artwork: the one material behind every tab
-            Image {
-                id: backdropImage
-                sourceSize: Qt.size(256, 256)
-                anchors.fill: parent
-                source: root.coverImageUrl
-                fillMode: Image.PreserveAspectCrop
-                asynchronous: true
-                cache: true
-                layer.enabled: root.isPanelRenderable
-                visible: false
-            }
-
-            MultiEffect {
-                anchors.fill: parent
-                source: backdropImage
-                visible: root.isPanelRenderable
-                blurEnabled: root.isPanelRenderable
-                blur: 1.0
-                blurMax: 64
-                saturation: 1.35
-                brightness: -0.15
-                contrast: 0.10
-            }
-
-            // Scrim shared by every tab, so switching tabs never swaps the material underneath
-            Rectangle {
-                anchors.fill: parent
-                gradient: Gradient {
-                    GradientStop { position: 0.0; color: Qt.rgba(0.06, 0.06, 0.08, 0.20) }
-                    GradientStop { position: 0.40; color: Qt.rgba(0.06, 0.06, 0.08, 0.55) }
-                    GradientStop { position: 0.75; color: Qt.rgba(0.06, 0.06, 0.08, 0.82) }
-                    GradientStop { position: 1.0; color: Qt.rgba(0.06, 0.06, 0.08, 0.94) }
-                }
-            }
-
-            // List tabs (queue, comments): see-through liquid glass over whatever is behind the
-            // panel, tinted dark enough for long text. It cross-fades over the cover material
-            // instead of popping in, so switching tabs never flashes.
             LiquidGlass {
                 id: panelLiquidBackdrop
                 anchors.fill: parent
-                opacity: root.isListTab ? 1.0 : 0.0
-                visible: opacity > 0.01 && root.isPanelRenderable
-                Behavior on opacity { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                visible: root.isPanelRenderable
                 extraDependency: root.layoutDependency
                 backgroundSourceItem: root.backgroundSourceItem
                 radius: root.panelStyle === 1 ? 0 : root.panelRadius
