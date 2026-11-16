@@ -178,10 +178,10 @@ PanelWindow {
         height: (root.lyricsPreset === 1)
             ? 120
             : ((root.lyricsPreset === 3)
-                ? (minimalistView.implicitHeight > 0 ? minimalistView.implicitHeight : 140)
+                ? (minimalistViewLoader.item && minimalistViewLoader.item.implicitHeight > 0 ? minimalistViewLoader.item.implicitHeight : 140)
                 : ((root.lyricsPreset === 4)
-                    ? (animeMVView.implicitHeight > 0 ? animeMVView.implicitHeight : 260)
-                    : (appleMusicView.implicitHeight > 0 ? appleMusicView.implicitHeight : 300)))
+                    ? (animeMVViewLoader.item && animeMVViewLoader.item.implicitHeight > 0 ? animeMVViewLoader.item.implicitHeight : 260)
+                    : (appleMusicViewLoader.item && appleMusicViewLoader.item.implicitHeight > 0 ? appleMusicViewLoader.item.implicitHeight : 300)))
         readonly property bool hasSyncedLyrics: root.activeLyrics && root.activeLyrics.length > 0
         visible: root.enabled && (hasSyncedLyrics || (root.currentTrack !== null && root.isPlaying))
 
@@ -268,79 +268,89 @@ PanelWindow {
             }
         }
 
-        GachaAnimeLyricsView {
-            id: gachaView
+        Loader {
+            id: gachaViewLoader
             anchors.fill: parent
-            visible: containerBox.hasSyncedLyrics && root.lyricsPreset === 1
-            activeLyrics: root.activeLyrics
-            currentTime: root.currentTime
-            isPlaying: root.isPlaying
-            lyricsRomanizationEnabled: root.lyricsRomanizationEnabled
-            magicFontFamily: root.magicFontFamily
-            colHighlight: root.colHighlight
-            colActiveText: root.colActiveText
-            colDeadText: root.colDeadText
-            colShadowDir: root.colShadowDir
-            colShadowAmb: root.colShadowAmb
-            isLightArea: root.isLightArea
+            active: root.lyricsPreset === 1
+            visible: containerBox.hasSyncedLyrics
+            sourceComponent: GachaAnimeLyricsView {
+                activeLyrics: root.activeLyrics
+                currentTime: root.currentTime
+                isPlaying: root.isPlaying
+                lyricsRomanizationEnabled: root.lyricsRomanizationEnabled
+                magicFontFamily: root.magicFontFamily
+                colHighlight: root.colHighlight
+                colActiveText: root.colActiveText
+                colDeadText: root.colDeadText
+                colShadowDir: root.colShadowDir
+                colShadowAmb: root.colShadowAmb
+                isLightArea: root.isLightArea
+            }
         }
 
         // =====================================================================
         // Preset 2: Apple Music Parametric Multi-Line Fluid Sync View Plugin
         // =====================================================================
-        AppleMusicDesktopLyrics {
-            id: appleMusicView
+        Loader {
+            id: appleMusicViewLoader
             anchors.fill: parent
-            visible: containerBox.hasSyncedLyrics && root.lyricsPreset === 2
-            activeLyrics: root.activeLyrics
-            currentTime: root.currentTime
-            isPlaying: root.isPlaying
-            currentTrack: root.currentTrack
-            lyricsRomanizationEnabled: root.lyricsRomanizationEnabled
-            colHighlight: root.colHighlight
-            colActiveText: root.colActiveText
-            colPendingText: "#a0a5b5"
-            colShadowDir: root.colShadowDir
-            colShadowAmb: root.colShadowAmb
-            visibleLinesCount: 5
+            active: root.lyricsPreset === 2
+            visible: containerBox.hasSyncedLyrics
+            sourceComponent: AppleMusicDesktopLyrics {
+                activeLyrics: root.activeLyrics
+                currentTime: root.currentTime
+                isPlaying: root.isPlaying
+                currentTrack: root.currentTrack
+                lyricsRomanizationEnabled: root.lyricsRomanizationEnabled
+                colHighlight: root.colHighlight
+                colActiveText: root.colActiveText
+                colPendingText: "#a0a5b5"
+                colShadowDir: root.colShadowDir
+                colShadowAmb: root.colShadowAmb
+                visibleLinesCount: 5
+            }
         }
 
         // =====================================================================
         // Preset 3: Minimalist Slide-Up Motion Blur View Plugin
         // =====================================================================
-        MinimalistLyricsView {
-            id: minimalistView
+        Loader {
+            id: minimalistViewLoader
             anchors.fill: parent
-            visible: root.lyricsPreset === 3
-            activeLyrics: root.activeLyrics
-            currentTime: root.currentTime
-            isPlaying: root.isPlaying
-            magicFontFamily: root.magicFontFamily
-            colHighlight: root.colHighlight
-            colActiveText: root.colActiveText
-            colDeadText: root.colDeadText
-            colShadowDir: root.colShadowDir
-            colShadowAmb: root.colShadowAmb
-            isLightArea: root.isLightArea
+            active: root.lyricsPreset === 3
+            sourceComponent: MinimalistLyricsView {
+                activeLyrics: root.activeLyrics
+                currentTime: root.currentTime
+                isPlaying: root.isPlaying
+                magicFontFamily: root.magicFontFamily
+                colHighlight: root.colHighlight
+                colActiveText: root.colActiveText
+                colDeadText: root.colDeadText
+                colShadowDir: root.colShadowDir
+                colShadowAmb: root.colShadowAmb
+                isLightArea: root.isLightArea
+            }
         }
 
         // =====================================================================
         // Preset 4: Motion Typography View Plugin
         // =====================================================================
-        AnimeMVKineticLyrics {
-            id: animeMVView
+        Loader {
+            id: animeMVViewLoader
             anchors.fill: parent
-            visible: root.lyricsPreset === 4
-            activeLyrics: root.activeLyrics
-            currentTime: root.currentTime
-            isPlaying: root.isPlaying
-            magicFontFamily: root.magicFontFamily
-            colHighlight: root.colHighlight
-            colActiveText: root.colActiveText
-            colDeadText: root.colDeadText
-            colShadowDir: root.colShadowDir
-            colShadowAmb: root.colShadowAmb
-            isLightArea: root.isLightArea
+            active: root.lyricsPreset === 4
+            sourceComponent: AnimeMVKineticLyrics {
+                activeLyrics: root.activeLyrics
+                currentTime: root.currentTime
+                isPlaying: root.isPlaying
+                magicFontFamily: root.magicFontFamily
+                colHighlight: root.colHighlight
+                colActiveText: root.colActiveText
+                colDeadText: root.colDeadText
+                colShadowDir: root.colShadowDir
+                colShadowAmb: root.colShadowAmb
+                isLightArea: root.isLightArea
+            }
         }
     }
 }

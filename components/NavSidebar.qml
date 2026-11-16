@@ -432,6 +432,7 @@ Rectangle {
                                     clip: true
 
                                     Image {
+                                        sourceSize: Qt.size(72, 72)
                                         anchors.fill: parent
                                         source: modelData.image || ""
                                         fillMode: Image.PreserveAspectCrop

@@ -187,6 +187,7 @@ PanelWindow {
                 clip: true
                 Image {
                     id: albumCoverImg
+                    sourceSize: Qt.size(600, 600)
                     anchors.centerIn: parent
                     width: parent.width * 1.34
                     height: parent.height * 1.34

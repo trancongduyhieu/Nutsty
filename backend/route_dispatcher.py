@@ -203,7 +203,10 @@ def _handle_payload(req):
     return dispatch_request(method, parsed.path, parse_qs(parsed.query), req.get("body", ""))
 
 
-IDLE_EXIT_SEC = 600
+try:
+    IDLE_EXIT_SEC = max(30, int(os.environ.get("NUTSTY_WORKER_IDLE_SEC", "600")))
+except ValueError:
+    IDLE_EXIT_SEC = 600
 MAX_REQUESTS = 500
 
 

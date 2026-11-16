@@ -484,6 +484,7 @@ Item {
             // 2. Lyrics Mode: Expressive Blurred Artwork Backdrop
             Image {
                 id: backdropImage
+                sourceSize: Qt.size(256, 256)
                 anchors.fill: parent
                 source: root.coverImageUrl
                 fillMode: Image.PreserveAspectCrop
@@ -592,6 +593,7 @@ Item {
 
                 Image {
                     id: coverGlowSrc
+                    sourceSize: Qt.size(128, 128)
                     anchors.fill: parent
                     source: root.coverImageUrl
                     fillMode: Image.PreserveAspectCrop
@@ -649,6 +651,7 @@ Item {
                 // 1. Crystal Sharp Album Artwork
                 Image {
                     id: topSharpCover
+                    sourceSize: Qt.size(800, 800)
                     anchors.fill: parent
                     source: root.coverImageUrl
                     fillMode: Image.PreserveAspectCrop

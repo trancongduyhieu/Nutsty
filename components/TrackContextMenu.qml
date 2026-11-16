@@ -248,6 +248,7 @@ Item {
                         clip: true
 
                         Image {
+                            sourceSize: Qt.size(64, 64)
                             anchors.fill: parent
                             source: (root.track && root.track.image) ? root.track.image : ""
                             fillMode: Image.PreserveAspectCrop

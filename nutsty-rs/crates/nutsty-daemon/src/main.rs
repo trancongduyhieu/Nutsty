@@ -36,8 +36,12 @@ fn trim_system_memory() {
 // in-process cache. Workers stay warm, take one JSON line per request and answer with one line.
 // A worker exits by itself when idle (10 min) or recycled (500 requests); it is respawned lazily.
 const POOL_SIZE: usize = 2;
+// Worker 0 stays warm for the session; the spare returns its RAM soon after a burst of parallel loads
+const PRIMARY_IDLE_EXIT_SECS: u64 = 600;
+const SPARE_IDLE_EXIT_SECS: u64 = 90;
 const WORKER_TIMEOUT: Duration = Duration::from_secs(120);
 const BUSY_WAIT: Duration = Duration::from_millis(400);
+const SPARE_SPAWN_WAIT: Duration = Duration::from_millis(150);
 
 fn python_cmd() -> &'static str {
     if cfg!(windows) { "python" } else { "python3" }
@@ -60,10 +64,11 @@ struct Worker {
 }
 
 impl Worker {
-    fn spawn(script: &Path) -> Option<Worker> {
+    fn spawn(script: &Path, idle_exit_secs: u64) -> Option<Worker> {
         let mut cmd = Command::new(python_cmd());
         cmd.arg(script)
             .arg("--serve")
+            .env("NUTSTY_WORKER_IDLE_SEC", idle_exit_secs.to_string())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit());
@@ -121,14 +126,15 @@ impl WorkerPool {
         if let Ok(mut slot) = self.slots[0].lock()
             && slot.is_none()
         {
-            *slot = Worker::spawn(&self.script);
+            *slot = Worker::spawn(&self.script, PRIMARY_IDLE_EXIT_SECS);
         }
     }
 
-    fn call_slot(&self, slot: &mut Option<Worker>, payload: &str) -> Option<String> {
+    fn call_slot(&self, index: usize, slot: &mut Option<Worker>, payload: &str) -> Option<String> {
         for _attempt in 0..2 {
             if slot.is_none() {
-                *slot = Worker::spawn(&self.script);
+                let idle = if index == 0 { PRIMARY_IDLE_EXIT_SECS } else { SPARE_IDLE_EXIT_SECS };
+                *slot = Worker::spawn(&self.script, idle);
             }
             let worker = slot.as_mut()?;
             match worker.call(payload) {
@@ -150,15 +156,22 @@ impl WorkerPool {
     fn dispatch(&self, payload: &str, pinned: bool) -> Option<String> {
         if pinned {
             let mut slot = self.slots[0].lock().ok()?;
-            return self.call_slot(&mut slot, payload);
+            return self.call_slot(0, &mut slot, payload);
         }
         // Most answers come from caches in a few ms: wait briefly for a free worker before
         // paying a cold one-shot interpreter
-        let deadline = std::time::Instant::now() + BUSY_WAIT;
+        let start = std::time::Instant::now();
+        let deadline = start + BUSY_WAIT;
         loop {
-            for m in self.slots.iter().rev() {
+            // Worker 0 first. A spare that is not running yet only spawns (~40 MB) once worker 0
+            // stayed busy past SPARE_SPAWN_WAIT, so routine poll overlaps never keep two alive
+            let may_spawn_spare = start.elapsed() >= SPARE_SPAWN_WAIT;
+            for (index, m) in self.slots.iter().enumerate() {
                 if let Ok(mut slot) = m.try_lock() {
-                    return self.call_slot(&mut slot, payload);
+                    if index > 0 && slot.is_none() && !may_spawn_spare {
+                        continue;
+                    }
+                    return self.call_slot(index, &mut slot, payload);
                 }
             }
             if std::time::Instant::now() >= deadline {

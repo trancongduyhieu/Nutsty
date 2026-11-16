@@ -314,6 +314,7 @@ Item {
                                         clip: true
 
                                         Image {
+                                            sourceSize: Qt.size(76, 76)
                                             anchors.fill: parent
                                             source: modelData.thumbnail || ""
                                             fillMode: Image.PreserveAspectCrop

@@ -254,9 +254,9 @@ Scope {
     property real liquidGlassColorBleed: 0.94
     readonly property bool isAnyModalOpen: (typeof settingsModal !== "undefined" && settingsModal.visible)
                                         || (typeof spotifyImportModal !== "undefined" && spotifyImportModal.visible)
-                                        || (typeof manageFriendsModal !== "undefined" && manageFriendsModal.visible)
-                                        || (typeof friendStoryModal !== "undefined" && friendStoryModal.visible)
-                                        || (typeof userNoteDetailModal !== "undefined" && userNoteDetailModal.visible)
+                                        || manageFriendsModalLoader.shown
+                                        || friendStoryModalLoader.shown
+                                        || userNoteDetailModalLoader.shown
                                         || (typeof postNoteModal !== "undefined" && postNoteModal.visible)
                                         || (typeof playlistTrackSearchModal !== "undefined" && playlistTrackSearchModal.visible)
                                         || (typeof friendRequestsPopover !== "undefined" && friendRequestsPopover.visible)
@@ -1510,7 +1510,7 @@ Scope {
     }
 
     function promptAddFriend() {
-        manageFriendsModal.openModal();
+        manageFriendsModalLoader.ensure().openModal();
     }
 
     function sendFriendRequest(targetEmail) {
@@ -2312,7 +2312,8 @@ Scope {
                     }
                 }
                 onDownloadPopoverRequested: {
-                    downloadPopover.isOpen = !downloadPopover.isOpen;
+                    var dlPopover = downloadPopoverLoader.ensure();
+                    dlPopover.isOpen = !dlPopover.isOpen;
                 }
             }
 
@@ -2376,10 +2377,10 @@ Scope {
                             onPlaylistSelected: pl => win.handleSelectPlaylist(pl)
                             onTrackContextMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false)
                             onPostNoteRequested: postNoteModal.openModal()
-                            onUserNoteDetailRequested: userNoteDetailModal.openModal(win.myLatestNote)
+                            onUserNoteDetailRequested: userNoteDetailModalLoader.ensure().openModal(win.myLatestNote)
                             onPlayFriendTrackRequested: trk => win.playFriendTrack(trk)
                             onAddFriendRequested: win.promptAddFriend()
-                            onOpenStoryRequested: (friendData, idx) => friendStoryModal.openWithIndex(idx)
+                            onOpenStoryRequested: (friendData, idx) => friendStoryModalLoader.ensure().openWithIndex(idx)
                         }
 
                         MainTrackGrid {
@@ -2479,10 +2480,10 @@ Scope {
                                 }
                             }
                             onBatchDeleteRequested: paths => win.batchDeleteTracks(paths)
-                            onCreatePlaylistRequested: trks => createPlaylistModal.openCreate(trks)
+                            onCreatePlaylistRequested: trks => createPlaylistModalLoader.ensure().openCreate(trks)
                             onPlaylistSelected: pl => win.handleSelectPlaylist(pl)
                             onPlayPlaylistRequested: (pl, shuffle) => win.playCustomPlaylist(pl, shuffle)
-                            onEditPlaylistRequested: pl => createPlaylistModal.openEdit(pl)
+                            onEditPlaylistRequested: pl => createPlaylistModalLoader.ensure().openEdit(pl)
                             onDeletePlaylistRequested: plId => win.deleteCustomPlaylist(plId)
                             onSpotifyImportRequested: spotifyImportModal.openModal()
                         }
@@ -2620,7 +2621,7 @@ Scope {
                             }
                             onPlayAllRequested: trks => win.playCustomPlaylistTracks(trks, false)
                             onShuffleRequested: trks => win.playCustomPlaylistTracks(trks, true)
-                            onEditRequested: pl => createPlaylistModal.openEdit(pl)
+                            onEditRequested: pl => createPlaylistModalLoader.ensure().openEdit(pl)
                             onDeleteRequested: plId => win.deleteCustomPlaylist(plId)
                             onTrackPlayRequested: (trk, index, trackList) => {
                                 if (win.isContextMenuActive) return;
@@ -2867,9 +2868,10 @@ Scope {
                     isSleepTimerActive: win.isSleepTimerActive
                     sleepTimerRemainingSeconds: win.sleepTimerRemainingSeconds
                     onSleepTimerRequested: anchorItem => {
-                        if (sleepTimerPopover.isOpen) { sleepTimerPopover.close(); return; }
-                        var pt = anchorItem.mapToItem(sleepTimerPopover, 0, anchorItem.height);
-                        sleepTimerPopover.openBelow(pt.x, pt.y);
+                        var sleepPopover = sleepTimerPopoverLoader.ensure();
+                        if (sleepPopover.isOpen) { sleepPopover.close(); return; }
+                        var pt = anchorItem.mapToItem(sleepPopover, 0, anchorItem.height);
+                        sleepPopover.openBelow(pt.x, pt.y);
                     }
                     onPlaylistSelected: pl => {
                         win.handleSelectPlaylist(pl);
@@ -3232,7 +3234,7 @@ Scope {
             updateStatusMessage: win.updateStatusMessage
 
             onCloseRequested: settingsModal.visible = false
-            onOpenWhatsNewRequested: whatsNewModal.openModal(win.updateReleaseNotes)
+            onOpenWhatsNewRequested: whatsNewModalLoader.ensure().openModal(win.updateReleaseNotes)
             onCheckUpdateRequested: win.checkForUpdates(true, true)
             onOpenUpdateUrlRequested: win.openExternalUrl(win.updateUrl)
             onStartDirectUpdateRequested: win.startDirectUpdate()
@@ -3446,22 +3448,26 @@ Scope {
             }
         }
 
-        UserNoteDetailModal {
-            id: userNoteDetailModal
-            backgroundSourceItem: masterBackdropStack
-            userAvatar: win.currentUserAvatar
-            userName: win.authAccountName
+        LazyModalLoader {
+            id: userNoteDetailModalLoader
+            anchors.fill: parent
+            z: 10007
+            sourceComponent: UserNoteDetailModal {
+                backgroundSourceItem: masterBackdropStack
+                userAvatar: win.currentUserAvatar
+                userName: win.authAccountName
 
-            accentColor: win.accentColor
-            isTrackPlaying: win.isPlaying
-            onChangeNoteRequested: {
-                postNoteModal.openModal();
-            }
-            onDeleteNoteRequested: {
-                win.deleteMyNote();
-            }
-            onPlayTrackRequested: trk => {
-                win.playOnlineTrack(trk, true);
+                accentColor: win.accentColor
+                isTrackPlaying: win.isPlaying
+                onChangeNoteRequested: {
+                    postNoteModal.openModal();
+                }
+                onDeleteNoteRequested: {
+                    win.deleteMyNote();
+                }
+                onPlayTrackRequested: trk => {
+                    win.playOnlineTrack(trk, true);
+                }
             }
         }
 
@@ -3499,7 +3505,7 @@ Scope {
             onRemoveFromPlaylistRequested: (trk, plId) => win.removeTrackFromCustomPlaylist(plId, trk)
             onDeleteTrackRequested: trk => win.deleteLocalTrack(trk)
             onAddToPlaylistRequested: (trk, plId) => win.addTrackToCustomPlaylist(plId, trk)
-            onCreatePlaylistWithTrackRequested: trk => createPlaylistModal.openCreate([trk])
+            onCreatePlaylistWithTrackRequested: trk => createPlaylistModalLoader.ensure().openCreate([trk])
             onViewArtistRequested: trk => win.loadArtistDetails(trk.artist || trk.author)
             onToggleFavoriteRequested: trk => {
                 if (win.isTrackLiked(trk)) win.removeTrackFromLiked(trk);
@@ -3528,58 +3534,78 @@ Scope {
             }
         }
 
-        DownloadQueuePopover {
-            id: downloadPopover
-            dlMgr: downloadManager
-            accentColor: win.accentColor
-            backgroundSourceItem: masterBackdropStack
-        }
-
-        SleepTimerPopover {
-            id: sleepTimerPopover
-            accentColor: win.accentColor
-            backgroundSourceItem: masterBackdropStack
-            targetAnchorItem: bottomPlayer
-            isTimerActive: win.isSleepTimerActive
-            remainingSeconds: win.sleepTimerRemainingSeconds
-            timerMode: win.sleepTimerMode
-
-            onSetTimerRequested: (minutes) => {
-                win.startSleepTimer(minutes * 60, "duration");
-            }
-            onSetEndOfTrackRequested: () => {
-                win.startSleepTimer(0, "end_of_track");
-            }
-            onCancelTimerRequested: () => {
-                win.cancelSleepTimer();
+        LazyModalLoader {
+            id: downloadPopoverLoader
+            anchors.fill: parent
+            z: 9999
+            sourceComponent: DownloadQueuePopover {
+                dlMgr: downloadManager
+                accentColor: win.accentColor
+                backgroundSourceItem: masterBackdropStack
             }
         }
 
-        WhatsNewModal {
-            id: whatsNewModal
-            backgroundSourceItem: masterBackdropStack
-            accentColor: win.accentColor
-            versionString: win.appVersion
+        LazyModalLoader {
+            id: sleepTimerPopoverLoader
+            anchors.fill: parent
+            z: 9999
+            sourceComponent: SleepTimerPopover {
+                accentColor: win.accentColor
+                backgroundSourceItem: masterBackdropStack
+                targetAnchorItem: bottomPlayer
+                isTimerActive: win.isSleepTimerActive
+                remainingSeconds: win.sleepTimerRemainingSeconds
+                timerMode: win.sleepTimerMode
+
+                onSetTimerRequested: (minutes) => {
+                    win.startSleepTimer(minutes * 60, "duration");
+                }
+                onSetEndOfTrackRequested: () => {
+                    win.startSleepTimer(0, "end_of_track");
+                }
+                onCancelTimerRequested: () => {
+                    win.cancelSleepTimer();
+                }
+            }
         }
 
-        FriendStoryModal {
-            id: friendStoryModal
-            backgroundSourceItem: masterBackdropStack
-            friendsNotes: win.mergedFriendsList
-            accentColor: win.accentColor
-            onListenAlongRequested: friendData => {
-                win.startListeningAlong(friendData);
-            }
-            onPlayTrackRequested: trk => {
-                win.playOnlineTrack(trk, true);
+        LazyModalLoader {
+            id: whatsNewModalLoader
+            anchors.fill: parent
+            z: 9998
+            sourceComponent: WhatsNewModal {
+                backgroundSourceItem: masterBackdropStack
+                accentColor: win.accentColor
+                versionString: win.appVersion
             }
         }
 
-        CreatePlaylistModal {
-            id: createPlaylistModal
-            accentColor: win.accentColor
-            onPlaylistCreated: (title, desc, cover, tracks) => win.createCustomPlaylist(title, desc, cover, tracks)
-            onPlaylistUpdated: (plId, title, desc, cover) => win.updateCustomPlaylist(plId, title, desc, cover)
+        LazyModalLoader {
+            id: friendStoryModalLoader
+            anchors.fill: parent
+            z: 9999
+            sourceComponent: FriendStoryModal {
+                backgroundSourceItem: masterBackdropStack
+                friendsNotes: win.mergedFriendsList
+                accentColor: win.accentColor
+                onListenAlongRequested: friendData => {
+                    win.startListeningAlong(friendData);
+                }
+                onPlayTrackRequested: trk => {
+                    win.playOnlineTrack(trk, true);
+                }
+            }
+        }
+
+        LazyModalLoader {
+            id: createPlaylistModalLoader
+            anchors.fill: parent
+            z: 10010
+            sourceComponent: CreatePlaylistModal {
+                accentColor: win.accentColor
+                onPlaylistCreated: (title, desc, cover, tracks) => win.createCustomPlaylist(title, desc, cover, tracks)
+                onPlaylistUpdated: (plId, title, desc, cover) => win.updateCustomPlaylist(plId, title, desc, cover)
+            }
         }
 
         PlaylistTrackSearchModal {
@@ -3620,31 +3646,35 @@ Scope {
             }
         }
 
-        ManageFriendsModal {
-            id: manageFriendsModal
-            accentColor: win.accentColor
-            backgroundSourceItem: masterBackdropStack
-            currentUserEmail: win.getCurrentUserEmail()
-            currentUserName: win.getCurrentUserName()
-            currentUserAvatar: win.getCurrentUserAvatar()
-            currentUserPin: win.currentUserPin
-            currentUserTag: (win.currentUserTag && !win.currentUserTag.toLowerCase().includes("shiraori"))
-                ? win.currentUserTag
-                : (win.getCurrentUserName() + (win.currentUserPin ? ("#" + win.currentUserPin) : ""))
-            friends: win.friendsDetails
-            onSendFriendRequestRequested: targetEmail => {
-                win.sendFriendRequest(targetEmail);
-            }
-            onUnfriendRequested: targetEmail => {
-                win.unfriendUser(targetEmail);
-            }
-            onRefreshFriendsRequested: {
-                win.fetchFriendsDataFast();
-                win.fetchFriendsNotesFast();
-                win.fetchCurrentUserProfile();
-            }
-            onRegeneratePinRequested: {
-                win.regenerateUserPin();
+        LazyModalLoader {
+            id: manageFriendsModalLoader
+            anchors.fill: parent
+            z: 9999
+            sourceComponent: ManageFriendsModal {
+                accentColor: win.accentColor
+                backgroundSourceItem: masterBackdropStack
+                currentUserEmail: win.getCurrentUserEmail()
+                currentUserName: win.getCurrentUserName()
+                currentUserAvatar: win.getCurrentUserAvatar()
+                currentUserPin: win.currentUserPin
+                currentUserTag: (win.currentUserTag && !win.currentUserTag.toLowerCase().includes("shiraori"))
+                    ? win.currentUserTag
+                    : (win.getCurrentUserName() + (win.currentUserPin ? ("#" + win.currentUserPin) : ""))
+                friends: win.friendsDetails
+                onSendFriendRequestRequested: targetEmail => {
+                    win.sendFriendRequest(targetEmail);
+                }
+                onUnfriendRequested: targetEmail => {
+                    win.unfriendUser(targetEmail);
+                }
+                onRefreshFriendsRequested: {
+                    win.fetchFriendsDataFast();
+                    win.fetchFriendsNotesFast();
+                    win.fetchCurrentUserProfile();
+                }
+                onRegeneratePinRequested: {
+                    win.regenerateUserPin();
+                }
             }
         }
 
@@ -3921,7 +3951,7 @@ Scope {
             }
             if (win.lastSeenVersion !== win.appVersion) {
                 Qt.callLater(function() {
-                    whatsNewModal.openModal(win.updateReleaseNotes);
+                    whatsNewModalLoader.ensure().openModal(win.updateReleaseNotes);
                     win.lastSeenVersion = win.appVersion;
                     win.saveSettings();
                 });
@@ -5016,10 +5046,10 @@ Scope {
         }
         function togglePlayerBar() { bottomPlayer.barClicked(); }
         function openWhatsNew() {
-            whatsNewModal.openModal(win.updateReleaseNotes);
+            whatsNewModalLoader.ensure().openModal(win.updateReleaseNotes);
         }
         function closeWhatsNew() {
-            whatsNewModal.closeModal();
+            if (whatsNewModalLoader.item) whatsNewModalLoader.item.closeModal();
         }
         function getAccentColorInfo() {
             console.log("[NutstyAccent]", "accentColor:", win.accentColor, "songAccentColor:", win.songAccentColor, "wallpaperAccentColor:", win.wallpaperAccentColor, "isPlaying:", win.isPlaying, "track:", win.currentTrack ? win.currentTrack.title : "null", "cover:", win.currentTrack ? win.currentTrack.image : "null");
@@ -5040,31 +5070,37 @@ Scope {
             win.suggestTrackToHost(trk);
         }
         function testPlayUserNote() {
-            if (userNoteDetailModal.attachedTrack) {
-                userNoteDetailModal.playTrackRequested(userNoteDetailModal.attachedTrack);
+            var noteModal = userNoteDetailModalLoader.item;
+            if (noteModal && noteModal.attachedTrack) {
+                noteModal.playTrackRequested(noteModal.attachedTrack);
             }
         }
         function testPlayFriendNote() {
-            if (friendStoryModal.attachedTrack) {
-                friendStoryModal.playTrackRequested(friendStoryModal.attachedTrack);
+            var storyModal = friendStoryModalLoader.item;
+            if (storyModal && storyModal.attachedTrack) {
+                storyModal.playTrackRequested(storyModal.attachedTrack);
             }
         }
-        function openUserNoteDetail() { userNoteDetailModal.openModal(win.myLatestNote); }
-        function closeUserNoteDetail() { userNoteDetailModal.closeModal(); }
-        function openFriendNote(idx: int) { friendStoryModal.openWithIndex(idx); }
-        function closeFriendNote() { friendStoryModal.close(); }
-        function openManageFriends() { manageFriendsModal.openModal(); }
-        function closeManageFriends() { manageFriendsModal.closeModal(); }
+        function openUserNoteDetail() { userNoteDetailModalLoader.ensure().openModal(win.myLatestNote); }
+        function closeUserNoteDetail() { if (userNoteDetailModalLoader.item) userNoteDetailModalLoader.item.closeModal(); }
+        function openFriendNote(idx: int) { friendStoryModalLoader.ensure().openWithIndex(idx); }
+        function closeFriendNote() { if (friendStoryModalLoader.item) friendStoryModalLoader.item.close(); }
+        function openManageFriends() { manageFriendsModalLoader.ensure().openModal(); }
+        function closeManageFriends() { if (manageFriendsModalLoader.item) manageFriendsModalLoader.item.closeModal(); }
         function testToggleEditProfile() {
-            manageFriendsModal.isEditingProfile = !manageFriendsModal.isEditingProfile;
+            var friendsModal = manageFriendsModalLoader.ensure();
+            friendsModal.isEditingProfile = !friendsModal.isEditingProfile;
         }
         function testSaveProfile(newName: string, newDisc: string) {
             win.updateUserProfile(newName, newDisc, function(ok, res) {
                 if (ok && res && res.user) {
-                    manageFriendsModal.isEditingProfile = false;
-                    manageFriendsModal.currentUserName = res.user.username;
-                    manageFriendsModal.currentUserPin = res.user.discriminator;
-                    manageFriendsModal.currentUserTag = res.user.tag;
+                    var friendsModal = manageFriendsModalLoader.item;
+                    if (friendsModal) {
+                        friendsModal.isEditingProfile = false;
+                        friendsModal.currentUserName = res.user.username;
+                        friendsModal.currentUserPin = res.user.discriminator;
+                        friendsModal.currentUserTag = res.user.tag;
+                    }
                 }
             });
         }
@@ -5169,8 +5205,9 @@ Scope {
         }
         function closePlaylistSearchModal() { playlistTrackSearchModal.closeModal(); }
         function toggleSleepTimer() {
-            if (sleepTimerPopover.isOpen) sleepTimerPopover.close();
-            else sleepTimerPopover.open();
+            var sleepPopover = sleepTimerPopoverLoader.ensure();
+            if (sleepPopover.isOpen) sleepPopover.close();
+            else sleepPopover.open();
         }
         function playNext() { win.playNext(); }
         function playPrev() { win.playPrev(); }
@@ -5394,7 +5431,7 @@ Scope {
         function showLibrary() {
             win.isNowPlayingOpen = false;
             win.showAmberolDetails = false;
-            if (downloadPopover && downloadPopover.isOpen) downloadPopover.close();
+            if (downloadPopoverLoader.item && downloadPopoverLoader.item.isOpen) downloadPopoverLoader.item.close();
             win.currentView = "library";
             libLoader.reload();
             win.browsingTracks = win.allTracks;

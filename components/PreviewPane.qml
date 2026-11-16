@@ -26,6 +26,7 @@ Rectangle {
             // Album art from URL if exists
             Image {
                 id: albumImg
+                sourceSize: Qt.size(512, 512)
                 anchors.fill: parent
                 source: root.item && root.item.image ? root.item.image : ""
                 fillMode: Image.PreserveAspectCrop

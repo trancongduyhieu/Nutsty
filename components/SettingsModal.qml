@@ -758,6 +758,7 @@ Rectangle {
                                 }
 
                                 Image {
+                                    sourceSize: Qt.size(128, 128)
                                     anchors.fill: parent
                                     source: root.accountThumb
                                     fillMode: Image.PreserveAspectCrop
