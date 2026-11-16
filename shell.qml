@@ -22,6 +22,8 @@ Scope {
         visible: true
 
         property bool isWindowActive: true
+        // Set by launcher_win.py when D3D11 falls back to the CPU rasterizer (VMs without a GPU driver)
+        readonly property bool softwareRendering: Quickshell.env("NUTSTY_SOFTWARE_RENDER") === "1"
         readonly property bool isWindowEffectivelyActive: win.visible && (typeof win.minimized !== "undefined" ? !win.minimized : true) && win.isWindowActive
 
         Connections {
@@ -1789,7 +1791,8 @@ Scope {
     // Adaptive Throttling: 40ms (25 FPS) when active or desktop lyrics enabled; 250ms (4 FPS) when unfocused
     Timer {
         id: smoothProgressTimer
-        interval: (win.isWindowEffectivelyActive || win.desktopLyricsEnabled) ? 40 : 250
+        // CPU rasterizer: every tick repaints the whole window, so 4 FPS there too
+        interval: ((win.isWindowEffectivelyActive || win.desktopLyricsEnabled) && !win.softwareRendering) ? 40 : 250
         repeat: true
         running: (win.visible || win.desktopLyricsEnabled) && win.isPlaying
                  && ((!win.isLoadingAudio && win.lastSyncTimestamp > 0) || (win.isLoadingAudio && win.mixActive !== null))

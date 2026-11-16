@@ -1328,6 +1328,27 @@ def _create_nutsty_app_icon(icon_save_path: str) -> QIcon:
         return QIcon()
 
 
+def _detect_software_rhi() -> bool:
+    """
+    True when Qt Quick would rasterize on the CPU. Display-only adapters (QEMU QXL, no GPU driver)
+    leave D3D11 on the Microsoft Basic Render Driver (WARP), which renders every frame on all
+    CPU cores, so full-window shaders and blurs cost 50-90% CPU. Needs a QGuiApplication.
+    """
+    if sys.platform != "win32" or os.environ.get("QSG_RHI_BACKEND", "") != "d3d11":
+        return False
+    try:
+        from PySide6.QtGui import QRhi, QRhiD3D11InitParams, QRhiDriverInfo
+        rhi = QRhi.create(QRhi.Implementation.D3D11, QRhiD3D11InitParams())
+        if rhi is None:
+            return True
+        info = rhi.driverInfo()
+        name = bytes(info.deviceName).decode("utf-8", "replace").lower()
+        return (info.deviceType == QRhiDriverInfo.DeviceType.CpuDevice
+                or "basic render" in name or "warp" in name)
+    except Exception:
+        return False
+
+
 _single_instance_mutex = None
 
 def _check_single_instance_or_activate(server_name="Nutsty_Single_Instance_IPC") -> bool:
@@ -1399,6 +1420,10 @@ def main():
         has_widgets = False
 
     app.installNativeEventFilter(native_filter)
+
+    if not os.environ.get("NUTSTY_SOFTWARE_RENDER", "").strip():
+        os.environ["NUTSTY_SOFTWARE_RENDER"] = "1" if _detect_software_rhi() else "0"
+    sys.stderr.write(f"Software rendering (CPU) mode: {os.environ['NUTSTY_SOFTWARE_RENDER']}\n")
 
     bridge = NutstyBridge()
     bridge_ref[0] = bridge

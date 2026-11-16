@@ -14,12 +14,15 @@ Item {
     property real zoom: 1.6
 
     readonly property bool isWindowActive: (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive))
+    // No GPU (WARP / Basic Render Driver): each animated frame re-runs the full-window warp + 64px blur
+    // on the CPU, so the artwork stays a static blurred frame instead
+    readonly property bool softwareRendering: (typeof win !== "undefined" && win && Boolean(win.softwareRendering))
 
     // Time counter for serene fluid 2D warping wave (50s period)
     property real animTime: 0.0
 
     NumberAnimation on animTime {
-        running: root.visible && root.running && root.isWindowActive
+        running: root.visible && root.running && root.isWindowActive && !root.softwareRendering
         loops: Animation.Infinite
         from: 0.0
         to: 62.831853
