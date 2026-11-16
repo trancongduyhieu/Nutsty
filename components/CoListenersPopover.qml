@@ -357,6 +357,10 @@ Item {
                         }
                     }
                 }
+                ScrollEdgeFade {
+                    flickable: listView
+                    fadeLength: 20
+                }
 
             // Empty state if 0 listeners
             Item {

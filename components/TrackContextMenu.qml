@@ -625,6 +625,10 @@ Item {
                 }
             }
         }
+        ScrollEdgeFade {
+            flickable: menuFlick
+            fadeLength: 16
+        }
         }
     }
 

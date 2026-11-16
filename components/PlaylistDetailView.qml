@@ -667,4 +667,8 @@ Rectangle {
             }
         }
     }
+    ScrollEdgeFade {
+        flickable: scrollArea
+        fadeLength: 40
+    }
 }

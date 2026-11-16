@@ -670,6 +670,10 @@ Rectangle {
                         }
                     }
                 }
+                ScrollEdgeFade {
+                    flickable: videoFlick
+                    fadeLength: 24
+                }
 
                 // =============================================================
                 // Archetype 2: Multi-row Track Grid (4 Rows per Column - Image 2)
@@ -891,6 +895,10 @@ Rectangle {
                             }
                         }
                     }
+                }
+                ScrollEdgeFade {
+                    flickable: trackGridFlick
+                    fadeLength: 24
                 }
 
                 // =============================================================
@@ -1177,6 +1185,10 @@ Rectangle {
                         }
                     }
                 }
+                ScrollEdgeFade {
+                    flickable: albumFlick
+                    fadeLength: 24
+                }
 
                 // =============================================================
                 // Case C: Fallback Quick Picks (Virtualized Multi-Row Carousel)
@@ -1379,6 +1391,10 @@ Rectangle {
                             }
                         }
                     }
+                }
+                ScrollEdgeFade {
+                    flickable: fallbackQuickPicksFlick
+                    fadeLength: 24
                 }
 
                 // =============================================================
@@ -1591,6 +1607,10 @@ Rectangle {
                         }
                     }
                 }
+                ScrollEdgeFade {
+                    flickable: fallbackPlaylistFlick
+                    fadeLength: 24
+                }
 
                 // =============================================================
                 // Case E: Skeleton Placeholder Row (Initial Loading State)
@@ -1631,5 +1651,9 @@ Rectangle {
                 Item { height: 16 }
             }
         }
+    }
+    ScrollEdgeFade {
+        flickable: feedListView
+        fadeLength: 40
     }
 }

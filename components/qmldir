@@ -40,7 +40,7 @@ MarqueeText 1.0 MarqueeText.qml
 MinimalistLyricsView 1.0 MinimalistLyricsView.qml
 MochySidePanel 1.0 MochySidePanel.qml
 MochyCommentsView 1.0 MochyCommentsView.qml
-ScrollEdgeMask 1.0 ScrollEdgeMask.qml
+ScrollEdgeFade 1.0 ScrollEdgeFade.qml
 CommentRow 1.0 CommentRow.qml
 PanelRimBorder 1.0 PanelRimBorder.qml
 NowPlayingControls 1.0 NowPlayingControls.qml

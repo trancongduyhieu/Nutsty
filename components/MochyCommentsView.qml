@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Effects
 import QtQuick.Layouts
 import "."
 
@@ -380,14 +379,6 @@ Item {
         boundsBehavior: Flickable.StopAtBounds
         model: commentModel
         visible: commentModel.count > 0
-        layer.enabled: visible && root.active
-        layer.effect: MultiEffect {
-            maskEnabled: true
-            maskSource: commentEdgeMask
-            maskThresholdMin: 0.5
-            maskSpreadAtMin: 1.0
-            autoPaddingEnabled: false
-        }
 
         onContentYChanged: {
             if (contentHeight - (contentY + height) < 600) root.loadMore();
@@ -422,10 +413,9 @@ Item {
         }
     }
 
-    ScrollEdgeMask {
-        id: commentEdgeMask
-        anchors.fill: commentList
+    ScrollEdgeFade {
         flickable: commentList
+        when: root.active
     }
 
     // Loading / empty / error states

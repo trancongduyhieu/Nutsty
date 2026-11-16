@@ -1850,6 +1850,10 @@ Rectangle {
             if (sortPopover.isOpen) sortPopover.isOpen = false;
         }
     }
+    ScrollEdgeFade {
+        flickable: scrollArea
+        fadeLength: 40
+    }
 
     // Empty state overlay for Favorite Songs & Playlists (Dead-Center Optical Alignment)
     Item {

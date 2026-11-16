@@ -895,6 +895,9 @@ Item {
                             }
                         }
                     }
+                    ScrollEdgeFade {
+                        flickable: searchResultsList
+                    }
 
                     Rectangle {
                         Layout.fillWidth: true
@@ -1082,6 +1085,9 @@ Item {
                             }
                         }
                     }
+                }
+                ScrollEdgeFade {
+                    flickable: friendsList
                 }
             }
         }

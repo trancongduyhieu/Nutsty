@@ -234,6 +234,7 @@ Item {
 
             // Scrollable Task List
             Flickable {
+                id: downloadQueueFlick
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 contentWidth: width
@@ -487,6 +488,10 @@ Item {
                         }
                     }
                 }
+            }
+            ScrollEdgeFade {
+                flickable: downloadQueueFlick
+                fadeLength: 20
             }
         }
     }

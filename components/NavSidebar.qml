@@ -555,6 +555,9 @@ Rectangle {
                             }
                         }
                     }
+                    ScrollEdgeFade {
+                        flickable: plList
+                    }
                 }
             }
 
@@ -782,6 +785,9 @@ Rectangle {
                                 }
                             }
                         }
+                    }
+                    ScrollEdgeFade {
+                        flickable: qList
                     }
                 }
             }

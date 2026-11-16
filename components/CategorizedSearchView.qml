@@ -860,6 +860,9 @@ Rectangle {
             }
         }
     }
+    ScrollEdgeFade {
+        flickable: suggestionsFlickable
+    }
 
     // =========================================================================
     // 1.5. SEARCH HISTORY VIEW (Dark Glass, MRU 20 items, Destructive Muted Rose)
@@ -1081,6 +1084,9 @@ Rectangle {
             }
         }
     }
+    ScrollEdgeFade {
+        flickable: historyFlickable
+    }
 
     // =========================================================================
     // 2. CATEGORIZED RESULTS VIEW (Search Summary / Filter Tabs)
@@ -1099,6 +1105,7 @@ Rectangle {
 
         // Filter Chips Bar (Glossy Gel Capsules + Reset Filter Chip)
         Flickable {
+            id: searchChipsFlick
             Layout.fillWidth: true
             Layout.preferredHeight: 32
             contentWidth: chipsRow.width + 10
@@ -1188,6 +1195,11 @@ Rectangle {
                     }
                 }
             }
+        }
+        ScrollEdgeFade {
+            flickable: searchChipsFlick
+            horizontal: true
+            fadeLength: 20
         }
 
         // =====================================================================
@@ -1810,6 +1822,11 @@ Rectangle {
                                         }
                                     }
                                 }
+                                ScrollEdgeFade {
+                                    flickable: albumsFlick
+                                    horizontal: true
+                                    fadeLength: 24
+                                }
                             }
                         }
 
@@ -1907,6 +1924,11 @@ Rectangle {
                                         }
                                     }
                                 }
+                                ScrollEdgeFade {
+                                    flickable: commPlFlick
+                                    horizontal: true
+                                    fadeLength: 24
+                                }
                             }
                         }
 
@@ -2001,6 +2023,11 @@ Rectangle {
                                             }
                                         }
                                     }
+                                }
+                                ScrollEdgeFade {
+                                    flickable: featPlFlick
+                                    horizontal: true
+                                    fadeLength: 24
                                 }
                             }
                         }
@@ -2109,6 +2136,11 @@ Rectangle {
                                             }
                                         }
                                     }
+                                }
+                                ScrollEdgeFade {
+                                    flickable: artistsFlick
+                                    horizontal: true
+                                    fadeLength: 24
                                 }
                             }
                         }
@@ -2773,6 +2805,10 @@ Rectangle {
                     }
                 }
             }
+        }
+        ScrollEdgeFade {
+            flickable: contentScroll
+            fadeLength: 40
         }
     }
 }

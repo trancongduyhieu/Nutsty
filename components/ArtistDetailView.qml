@@ -586,6 +586,11 @@ Item {
                         }
                     }
                 }
+                ScrollEdgeFade {
+                    flickable: albumFlick
+                    horizontal: true
+                    fadeLength: 24
+                }
             }
 
             // 4. Section: Singles & EPs Carousel
@@ -700,6 +705,11 @@ Item {
                             }
                         }
                     }
+                }
+                ScrollEdgeFade {
+                    flickable: singleFlick
+                    horizontal: true
+                    fadeLength: 24
                 }
             }
 
@@ -823,6 +833,11 @@ Item {
                         }
                     }
                 }
+                ScrollEdgeFade {
+                    flickable: videoFlick
+                    horizontal: true
+                    fadeLength: 24
+                }
             }
 
             // 6. Section: Similar Artists Carousel
@@ -928,6 +943,11 @@ Item {
                         }
                     }
                 }
+                ScrollEdgeFade {
+                    flickable: relFlick
+                    horizontal: true
+                    fadeLength: 24
+                }
             }
 
             // 7. Section: Bio / Description Card
@@ -994,6 +1014,10 @@ Item {
 
             Item { Layout.preferredHeight: 30 }
         }
+    }
+    ScrollEdgeFade {
+        flickable: mainScroll
+        fadeLength: 40
     }
 
     // Top Floating Navigation (Back Button only, no black header bar)

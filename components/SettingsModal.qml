@@ -3665,6 +3665,12 @@ Rectangle {
                                 }
                             }
                         }
+            ScrollEdgeFade {
+                flickable: settingsFlickable
+            }
+                        ScrollEdgeFade {
+                            flickable: lyricsSourceFlickable
+                        }
                     }
                 }
 

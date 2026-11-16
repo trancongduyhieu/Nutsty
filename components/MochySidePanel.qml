@@ -507,13 +507,23 @@ Item {
                 }
             }
 
-            // Same material, just denser where text needs to stay readable (queue, comments)
-            Rectangle {
+            // List tabs (queue, comments): see-through liquid glass over whatever is behind the
+            // panel, tinted dark enough for long text. It cross-fades over the cover material
+            // instead of popping in, so switching tabs never flashes.
+            LiquidGlass {
+                id: panelLiquidBackdrop
                 anchors.fill: parent
-                color: Qt.rgba(0.05, 0.05, 0.07, 0.50)
                 opacity: root.isListTab ? 1.0 : 0.0
-                visible: opacity > 0.01
+                visible: opacity > 0.01 && root.isPanelRenderable
                 Behavior on opacity { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                extraDependency: root.layoutDependency
+                backgroundSourceItem: root.backgroundSourceItem
+                radius: root.panelStyle === 1 ? 0 : root.panelRadius
+                displacement: 12.0
+                bevelWidth: 16.0
+                blurRadius: 0.85
+                tintColor: Qt.rgba(0.06, 0.07, 0.10, 0.74)
+                isFlowActive: false
             }
         }
 
@@ -1312,14 +1322,6 @@ Item {
                 spacing: 4
                 boundsBehavior: Flickable.StopAtBounds
                 model: root.upNextTracks
-                layer.enabled: root.isPanelRenderable && root.activeTab === "queue"
-                layer.effect: MultiEffect {
-                    maskEnabled: true
-                    maskSource: queueEdgeMask
-                    maskThresholdMin: 0.5
-                    maskSpreadAtMin: 1.0
-                    autoPaddingEnabled: false
-                }
 
                 header: Column {
                     width: queueListView.width
@@ -1621,10 +1623,9 @@ Item {
                 }
             }
 
-            ScrollEdgeMask {
-                id: queueEdgeMask
-                anchors.fill: queueListView
+            ScrollEdgeFade {
                 flickable: queueListView
+                when: root.isPanelRenderable && root.activeTab === "queue"
             }
 
             // Empty State

@@ -359,6 +359,10 @@ Item {
                         }
                     }
                 }
+                ScrollEdgeFade {
+                    flickable: reqsList
+                    fadeLength: 20
+                }
             }
         }
     }

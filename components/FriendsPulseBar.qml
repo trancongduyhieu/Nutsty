@@ -756,4 +756,9 @@ Item {
             }
         }
     }
+    ScrollEdgeFade {
+        flickable: friendsFlickable
+        horizontal: true
+        fadeLength: 20
+    }
 }

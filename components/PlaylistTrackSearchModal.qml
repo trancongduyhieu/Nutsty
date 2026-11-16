@@ -542,6 +542,9 @@ Rectangle {
                     }
                 }
             }
+            ScrollEdgeFade {
+                flickable: resultsList
+            }
 
             // Empty State Prompt (ui-layout-design-rules & PostNoteModal standard)
             Item {

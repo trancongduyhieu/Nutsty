@@ -945,6 +945,9 @@ Rectangle {
                     }
                 }
             }
+            ScrollEdgeFade {
+                flickable: pickerListView
+            }
         }
     }
 
