@@ -552,8 +552,19 @@ Rectangle {
             Behavior on color { ColorAnimation { duration: 400 } }
                 visible: width > 0
 
-                Behavior on x { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-                Behavior on width { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                // Geometry of the selected chip (animated when the selection moves)
+                property real selX: 0
+                property real selW: 0
+                Behavior on selX { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                Behavior on selW { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                // A selected chip scrolled half out of view keeps a whole capsule inside the bar: the
+                // pill shrinks to the visible part instead of being cut flat by the scroll clip
+                readonly property real edgeInset: 2
+                readonly property real chipLeft: moodRow.x + selX
+                readonly property real viewLeft: topMoodFlickable.contentX + edgeInset
+                readonly property real viewRight: topMoodFlickable.contentX + topMoodFlickable.width - edgeInset
+                x: Math.max(chipLeft, viewLeft)
+                width: Math.max(0, Math.min(chipLeft + selW, viewRight) - x)
             }
 
             Row {
@@ -579,15 +590,15 @@ Rectangle {
                         readonly property bool isHovered: pillMouse.containsMouse
 
                         onXChanged: {
-                            if (isSelected) activeMoodIndicator.x = pillItem.x;
+                            if (isSelected) activeMoodIndicator.selX = pillItem.x;
                         }
                         onWidthChanged: {
-                            if (isSelected) activeMoodIndicator.width = pillItem.width;
+                            if (isSelected) activeMoodIndicator.selW = pillItem.width;
                         }
                         onIsSelectedChanged: {
                             if (isSelected) {
-                                activeMoodIndicator.x = pillItem.x;
-                                activeMoodIndicator.width = pillItem.width;
+                                activeMoodIndicator.selX = pillItem.x;
+                                activeMoodIndicator.selW = pillItem.width;
                             }
                         }
 
@@ -673,8 +684,8 @@ Rectangle {
                 for (var i = 0; i < moodRepeater.count; ++i) {
                     var itm = moodRepeater.itemAt(i);
                     if (itm && itm.isSelected) {
-                        activeMoodIndicator.x = itm.x;
-                        activeMoodIndicator.width = itm.width;
+                        activeMoodIndicator.selX = itm.x;
+                        activeMoodIndicator.selW = itm.width;
                         return;
                     }
                 }
