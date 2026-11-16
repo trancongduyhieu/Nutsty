@@ -144,14 +144,16 @@ def check_for_updates(force=False, mock=False):
                                 if content_elem is not None and content_elem.text:
                                     atom_body = re.sub(r'<[^>]+>', '', content_elem.text).strip()
                                 
-                                asset_name = "Nutsty_Windows_Portable.zip" if getattr(pc, "IS_WINDOWS", False) else "Nutsty_Linux.zip"
-                                atom_download = f"https://github.com/{repo}/releases/download/{tag}/{asset_name}"
+                                assets = []
+                                if getattr(pc, "IS_WINDOWS", False):
+                                    asset_name = "Nutsty_Windows_Portable.zip"
+                                    assets.append({"name": asset_name, "browser_download_url": f"https://github.com/{repo}/releases/download/{tag}/{asset_name}"})
                                 release_data = {
                                     "tag_name": tag,
                                     "name": tag,
                                     "body": atom_body,
                                     "html_url": atom_html,
-                                    "assets": [{"name": asset_name, "browser_download_url": atom_download}]
+                                    "assets": assets
                                 }
                                 break
             except Exception as e:
@@ -200,6 +202,10 @@ def check_for_updates(force=False, mock=False):
         if not download_url and assets and pc.IS_WINDOWS:
             download_url = assets[0].get("browser_download_url", "")
 
+    # Releases only ship a Windows build; Linux runs from source, so fall back to the tag's source archive
+    if not download_url and not pc.IS_WINDOWS and latest_tag:
+        download_url = source_archive_url(latest_tag)
+
     if not download_url:
         download_url = html_url
 
@@ -218,6 +224,22 @@ def check_for_updates(force=False, mock=False):
 
     save_cached_update(res)
     return res
+
+
+def source_archive_url(tag):
+    return f"https://github.com/trancongduyhieu/Nutsty/archive/refs/tags/{tag}.zip"
+
+
+def source_app_dir():
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+
+def is_git_checkout(path):
+    return os.path.exists(os.path.join(path, ".git")) and shutil.which("git") is not None
+
+
+# Files the running app rewrites inside its own folder; a source update must not replace them
+LOCAL_STATE_FILES = ("library.json", os.path.join("assets", "nutsty_palette.json"))
 
 
 def find_app_root_in_staged(stage_path):
@@ -285,6 +307,14 @@ class DirectUpdateManager:
                 self.target_version = target_version or "latest"
                 self.message = "Đang tải bản cập nhật..."
 
+            if not pc.IS_WINDOWS:
+                app_dir = source_app_dir()
+                if is_git_checkout(app_dir):
+                    self._git_pull(app_dir)
+                    return
+                if not str(download_url).lower().endswith(".zip") and target_version:
+                    download_url = source_archive_url(target_version)
+
             update_root = os.path.join(CONFIG_DIR, "updates")
             os.makedirs(update_root, exist_ok=True)
             zip_dest = os.path.join(update_root, "update.zip")
@@ -334,6 +364,12 @@ class DirectUpdateManager:
                 zf.extractall(staged_dest)
 
             final_stage = find_app_root_in_staged(staged_dest)
+            if not pc.IS_WINDOWS:
+                for rel in LOCAL_STATE_FILES:
+                    try:
+                        os.remove(os.path.join(final_stage, rel))
+                    except OSError:
+                        pass
 
             with self._lock:
                 self.active = False
@@ -349,9 +385,46 @@ class DirectUpdateManager:
                 self.error = str(e)
                 self.message = f"Lỗi tải cập nhật: {str(e)}"
 
+    def _git_pull(self, app_dir):
+        """Linux git checkout: fast-forward to the latest commit instead of copying an archive over it."""
+        env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
+        res = subprocess.run(
+            ["git", "-C", app_dir, "pull", "--ff-only", "--autostash"],
+            capture_output=True, text=True, timeout=300, env=env
+        )
+        if res.returncode != 0:
+            detail = (res.stderr or res.stdout or "").strip().splitlines()
+            raise RuntimeError("git pull: " + (detail[-1] if detail else f"exit {res.returncode}"))
+        with self._lock:
+            self.active = False
+            self.status = "ready"
+            self.staged_dir = None
+            self.progress = 1.0
+            self.percent = 100
+            self.message = "Bản cập nhật đã tải xong! Bấm để áp dụng và khởi động lại."
+
+    def _restart_linux(self, app_dir, copy_from=None):
+        sh_path = os.path.join(CONFIG_DIR, "updates", "apply_update.sh")
+        os.makedirs(os.path.dirname(sh_path), exist_ok=True)
+        copy_line = f'cp -rf "{copy_from}"/. "{app_dir}"/\n' if copy_from else ""
+        sh_content = f"""#!/bin/sh
+sleep 1
+{copy_line}if [ -f "{app_dir}/run.sh" ]; then
+    bash "{app_dir}/run.sh" --restart &
+fi
+"""
+        with open(sh_path, "w", encoding="utf-8") as f:
+            f.write(sh_content)
+        os.chmod(sh_path, 0o755)
+        subprocess.Popen(["/bin/sh", sh_path], start_new_session=True)
+        return {"success": True, "message": "Đang khởi động lại ứng dụng..."}
+
     def apply_update_and_restart(self, target_dir=None):
         with self._lock:
             staged = self.staged_dir
+        if not pc.IS_WINDOWS and not staged and is_git_checkout(source_app_dir()):
+            # Already pulled by _git_pull; only the restart is left
+            return self._restart_linux(source_app_dir())
         if not staged or not os.path.exists(staged):
             default_staged = os.path.join(CONFIG_DIR, "updates", "staged")
             if os.path.exists(default_staged):
@@ -411,20 +484,7 @@ exit
             subprocess.Popen(["cmd.exe", "/c", bat_path], creationflags=flags, close_fds=True)
             return {"success": True, "message": "Đang khởi động lại ứng dụng..."}
         else:
-            sh_path = os.path.join(CONFIG_DIR, "updates", "apply_update.sh")
-            os.makedirs(os.path.dirname(sh_path), exist_ok=True)
-            sh_content = f"""#!/bin/sh
-sleep 1
-cp -rf "{staged}"/* "{app_dir}"/
-if [ -f "{app_dir}/run.sh" ]; then
-    sh "{app_dir}/run.sh" &
-fi
-"""
-            with open(sh_path, "w", encoding="utf-8") as f:
-                f.write(sh_content)
-            os.chmod(sh_path, 0o755)
-            subprocess.Popen(["/bin/sh", sh_path], start_new_session=True)
-            return {"success": True, "message": "Đang khởi động lại ứng dụng..."}
+            return self._restart_linux(app_dir, copy_from=staged)
 
 direct_updater = DirectUpdateManager()
 
