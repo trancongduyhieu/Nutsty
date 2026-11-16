@@ -70,6 +70,7 @@ Tài liệu đặc tả chuyên sâu về hệ thống đồ họa, ngôn ngữ 
   - Tích hợp sẵn placeholder nền và fallback `AppIcon` khi rỗng hoặc tải lỗi.
 - Ảnh đại diện/bìa phải lấp đầy 100% thẻ (`fillMode: Image.PreserveAspectCrop`), không để đệm trống mép đen.
 - Viền hairline 1px áp dụng trực tiếp qua `borderColor` và `borderWidth` theo công thức bo góc đồng tâm.
+- **Footgun RAM (heaptrack 2026-11)**: `Image` thô phải có `sourceSize`; `Repeater` trong view/khối bị ẩn vẫn tạo đủ delegate và giữ ảnh bìa (ảnh giải mã là khối heap lớn nhất), nên gate `model: container.visible ? data : []`. Modal ít dùng bọc trong `LazyModalLoader` (mở qua `ensure()`).
 
 ---
 

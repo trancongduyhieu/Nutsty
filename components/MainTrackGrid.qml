@@ -1558,12 +1558,14 @@ Rectangle {
                 // SimpMusic Clean Horizontal List View for Downloads & Favorites
                 // =============================================================
                 ColumnLayout {
+                    id: downloadRowsColumn
                     Layout.fillWidth: true
                     spacing: 4
                     visible: !root.isLoading && root.isDownloadsView && (root.downloadsSubTab === "tracks" || root.downloadsSubTab === "favorites") && root.albumMetadata === null && root.sortedTracks && root.sortedTracks.length > 0
 
                     Repeater {
-                        model: root.sortedTracks
+                        // Hidden lists keep no delegates: otherwise every track row (and its cover) stays in RAM
+                        model: downloadRowsColumn.visible ? root.sortedTracks : []
 
                         Rectangle {
                             id: dlRow
@@ -1816,12 +1818,13 @@ Rectangle {
 
                 // Grid of tracks (Online searches, or playlists with no hero album)
                 Flow {
+                    id: trackCardFlow
                     Layout.fillWidth: true
                     spacing: 16
                     visible: !root.isLoading && (!root.isDownloadsView || root.albumMetadata !== null) && !(root.isDownloadsView && (root.downloadsSubTab === "favorites" || root.downloadsSubTab === "playlists"))
 
                     Repeater {
-                        model: root.sortedTracks
+                        model: trackCardFlow.visible ? root.sortedTracks : []
 
                         TrackCard {
                             track: modelData

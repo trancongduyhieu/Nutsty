@@ -66,7 +66,7 @@ Tất cả các tính năng mới và cải tiến của Nutsty được lưu tr
 
 ### Fixed
 - **Không còn tốn pin khi tạm dừng**: Trước đây, lúc nhạc đang dừng và cửa sổ đã ẩn đi, lời bài hát trên màn hình chính vẫn bị vẽ lại liên tục khiến máy nóng và tốn pin. Giờ khi bạn dừng nhạc, ứng dụng gần như không dùng tới bộ xử lý, nhẹ hơn hẳn trên máy cấu hình yếu.
-- **Nhẹ bộ nhớ hơn**: Các cửa sổ ít dùng như quản lý bạn bè, ghi chú, hẹn giờ ngủ, danh sách tải về, tạo danh sách phát và có gì mới chỉ được tạo khi bạn mở và tự giải phóng sau khi đóng một lúc. Lời bài hát trên màn hình chỉ nạp kiểu hiển thị bạn đang dùng, ảnh bìa được giải mã vừa đúng kích thước hiển thị, và phần xử lý phụ chạy nền chỉ bật khi thật sự cần rồi tự tắt sau một phút rưỡi rảnh.
+- **Nhẹ bộ nhớ hơn**: Các cửa sổ ít dùng như quản lý bạn bè, ghi chú, hẹn giờ ngủ, danh sách tải về, tạo danh sách phát và có gì mới chỉ được tạo khi bạn mở và tự giải phóng sau khi đóng một lúc. Lời bài hát trên màn hình chỉ nạp kiểu hiển thị bạn đang dùng, ảnh bìa được giải mã vừa đúng kích thước hiển thị, thư viện nhạc không còn giữ sẵn toàn bộ ảnh bìa khi bạn đang ở màn khác, và phần xử lý phụ chạy nền chỉ bật khi thật sự cần rồi tự tắt sau một phút rưỡi rảnh.
 - **Lời bài hát tiếng Việt bị tách chữ**: Sửa lỗi một số nguồn lời tách rời chữ cái như "n à o", giờ hiển thị đúng thành "nào".
 - **Bảng bên lời bài hát**: Vùng ánh màu dưới bìa đĩa giờ mờ dần mượt mà, không còn bị cắt ngang thành một vệt tối ở gần cuối bảng.
 - **Ảnh bìa khi chuyển bài**: Ảnh bìa của bài kế tiếp được chuẩn bị sẵn từ lúc bài đang phát còn khoảng 20%, nên khi chuyển bài không còn hiện nhầm ảnh bìa bài cũ, không nháy và không bị trống.
