@@ -1921,7 +1921,7 @@ Scope {
         id: windowCornerMask
         anchors.fill: parent
         visible: false
-        layer.enabled: !(win.maximized || win.fullscreen)
+        layer.enabled: !(win.maximized || win.fullscreen) && !win.softwareRendering
         layer.smooth: true
 
         Rectangle {
@@ -1959,7 +1959,9 @@ Scope {
             acceptedButtons: Qt.NoButton
             onPositionChanged: win.triggerUserActiveBoost()
         }
-        layer.enabled: !(win.maximized || win.fullscreen)
+        // CPU rasterizer: this layer re-renders the whole window on any change; the Win32 window
+        // region from launcher_win.py already rounds the corners there
+        layer.enabled: !(win.maximized || win.fullscreen) && !win.softwareRendering
         layer.smooth: true
         layer.effect: MultiEffect {
             maskEnabled: true
