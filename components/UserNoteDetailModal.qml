@@ -481,7 +481,7 @@ Item {
                             visible: root.isThisTrackPlaying
 
                             RotationAnimation on rotation {
-                                running: root.isThisTrackPlaying
+                                running: root.visible && root.isThisTrackPlaying
                                 loops: Animation.Infinite
                                 from: 0; to: 360; duration: 2500
                             }

@@ -99,7 +99,7 @@ Item {
                             color: "#28282c"
                             visible: heroAvatar.status !== Image.Ready
                             SequentialAnimation on opacity {
-                                running: heroAvatar.status !== Image.Ready
+                                running: root.visible && heroAvatar.status === Image.Loading
                                 loops: Animation.Infinite
                                 NumberAnimation { from: 0.3; to: 0.7; duration: 800; easing.type: Easing.InOutQuad }
                                 NumberAnimation { from: 0.7; to: 0.3; duration: 800; easing.type: Easing.InOutQuad }

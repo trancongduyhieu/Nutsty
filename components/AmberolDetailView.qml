@@ -776,7 +776,7 @@ Rectangle {
                             visible: artistImg.status !== Image.Ready
                             
                             SequentialAnimation on opacity {
-                                running: root.visible && artistImg.status !== Image.Ready
+                                running: root.visible && artistImg.status === Image.Loading
                                 loops: Animation.Infinite
                                 NumberAnimation { from: 0.35; to: 0.70; duration: 900; easing.type: Easing.InOutQuad }
                                 NumberAnimation { from: 0.70; to: 0.35; duration: 900; easing.type: Easing.InOutQuad }

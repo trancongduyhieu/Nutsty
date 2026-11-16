@@ -65,6 +65,7 @@ Tất cả các tính năng mới và cải tiến của Nutsty được lưu tr
 - **Phân tách hoàn hảo cử chỉ Nhấn giữ (Hold) và Nhấp nhanh (Click) trên thanh phát nhạc**: Khôi phục trọn vẹn khả năng nhấn giữ chuột trái ở bất kỳ đâu trên thanh phát nhạc để kích hoạt hiệu ứng quầng sáng Spotlight rực rỡ và phóng to nhẹ theo con trỏ chuột mà không bị kẹt bởi tiêu đề hay tên nghệ sĩ. Thao tác nhấp chuột nhanh sẽ mở/đóng bảng áp phích cạnh bên dứt khoát, và khi buông chuột sau khi nhấn giữ ngắm Spotlight thì thanh nhạc tự động thu về êm đềm mà không làm gián đoạn hay đóng/mở bảng áp phích ngoài ý muốn.
 
 ### Fixed
+- **Không còn tốn pin khi tạm dừng**: Trước đây, lúc nhạc đang dừng và cửa sổ đã ẩn đi, lời bài hát trên màn hình chính vẫn bị vẽ lại liên tục khiến máy nóng và tốn pin. Giờ khi bạn dừng nhạc, ứng dụng gần như không dùng tới bộ xử lý, nhẹ hơn hẳn trên máy cấu hình yếu.
 - **Lời bài hát tiếng Việt bị tách chữ**: Sửa lỗi một số nguồn lời tách rời chữ cái như "n à o", giờ hiển thị đúng thành "nào".
 - **Bảng bên lời bài hát**: Vùng ánh màu dưới bìa đĩa giờ mờ dần mượt mà, không còn bị cắt ngang thành một vệt tối ở gần cuối bảng.
 - **Ảnh bìa khi chuyển bài**: Ảnh bìa của bài kế tiếp được chuẩn bị sẵn từ lúc bài đang phát còn khoảng 20%, nên khi chuyển bài không còn hiện nhầm ảnh bìa bài cũ, không nháy và không bị trống.
