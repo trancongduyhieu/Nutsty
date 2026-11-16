@@ -2650,8 +2650,7 @@ Scope {
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
                     anchors.right: parent.right
-                    anchors.topMargin: win.mochyPanelStyle === 1 ? 0 : 8
-                    anchors.bottomMargin: win.mochyPanelStyle === 1 ? 0 : 16
+                    // Same top and bottom edges as the browsing area on the left, so both columns line up
                     anchors.rightMargin: win.mochyPanelStyle === 1 ? 0 : 8
                     panelStyle: win.mochyPanelStyle
                     // Fixed width + transform slide: content never re-lays out per frame (no FBO realloc / cover reflow)
@@ -2673,7 +2672,8 @@ Scope {
                     enabled: win.isMochySidePanelOpen && !win.isNowPlayingOpen
                     z: 10
 
-                    isEffectivelyActive: win.isWindowEffectivelyActive && win.isMochySidePanelOpen && !win.isNowPlayingOpen
+                    // Keyed to the slide, not the open flag: closing keeps blur and glass alive until the panel is off screen
+                    isEffectivelyActive: win.isWindowEffectivelyActive && !win.isNowPlayingOpen && revealProgress > 0.001
 
                     activeTab: win.mochyActiveTab
                     currentTrack: win.currentTrack

@@ -63,7 +63,12 @@ def _comment(vm, ents, replies_label="", replies_token=None):
         "isVerified": bool(author.get("isVerified")),
         "text": (props.get("content") or {}).get("content") or "",
         "published": props.get("publishedTime") or "",
-        "likes": toolbar.get("likeCountNotliked") or "",
+        "likes": (toolbar.get("likeCountNotliked") or "").strip(),
+        "likesLiked": (toolbar.get("likeCountLiked") or "").strip(),
+        "liked": state.get("likeState") == "TOOLBAR_LIKE_STATE_LIKED",
+        # Signed in only: opaque tokens for comment/perform_comment_action
+        "likeAction": _find(surface.get("likeCommand"), "action") or "",
+        "unlikeAction": _find(surface.get("unlikeCommand"), "action") or "",
         "isHearted": state.get("heartState") == "TOOLBAR_HEART_STATE_HEARTED",
         "isPinned": vm.get("pinnedText") is not None,
         "repliesLabel": replies_label or "",
@@ -174,6 +179,13 @@ def _created(resp):
         if "commentEntityPayload" in payload:
             return _comment({"commentKey": key}, ents)
     return None
+
+
+def perform_action(action):
+    """Like or unlike, using a token from the comment's toolbar."""
+    resp = _client()._send_request("comment/perform_comment_action", {"actions": [action]})
+    status = _find(resp.get("actionResults"), "status") or ""
+    return {"success": status != "STATUS_FAILED", "status": status}
 
 
 def create_comment(params, text):

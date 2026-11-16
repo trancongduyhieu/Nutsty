@@ -162,6 +162,8 @@ def dispatch_request(method, path, query_dict, body_str):
             music_routes.handle_post_comment(handler, req_json)
         elif clean_path == "/api/comments/reply":
             music_routes.handle_post_comment(handler, req_json, reply=True)
+        elif clean_path == "/api/comments/action":
+            music_routes.handle_post_comment_action(handler, req_json)
         elif clean_path == "/api/spotify/auto-sync":
             music_routes.handle_post_spotify_auto_sync(handler)
         elif clean_path == "/api/spotify/validate":

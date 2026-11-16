@@ -67,7 +67,8 @@ Item {
         return {
             kind: kind, cid: c.id || "", parentId: parentId || "",
             author: c.author || "", avatar: c.avatar || "", text: c.text || "",
-            published: c.published || "", likes: c.likes || "",
+            published: c.published || "", likes: c.likes || "", likesLiked: c.likesLiked || "",
+            liked: !!c.liked, likeAction: c.likeAction || "", unlikeAction: c.unlikeAction || "",
             isCreator: !!c.isCreator, isVerified: !!c.isVerified,
             isPinned: !!c.isPinned, isHearted: !!c.isHearted,
             repliesLabel: c.repliesLabel || "", repliesToken: c.repliesToken || "",
@@ -207,6 +208,22 @@ Item {
                 return;
             }
         }
+    }
+
+    // Optimistic like: flip at once, flip back if YouTube refuses
+    function toggleLike(index) {
+        var row = commentModel.get(index);
+        var action = row.liked ? row.unlikeAction : row.likeAction;
+        if (!action || !root.isLoggedIn) return;
+        var cid = row.cid;
+        var target = !row.liked;
+        commentModel.setProperty(index, "liked", target);
+        request("POST", "/action", { action: action }, function(data) {
+            if (data && data.success) return;
+            for (var k = 0; k < commentModel.count; k++) {
+                if (commentModel.get(k).cid === cid) { commentModel.setProperty(k, "liked", !target); break; }
+            }
+        });
     }
 
     function startReply(index) {
@@ -388,6 +405,7 @@ Item {
             replyTargeted: root.replyCid !== "" && (commentDelegate.cid === root.replyCid || commentDelegate.parentId === root.replyCid)
             onToggleRepliesRequested: root.toggleReplies(commentDelegate.index)
             onReplyRequested: root.startReply(commentDelegate.index)
+            onLikeRequested: root.toggleLike(commentDelegate.index)
             onMoreRepliesRequested: root.loadMoreReplies(commentDelegate.index)
         }
     }
@@ -516,25 +534,19 @@ Item {
                     scale: sendMouse.pressed ? 0.92 : (sendH.hovered && ready ? 1.06 : 1.0)
                     Behavior on scale { NumberAnimation { duration: 120 } }
 
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: 16
-                        color: sendBtn.ready ? root.accentColor
-                             : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
-                        Behavior on color { ColorAnimation { duration: 140 } }
-                    }
+                    // Icon only: accent when there is something to send, faded otherwise
                     AppIcon {
                         anchors.centerIn: parent
                         visible: !root.sending
                         source: "../assets/icons/material/ms-send.svg"
-                        iconSize: 15
-                        color: sendBtn.ready ? "#101014" : "#ffffff"
+                        iconSize: 20
+                        color: sendBtn.ready ? root.accentColor : Qt.rgba(1, 1, 1, 0.35)
                     }
                     CircularSpinner {
                         anchors.centerIn: parent
                         visible: root.sending
                         size: 16
-                        color: "#ffffff"
+                        color: root.accentColor
                         running: visible
                     }
                     MouseArea {

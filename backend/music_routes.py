@@ -112,6 +112,18 @@ def handle_post_comment(handler, req_json, reply=False):
         handler._send_json({"success": False, "error": str(e)}, 500)
 
 
+def handle_post_comment_action(handler, req_json):
+    action = (req_json.get("action") or "").strip() if isinstance(req_json, dict) else ""
+    if not action:
+        handler._send_json({"success": False, "error": "missing action"}, 400)
+        return
+    try:
+        handler._send_json(youtube_comments.perform_action(action), 200)
+    except Exception as e:
+        sys.stderr.write(f"[comment action error]: {e}\n")
+        handler._send_json({"success": False, "error": str(e)}, 500)
+
+
 def handle_get_artist_shuffle(handler, query):
     name = query.get("name", [""])[0]
     browse_id = query.get("browseId", [""])[0]

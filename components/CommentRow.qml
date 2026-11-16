@@ -15,6 +15,10 @@ Item {
     required property string text
     required property string published
     required property string likes
+    required property string likesLiked
+    required property bool liked
+    required property string likeAction
+    required property string unlikeAction
     required property bool isCreator
     required property bool isVerified
     required property bool isPinned
@@ -31,6 +35,7 @@ Item {
 
     signal toggleRepliesRequested()
     signal replyRequested()
+    signal likeRequested()
     signal moreRepliesRequested()
 
     readonly property bool isReply: kind === "reply"
@@ -189,19 +194,42 @@ Item {
                 Layout.topMargin: 2
                 spacing: 14
 
-                RowLayout {
-                    spacing: 4
-                    AppIcon {
-                        source: "../assets/icons/material/ms-thumb_up.svg"
-                        iconSize: 13
-                        color: Qt.rgba(1, 1, 1, 0.6)
+                Item {
+                    id: likeBox
+                    readonly property bool canLike: row.canReply && row.likeAction !== ""
+                    // likeCountLiked already counts the user's own like
+                    readonly property string count: row.liked ? (row.likesLiked || "1") : row.likes
+                    implicitWidth: likeRow.implicitWidth
+                    implicitHeight: likeRow.implicitHeight
+                    scale: likeMouse.pressed ? 0.88 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 110 } }
+
+                    Row {
+                        id: likeRow
+                        spacing: 4
+                        AppIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            source: row.liked ? "../assets/icons/material/ms-thumb_up-fill.svg" : "../assets/icons/material/ms-thumb_up.svg"
+                            iconSize: 13
+                            color: row.liked ? row.accentColor : (likeMouse.containsMouse ? "#ffffff" : Qt.rgba(1, 1, 1, 0.6))
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: likeBox.count !== "" && likeBox.count !== "0"
+                            text: likeBox.count
+                            color: row.liked ? row.accentColor : Qt.rgba(1, 1, 1, 0.6)
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                        }
                     }
-                    Text {
-                        visible: row.likes !== "" && row.likes !== "0"
-                        text: row.likes
-                        color: Qt.rgba(1, 1, 1, 0.6)
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 11
+                    MouseArea {
+                        id: likeMouse
+                        anchors.fill: parent
+                        anchors.margins: -6
+                        enabled: likeBox.canLike
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: row.likeRequested()
                     }
                 }
 
