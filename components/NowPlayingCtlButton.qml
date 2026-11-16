@@ -26,6 +26,9 @@ Item {
         iconSize: Math.round(cb.size * cb.iconScale)
         color: "#ffffff"
         opacity: (!cb.toggle || cb.on) ? 1.0 : (cbH.hovered ? 0.8 : 0.5)
+        // AppIcon's brightness lift pushes white-filled SVGs past their alpha, so plain opacity left them
+        // fully white; rendering into a layer clamps the colour first, then opacity dims it correctly
+        layer.enabled: cb.toggle
         scale: cbMouse.pressed ? 0.9 : 1.0
         Behavior on opacity { NumberAnimation { duration: 140 } }
         Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutQuad } }

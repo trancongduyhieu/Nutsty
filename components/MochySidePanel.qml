@@ -25,8 +25,6 @@ Item {
     property int panelStyle: 1 // 1: Flush Split-Rail, 2: Bento Glass Island
     property string activeTab: "lyrics" // "lyrics" | "queue"
     property var currentTracks: []
-    property var listeningAlongFriend: null
-    property var activeCoListenersDetails: []
     property real layoutDependency: 0.0 // Driven by host slide progress so LiquidGlass re-samples its backdrop offset
     readonly property real targetPanelWidth: Math.max(380, Math.min(460, Math.round((parent ? parent.width : 1200) * 0.34)))
 
@@ -44,10 +42,6 @@ Item {
     signal trackPlayRequested(var track, int index)
     signal trackContextMenuRequested(var track, real gx, real gy)
     signal tabRequested(string tab)
-    signal listenAlongRequested()
-    signal coListenersRequested(real globalX, real globalY)
-    signal exitListeningAlongRequested()
-    signal sendChatMessageRequested(string messageText)
 
     readonly property var upNextTracks: {
         if (!root.currentTracks || root.currentTracks.length === 0) return [];
@@ -781,8 +775,7 @@ Item {
         }
 
         // =====================================================================
-        // LAYER D: BOTTOM DOCK, SimpMusic-style action row shared by both tabs:
-        // Lyrics | [ Listen Along · Listeners · Comment ] | Up Next
+        // LAYER D: BOTTOM DOCK, reserves the action row's space (Lyrics | Up Next) for the lyric canvas
         // =====================================================================
         Item {
             id: bottomDock
@@ -1657,16 +1650,10 @@ Item {
             NowPlayingActionRow {
                 id: actionRow
                 anchors.fill: parent
-                activeTab: root.activeTab === "queue" ? "up_next" : root.activeTab
+                activeTab: root.activeTab
                 accentColor: root.accentColor
-                listeningAlongFriend: root.listeningAlongFriend
-                activeCoListenersDetails: root.activeCoListenersDetails
                 onLyricsClicked: root.tabRequested("lyrics")
                 onQueueClicked: root.tabRequested(root.activeTab === "queue" ? "lyrics" : "queue")
-                onListenAlongClicked: root.listenAlongRequested()
-                onListenersClicked: (gx, gy) => root.coListenersRequested(gx, gy)
-                onLeaveListeningAlongClicked: root.exitListeningAlongRequested()
-                onSendChatMessage: text => root.sendChatMessageRequested(text)
             }
         }
     }
