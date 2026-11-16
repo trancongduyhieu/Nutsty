@@ -802,14 +802,25 @@ def run_daemon():
     server.bind(SOCKET_PATH)
     server.listen(10)
     server.setblocking(False)
+    my_socket_id = _socket_identity()
 
     manager = DownloadManager()
     manager.emit_event({"event": "daemon_ready", "socket": SOCKET_PATH})
 
     read_sockets = [server]
+    last_owner_check = time.monotonic()
 
     try:
         while True:
+            # A newer daemon (app restart) rebinds the socket path; once this one has no
+            # downloads left it is unreachable, so it exits instead of idling forever
+            if time.monotonic() - last_owner_check > 5:
+                last_owner_check = time.monotonic()
+                if _socket_identity() != my_socket_id:
+                    with manager.lock:
+                        busy = bool(manager.active_downloads or manager.queue)
+                    if not busy:
+                        break
             readable, _, _ = select.select(read_sockets, [], [], 0.5)
             for s in readable:
                 if s is server:
@@ -884,11 +895,19 @@ def run_daemon():
         pass
     finally:
         server.close()
-        if os.path.exists(SOCKET_PATH):
+        if my_socket_id is not None and _socket_identity() == my_socket_id:
             try:
                 os.remove(SOCKET_PATH)
             except Exception:
                 pass
+
+
+def _socket_identity():
+    try:
+        st = os.stat(SOCKET_PATH)
+        return (st.st_dev, st.st_ino)
+    except OSError:
+        return None
 
 def client_enqueue(video_id, title="Track", artist="Artist", thumbnail="", quality=None):
     """CLI client helper to enqueue a download"""
