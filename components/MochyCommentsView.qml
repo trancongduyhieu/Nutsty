@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import "."
 
@@ -15,6 +16,9 @@ Item {
     property bool active: false
     // Space kept free at the bottom for the Mochy action row
     property real bottomInset: 0
+    // Composer insets and radius, concentric with the panel like the tab bar below it
+    property real sideInset: 8
+    property real cornerRadius: 16
 
     signal closeRequested()
 
@@ -325,7 +329,7 @@ Item {
                 text: root.countText
                 font.family: Theme.fontFamily
                 font.pixelSize: 13
-                color: Qt.rgba(1, 1, 1, 0.55)
+                color: Qt.rgba(1, 1, 1, 0.72)
             }
         }
 
@@ -376,6 +380,14 @@ Item {
         boundsBehavior: Flickable.StopAtBounds
         model: commentModel
         visible: commentModel.count > 0
+        layer.enabled: visible && root.active
+        layer.effect: MultiEffect {
+            maskEnabled: true
+            maskSource: commentEdgeMask
+            maskThresholdMin: 0.5
+            maskSpreadAtMin: 1.0
+            autoPaddingEnabled: false
+        }
 
         onContentYChanged: {
             if (contentHeight - (contentY + height) < 600) root.loadMore();
@@ -408,6 +420,12 @@ Item {
             onLikeRequested: root.toggleLike(commentDelegate.index)
             onMoreRepliesRequested: root.loadMoreReplies(commentDelegate.index)
         }
+    }
+
+    ScrollEdgeMask {
+        id: commentEdgeMask
+        anchors.fill: commentList
+        flickable: commentList
     }
 
     // Loading / empty / error states
@@ -444,14 +462,16 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        anchors.leftMargin: 16
-        anchors.rightMargin: 16
+        anchors.leftMargin: root.sideInset
+        anchors.rightMargin: root.sideInset
         anchors.bottomMargin: root.bottomInset
         height: composerCol.implicitHeight + 16
-        radius: 18
-        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
+        radius: root.cornerRadius
+        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.08)
         border.width: 1
-        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, commentInput.activeFocus ? 0.55 : 0.25)
+        // Accent only while typing; at rest the field stays a quiet hairline
+        border.color: commentInput.activeFocus ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.55)
+                                               : Qt.rgba(1, 1, 1, 0.12)
         Behavior on border.color { ColorAnimation { duration: 140 } }
 
         ColumnLayout {
@@ -472,7 +492,7 @@ Item {
                     Layout.fillWidth: true
                     text: root.sendError !== "" ? root.sendError
                         : I18n.tr("Đang trả lời ", "Replying to ") + root.replyAuthor
-                    color: root.sendError !== "" ? Qt.rgba(0.96, 0.45, 0.55, 1) : Qt.rgba(1, 1, 1, 0.65)
+                    color: root.sendError !== "" ? Qt.rgba(0.96, 0.45, 0.55, 1) : Qt.rgba(1, 1, 1, 0.75)
                     font.family: Theme.fontFamily
                     font.pixelSize: 11
                     elide: Text.ElideRight
@@ -519,7 +539,7 @@ Item {
                         verticalAlignment: Text.AlignVCenter
                         text: root.replyCid !== "" ? I18n.tr("Viết phản hồi...", "Write a reply...")
                                                    : I18n.tr("Viết bình luận...", "Add a comment...")
-                        color: Qt.rgba(1, 1, 1, 0.45)
+                        color: Qt.rgba(1, 1, 1, 0.55)
                         font: commentInput.font
                         visible: !commentInput.text && !commentInput.inputMethodComposing
                     }

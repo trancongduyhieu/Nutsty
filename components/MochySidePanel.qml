@@ -25,6 +25,10 @@ Item {
     property int panelStyle: 1 // 1: Flush Split-Rail, 2: Bento Glass Island
     property string activeTab: "lyrics" // "lyrics" | "queue" | "comments"
     property bool isLoggedIn: false
+    // Corner radius declared once; everything nested derives from it (R_inner = R_outer - inset)
+    readonly property real panelRadius: 24
+    readonly property real dockInset: 8
+    readonly property bool isListTab: root.activeTab === "queue" || root.activeTab === "comments"
     property var currentTracks: []
     property real layoutDependency: 0.0 // Driven by host slide progress so LiquidGlass re-samples its backdrop offset
     readonly property real targetPanelWidth: Math.max(380, Math.min(460, Math.round((parent ? parent.width : 1200) * 0.34)))
@@ -394,10 +398,10 @@ Item {
         layer.smooth: true
         Rectangle {
             anchors.fill: parent
-            topLeftRadius: root.panelStyle === 1 ? 0 : 20
-            bottomLeftRadius: root.panelStyle === 1 ? 0 : 20
-            topRightRadius: 20
-            bottomRightRadius: 20
+            topLeftRadius: root.panelStyle === 1 ? 0 : root.panelRadius
+            bottomLeftRadius: root.panelStyle === 1 ? 0 : root.panelRadius
+            topRightRadius: root.panelRadius
+            bottomRightRadius: root.panelRadius
             color: "#ffffff"
         }
     }
@@ -428,7 +432,7 @@ Item {
         visible: root.isPanelRenderable && root.panelStyle === 2
         anchors.fill: parent
         anchors.margins: -4
-        radius: 24
+        radius: root.panelRadius + 4
         color: Qt.rgba(0, 0, 0, 0.48)
         z: -1
         layer.enabled: root.isPanelRenderable && root.panelStyle === 2
@@ -461,29 +465,13 @@ Item {
             id: backdropWrapper
             anchors.fill: parent
 
-            // Base deep dark tone (fallback only when the shared liquid backdrop is off)
+            // Base deep dark tone, shown through when there is no cover
             Rectangle {
                 anchors.fill: parent
-                visible: root.activeTab === "lyrics" || !panelLiquidBackdrop.visible
                 color: root.panelStyle === 1 ? "#0e0f14" : "#0a0b10"
             }
 
-            // Queue Mode: Seamless Frosted Continuation of the animated Home liquid backdrop (0 duplicate textures)
-            LiquidGlass {
-                id: panelLiquidBackdrop
-                anchors.fill: parent
-                visible: (root.activeTab === "queue" || root.activeTab === "comments") && root.isPanelRenderable
-                extraDependency: root.layoutDependency
-                backgroundSourceItem: root.backgroundSourceItem
-                radius: root.panelStyle === 1 ? 0 : 20
-                displacement: 12.0
-                bevelWidth: 16.0
-                blurRadius: 0.85
-                tintColor: Qt.rgba(0.06, 0.07, 0.10, 0.74)
-                isFlowActive: false
-            }
-
-            // 2. Lyrics Mode: Expressive Blurred Artwork Backdrop
+            // Blurred artwork: the one material behind every tab
             Image {
                 id: backdropImage
                 sourceSize: Qt.size(256, 256)
@@ -492,15 +480,15 @@ Item {
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
                 cache: true
-                layer.enabled: root.isPanelRenderable && root.activeTab === "lyrics"
+                layer.enabled: root.isPanelRenderable
                 visible: false
             }
 
             MultiEffect {
                 anchors.fill: parent
                 source: backdropImage
-                visible: root.isPanelRenderable && root.activeTab === "lyrics"
-                blurEnabled: root.isPanelRenderable && root.activeTab === "lyrics"
+                visible: root.isPanelRenderable
+                blurEnabled: root.isPanelRenderable
                 blur: 1.0
                 blurMax: 64
                 saturation: 1.35
@@ -508,16 +496,24 @@ Item {
                 contrast: 0.10
             }
 
-            // Lyrics Mode Scrim Overlay
+            // Scrim shared by every tab, so switching tabs never swaps the material underneath
             Rectangle {
                 anchors.fill: parent
-                visible: root.activeTab === "lyrics"
                 gradient: Gradient {
                     GradientStop { position: 0.0; color: Qt.rgba(0.06, 0.06, 0.08, 0.20) }
                     GradientStop { position: 0.40; color: Qt.rgba(0.06, 0.06, 0.08, 0.55) }
                     GradientStop { position: 0.75; color: Qt.rgba(0.06, 0.06, 0.08, 0.82) }
                     GradientStop { position: 1.0; color: Qt.rgba(0.06, 0.06, 0.08, 0.94) }
                 }
+            }
+
+            // Same material, just denser where text needs to stay readable (queue, comments)
+            Rectangle {
+                anchors.fill: parent
+                color: Qt.rgba(0.05, 0.05, 0.07, 0.50)
+                opacity: root.isListTab ? 1.0 : 0.0
+                visible: opacity > 0.01
+                Behavior on opacity { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
             }
         }
 
@@ -783,9 +779,9 @@ Item {
             anchors.left: parent.left
             anchors.bottom: parent.bottom
             anchors.right: parent.right
-            anchors.leftMargin: 24
-            anchors.rightMargin: 24
-            anchors.bottomMargin: 20
+            anchors.leftMargin: root.dockInset
+            anchors.rightMargin: root.dockInset
+            anchors.bottomMargin: root.dockInset
             height: actionDock.height
             z: 10
 
@@ -1280,8 +1276,8 @@ Item {
                     Rectangle {
                         anchors.fill: parent
                         radius: 15
-                        color: qCloseH.hovered ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.06)
-                        border.color: Qt.rgba(1, 1, 1, 0.12)
+                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, qCloseH.hovered ? 0.28 : 0.14)
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.30)
                         border.width: 1
                         Behavior on color { ColorAnimation { duration: 120 } }
 
@@ -1311,11 +1307,19 @@ Item {
                 anchors.topMargin: 8
                 anchors.leftMargin: 12
                 anchors.rightMargin: 12
-                anchors.bottomMargin: actionDock.height + actionDock.anchors.bottomMargin + 12
+                anchors.bottomMargin: actionDock.height + actionDock.anchors.bottomMargin + root.dockInset
                 clip: true
                 spacing: 4
                 boundsBehavior: Flickable.StopAtBounds
                 model: root.upNextTracks
+                layer.enabled: root.isPanelRenderable && root.activeTab === "queue"
+                layer.effect: MultiEffect {
+                    maskEnabled: true
+                    maskSource: queueEdgeMask
+                    maskThresholdMin: 0.5
+                    maskSpreadAtMin: 1.0
+                    autoPaddingEnabled: false
+                }
 
                 header: Column {
                     width: queueListView.width
@@ -1343,7 +1347,7 @@ Item {
 
                         Rectangle {
                             anchors.fill: parent
-                            radius: 10
+                            radius: 12
                             color: Qt.rgba(1, 1, 1, 0.04)
                             border.color: curCardHover.hovered 
                                 ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45) 
@@ -1419,7 +1423,7 @@ Item {
                                     text: root.currentTrack ? (root.currentTrack.artist || root.currentTrack.artists || "Unknown Artist") : ""
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 11
-                                    color: Qt.rgba(1, 1, 1, 0.65)
+                                    color: Qt.rgba(1, 1, 1, 0.75)
                                     elide: Text.ElideRight
                                 }
                             }
@@ -1442,7 +1446,7 @@ Item {
                                     anchors.centerIn: parent
                                     source: "../assets/icons/view-more-symbolic.svg"
                                     iconSize: 18
-                                    color: curMoreH.hovered ? "#ffffff" : Qt.rgba(1, 1, 1, 0.65)
+                                    color: curMoreH.hovered ? "#ffffff" : Qt.rgba(1, 1, 1, 0.75)
                                     Behavior on color { ColorAnimation { duration: 120 } }
                                 }
 
@@ -1485,7 +1489,7 @@ Item {
                             font.pixelSize: 11
                             font.bold: true
                             font.letterSpacing: 0.8
-                            color: Qt.rgba(1, 1, 1, 0.50)
+                            color: Qt.rgba(1, 1, 1, 0.72)
                         }
                     }
                 }
@@ -1500,8 +1504,8 @@ Item {
 
                     Rectangle {
                         anchors.fill: parent
-                        radius: 8
-                        color: rowHover.hovered ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
+                        radius: 12
+                        color: rowHover.hovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.08) : "transparent"
                         Behavior on color { ColorAnimation { duration: 120 } }
                     }
 
@@ -1556,7 +1560,7 @@ Item {
                                 text: queueItem.modelData ? (queueItem.modelData.artist || queueItem.modelData.artists || "Unknown Artist") : ""
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 11
-                                color: Qt.rgba(1, 1, 1, 0.50)
+                                color: Qt.rgba(1, 1, 1, 0.72)
                                 elide: Text.ElideRight
                             }
                         }
@@ -1579,7 +1583,7 @@ Item {
                                 anchors.centerIn: parent
                                 source: "../assets/icons/view-more-symbolic.svg"
                                 iconSize: 18
-                                color: moreHover.hovered ? "#ffffff" : Qt.rgba(1, 1, 1, 0.65)
+                                color: moreHover.hovered ? "#ffffff" : Qt.rgba(1, 1, 1, 0.75)
                                 Behavior on color { ColorAnimation { duration: 120 } }
                             }
 
@@ -1617,6 +1621,12 @@ Item {
                 }
             }
 
+            ScrollEdgeMask {
+                id: queueEdgeMask
+                anchors.fill: queueListView
+                flickable: queueListView
+            }
+
             // Empty State
             Item {
                 anchors.centerIn: parent
@@ -1650,7 +1660,9 @@ Item {
             accentColor: root.accentColor
             isLoggedIn: root.isLoggedIn
             active: root.activeTab === "comments" && root.isPanelRenderable
-            bottomInset: actionDock.height + actionDock.anchors.bottomMargin + 12
+            bottomInset: actionDock.height + actionDock.anchors.bottomMargin + root.dockInset
+            sideInset: root.dockInset
+            cornerRadius: root.panelRadius - root.dockInset
             onCloseRequested: root.closeRequested()
         }
 
@@ -1661,9 +1673,9 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            anchors.leftMargin: 24
-            anchors.rightMargin: 24
-            anchors.bottomMargin: 20
+            anchors.leftMargin: root.dockInset
+            anchors.rightMargin: root.dockInset
+            anchors.bottomMargin: root.dockInset
             height: actionRow.implicitHeight
             z: 30
 
@@ -1672,6 +1684,7 @@ Item {
                 anchors.fill: parent
                 activeTab: root.activeTab
                 accentColor: root.accentColor
+                radius: root.panelRadius - root.dockInset
                 onLyricsClicked: root.tabRequested("lyrics")
                 onCommentsClicked: root.tabRequested(root.activeTab === "comments" ? "lyrics" : "comments")
                 onQueueClicked: root.tabRequested(root.activeTab === "queue" ? "lyrics" : "queue")
@@ -1709,8 +1722,10 @@ Item {
         anchors.fill: parent
         z: 100
         accentColor: root.accentColor
-        topLeftRadius: root.panelStyle === 1 ? 0 : 20
-        bottomLeftRadius: root.panelStyle === 1 ? 0 : 20
+        topLeftRadius: root.panelStyle === 1 ? 0 : root.panelRadius
+        bottomLeftRadius: root.panelStyle === 1 ? 0 : root.panelRadius
+        topRightRadius: root.panelRadius
+        bottomRightRadius: root.panelRadius
         borderWidth: root.panelStyle === 1 ? 1 : 1.2
     }
 }

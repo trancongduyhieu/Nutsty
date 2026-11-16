@@ -66,7 +66,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         anchors.leftMargin: row.indent
-        radius: 14
+        radius: 12
         visible: !row.isMore
         color: Qt.rgba(row.accentColor.r, row.accentColor.g, row.accentColor.b,
                        row.replyTargeted ? 0.14 : (rowHover.hovered ? 0.08 : 0.0))
@@ -88,7 +88,7 @@ Item {
         anchors.leftMargin: row.indent + 8
         anchors.verticalCenter: parent.verticalCenter
         text: I18n.tr("Xem thêm phản hồi", "Show more replies")
-        color: row.accentColor
+        color: "#ffffff"
         font.family: Theme.fontFamily
         font.pixelSize: 12
         font.bold: true
@@ -135,11 +135,11 @@ Item {
                 AppIcon {
                     source: "../assets/icons/material/ms-push_pin.svg"
                     iconSize: 11
-                    color: Qt.rgba(1, 1, 1, 0.6)
+                    color: Qt.rgba(1, 1, 1, 0.75)
                 }
                 Text {
                     text: I18n.tr("Đã ghim", "Pinned")
-                    color: Qt.rgba(1, 1, 1, 0.6)
+                    color: Qt.rgba(1, 1, 1, 0.75)
                     font.family: Theme.fontFamily
                     font.pixelSize: 11
                 }
@@ -155,7 +155,7 @@ Item {
                     Layout.preferredWidth: authorText.implicitWidth + (row.isCreator ? 14 : 0)
                     Layout.preferredHeight: authorText.implicitHeight + (row.isCreator ? 4 : 0)
                     radius: height / 2
-                    color: row.isCreator ? Qt.rgba(row.accentColor.r, row.accentColor.g, row.accentColor.b, 0.28) : "transparent"
+                    color: row.isCreator ? Qt.rgba(1, 1, 1, 0.16) : "transparent"
                     Text {
                         id: authorText
                         anchors.centerIn: parent
@@ -171,7 +171,7 @@ Item {
                 Text {
                     Layout.fillWidth: true
                     text: row.relTime(row.published)
-                    color: Qt.rgba(1, 1, 1, 0.5)
+                    color: Qt.rgba(1, 1, 1, 0.72)
                     font.family: Theme.fontFamily
                     font.pixelSize: 11
                     elide: Text.ElideRight
@@ -211,13 +211,13 @@ Item {
                             anchors.verticalCenter: parent.verticalCenter
                             source: row.liked ? "../assets/icons/material/ms-thumb_up-fill.svg" : "../assets/icons/material/ms-thumb_up.svg"
                             iconSize: 13
-                            color: row.liked ? row.accentColor : (likeMouse.containsMouse ? "#ffffff" : Qt.rgba(1, 1, 1, 0.6))
+                            color: row.liked ? row.accentColor : (likeMouse.containsMouse ? "#ffffff" : Qt.rgba(1, 1, 1, 0.75))
                         }
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             visible: likeBox.count !== "" && likeBox.count !== "0"
                             text: likeBox.count
-                            color: row.liked ? row.accentColor : Qt.rgba(1, 1, 1, 0.6)
+                            color: row.liked ? row.accentColor : Qt.rgba(1, 1, 1, 0.75)
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                         }
@@ -243,7 +243,7 @@ Item {
                 Text {
                     visible: row.canReply && (row.replyParams !== "" || row.isReply)
                     text: I18n.tr("Trả lời", "Reply")
-                    color: replyMouse.containsMouse ? row.accentColor : Qt.rgba(1, 1, 1, 0.7)
+                    color: replyMouse.containsMouse ? row.accentColor : Qt.rgba(1, 1, 1, 0.8)
                     font.family: Theme.fontFamily
                     font.pixelSize: 11
                     font.bold: true
@@ -264,7 +264,7 @@ Item {
                     spacing: 4
                     Text {
                         text: row.expanded ? I18n.tr("Ẩn phản hồi", "Hide replies") : row.repliesText(row.repliesLabel)
-                        color: row.accentColor
+                        color: "#ffffff"
                         font.family: Theme.fontFamily
                         font.pixelSize: 11
                         font.bold: true
@@ -273,7 +273,7 @@ Item {
                         visible: row.busy
                         size: 12
                         strokeWidth: 1.6
-                        color: row.accentColor
+                        color: "#ffffff"
                         running: visible
                     }
                 }

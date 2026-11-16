@@ -10,12 +10,15 @@ Item {
     property bool toggle: false
     property real size: 40
     property real iconScale: 0.6
+    // Plain: no hover circle and no "on" dot, for hosts that draw their own selection
+    property bool plain: false
     signal clicked()
     width: size; height: size
 
     Rectangle {
         anchors.fill: parent
         radius: width / 2
+        visible: !cb.plain
         color: Qt.rgba(1, 1, 1, cbMouse.pressed ? 0.16 : (cbH.hovered ? 0.09 : 0.0))
         Behavior on color { ColorAnimation { duration: 120 } }
     }
@@ -34,7 +37,7 @@ Item {
         Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutQuad } }
     }
     Rectangle {
-        visible: cb.toggle
+        visible: cb.toggle && !cb.plain
         opacity: cb.on ? 1 : 0
         width: 4; height: 4; radius: 2
         color: "#ffffff"
