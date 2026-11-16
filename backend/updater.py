@@ -77,11 +77,11 @@ def check_for_updates(force=False, mock=False):
         return {
             "has_update": True,
             "current_version": current_ver,
-            "latest_version": "v1.0.7",
-            "release_name": "Nutsty v1.0.7 (Kính lỏng SimpMusic, Quầng sáng nam châm & Âm lượng dọc)",
+            "latest_version": "v2.0.0",
+            "release_name": "Nutsty v2.0.0",
             "changelog": "- Thanh phát nhạc kính lỏng viên nhộng: Thiết kế thanh điều khiển nổi dạng viên nhộng trong suốt hiện đại, làm mờ êm ái hình ảnh bên dưới giúp tên bài hát và ca sĩ luôn nổi bật, dễ nhìn.\n- Quầng sáng tỏa lan khi giữ chuột: Khi bạn nhấn giữ vào thanh phát nhạc, thanh sẽ phóng to nhẹ nhàng và tỏa ra vầng sáng nam châm mềm mại bám theo con trỏ chuột.\n- Thanh trượt âm lượng dạng dọc: Bấm vào biểu tượng loa để mở thanh điều chỉnh âm lượng dọc nhỏ gọn, hỗ trợ bấm chọn mức âm lượng tức thì hoặc lăn con lăn chuột cực kỳ thuận tiện.\n- Hàng đợi bài hát tiếp theo: Bấm biểu tượng danh sách cạnh nút Thích để mở nhanh danh sách các bài hát chuẩn bị phát.\n- Nút Thích và Đóng tiện lợi: Trái tim đổi sang màu đỏ rực rỡ khi bạn yêu thích bài hát; nút [✕] giúp dừng phát và làm gọn thanh phát nhạc khi cần.",
             "release_url": "https://github.com/trancongduyhieu/Nutsty/releases",
-            "download_url": "https://github.com/trancongduyhieu/Nutsty/releases/download/v1.0.7/Nutsty_Windows_Portable.zip",
+            "download_url": "https://github.com/trancongduyhieu/Nutsty/releases/download/v2.0.0/Nutsty_Windows_Portable.zip",
             "checked_at": int(time.time())
         }
 

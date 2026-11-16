@@ -2,7 +2,7 @@
 
 Tất cả các tính năng mới và cải tiến của Nutsty được lưu trữ tại đây.
 
-## [1.0.7] - 2026-11-15
+## [2.0.0] - 2026-11-16
 
 ### Added
 - **Mời bạn bè nghe cùng**: Khi đang nghe nhạc, mở danh sách người nghe cùng trên thanh phát nhạc và chọn "Mời thêm bạn bè", hoặc bấm "Mời nghe cùng" trong ghi chú của bạn bè. Người được mời thấy một thông báo kèm bìa đĩa, tên bài và ảnh đại diện của bạn, chỉ cần bấm "Nghe cùng" là vào phát cùng lúc, hoặc "Để sau" để bỏ qua. Lời mời hết hạn sau 2 phút, mỗi người chỉ được mời lại sau 30 giây, và nếu người nhận đang nghe cùng ai khác thì thông báo sẽ nhắc rằng nhận lời sẽ rời phiên hiện tại.
@@ -70,6 +70,7 @@ Tất cả các tính năng mới và cải tiến của Nutsty được lưu tr
 - **Phân tách hoàn hảo cử chỉ Nhấn giữ (Hold) và Nhấp nhanh (Click) trên thanh phát nhạc**: Khôi phục trọn vẹn khả năng nhấn giữ chuột trái ở bất kỳ đâu trên thanh phát nhạc để kích hoạt hiệu ứng quầng sáng Spotlight rực rỡ và phóng to nhẹ theo con trỏ chuột mà không bị kẹt bởi tiêu đề hay tên nghệ sĩ. Thao tác nhấp chuột nhanh sẽ mở/đóng bảng áp phích cạnh bên dứt khoát, và khi buông chuột sau khi nhấn giữ ngắm Spotlight thì thanh nhạc tự động thu về êm đềm mà không làm gián đoạn hay đóng/mở bảng áp phích ngoài ý muốn.
 
 ### Fixed
+- **Không còn ngốn CPU trên máy không có card đồ họa**: Trên máy ảo hoặc máy chưa cài driver card màn hình, mở Nutsty lên và phát nhạc từng chiếm tới 70-90% CPU. Giờ ứng dụng tự nhận ra và chuyển sang chế độ nhẹ: nền ảnh bìa đứng yên thay vì chuyển động, sóng âm cạnh ảnh bạn bè đứng yên, thanh thời gian cập nhật thưa hơn. CPU chỉ còn khoảng 9%. Máy có card đồ họa bình thường vẫn giữ nguyên mọi hiệu ứng.
 - **Nghe cùng không còn nhận lệnh lạ**: Sau khi rời phòng nghe cùng, đôi khi bạn vẫn bị coi là người nghe của chính chủ phòng cũ, và chủ phòng lại nhảy theo khi bạn tua bài. Giờ chỉ người đang thật sự ở trong phòng mới điều khiển được bài hát.
 - **Tự dọn người nghe đã thoát**: Khi bạn bè tắt ứng dụng hoặc mất mạng mà không bấm rời phòng, khoảng nửa phút sau họ tự biến khỏi danh sách người nghe cùng kèm một thông báo nhỏ, thanh phát nhạc thu gọn lại như cũ.
 - **Mở hai tài khoản cùng lúc trên một máy**: Cửa sổ thứ hai giờ phát đúng nhạc của chính tài khoản đó thay vì hiện bài của cửa sổ kia, và không còn bị bật trùng hai trình phát nhạc. Đóng một cửa sổ cũng không làm cửa sổ còn lại mất kết nối nữa.
