@@ -24,10 +24,29 @@ Item {
     property Item backgroundSourceItem: null
     property real targetX: 0
     property real targetY: 0
+    // Friends to offer in the invite list (win.mergedFriendsList) and whether inviting is possible now
+    property var friends: []
+    property bool canInvite: false
+    property bool inviteExpanded: false
+    property var invitedKeys: ({})
+
+    readonly property var inviteCandidates: {
+        var taken = {};
+        (root.listeners || []).forEach(function(l) {
+            [l.email, l.tag, l.user_id, l.id].forEach(function(k) { if (k) taken[String(k).toLowerCase()] = true; });
+        });
+        var out = (root.friends || []).filter(function(f) {
+            var keys = [f.tag, f.user_email, f.email, f.user_id, f.id].filter(function(k) { return k; });
+            return keys.length > 0 && !keys.some(function(k) { return taken[String(k).toLowerCase()]; });
+        });
+        out.sort(function(a, b) { return (b.is_online ? 1 : 0) - (a.is_online ? 1 : 0); });
+        return out;
+    }
 
     signal stopAllRequested()
     signal kickRequested(string email, string name)
     signal toggleAllowControlRequested(bool allowed)
+    signal inviteRequested(var friend)
 
     Timer {
         id: closeTimer
@@ -39,6 +58,11 @@ Item {
     function openAt(listenersList, xPos, yPos) {
         closeTimer.stop();
         root.closingGuard = false;
+        // Live refreshes while open (someone joined or left) keep the invite list as it is
+        if (!root.isOpen) {
+            root.inviteExpanded = false;
+            root.invitedKeys = ({});
+        }
         root.listeners = listenersList || [];
         if (xPos !== undefined && xPos > 0) root.targetX = xPos;
         else root.targetX = root.width - 240;
@@ -75,7 +99,8 @@ Item {
     Item {
         id: cardWrapper
         width: 276
-        height: Math.min(360, col.implicitHeight + 24)
+        height: Math.min(440, col.implicitHeight + 24)
+        Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
 
         // Clamping within window
         x: Math.max(16, Math.min(root.targetX - width / 2, root.width - width - 16))
@@ -362,6 +387,169 @@ Item {
                     fadeLength: 20
                 }
 
+                // Invite more friends: expands a list of friends not yet in the session
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 34
+                    visible: root.canInvite
+                    radius: 8
+                    color: inviteHeaderMouse.containsMouse || root.inviteExpanded
+                           ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
+                           : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.10)
+                    Behavior on color { ColorAnimation { duration: 120 } }
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 10
+                        spacing: 8
+
+                        AppIcon {
+                            source: "../assets/icons/system-users-symbolic.svg"
+                            iconSize: 13
+                            color: root.accentColor
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: I18n.tr("Mời thêm bạn bè", "Invite friends")
+                            color: "#ffffff"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            font.weight: Font.DemiBold
+                            elide: Text.ElideRight
+                        }
+
+                        AppIcon {
+                            source: "../assets/icons/go-next-symbolic.svg"
+                            iconSize: 11
+                            color: Qt.rgba(1, 1, 1, 0.70)
+                            rotation: root.inviteExpanded ? 90 : 0
+                            Behavior on rotation { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                        }
+                    }
+
+                    MouseArea {
+                        id: inviteHeaderMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.inviteExpanded = !root.inviteExpanded
+                    }
+                }
+
+                ListView {
+                    id: inviteList
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: root.inviteExpanded && root.canInvite ? Math.max(36, Math.min(150, count * 38)) : 0
+                    visible: Layout.preferredHeight > 0
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+                    model: root.inviteExpanded ? root.inviteCandidates : []
+
+                    delegate: Item {
+                        id: inviteRow
+                        required property var modelData
+                        readonly property string key: String(modelData.tag || modelData.user_id || modelData.user_email || modelData.email || "").toLowerCase()
+                        readonly property bool invited: Boolean(root.invitedKeys[key])
+                        width: inviteList.width
+                        height: 38
+                        opacity: modelData.is_online ? 1.0 : 0.6
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 4
+                            anchors.rightMargin: 4
+                            spacing: 10
+
+                            RoundedImage {
+                                Layout.preferredWidth: 26
+                                Layout.preferredHeight: 26
+                                radius: 13
+                                source: inviteRow.modelData.avatar_url || inviteRow.modelData.avatar || ""
+                                borderColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, inviteRow.modelData.is_online ? 0.70 : 0.25)
+                                borderWidth: 1
+                                fallbackIcon: "../assets/icons/system-users-symbolic.svg"
+                                placeholderColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 0
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: inviteRow.modelData.user_name || inviteRow.modelData.name || I18n.tr("Bạn bè", "Friend")
+                                    color: "#ffffff"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    font.weight: Font.Medium
+                                    elide: Text.ElideRight
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: inviteRow.modelData.is_online ? I18n.tr("Đang trực tuyến", "Online") : I18n.tr("Ngoại tuyến", "Offline")
+                                    color: inviteRow.modelData.is_online ? root.accentColor : "#a1a1aa"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 9
+                                    elide: Text.ElideRight
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.preferredWidth: inviteBtnText.implicitWidth + 20
+                                Layout.preferredHeight: 24
+                                radius: 8
+                                color: inviteRow.invited
+                                       ? "transparent"
+                                       : (inviteBtnMouse.containsMouse
+                                          ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.36)
+                                          : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18))
+                                border.width: 1
+                                border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, inviteRow.invited ? 0.25 : 0.45)
+                                Behavior on color { ColorAnimation { duration: 120 } }
+
+                                Text {
+                                    id: inviteBtnText
+                                    anchors.centerIn: parent
+                                    text: inviteRow.invited ? I18n.tr("Đã mời", "Invited") : I18n.tr("Mời", "Invite")
+                                    color: inviteRow.invited ? root.accentColor : "#ffffff"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 10
+                                    font.weight: Font.DemiBold
+                                }
+
+                                MouseArea {
+                                    id: inviteBtnMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    enabled: !inviteRow.invited
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        var next = Object.assign({}, root.invitedKeys);
+                                        next[inviteRow.key] = true;
+                                        root.invitedKeys = next;
+                                        root.inviteRequested(inviteRow.modelData);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        anchors.centerIn: parent
+                        visible: inviteList.count === 0
+                        text: I18n.tr("Bạn bè đều đang nghe cùng rồi", "All your friends are already here")
+                        color: "#a1a1aa"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 10
+                    }
+                }
+                ScrollEdgeFade {
+                    flickable: inviteList
+                    fadeLength: 16
+                }
             // Empty state if 0 listeners
             Item {
                 Layout.fillWidth: true

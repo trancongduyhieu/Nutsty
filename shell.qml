@@ -1665,6 +1665,16 @@ Scope {
         return SocialEngine.exitListeningAlong(win);
     }
 
+    // Host side: may invite while a track is loaded and this window is not following someone else
+    readonly property bool canInviteToListen: win.currentTrack !== null && win.currentTrack !== undefined && !win.listeningAlongFriend
+    function sendListenInvite(friend) {
+        return SocialEngine.sendListenInvite(win, friend);
+    }
+
+    function acceptListenInvite(invite) {
+        return SocialEngine.acceptListenInvite(win, invite);
+    }
+
     function stopAllCoListening() {
         return SocialEngine.stopAllCoListening(win);
     }
@@ -3601,6 +3611,9 @@ Scope {
                 onListenAlongRequested: friendData => {
                     win.startListeningAlong(friendData);
                 }
+                canInvite: win.canInviteToListen
+                myTrackTitle: win.currentTrack ? (win.currentTrack.title || win.currentTrack.name || "") : ""
+                onInviteRequested: friendData => win.sendListenInvite(friendData)
                 onPlayTrackRequested: trk => {
                     win.playOnlineTrack(trk, true);
                 }
@@ -3642,6 +3655,9 @@ Scope {
             onStopAllRequested: win.stopAllCoListening()
             onKickRequested: (kEmail, kName) => win.kickCoListener(kEmail, kName)
             onToggleAllowControlRequested: allowed => win.setAllowCoListenerControl(allowed)
+            friends: win.mergedFriendsList
+            canInvite: win.canInviteToListen
+            onInviteRequested: friend => win.sendListenInvite(friend)
         }
 
         FriendRequestsPopover {
@@ -3709,6 +3725,15 @@ Scope {
                 win.appendTrackToQueue(trk);
                 win.showToast(I18n.tr("Đã thêm vào hàng đợi", "Added to queue"));
             }
+        }
+
+        ListenInviteToast {
+            id: listenInviteToast
+            anchors.top: parent.top
+            anchors.topMargin: suggestTrackToast.isShown ? 140 : 20
+            anchors.horizontalCenter: parent.horizontalCenter
+            accentColor: win.accentColor
+            onAcceptRequested: inv => win.acceptListenInvite(inv)
         }
 
         FloatingChatBubble {
@@ -5071,6 +5096,18 @@ Scope {
         }
 
         function testPostNote(text: string) { win.postDailyNote(text, null); }
+        function testInviteFriend(name: string): string {
+            var f = (win.mergedFriendsList || []).find(x => [x.user_name, x.name, x.tag, x.user_email].some(v => v && String(v).toLowerCase() === name.toLowerCase()));
+            return f ? String(win.sendListenInvite(f)) : "not found";
+        }
+        function testAcceptInvite(): string {
+            if (!listenInviteToast.isShown) return "no invite";
+            listenInviteToast.accept();
+            return "accepted";
+        }
+        function getInviteToast(): string {
+            return JSON.stringify({ shown: listenInviteToast.isShown, from: listenInviteToast.senderName, track: listenInviteToast.track ? listenInviteToast.track.title : null, leaves: listenInviteToast.leavesCurrentSession });
+        }
         function testDeleteNote() { win.deleteMyNote(); }
         function getSocialState(): string {
             var f = win.listeningAlongFriend;

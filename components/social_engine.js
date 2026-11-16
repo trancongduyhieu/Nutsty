@@ -762,6 +762,8 @@ function pollSocialEventsFast(win) {
                                 }
                                 suggestTrackToast.showSuggestion(sFrom, sAvatar, ev.data.track);
                             }
+                        } else if (ev.event === "listen_invite") {
+                            handleListenInvite(win, ev);
                         } else if (ev.event === "chat_message") {
                             var cFrom = ev.from_name || I18n.tr("Bạn bè", "Friend");
                             var cAvatar = ev.from_avatar || "";
@@ -1104,6 +1106,100 @@ function startListeningAlong(win, friend) {
             win.sendSocialEventFast("join", joinTarget);
         }
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Listen-along invites: the host sends "listen_invite" with its current track; the friend gets a
+// toast and joins through the normal startListeningAlong path, so the host syncs it on "join".
+// ---------------------------------------------------------------------------------------------
+var INVITE_COOLDOWN_MS = 30000;
+var INVITE_MAX_AGE_SEC = 120;
+var _inviteSentAt = {};
+
+function _friendKey(f) {
+    return String((f && (f.tag || f.user_id || f.user_email || f.email)) || "").trim();
+}
+
+function canInviteToListen(win) {
+    return Boolean(win.currentTrack) && !win.listeningAlongFriend;
+}
+
+function sendListenInvite(win, friend) {
+    var target = _friendKey(friend);
+    var name = (friend && (friend.user_name || friend.name)) || I18n.tr("Bạn bè", "Friend");
+    if (!target) return false;
+    if (!canInviteToListen(win)) {
+        win.showToast(I18n.tr("Hãy phát một bài hát trước khi mời", "Play a track before inviting"));
+        return false;
+    }
+    var key = target.toLowerCase();
+    var now = Date.now();
+    if (_inviteSentAt[key] && now - _inviteSentAt[key] < INVITE_COOLDOWN_MS) {
+        win.showToast(I18n.tr("Vừa mời " + name + ", chờ một chút rồi mời lại nhé", "You just invited " + name + ", try again in a moment"));
+        return false;
+    }
+    _inviteSentAt[key] = now;
+    var t = win.currentTrack;
+    var vid = String(t.videoId || t.id || "").replace(/^yt_/, "");
+    var path = t.path || (vid ? ("ytdl://" + vid) : "");
+    win.sendSocialEventFast("listen_invite", target, {
+        track: {
+            title: t.title || t.name || "",
+            artist: t.artist || "",
+            cover: win.getTrackCoverUrl(t) || "",
+            videoId: vid,
+            path: path,
+            duration: win.totalDuration || t.duration || 0,
+            position: win.currentTime || 0,
+            timestamp: now / 1000.0,
+            is_playing: Boolean(win.isPlaying),
+            allow_control: Boolean(win.allowCoListenerControl)
+        }
+    });
+    win.showToast(I18n.tr("Đã mời " + name + " nghe cùng", "Invited " + name + " to listen along"));
+    return true;
+}
+
+function _sameSender(f, ev) {
+    if (!f) return false;
+    var keys = [ev.from_id, ev.from_email].map(function(k) { return String(k || "").trim().toLowerCase(); }).filter(function(k) { return k !== ""; });
+    var fk = [f.user_id, f.id, f.tag, f.user_email, f.email].map(function(k) { return String(k || "").trim().toLowerCase(); });
+    for (var i = 0; i < fk.length; i++) if (fk[i] && keys.indexOf(fk[i]) !== -1) return true;
+    return false;
+}
+
+function handleListenInvite(win, ev) {
+    var tsSec = Number(ev.timestamp || 0);
+    if (tsSec > 0 && Date.now() / 1000.0 - tsSec > INVITE_MAX_AGE_SEC) return;
+    if (win.listeningAlongFriend && _sameSender(win.listeningAlongFriend, ev)) return;
+    var friend = null;
+    var list = win.mergedFriendsList || [];
+    for (var i = 0; i < list.length; i++) {
+        if (_sameSender(list[i], ev)) { friend = list[i]; break; }
+    }
+    var trk = (ev.data && ev.data.track) ? ev.data.track : null;
+    var invite = {
+        user_id: ev.from_id || (friend ? friend.user_id : "") || "",
+        tag: ev.from_email || (friend ? (friend.tag || friend.user_email) : "") || "",
+        user_email: ev.from_email || (friend ? (friend.user_email || friend.tag) : "") || "",
+        user_name: ev.from_name || (friend ? friend.user_name : "") || I18n.tr("Bạn bè", "Friend"),
+        avatar_url: ev.from_avatar || (friend ? (friend.avatar_url || friend.avatar) : "") || "",
+        is_online: true,
+        now_playing: trk,
+        received_at: Date.now()
+    };
+    var busy = Boolean(win.listeningAlongFriend) || (win.activeCoListeners && win.activeCoListeners.length > 0);
+    listenInviteToast.showInvite(invite, busy);
+}
+
+function acceptListenInvite(win, invite) {
+    if (!invite) return;
+    // The track snapshot ages while the toast is open: startListeningAlong adds the elapsed time
+    if (win.listeningAlongFriend && !_sameSender(win.listeningAlongFriend, { from_id: invite.user_id, from_email: invite.tag })) {
+        exitListeningAlong(win);
+    }
+    if (win.activeCoListeners && win.activeCoListeners.length > 0) stopAllCoListening(win);
+    startListeningAlong(win, invite);
 }
 
 function exitListeningAlong(win) {

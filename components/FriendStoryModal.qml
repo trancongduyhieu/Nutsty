@@ -23,6 +23,10 @@ Item {
     property Item backgroundSourceItem: null
 
     signal listenAlongRequested(var friendData)
+    signal inviteRequested(var friendData)
+    // A track is loaded here and this window follows nobody: the friend can be invited to it
+    property bool canInvite: false
+    property string myTrackTitle: ""
     signal playTrackRequested(var track)
 
     readonly property var currentFriend: (friendsNotes && friendsNotes.length > currentIndex && currentIndex >= 0) ? friendsNotes[currentIndex] : null
@@ -711,6 +715,88 @@ Item {
                             if (f) {
                                 root.listenAlongRequested(f);
                             }
+                        }
+                    }
+                }
+
+                // FOOTER (alternative): the friend is not playing anything, so invite them to my track
+                Rectangle {
+                    id: inviteFriendBtn
+                    property bool sent: false
+                    readonly property bool shown: !liveListenBtn.isLiveActive && root.canInvite && root.currentFriend !== null
+                    visible: shown
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: shown ? 52 : 0
+                    radius: 12
+                    color: inviteFriendMouse.containsMouse && !sent
+                        ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
+                        : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.08)
+                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, inviteFriendMouse.containsMouse ? 0.50 : 0.25)
+                    border.width: 1
+                    Behavior on color { ColorAnimation { duration: 150 } }
+
+                    Connections {
+                        target: root
+                        function onCurrentFriendChanged() { inviteFriendBtn.sent = false; }
+                    }
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 14
+                        anchors.rightMargin: 14
+                        spacing: 10
+
+                        AppIcon {
+                            source: "../assets/icons/system-users-symbolic.svg"
+                            iconSize: 16
+                            color: root.accentColor
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 1
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: {
+                                    var uName = root.currentFriend ? (root.currentFriend.user_name || I18n.tr("Bạn bè", "Friend")) : I18n.tr("Bạn bè", "Friend");
+                                    return inviteFriendBtn.sent
+                                        ? I18n.tr("Đã mời " + uName + " nghe cùng", "Invited " + uName + " to listen along")
+                                        : I18n.tr("Mời " + uName + " nghe cùng", "Invite " + uName + " to listen along");
+                                }
+                                color: "#ffffff"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                font.weight: Font.DemiBold
+                                elide: Text.ElideRight
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: I18n.tr("Bài đang phát: " + root.myTrackTitle, "Now playing: " + root.myTrackTitle)
+                                color: Qt.rgba(1, 1, 1, 0.65)
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 10
+                                elide: Text.ElideRight
+                            }
+                        }
+
+                        AppIcon {
+                            source: inviteFriendBtn.sent ? "../assets/icons/emblem-ok-symbolic.svg" : "../assets/icons/go-next-symbolic.svg"
+                            iconSize: 13
+                            color: root.accentColor
+                        }
+                    }
+
+                    MouseArea {
+                        id: inviteFriendMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        enabled: !inviteFriendBtn.sent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            inviteFriendBtn.sent = true;
+                            root.inviteRequested(root.currentFriend);
                         }
                     }
                 }
