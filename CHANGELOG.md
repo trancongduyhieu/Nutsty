@@ -5,6 +5,7 @@ Tất cả các tính năng mới và cải tiến của Nutsty được lưu tr
 ## [2.0.0] - 2026-11-16
 
 ### Added
+- **Công tắc Chế độ nhẹ trong Cài đặt**: Vào Cài đặt, mục Tài khoản, chọn Chế độ nhẹ. Tự động (mặc định) chỉ bật khi máy không có card đồ họa, Bật dùng cho laptop yếu hay bị giật, Tắt luôn giữ đủ hiệu ứng. Khi bật, nền ảnh bìa và sóng âm đứng yên, mép danh sách không mờ dần và thanh thời gian cập nhật thưa hơn để máy chạy mượt và mát hơn.
 - **Mời bạn bè nghe cùng**: Khi đang nghe nhạc, mở danh sách người nghe cùng trên thanh phát nhạc và chọn "Mời thêm bạn bè", hoặc bấm "Mời nghe cùng" trong ghi chú của bạn bè. Người được mời thấy một thông báo kèm bìa đĩa, tên bài và ảnh đại diện của bạn, chỉ cần bấm "Nghe cùng" là vào phát cùng lúc, hoặc "Để sau" để bỏ qua. Lời mời hết hạn sau 2 phút, mỗi người chỉ được mời lại sau 30 giây, và nếu người nhận đang nghe cùng ai khác thì thông báo sẽ nhắc rằng nhận lời sẽ rời phiên hiện tại.
 - **Bình luận YouTube ngay trong bảng bên phải**: Nút mới ở giữa đáy bảng bên phải mở danh sách bình luận của bài đang nghe, kèm ảnh đại diện, thời gian, lượt thích và dấu bình luận đã ghim. Cuộn xuống để xem thêm, bấm vào một bình luận để xem các phản hồi. Khi đã đăng nhập Google, bạn có thể viết bình luận, trả lời người khác và bấm thích bình luận ngay tại đó.
 - **Bảng bên phải đóng lại mượt mà**: Khi đóng bảng ở mục Bình luận hoặc Phát tiếp theo, bảng giữ nguyên lớp kính mờ và màu sắc trong lúc trượt đi thay vì chuyển sang màu xám đen. Bảng cũng cao bằng khu vực nội dung bên trái để hai bên thẳng hàng.
