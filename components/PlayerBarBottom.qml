@@ -7,7 +7,7 @@ import "."
 
 Item {
     id: root
-    implicitWidth: isCoListeningActive ? 850 : 790
+    implicitWidth: 790 + coListenPill.targetWidth
     implicitHeight: 60
     height: 60
 
@@ -848,7 +848,7 @@ Item {
         // ---------------------------------------------------------------------
         Item {
             id: rightSectionBox
-            width: 200
+            width: 200 + coListenPill.width
             height: root.height
 
             Row {
@@ -968,6 +968,144 @@ Item {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.lyricsClicked()
+                    }
+                }
+
+                // Listen Along capsule (SimpMusic-style pill between Lyrics and Queue): slides open only while
+                // friends listen together, holding the floating chat and the listeners / leave controls.
+                Item {
+                    id: coListenPill
+                    readonly property bool isListener: root.listeningAlongFriend !== null && root.listeningAlongFriend !== undefined
+                    readonly property int listenerCount: root.activeCoListenersDetails ? root.activeCoListenersDetails.length : 0
+                    readonly property real targetWidth: root.isCoListeningActive ? pillRow.implicitWidth + 24 : 0
+                    width: targetWidth
+                    height: parent.height
+                    clip: true
+                    visible: width > 0.5
+                    opacity: root.isCoListeningActive ? 1.0 : 0.0
+                    Behavior on width { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                    Behavior on opacity { NumberAnimation { duration: 200 } }
+
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: pillRow.implicitWidth + 12
+                        height: 36
+                        radius: 18
+                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.14)
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.32)
+                        border.width: 1
+
+                        Row {
+                            id: pillRow
+                            anchors.centerIn: parent
+                            spacing: 2
+
+                            // Floating chat: friends see the message drift across their screen
+                            Rectangle {
+                                width: 30; height: 30; radius: 15
+                                color: root.isChatInputOpen ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.30) : (chatPillH.hovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) : "transparent")
+                                HoverHandler { id: chatPillH }
+                                AppIcon {
+                                    anchors.centerIn: parent
+                                    source: "../assets/icons/chat-message-new-symbolic.svg"
+                                    iconSize: 16
+                                    color: root.isChatInputOpen ? root.accentColor : "#ffffff"
+                                }
+                                ToolTip.visible: chatPillH.hovered
+                                ToolTip.text: I18n.tr("Gửi bình luận bay", "Send a floating comment")
+                                ToolTip.delay: 350
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root.isChatInputOpen = !root.isChatInputOpen;
+                                        if (root.isChatInputOpen) chatTextInput.forceActiveFocus();
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                width: 1; height: 16
+                                anchors.verticalCenter: parent.verticalCenter
+                                color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                            }
+
+                            // Host side: manage who is listening (switch track permission, remove)
+                            Rectangle {
+                                id: listenersPillBtn
+                                visible: !coListenPill.isListener
+                                width: listenersRow.implicitWidth + 14; height: 30; radius: 15
+                                color: listenersPillH.hovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) : "transparent"
+                                HoverHandler { id: listenersPillH }
+                                Row {
+                                    id: listenersRow
+                                    anchors.centerIn: parent
+                                    spacing: 4
+                                    AppIcon {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        source: "../assets/icons/system-users-symbolic.svg"
+                                        iconSize: 16
+                                        color: "#ffffff"
+                                    }
+                                    Text {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: coListenPill.listenerCount
+                                        color: root.accentColor
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 12
+                                        font.weight: Font.Bold
+                                    }
+                                }
+                                ToolTip.visible: listenersPillH.hovered
+                                ToolTip.text: I18n.tr("Quản lý người nghe cùng", "Manage listeners")
+                                ToolTip.delay: 350
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        var pt = listenersPillBtn.mapToItem(null, listenersPillBtn.width / 2, 0);
+                                        root.openCoListenersRequested(pt.x, pt.y);
+                                    }
+                                }
+                            }
+
+                            // Listener side: whose music you follow, plus a Muted Rose leave button
+                            Row {
+                                visible: coListenPill.isListener
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: 6
+                                leftPadding: 4
+                                RoundedImage {
+                                    width: 24; height: 24; radius: 12
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    borderColor: root.accentColor
+                                    borderWidth: 1.5
+                                    source: coListenPill.isListener ? (root.listeningAlongFriend.avatar_url || root.listeningAlongFriend.avatar || "") : ""
+                                    fallbackIcon: "../assets/icons/system-users-symbolic.svg"
+                                    placeholderColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
+                                }
+                                Rectangle {
+                                    width: 26; height: 26; radius: 13
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    color: leavePillH.hovered ? Qt.rgba(244/255, 63/255, 94/255, 0.30) : Qt.rgba(244/255, 63/255, 94/255, 0.12)
+                                    HoverHandler { id: leavePillH }
+                                    AppIcon {
+                                        anchors.centerIn: parent
+                                        source: "../assets/icons/window-close-symbolic.svg"
+                                        iconSize: 10
+                                        color: "#fda4af"
+                                    }
+                                    ToolTip.visible: leavePillH.hovered
+                                    ToolTip.text: I18n.tr("Rời phiên nghe cùng", "Leave Listen Along")
+                                    ToolTip.delay: 350
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.exitListeningAlongRequested()
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 

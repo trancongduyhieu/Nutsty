@@ -2915,7 +2915,7 @@ Scope {
             readonly property real targetMaxAvailableWidth: (win.isMochySidePanelOpen && !win.isNowPlayingOpen)
                 ? (parent.width - mochySidePanel.targetPanelWidth - (win.mochyPanelStyle === 1 ? 0 : 16) - 40)
                 : (parent.width - 32)
-            width: Math.min(win.isCoListeningActive ? 850 : 790, targetMaxAvailableWidth)
+            width: Math.min(implicitWidth, targetMaxAvailableWidth)
             Behavior on width { SpringAnimation { spring: 4; damping: 0.32; epsilon: 0.5 } }
             height: 60
             z: 50
