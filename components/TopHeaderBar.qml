@@ -387,7 +387,25 @@ Rectangle {
         // Selected chip takes the cover / wallpaper accent; text flips dark on light accents
         readonly property color chipTextColor: topMoodFlickable.accentLuminance > 0.6 ? "#121214" : "#ffffff"
         readonly property real compactWidth: compactTxt.implicitWidth + 36
-        readonly property real expandedTargetWidth: Math.min(headerRoot.width - 580, moodRow.width + 24)
+        readonly property real maxExpandedWidth: headerRoot.width - 580
+        readonly property real expandedTargetWidth: Math.min(maxExpandedWidth, moodRow.width + 24)
+        // Chips shrink their side padding (24 -> 16) so the whole row fits the island instead of the
+        // last chip being cut flat by the clip; it only scrolls if even the tight padding cannot fit
+        property real moodTextSum: 0
+        readonly property real chipPad: {
+            var n = moodRepeater.count;
+            if (n <= 0) return 24;
+            var free = maxExpandedWidth - 24 - moodRow.spacing * (n - 1) - moodTextSum;
+            return Math.max(16, Math.min(24, Math.floor(free / n)));
+        }
+        function recalcMoodText() {
+            var sum = 0;
+            for (var i = 0; i < moodRepeater.count; ++i) {
+                var it = moodRepeater.itemAt(i);
+                if (it) sum += it.textW;
+            }
+            moodTextSum = sum;
+        }
         width: isExpanded ? expandedTargetWidth : compactWidth
 
         Behavior on width {
@@ -533,13 +551,18 @@ Rectangle {
                 Repeater {
                     id: moodRepeater
                     model: headerRoot.activeMoodList
+                    onCountChanged: Qt.callLater(dynamicMoodIsland.recalcMoodText)
 
                     delegate: Item {
                         id: pillItem
                         height: 30
-                        width: pillTxt.implicitWidth + 24
+                        width: pillTxt.implicitWidth + dynamicMoodIsland.chipPad
+                        readonly property real textW: pillTxt.implicitWidth
+                        onTextWChanged: Qt.callLater(dynamicMoodIsland.recalcMoodText)
                         readonly property bool isSelected: headerRoot.selectedMood === modelData.title
                         readonly property bool isHovered: pillMouse.containsMouse
+                        // A chip half hidden at either end slides fully into view when hovered
+                        onIsHoveredChanged: if (isHovered) topMoodFlickable.revealChip(pillItem)
 
                         onXChanged: {
                             if (isSelected) activeMoodIndicator.x = pillItem.x;
@@ -589,6 +612,27 @@ Rectangle {
                         }
                     }
                 }
+            }
+
+            NumberAnimation {
+                id: moodRevealAnim
+                target: topMoodFlickable
+                property: "contentX"
+                duration: 280
+                easing.type: Easing.OutCubic
+            }
+
+            function revealChip(item) {
+                if (contentWidth <= width) return;
+                var edge = 6;
+                var left = moodRow.x + item.x, right = left + item.width;
+                var target = contentX;
+                if (right > contentX + width - edge) target = right - width + edge;
+                else if (left < contentX + edge) target = left - edge;
+                target = Math.max(0, Math.min(contentWidth - width, target));
+                if (Math.abs(target - contentX) < 0.5) return;
+                moodRevealAnim.to = target;
+                moodRevealAnim.restart();
             }
 
             function updateActiveIndicator() {
