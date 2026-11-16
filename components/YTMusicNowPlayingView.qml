@@ -433,6 +433,10 @@ Item {
     signal exitListeningAlongRequested()
 
     property var listeningAlongFriend: null
+    property var activeCoListenersDetails: []
+    signal listenAlongRequested()
+    signal coListenersRequested(real globalX, real globalY)
+    signal sendChatMessageRequested(string messageText)
     // AutoMix transition card (see AutoMixBridge.qml)
     property var mixUpcoming: null
     property var mixActive: null
@@ -1141,7 +1145,7 @@ Item {
             x: 0
             y: 0
             width: mainArea.width + (mainArea.compactLeftW - mainArea.width) * mainArea.panelT
-            height: mainArea.height
+            height: mainArea.height - nowPlayingActionRow.height - 12
             spacing: 16
             readonly property real blockWidth: coverArtworkWrapper.width
 
@@ -1390,6 +1394,27 @@ Item {
 
             Item { Layout.preferredHeight: 4 }
         }
+
+        // SimpMusic-style action row pinned to the bottom edge, centred under the left cluster
+        NowPlayingActionRow {
+            id: nowPlayingActionRow
+            anchors.bottom: parent.bottom
+            x: leftColumn.x + (leftColumn.width - width) / 2
+            width: Math.max(leftColumn.blockWidth, implicitWidth)
+            height: implicitHeight
+            activeTab: root.activeTab
+            accentColor: root.accentColor
+            listeningAlongFriend: root.listeningAlongFriend
+            activeCoListenersDetails: root.activeCoListenersDetails
+            onLyricsClicked: root.activeTab = root.activeTab === "lyrics" ? "artwork" : "lyrics"
+            onQueueClicked: root.activeTab = root.activeTab === "up_next" ? "artwork" : "up_next"
+            onListenAlongClicked: root.listenAlongRequested()
+            onListenersClicked: (gx, gy) => root.coListenersRequested(gx, gy)
+            onLeaveListeningAlongClicked: root.exitListeningAlongRequested()
+            onSendChatMessage: text => root.sendChatMessageRequested(text)
+        }
+
+
 
         // =====================================================================
         // RIGHT PANEL: [ UP NEXT | LYRICS ]; opacity / shift are driven by the panel animations

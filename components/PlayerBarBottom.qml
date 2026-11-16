@@ -7,7 +7,7 @@ import "."
 
 Item {
     id: root
-    implicitWidth: 790 + coListenPill.targetWidth
+    implicitWidth: 710 + coListenPill.targetWidth
     implicitHeight: 60
     height: 60
 
@@ -844,11 +844,11 @@ Item {
         }
 
         // ---------------------------------------------------------------------
-        // SECTION 3: RIGHT (Action Cluster: Like, Queue, Lyrics, Volume, Close)
+        // SECTION 3: RIGHT (Action Cluster: Like, Listen Along capsule, Volume, Close; Lyrics / Up Next live in Now Playing)
         // ---------------------------------------------------------------------
         Item {
             id: rightSectionBox
-            width: 200 + coListenPill.width
+            width: 120 + coListenPill.width
             height: root.height
 
             Row {
@@ -948,30 +948,7 @@ Item {
                     }
                 }
 
-                // 2. Lyrics Button (Swiftify Style: toggles Mochy Sidebar in Lyrics mode)
-                Item {
-                    id: lyricsBtn
-                    width: 40; height: parent.height
-                    HoverHandler { id: lyricsNowPlayingH }
-                    scale: lyricsNowPlayingH.hovered ? 1.08 : 1.0
-                    Behavior on scale { NumberAnimation { duration: 120 } }
-                    AppIcon {
-                        anchors.centerIn: parent
-                        source: "../assets/icons/material/ms-lyrics-fill.svg"
-                        iconSize: 20
-                        color: root.isLyricsActive ? root.accentColor : "#ffffff"
-                    }
-                    ToolTip.visible: lyricsNowPlayingH.hovered
-                    ToolTip.text: I18n.tr("Lời bài hát", "Lyrics")
-                    ToolTip.delay: 350
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.lyricsClicked()
-                    }
-                }
-
-                // Listen Along capsule (SimpMusic-style pill between Lyrics and Queue): slides open only while
+                // Listen Along capsule (SimpMusic-style pill after Like): slides open only while
                 // friends listen together, holding the floating chat and the listeners / leave controls.
                 Item {
                     id: coListenPill
@@ -1106,29 +1083,6 @@ Item {
                                 }
                             }
                         }
-                    }
-                }
-
-                // 3. Queue / Playing Next Button (Swiftify Style: toggles Mochy Sidebar in Queue mode)
-                Item {
-                    id: queueBtn
-                    width: 40; height: parent.height
-                    HoverHandler { id: qH }
-                    scale: qH.hovered ? 1.08 : 1.0
-                    Behavior on scale { NumberAnimation { duration: 120 } }
-                    AppIcon {
-                        anchors.centerIn: parent
-                        source: "../assets/icons/queue-music-symbolic.svg"
-                        iconSize: 20
-                        color: root.isQueueActive ? root.accentColor : "#ffffff"
-                    }
-                    ToolTip.visible: qH.hovered
-                    ToolTip.text: I18n.tr("Phát tiếp theo", "Playing Next")
-                    ToolTip.delay: 350
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.queueClicked()
                     }
                 }
 

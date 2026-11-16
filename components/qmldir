@@ -41,6 +41,7 @@ MinimalistLyricsView 1.0 MinimalistLyricsView.qml
 MochySidePanel 1.0 MochySidePanel.qml
 PanelRimBorder 1.0 PanelRimBorder.qml
 NowPlayingControls 1.0 NowPlayingControls.qml
+NowPlayingActionRow 1.0 NowPlayingActionRow.qml
 NavArrowButton 1.0 NavArrowButton.qml
 NavSidebar 1.0 NavSidebar.qml
 ParticleBackground 1.0 ParticleBackground.qml

@@ -2844,6 +2844,10 @@ Scope {
                     accentColor: win.accentColor
                     backgroundSourceItem: masterBackdropStack
                     listeningAlongFriend: win.listeningAlongFriend
+                    activeCoListenersDetails: win.activeCoListenersDetails
+                    onListenAlongRequested: manageFriendsModalLoader.ensure().openModal()
+                    onCoListenersRequested: (tx, ty) => coListenersPopover.openAt(win.activeCoListenersDetails, tx, ty)
+                    onSendChatMessageRequested: text => win.sendChatMessage(text)
                     lyricsRomanizationEnabled: win.lyricsRomanizationEnabled
                     mixUpcoming: win.mixUpcoming
                     mixActive: win.mixActive
