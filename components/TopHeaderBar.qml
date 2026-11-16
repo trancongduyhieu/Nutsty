@@ -407,11 +407,21 @@ Rectangle {
             moodTextSum = sum;
         }
         width: isExpanded ? expandedTargetWidth : compactWidth
-        // Once the island has finished opening, bring the selected mood into view
-        // (it may sit past the right end, e.g. "Tâm trạng", and would otherwise open cut off)
-        onWidthChanged: {
-            if (isExpanded && Math.abs(width - expandedTargetWidth) < 0.5)
-                Qt.callLater(topMoodFlickable.revealSelected);
+        // Once the island has finished opening, bring the selected mood into view (it may sit past
+        // the right end, e.g. "Tâm trạng"). Until then hover never scrolls: chips sliding under the
+        // still cursor (it rests where the compact pill was clicked) would drag the row back to 0.
+        property bool settled: false
+        onIsExpandedChanged: {
+            settled = false;
+            if (isExpanded) settleTimer.restart(); else settleTimer.stop();
+        }
+        Timer {
+            id: settleTimer
+            interval: 340 // width animation is 320 ms
+            onTriggered: {
+                dynamicMoodIsland.settled = true;
+                topMoodFlickable.revealSelected();
+            }
         }
 
         Behavior on width {
@@ -567,8 +577,6 @@ Rectangle {
                         onTextWChanged: Qt.callLater(dynamicMoodIsland.recalcMoodText)
                         readonly property bool isSelected: headerRoot.selectedMood === modelData.title
                         readonly property bool isHovered: pillMouse.containsMouse
-                        // A chip half hidden at either end slides fully into view when hovered
-                        onIsHoveredChanged: if (isHovered) topMoodFlickable.revealChip(pillItem)
 
                         onXChanged: {
                             if (isSelected) activeMoodIndicator.x = pillItem.x;
@@ -614,7 +622,10 @@ Rectangle {
                                 headerRoot.moodSelected(modelData.title, modelData.params || "");
                                 headerRoot.isMoodIslandExpanded = false;
                             }
-                            onPositionChanged: autoCollapseTimer.restart()
+                            onPositionChanged: mouse => {
+                                autoCollapseTimer.restart();
+                                topMoodFlickable.hoverReveal(pillMouse, mouse, pillItem);
+                            }
                         }
                     }
                 }
@@ -639,6 +650,16 @@ Rectangle {
                 if (Math.abs(target - contentX) < 0.5) return;
                 moodRevealAnim.to = target;
                 moodRevealAnim.restart();
+            }
+
+            // A chip half hidden at either end slides fully into view when the pointer really moves
+            // onto it; hover events from chips moving under a still cursor (scene point unchanged) are ignored
+            property point lastHoverPoint: Qt.point(-1, -1)
+            function hoverReveal(area, mouse, item) {
+                var p = area.mapToItem(null, mouse.x, mouse.y);
+                var moved = lastHoverPoint.x >= 0 && (Math.abs(p.x - lastHoverPoint.x) + Math.abs(p.y - lastHoverPoint.y)) > 0.5;
+                lastHoverPoint = p;
+                if (moved && dynamicMoodIsland.settled) revealChip(item);
             }
 
             function revealSelected() {
