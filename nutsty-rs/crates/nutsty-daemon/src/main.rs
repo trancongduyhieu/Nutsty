@@ -4,6 +4,8 @@
 //! and dispatches external routes (YouTube Music, Social, Spotify) to a small pool of warm
 //! Python workers (`route_dispatcher.py --serve`), falling back to a one-shot subprocess.
 
+mod social;
+
 use serde_json::json;
 use std::env;
 use std::fs;
@@ -499,7 +501,14 @@ fn handle_request(state: Arc<AppState>, mut request: tiny_http::Request) {
         }
     }
 
-    // 3. Fallback: Dispatch to Python subprocess (YouTube Music, Social, Spotify, Updater)
+    // 3. Social polls (friends, notes, events, presence) go straight to the relay; uncommon
+    //    cases (identity setup, 401, local events) return None and fall through to Python
+    if let Some(body) = social::try_handle(&method, &path, &parsed_url, &body_str) {
+        send_raw_json(request, 200, body);
+        return;
+    }
+
+    // 4. Fallback: Dispatch to Python subprocess (YouTube Music, Social, Spotify, Updater)
     let (status_code, response_body) = dispatch_to_python(&state, &method, &raw_url, &body_str);
     send_raw_json(request, status_code, response_body);
     trim_system_memory();
@@ -526,13 +535,15 @@ fn main() {
         pool: WorkerPool::new(app_dir.join("backend").join("route_dispatcher.py")),
     });
 
-    let addr = format!("{HOST}:{PORT}");
+    // NUTSTY_DAEMON_PORT lets a test build run beside the live daemon
+    let port: u16 = env::var("NUTSTY_DAEMON_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(PORT);
+    let addr = format!("{HOST}:{port}");
     let server = match Server::http(&addr) {
         Ok(s) => Arc::new(s),
         Err(e) => {
             // If port 17890 is already occupied by a running daemon, exit cleanly with code 0
             if std::net::TcpStream::connect(&addr).is_ok() {
-                println!("nutsty-daemon: Port {PORT} already active, exiting cleanly.");
+                println!("nutsty-daemon: Port {port} already active, exiting cleanly.");
                 std::process::exit(0);
             }
             eprintln!("nutsty-daemon: Failed to bind to {addr}: {e}");

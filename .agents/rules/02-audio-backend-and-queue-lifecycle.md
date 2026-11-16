@@ -10,7 +10,7 @@ Tài liệu đặc tả chuyên sâu về hệ thống daemon phát nhạc, giao
 - **Tính năng âm thanh**:
   - Hỗ trợ phát liền mạch (gapless playback), giải mã phần cứng (hardware decoding).
   - Tích hợp hook `yt-dlp` (`mpv --ytdl-format="bestaudio"`) để stream luồng YouTube Music trực tiếp (< 100MB RAM, độ trễ cực thấp).
-  - **Tránh HTTP 403 CDN & Autoplay tức thì**: `resolve_stream_url()` dùng `player_client: ["android"]` (không ép cookie web vào direct googlevideo URL). MPV bổ sung `--referrer=https://www.youtube.com/` và `--audio-buffer=0.4` để mở stream ngay trong ~1.0s, autoplay 100% không bị abort.
+  - **Tránh HTTP 403 CDN & Autoplay tức thì**: `resolve_stream_url()` dùng `player_client: ["android"]` (không ép cookie web vào direct googlevideo URL). MPV thêm `--referrer=https://www.youtube.com/`, `--audio-buffer=0.4` để mở stream ~1 s.
 - **Quy tắc an toàn**: Không bao giờ giao tiếp trực tiếp với tiến trình con `mpv` bằng stdin/stdout shell thô; mọi lệnh phát, dừng, tìm bài, điều chỉnh âm lượng bắt buộc phải gửi qua socket IPC JSON.
 
 ---
@@ -29,7 +29,7 @@ Tài liệu đặc tả chuyên sâu về hệ thống daemon phát nhạc, giao
 - **Hai thuộc tính độc lập tại `shell.qml`**:
   - `win.browsingTracks`: Danh sách bài hát đang hiển thị trên giao diện duyệt (kết quả tìm kiếm, tab Downloads, danh sách bài của album/nghệ sĩ).
   - `win.currentTracks`: Hàng đợi phát nhạc thực sự (Queue).
-- **Nguyên tắc bất khả xâm phạm**: Thao tác duyệt xem playlist, gõ tìm kiếm bài hát hoặc mở tab Tải xuống **tuyệt đối không được làm gián đoạn hay ghi đè hàng đợi phát nhạc** (`win.currentTracks`). Chỉ khi người dùng click trực tiếp vào một bài hát thì bài hát đó mới được kích hoạt phát.
+- **Nguyên tắc bất khả xâm phạm**: Thao tác duyệt xem playlist, gõ tìm kiếm bài hát hoặc mở tab Tải xuống **không được ghi đè hàng đợi** (`win.currentTracks`); chỉ click trực tiếp vào bài mới phát.
 
 ---
 
@@ -87,11 +87,13 @@ Tài liệu đặc tả chuyên sâu về hệ thống daemon phát nhạc, giao
 
 ## 10. Spotify Embed Importer & 0-Friction Session Cache
 - **Trích xuất Embed không cần Token**: `backend/spotify_importer.py` phân tích JSON `__NEXT_DATA__` từ `https://open.spotify.com/embed/playlist/{id}`, hoàn toàn miễn nhiễm lỗi 429 Rate-Limit và trích xuất tracks trong <0.5s.
-- **Fast-path 0 giây**: `handle_post_spotify_auto_sync` và `handle_post_auth_auto_sync` ưu tiên kiểm tra session hợp lệ trong `nutsty_settings.json` / `ytmusic_auth.json` trước khi kích hoạt browser window, triệt tiêu hoàn toàn hiện tượng bắt người dùng đăng nhập lại lặp đi lặp lại.
+- **Fast-path 0 giây**: `handle_post_spotify_auto_sync` và `handle_post_auth_auto_sync` ưu tiên kiểm tra session hợp lệ trong `nutsty_settings.json` / `ytmusic_auth.json` trước khi mở browser, tránh bắt đăng nhập lại.
 
 
 
 ## 11. Warm Python Worker Pool (`nutsty-daemon` → `route_dispatcher.py --serve`)
 - **Tệp**: `nutsty-rs/crates/nutsty-daemon/src/main.rs` (`WorkerPool`), `backend/route_dispatcher.py` (`serve`). Daemon xử lý mỗi request trên 1 thread, giữ 2 worker Python sống (1 dòng JSON vào / 1 dòng ra); cache hit ~1 ms thay vì ~0,8 s spawn + import `ytmusicapi`.
 - **Vòng đời**: worker 0 prewarm lúc daemon bật; tự thoát khi rảnh 10 phút, sau 500 request, hoặc khi có `backend/*.py` mới hơn lúc nạp (sửa code / updater) → spawn lại lười. Cả 2 bận > 400 ms → fallback one-shot cũ.
-- **Footgun**: `/api/update*`, `/api/check_update`, `/api/spotify*` giữ tiến trình trong RAM nên **luôn pin worker 0**. Cache trong module phải chịu được nhiều tiến trình (auth status theo mtime `AUTH_FILE`, `online_tracks` reload theo mtime + merge khi ghi). Handler `print()` đi stderr; stdout là kênh trả lời. `bin/*.exe` Windows phải build lại mới có pool.
+- **Footgun**: `/api/update*`, `/api/check_update`, `/api/spotify*` giữ tiến trình trong RAM nên **luôn pin worker 0**. Cache trong module phải chịu được nhiều tiến trình (auth status theo mtime `AUTH_FILE`, `online_tracks` reload theo mtime + merge khi ghi). Handler `print()` đi stderr; stdout là kênh trả lời.
+- **Social fast path** (`nutsty-daemon/src/social.rs`, `ureq`): notes/events, notes, friends (GET), now_playing (POST) gọi thẳng relay; Timer social không còn giữ worker Python.
+- **Footgun**: `try_handle` trả `None` → Python xử lý (chưa có identity, cần sync tên/avatar, 401, events cục bộ, `/api/notes` lỗi mạng). Sửa route/identity ở Python phải sửa cả `social.rs`.
