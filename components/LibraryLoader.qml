@@ -31,9 +31,6 @@ Item {
             libFileView.reload();
             parseDebounceTimer.restart();
         }
-        onTextChanged: {
-            parseDebounceTimer.restart();
-        }
     }
 
     function reload() {
