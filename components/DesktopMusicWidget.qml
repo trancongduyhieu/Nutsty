@@ -26,10 +26,8 @@ PanelWindow {
 
     readonly property bool isWindows: Qt.platform.os === "windows"
 
-    implicitWidth: isWindows ? 216 : ((screen && screen.geometry) ? screen.geometry.width : Screen.width)
-    implicitHeight: isWindows ? 216 : ((screen && screen.geometry) ? screen.geometry.height : Screen.height)
-    width: isWindows ? 216 : implicitWidth
-    height: isWindows ? 216 : implicitHeight
+    width: isWindows ? 216 : ((screen && screen.geometry) ? screen.geometry.width : Screen.width)
+    height: isWindows ? 216 : ((screen && screen.geometry) ? screen.geometry.height : Screen.height)
 
     screen: Quickshell.screens[0]
     exclusionMode: ExclusionMode.Ignore
