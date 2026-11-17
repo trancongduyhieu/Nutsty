@@ -39,8 +39,9 @@ Từ vựng kiến trúc (module, interface, seam, adapter, depth...) theo skill
 ## Danh sách phát
 
 - **custom playlist**: Danh sách phát người dùng tự tạo hoặc nhập từ Spotify, lưu trong
-  `custom_playlists{suffix}.json`, id dạng `custom_pl_<ms>`, có `isCustom`, `isLocal`, `type: "custom"`.
-  _Tránh_: "local playlist" (dễ nhầm với thư mục nhạc local).
+  `custom_playlists{suffix}.json`. Định nghĩa duy nhất: id bắt đầu bằng `custom_pl_`. Các cờ `isCustom`,
+  `isLocal`, `type`, `source` chỉ là dữ liệu kèm theo, không dùng để phân loại (album trên máy cũng có `isLocal`).
+  _Tránh_: "local playlist" (dễ nhầm với album nhạc trên máy, id `local_alb_`).
 - **favorite playlist**: Danh sách phát (trực tuyến hoặc custom) được đánh dấu yêu thích, lưu trong
   `favorite_playlists{suffix}.json`, so khớp theo `id`, `playlistId` hoặc `browseId`.
 - **Spotify import**: Custom playlist chuyển từ Spotify, có `source: "spotify_import"` và `spotifyId`.
@@ -48,9 +49,17 @@ Từ vựng kiến trúc (module, interface, seam, adapter, depth...) theo skill
   tạo bằng nút Xuất file / Nhập file trong Cài đặt. Nhập chỉ thêm, không xóa.
 - **track key**: Khóa duy nhất của một bài trong danh sách phát (`get_track_unique_key`): `yt_<videoId>`
   cho bài trực tuyến, `local_<path>` cho file trên máy. Dùng để chống trùng.
-- **optimistic patch**: Việc QML tự sửa bản sao danh sách phát trong bộ nhớ ngay khi người dùng thao tác,
-  trước khi backend ghi xong.
+- **optimistic patch**: Việc QML tự sửa danh sách phát trong bộ nhớ ngay khi người dùng thao tác,
+  trước khi backend ghi xong. Chỉ là bản tạm: playlist write result luôn thay thế nó.
+- **playlist write**: Một lệnh thay đổi danh sách phát (create, rename, add, remove, reorder, delete,
+  favorite). Đi qua PlaylistStore, xếp hàng từng lệnh một, gửi bằng HTTP POST tới cổng 17890.
+- **playlist write result**: Danh sách phát mà backend trả về sau một playlist write. Là bản chuẩn:
+  thay optimistic patch khi thành công, khôi phục từ backend và báo lỗi khi thất bại.
+- **PlaylistStore** (`components/PlaylistStore.qml`, đề xuất C, đang thiết kế): Module giữ trạng thái
+  danh sách phát duy nhất (custom, favorite, id đang mở), sở hữu hàng đợi playlist write.
+  Danh sách đang mở chỉ lưu id; object được tính từ store.
 - **refreshPlaylistsTimer**: Timer 300 ms trong `shell.qml` nạp lại danh sách phát sau mỗi lệnh ghi.
+  Sẽ bị bỏ khi có PlaylistStore, vì playlist write result thay cho việc đoán lúc ghi xong.
 
 ## Mạng xã hội và giao diện
 
