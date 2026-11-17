@@ -751,6 +751,56 @@ Scope {
         }
     }
 
+    // Playlist backup (Settings > Playlist backup): export / import a JSON file via playlist_manager.py
+    property bool playlistBackupBusy: false
+    property string playlistBackupAction: ""
+    function runPlaylistBackup(action, fileUrl) {
+        if (playlistBackupProc.running || !fileUrl) return;
+        win.playlistBackupAction = action;
+        win.playlistBackupBusy = true;
+        playlistBackupProc.gotResult = false;
+        playlistBackupProc.command = ["python3", "-u", win.appDir + "/backend/playlist_manager.py", action, String(fileUrl)];
+        playlistBackupProc.running = true;
+    }
+    function playlistBackupErrorText(code) {
+        if (code === "invalid_json") return I18n.tr("File bị hỏng hoặc không phải JSON", "The file is damaged or not JSON");
+        if (code === "unsupported") return I18n.tr("File này không phải bản sao lưu danh sách phát của Nutsty", "This file is not a Nutsty playlist backup");
+        if (code === "not_found") return I18n.tr("Không tìm thấy file", "File not found");
+        if (code === "too_large") return I18n.tr("File quá lớn (tối đa 50 MB)", "File is too large (50 MB max)");
+        if (code === "write_failed") return I18n.tr("Không ghi được file, hãy chọn thư mục khác", "Could not write the file, try another folder");
+        return I18n.tr("Có lỗi xảy ra, hãy thử lại", "Something went wrong, please try again");
+    }
+
+    Process {
+        id: playlistBackupProc
+        property bool gotResult: false
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                var res = null;
+                try { res = JSON.parse(data); } catch (e) { return; }
+                playlistBackupProc.gotResult = true;
+                if (!res || !res.success) {
+                    win.showToast(win.playlistBackupErrorText(res ? res.error : ""));
+                } else if (win.playlistBackupAction === "export") {
+                    win.showToast(I18n.tr("Đã xuất " + res.playlists + " danh sách phát và " + res.favorites + " mục yêu thích",
+                                          "Exported " + res.playlists + " playlists and " + res.favorites + " favorites"));
+                } else {
+                    var changed = res.added + res.updated + res.favoritesAdded;
+                    win.showToast(changed === 0
+                        ? I18n.tr("Không có gì mới, danh sách phát đã đầy đủ", "Nothing new, your playlists are already up to date")
+                        : I18n.tr("Đã nhập " + res.added + " danh sách mới, bổ sung " + res.tracksAdded + " bài, " + res.favoritesAdded + " mục yêu thích",
+                                  "Imported " + res.added + " new playlists, " + res.tracksAdded + " added songs, " + res.favoritesAdded + " favorites"));
+                    if (changed > 0) refreshPlaylistsTimer.restart();
+                }
+            }
+        }
+        onExited: {
+            win.playlistBackupBusy = false;
+            if (!gotResult) win.showToast(win.playlistBackupErrorText(""));
+        }
+    }
+
     Process {
         id: homeProc
         stdout: SplitParser {
@@ -3323,6 +3373,9 @@ Scope {
                 win.runCacheCommand(["enforce", String(mb)]);
             }
             onClearCacheRequested: win.runCacheCommand(["clear"])
+            playlistBackupBusy: win.playlistBackupBusy
+            onExportPlaylistsRequested: fileUrl => win.runPlaylistBackup("export", fileUrl)
+            onImportPlaylistsRequested: fileUrl => win.runPlaylistBackup("import", fileUrl)
             onToggleAutoMixRequested: enabled => {
                 win.autoMixEnabled = enabled;
                 win.autoMixPlan = null;

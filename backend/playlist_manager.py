@@ -339,6 +339,149 @@ def remove_favorite_playlist(pl_id):
     save_favorite_playlists(filtered)
     return {"success": True, "favorites": filtered}
 
+# ---------------------------------------------------------------------------
+# Backup: export / import custom + favorite playlists as one JSON file
+# ---------------------------------------------------------------------------
+BACKUP_FORMAT = "nutsty-playlists"
+BACKUP_VERSION = 1
+MAX_BACKUP_BYTES = 50 * 1024 * 1024
+
+def _to_local_path(path_or_url):
+    """Accept a plain path or a file:// URL (what QML FileDialog returns)."""
+    p = str(path_or_url or "").strip()
+    if p.lower().startswith("file:"):
+        from urllib.parse import urlparse, unquote
+        from urllib.request import url2pathname
+        parsed = urlparse(p)
+        p = url2pathname(unquote(parsed.path))
+        if parsed.netloc and parsed.netloc != "localhost":
+            p = "//" + parsed.netloc + p  # UNC share on Windows
+    return os.path.expanduser(p)
+
+def export_playlists(dest):
+    dest = _to_local_path(dest)
+    if not dest:
+        return {"success": False, "error": "no_path"}
+    if not dest.lower().endswith(".json"):
+        dest += ".json"
+    playlists = load_playlists()
+    favorites = load_favorite_playlists()
+    payload = {
+        "format": BACKUP_FORMAT,
+        "version": BACKUP_VERSION,
+        "app": "Nutsty",
+        "appVersion": getattr(pc, "APP_VERSION", ""),
+        "exportedAt": int(time.time()),
+        "playlists": playlists,
+        "favorites": favorites,
+    }
+    try:
+        parent = os.path.dirname(dest)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        tmp = dest + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, dest)
+    except Exception as e:
+        sys.stderr.write(f"Error exporting playlists: {e}\n")
+        return {"success": False, "error": "write_failed", "detail": str(e)}
+    return {"success": True, "path": dest, "playlists": len(playlists), "favorites": len(favorites)}
+
+def _playlist_id(pl):
+    return str(pl.get("id") or pl.get("playlistId") or pl.get("browseId") or "")
+
+def import_playlists(src):
+    """Merge a backup into the current playlists. Never deletes anything:
+    unknown playlists are added, known ones (same id) gain the tracks they lack."""
+    src = _to_local_path(src)
+    if not src or not os.path.isfile(src):
+        return {"success": False, "error": "not_found"}
+    try:
+        if os.path.getsize(src) > MAX_BACKUP_BYTES:
+            return {"success": False, "error": "too_large"}
+        with open(src, "r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+    except Exception:
+        return {"success": False, "error": "invalid_json"}
+
+    # Our own backup format, or a raw copy of custom_playlists.json (a plain list)
+    if isinstance(data, dict) and data.get("format") == BACKUP_FORMAT:
+        in_pls = data.get("playlists") or []
+        in_favs = data.get("favorites") or []
+    elif isinstance(data, list):
+        in_pls, in_favs = data, []
+    else:
+        return {"success": False, "error": "unsupported"}
+    if not isinstance(in_pls, list) or not isinstance(in_favs, list):
+        return {"success": False, "error": "unsupported"}
+
+    playlists = load_playlists()
+    by_id = {_playlist_id(p): p for p in playlists if isinstance(p, dict) and _playlist_id(p)}
+    added = updated = tracks_added = 0
+    now_ms = int(time.time() * 1000)
+
+    for pl in in_pls:
+        if not isinstance(pl, dict):
+            continue
+        tracks = [t for t in (pl.get("tracks") or []) if isinstance(t, (dict, str))]
+        pid = _playlist_id(pl)
+        existing = by_id.get(pid) if pid else None
+        if existing is not None:
+            have = {get_track_unique_key(t) for t in existing.get("tracks", [])}
+            new_tracks = [t for t in tracks if get_track_unique_key(t) not in have]
+            if new_tracks:
+                existing.setdefault("tracks", []).extend(new_tracks)
+                existing["trackCount"] = len(existing["tracks"])
+                if not existing.get("customCover") and not existing.get("image"):
+                    first = existing["tracks"][0]
+                    existing["image"] = first.get("image", "") if isinstance(first, dict) else ""
+                tracks_added += len(new_tracks)
+                updated += 1
+            continue
+        if not pid:
+            now_ms += 1
+            pid = f"custom_pl_{now_ms}"
+        title = str(pl.get("title") or pl.get("name") or "Playlist").strip() or "Playlist"
+        entry = dict(pl)
+        entry.update({
+            "id": pid,
+            "playlistId": pid,
+            "title": title,
+            "name": title,
+            "isLocal": True,
+            "isCustom": True,
+            "type": pl.get("type") or "custom",
+            "tracks": tracks,
+            "trackCount": len(tracks),
+        })
+        entry.setdefault("createdAt", int(time.time()))
+        if not entry.get("image"):
+            first = tracks[0] if tracks else None
+            entry["image"] = entry.get("customCover") or (first.get("image", "") if isinstance(first, dict) else "")
+        playlists.append(entry)
+        by_id[pid] = entry
+        added += 1
+
+    favs = load_favorite_playlists()
+    fav_ids = {_playlist_id(f) for f in favs if isinstance(f, dict)}
+    favs_added = 0
+    for fav in in_favs:
+        if not isinstance(fav, dict):
+            continue
+        fid = _playlist_id(fav)
+        if fid and fid not in fav_ids:
+            favs.append(fav)
+            fav_ids.add(fid)
+            favs_added += 1
+
+    if (added or updated) and not save_playlists(playlists):
+        return {"success": False, "error": "write_failed"}
+    if favs_added and not save_favorite_playlists(favs):
+        return {"success": False, "error": "write_failed"}
+    return {"success": True, "added": added, "updated": updated,
+            "tracksAdded": tracks_added, "favoritesAdded": favs_added}
+
 def handle_cli(args=None):
     if args is None:
         args = sys.argv[1:] if len(sys.argv) > 1 else []
@@ -376,6 +519,10 @@ def handle_cli(args=None):
         print(json.dumps(delete_playlist(args[1]), ensure_ascii=False))
     elif cmd == "add" and len(args) > 2:
         print(json.dumps(add_tracks_to_playlist(args[1], args[2]), ensure_ascii=False))
+    elif cmd == "export" and len(args) > 1:
+        print(json.dumps(export_playlists(args[1]), ensure_ascii=False))
+    elif cmd == "import" and len(args) > 1:
+        print(json.dumps(import_playlists(args[1]), ensure_ascii=False))
     elif cmd == "remove" and len(args) > 2:
         print(json.dumps(remove_track_from_playlist(args[1], args[2]), ensure_ascii=False))
     else:

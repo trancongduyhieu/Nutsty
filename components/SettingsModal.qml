@@ -2,6 +2,8 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls.Basic
 import QtQuick.Effects
+import QtQuick.Dialogs
+import QtCore
 import "."
 
 Rectangle {
@@ -337,6 +339,108 @@ Rectangle {
     signal refreshCacheUsageRequested()
     signal selectCacheLimitRequested(int mb)
     signal clearCacheRequested()
+    signal exportPlaylistsRequested(string fileUrl)
+    signal importPlaylistsRequested(string fileUrl)
+    property bool playlistBackupBusy: false
+    property string playlistBackupPending: ""  // "export" / "import" while that button's job runs
+    onPlaylistBackupBusyChanged: if (!playlistBackupBusy) playlistBackupPending = ""
+
+    readonly property url playlistBackupFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+
+    FileDialog {
+        id: exportPlaylistsDialog
+        title: I18n.tr("Lưu bản sao lưu danh sách phát", "Save playlist backup")
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "json"
+        nameFilters: [I18n.tr("Bản sao lưu Nutsty (*.json)", "Nutsty backup (*.json)")]
+        currentFolder: root.playlistBackupFolder
+        onAccepted: {
+            root.playlistBackupPending = "export";
+            root.exportPlaylistsRequested(String(selectedFile));
+        }
+    }
+
+    FileDialog {
+        id: importPlaylistsDialog
+        title: I18n.tr("Chọn bản sao lưu danh sách phát", "Choose a playlist backup")
+        fileMode: FileDialog.OpenFile
+        nameFilters: [I18n.tr("Bản sao lưu Nutsty (*.json)", "Nutsty backup (*.json)")]
+        currentFolder: root.playlistBackupFolder
+        onAccepted: {
+            root.playlistBackupPending = "import";
+            root.importPlaylistsRequested(String(selectedFile));
+        }
+    }
+
+    // Accent-tinted pill used by the playlist backup row (icon + label, spinner while busy)
+    component BackupPillButton: Rectangle {
+        id: pill
+        property string label: ""
+        property string iconSource: ""
+        property bool busy: false
+        signal activated()
+        height: 32
+        width: pillRow.implicitWidth + 26
+        radius: 16
+        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, pillMouse.containsMouse ? 0.24 : 0.14)
+        opacity: root.playlistBackupBusy && !busy ? 0.5 : 1.0
+        scale: pillMouse.pressed ? 0.96 : 1.0
+        Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+        Behavior on color { ColorAnimation { duration: 150 } }
+        Behavior on opacity { NumberAnimation { duration: 150 } }
+
+        Row {
+            id: pillRow
+            anchors.centerIn: parent
+            spacing: 7
+
+            Item {
+                width: 15
+                height: 15
+                anchors.verticalCenter: parent.verticalCenter
+
+                Image {
+                    anchors.centerIn: parent
+                    source: pill.iconSource
+                    sourceSize: Qt.size(15, 15)
+                    width: 15
+                    height: 15
+                    opacity: pill.busy ? 0 : 1
+                    Behavior on opacity { NumberAnimation { duration: 180 } }
+                    layer.enabled: true
+                    layer.effect: MultiEffect { colorization: 1.0; colorizationColor: "#ffffff" }
+                }
+
+                CircularSpinner {
+                    anchors.centerIn: parent
+                    size: 14
+                    strokeWidth: 2
+                    color: "#ffffff"
+                    running: pill.busy
+                    opacity: pill.busy ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 180 } }
+                }
+            }
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: pill.label
+                font.family: Theme.fontFamily
+                font.pixelSize: 12
+                font.weight: Font.DemiBold
+                color: "#ffffff"
+            }
+        }
+
+        MouseArea {
+            id: pillMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            enabled: !root.playlistBackupBusy
+            cursorShape: Qt.PointingHandCursor
+            onClicked: pill.activated()
+        }
+    }
     signal saveCanvasPreferenceRequested(string pref)
     signal toggleDesktopLyricsRequested(bool enabled)
     signal toggleTaskbarLyricsRequested(bool enabled)
@@ -2320,6 +2424,69 @@ Rectangle {
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+
+                // =============================================================
+                // Playlist backup: export / import custom + favorite playlists as JSON
+                // =============================================================
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 52
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: playlistBackupButtons.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Sao lưu danh sách phát", "Playlist backup")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Lưu ra file JSON để chuyển sang máy khác hoặc khi cài lại ứng dụng",
+                                          "Save to a JSON file to move to another computer or after reinstalling")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                            wrapMode: Text.WordWrap
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    Row {
+                        id: playlistBackupButtons
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 8
+
+                        BackupPillButton {
+                            label: I18n.tr("Xuất file", "Export")
+                            iconSource: "../assets/icons/arrow-outward-symbolic.svg"
+                            busy: root.playlistBackupBusy && root.playlistBackupPending === "export"
+                            onActivated: {
+                                exportPlaylistsDialog.selectedFile = root.playlistBackupFolder + "/nutsty-playlists-"
+                                    + Qt.formatDate(new Date(), "yyyy-MM-dd") + ".json";
+                                exportPlaylistsDialog.open();
+                            }
+                        }
+
+                        BackupPillButton {
+                            label: I18n.tr("Nhập file", "Import")
+                            iconSource: "../assets/icons/download-symbolic.svg"
+                            busy: root.playlistBackupBusy && root.playlistBackupPending === "import"
+                            onActivated: importPlaylistsDialog.open()
                         }
                     }
                 }
