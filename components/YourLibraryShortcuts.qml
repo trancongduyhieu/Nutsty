@@ -47,8 +47,10 @@ ColumnLayout {
     // their width and position follow the window with the same spring when the side panel opens
     readonly property int gap: 10
     readonly property int tileHeight: 60
-    readonly property int rows: Math.ceil(entries.length / columns)
-    property real tileWidth: (width - (columns - 1) * gap) / columns
+    // Fewer tiles than columns: the tiles share the whole row instead of leaving a gap at the end
+    readonly property int usedColumns: Math.max(1, Math.min(columns, entries.length))
+    readonly property int rows: Math.ceil(entries.length / usedColumns)
+    property real tileWidth: (width - (usedColumns - 1) * gap) / usedColumns
     Behavior on tileWidth { SpringAnimation { spring: 4; damping: 0.4; epsilon: 0.25 } }
     property real gridHeight: rows * tileHeight + Math.max(0, rows - 1) * gap
     Behavior on gridHeight { SpringAnimation { spring: 4; damping: 0.4; epsilon: 0.25 } }
@@ -63,8 +65,8 @@ ColumnLayout {
                 id: tile
                 required property var modelData
                 required property int index
-                x: (index % root.columns) * (root.tileWidth + root.gap)
-                y: Math.floor(index / root.columns) * (root.tileHeight + root.gap)
+                x: (index % root.usedColumns) * (root.tileWidth + root.gap)
+                y: Math.floor(index / root.usedColumns) * (root.tileHeight + root.gap)
                 width: root.tileWidth
                 height: root.tileHeight
                 Behavior on x { SpringAnimation { spring: 4; damping: 0.4; epsilon: 0.25 } }
