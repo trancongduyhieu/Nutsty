@@ -4552,7 +4552,12 @@ Scope {
 
     function openTrackFolder(trk) {
         if (!trk || !trk.path) return;
-        Quickshell.execDetached(["sh", "-c", 'xdg-open "$(dirname "$1")"', "sh", trk.path]);
+        var path = String(trk.path);
+        if (path.startsWith("file://")) path = decodeURIComponent(path.substring(7));
+        var cut = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+        if (cut <= 0) return;
+        // Plain xdg-open: the Windows bridge maps it to os.startfile, it has no sh
+        Quickshell.execDetached(["xdg-open", path.substring(0, cut)]);
     }
 
     function downloadTrack(trk) {
@@ -4734,16 +4739,10 @@ Scope {
 
     function updateCustomPlaylist(plId, newTitle, newDesc, newCover) {
         if (!plId) return;
-        Quickshell.execDetached([
-            "python3", win.appDir + "/backend/playlist_manager.py", "rename",
-            plId, newTitle, newDesc || ""
-        ]);
-        if (newCover !== undefined) {
-            Quickshell.execDetached([
-                "python3", win.appDir + "/backend/playlist_manager.py", "set_cover",
-                plId, newCover
-            ]);
-        }
+        // One command: separate rename and set_cover writes ran concurrently and overwrote each other
+        var cmd = ["python3", win.appDir + "/backend/playlist_manager.py", "rename", plId, newTitle, newDesc || ""];
+        if (newCover !== undefined) cmd.push(newCover || "");
+        Quickshell.execDetached(cmd);
         refreshPlaylistsTimer.restart();
         if (win.selectedCustomPlaylist && (win.selectedCustomPlaylist.id === plId || win.selectedCustomPlaylist.playlistId === plId)) {
             var updated = Object.assign({}, win.selectedCustomPlaylist);

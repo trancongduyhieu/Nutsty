@@ -126,7 +126,12 @@ def create_playlist(title, initial_tracks=None, description="", custom_cover="")
     save_playlists(playlists)
     return new_pl
 
-def rename_playlist(pl_id, new_title, new_description=None):
+def rename_playlist(pl_id, new_title, new_description=None, new_cover=None):
+    """Rename a playlist and, when new_cover is given ("" clears it), set its cover in the same write.
+
+    Doing both in one load/save matters: two separate commands run concurrently and the second
+    save overwrites the first with a stale copy of the file.
+    """
     playlists = load_playlists()
     target = None
     for p in playlists:
@@ -141,8 +146,14 @@ def rename_playlist(pl_id, new_title, new_description=None):
         target["name"] = new_title.strip()
     if new_description is not None:
         target["description"] = new_description.strip()
+    if new_cover is not None:
+        _apply_cover(target, new_cover)
     save_playlists(playlists)
     return {"success": True, "playlist": target}
+
+def _apply_cover(target, image_path):
+    target["customCover"] = image_path.strip() if image_path else ""
+    target["image"] = target["customCover"] or (target["tracks"][0].get("image", "") if target.get("tracks") else "")
 
 def set_playlist_cover(pl_id, image_path):
     playlists = load_playlists()
@@ -154,8 +165,7 @@ def set_playlist_cover(pl_id, image_path):
     if not target:
         return {"success": False, "error": "Playlist not found"}
 
-    target["customCover"] = image_path.strip() if image_path else ""
-    target["image"] = target["customCover"] or (target["tracks"][0].get("image", "") if target.get("tracks") else "")
+    _apply_cover(target, image_path)
     save_playlists(playlists)
     return {"success": True, "playlist": target}
 
@@ -505,7 +515,8 @@ def handle_cli(args=None):
         pl_id = args[1]
         new_title = args[2]
         desc = args[3] if len(args) > 3 else None
-        print(json.dumps(rename_playlist(pl_id, new_title, desc), ensure_ascii=False))
+        cover = args[4] if len(args) > 4 else None
+        print(json.dumps(rename_playlist(pl_id, new_title, desc, cover), ensure_ascii=False))
     elif cmd == "set_cover" and len(args) > 2:
         pl_id = args[1]
         cover_path = args[2]

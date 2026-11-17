@@ -61,7 +61,10 @@ def handle_get_playlist(handler, query):
     pl_id = query.get("id", [""])[0]
     if pl_id.startswith("custom_"):
         try:
-            from . import playlist_manager
+            try:
+                from . import playlist_manager
+            except (ImportError, ValueError):
+                import playlist_manager
             playlists = playlist_manager.load_playlists()
             for p in playlists:
                 if p.get("id") == pl_id or p.get("playlistId") == pl_id:
