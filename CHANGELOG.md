@@ -11,6 +11,9 @@ Tất cả các tính năng mới và cải tiến của Nutsty được lưu tr
 - **Bản Windows mở được trở lại**: Một số máy Windows báo lỗi "Failed to load QML root object" và không mở được ứng dụng sau khi cài bản 2.0.0. Lỗi này đã được sửa, ứng dụng mở bình thường như trước.
 - **Sửa tên và ảnh bìa danh sách phát cùng lúc không còn bị mất**: Trước đây khi vừa đổi tên vừa đổi ảnh bìa trong một lần sửa, đôi khi chỉ một trong hai thay đổi được giữ lại. Giờ cả hai luôn được lưu.
 - **Mở thư mục chứa bài hát trên Windows**: Lựa chọn mở thư mục chứa file trong menu chuột phải của bài hát giờ hoạt động trên Windows, mở đúng thư mục trong File Explorer.
+- **Thay đổi danh sách phát luôn được lưu đủ**: Trước đây khi thêm, xóa hay sắp xếp nhiều bài liên tiếp thật nhanh, hoặc vừa chuyển danh sách từ Spotify vừa sửa một danh sách khác, đôi khi có thay đổi bị mất sau khi mở lại ứng dụng. Giờ mọi thay đổi được lưu lần lượt và không cái nào bị ghi đè.
+- **Thông báo danh sách phát nói đúng sự thật**: Các thông báo như "Đã thêm vào danh sách phát" hay "Đã tạo danh sách phát mới" chỉ hiện khi thay đổi đã thật sự được lưu. Nếu không lưu được, ứng dụng báo lỗi và đưa danh sách về đúng như đang lưu, thay vì hiện như đã xong.
+- **Danh sách đang mở luôn hiện mới nhất**: Khi đang xem một danh sách phát, mọi thay đổi (đổi tên, thêm bài, bỏ yêu thích...) hiện ngay trên màn hình đó và trong ô tìm bài để thêm, không còn chỗ cũ chỗ mới.
 
 ## [2.0.0] - 2026-11-16
 

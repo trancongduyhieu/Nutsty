@@ -33,8 +33,8 @@ Từ vựng kiến trúc (module, interface, seam, adapter, depth...) theo skill
 - **nutsty-daemon**: Router HTTP Rust ở `127.0.0.1:17890` trên Linux, chuyển yêu cầu cho các worker
   `route_dispatcher.py --serve`.
 - **auth_server**: Server Python cùng cổng 17890, dùng trên Windows thay cho nutsty-daemon.
-- **fire-and-forget write**: Lệnh ghi chạy bằng `execDetached`, không chờ kết quả, rồi đoán lúc xong bằng
-  timer làm mới (xem refreshPlaylistsTimer).
+- **fire-and-forget write**: Lệnh ghi chạy bằng `execDetached`, không chờ kết quả. Danh sách phát đã bỏ cách này
+  (dùng playlist write); các lệnh khác vẫn còn dùng.
 
 ## Danh sách phát
 
@@ -52,14 +52,16 @@ Từ vựng kiến trúc (module, interface, seam, adapter, depth...) theo skill
 - **optimistic patch**: Việc QML tự sửa danh sách phát trong bộ nhớ ngay khi người dùng thao tác,
   trước khi backend ghi xong. Chỉ là bản tạm: playlist write result luôn thay thế nó.
 - **playlist write**: Một lệnh thay đổi danh sách phát (create, rename, add, remove, reorder, delete,
-  favorite). Đi qua PlaylistStore, xếp hàng từng lệnh một, gửi bằng HTTP POST tới cổng 17890.
+  favorite). Đi qua PlaylistStore, xếp hàng từng lệnh một, gửi bằng `POST /api/playlists/<op>` tới cổng 17890,
+  kèm `profile` vì một daemon phục vụ mọi cửa sổ hồ sơ.
 - **playlist write result**: Danh sách phát mà backend trả về sau một playlist write. Là bản chuẩn:
   thay optimistic patch khi thành công, khôi phục từ backend và báo lỗi khi thất bại.
-- **PlaylistStore** (`components/PlaylistStore.qml`, đề xuất C, đang thiết kế): Module giữ trạng thái
-  danh sách phát duy nhất (custom, favorite, id đang mở), sở hữu hàng đợi playlist write.
-  Danh sách đang mở chỉ lưu id; object được tính từ store.
-- **refreshPlaylistsTimer**: Timer 300 ms trong `shell.qml` nạp lại danh sách phát sau mỗi lệnh ghi.
-  Sẽ bị bỏ khi có PlaylistStore, vì playlist write result thay cho việc đoán lúc ghi xong.
+- **PlaylistStore** (`components/PlaylistStore.qml`, ADR-0007, `id: playlistStore` trong `shell.qml`): Module giữ
+  trạng thái danh sách phát duy nhất (custom, favorite, id đang mở), sở hữu hàng đợi playlist write.
+  Danh sách đang mở chỉ lưu id; object được tính từ store. `win.customPlaylists`, `win.favoritePlaylists`,
+  `win.selectedCustomPlaylist` chỉ là binding đọc; hàm `win.*` là delegate 1 dòng.
+- **playlist lock**: Khóa file liên tiến trình (`playlist_manager.locked()`) quanh mọi lần đọc-sửa-ghi danh sách phát,
+  dùng chung cho HTTP, CLI và Spotify import.
 
 ## Mạng xã hội và giao diện
 
