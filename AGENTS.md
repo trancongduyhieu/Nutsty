@@ -64,7 +64,7 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 ├── scripts/
 │   ├── verify_codebase.py          # Kiểm tra AST scope, py_compile & QML/JS contracts (< 1s)
 │   ├── verify_qml_compat.py        # Contract test Quickshell seam: nạp toàn bộ QML qua compat (~2s)
-│   ├── test_playlist_backend.py    # Test ghi danh sách phát: HTTP ops, profile, khóa liên tiến trình
+│   ├── test_playlist_*.py          # Test ghi danh sách phát: backend (HTTP, profile, khóa) và PlaylistStore
 │   └── run_dual_profile_test.sh    # Launcher test 2 profile song song (user1 & user2)
 ├── cloud_relay/                    # Cloudflare Worker & D1 Serverless Global Relay
 │   ├── schema.sql                  # Schema D1 (users, friendships, events, notes)
@@ -107,6 +107,7 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 │   ├── NavArrowButton.qml          # Nút mũi tên < > đồng bộ màu động accentColor
 │   ├── NavSidebar.qml              # Sidebar điều hướng [ Playlists | Queue ]
 │   ├── PlayerBarBottom.qml         # Thanh phát nhạc chính Nutsty
+│   ├── PlaylistStore.qml           # Nguồn duy nhất của danh sách phát; ghi tuần tự qua HTTP (ADR-0007)
 │   ├── PostNoteModal.qml           # Modal đăng ghi chú 24h kèm bài hát
 │   ├── RoundedImage.qml            # Bo góc Design System (HiDPI 2x, lazy VRAM, fallback)
 │   ├── SettingsModal.qml           # Modal đăng nhập Google Account Dark Glass

@@ -36,6 +36,7 @@ jobs:
           python scripts/verify_codebase.py
           python scripts/verify_qml_compat.py
           python scripts/test_playlist_backend.py
+          python scripts/test_playlist_store.py
 
       - name: Download Standalone Windows Binaries (yt-dlp and mpv)
         shell: pwsh
