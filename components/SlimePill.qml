@@ -11,11 +11,11 @@ Rectangle {
     property real targetX: 0
     property real targetWidth: 0
     // Leading edge: fast; it would overshoot, but the wall stops it at the target
-    property real leadSpring: 8.0
+    property real leadSpring: 5.0
     property real leadDamping: 0.45
     // Trailing edge: slower and bouncy
-    property real trailSpring: 2.6
-    property real trailDamping: 0.24
+    property real trailSpring: 1.7
+    property real trailDamping: 0.2
     // How far the trailing edge may squeeze the pill when it overshoots (fraction of targetWidth)
     property real minSquash: 0.76
     // Splat on impact: share of the width pushed into height for a moment
@@ -92,8 +92,8 @@ Rectangle {
 
     SequentialAnimation {
         id: splat
-        NumberAnimation { target: pill; property: "impact"; to: 1; duration: 70; easing.type: Easing.OutQuad }
-        NumberAnimation { target: pill; property: "impact"; to: 0; duration: 560; easing.type: Easing.OutElastic; easing.amplitude: 1.0; easing.period: 0.32 }
+        NumberAnimation { target: pill; property: "impact"; to: 1; duration: 130; easing.type: Easing.OutQuad }
+        NumberAnimation { target: pill; property: "impact"; to: 0; duration: 900; easing.type: Easing.OutElastic; easing.amplitude: 1.0; easing.period: 0.55 }
     }
 
     Behavior on leftEdge {
