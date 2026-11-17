@@ -7,22 +7,138 @@ import os
 import sys
 import json
 import time
+import threading
+import contextlib
+import contextvars
+import functools
 
 try:
     from . import platform_compat as pc
 except (ImportError, ValueError):
     import platform_compat as pc
 
+
+def _suffix_for(profile):
+    name = str(profile or "").strip().lower()
+    return f"_{name}" if name else ""
+
+
+# Suffix of the process's own profile. One nutsty-daemon serves every profile window, so HTTP requests
+# override it per request with profile_scope(); contextvars keeps that per thread on auth_server.
 PROFILE_NAME = os.getenv("NUTSTY_PROFILE", "").strip().lower()
-PROFILE_SUFFIX = f"_{PROFILE_NAME}" if PROFILE_NAME else ""
+PROFILE_SUFFIX = _suffix_for(PROFILE_NAME)
+_ACTIVE_SUFFIX = contextvars.ContextVar("nutsty_playlist_suffix", default=PROFILE_SUFFIX)
 
 CONFIG_DIR = pc.get_config_dir()
 PLAYLISTS_FILE = os.path.join(CONFIG_DIR, f"custom_playlists{PROFILE_SUFFIX}.json")
 FAVORITE_PLAYLISTS_FILE = os.path.join(CONFIG_DIR, f"favorite_playlists{PROFILE_SUFFIX}.json")
+LOCK_TIMEOUT_SEC = 10.0
+
+
+def _playlists_file():
+    return os.path.join(CONFIG_DIR, f"custom_playlists{_ACTIVE_SUFFIX.get()}.json")
+
+
+def _favorites_file():
+    return os.path.join(CONFIG_DIR, f"favorite_playlists{_ACTIVE_SUFFIX.get()}.json")
+
+
+@contextlib.contextmanager
+def profile_scope(profile):
+    """Read and write the files of `profile` (NUTSTY_PROFILE value, "" = default) inside this block."""
+    token = _ACTIVE_SUFFIX.set(_suffix_for(profile))
+    try:
+        yield
+    finally:
+        _ACTIVE_SUFFIX.reset(token)
+
+
+# ---------------------------------------------------------------------------
+# Cross-process lock around load-modify-save. Writers: the QML store (via HTTP), the CLI, spotify_importer.
+# Without it two writers each load the file and the later save drops the other's change.
+# ---------------------------------------------------------------------------
+_THREAD_LOCK = threading.RLock()
+_LOCK_STATE = threading.local()
+
+
+def _acquire_file_lock(fh):
+    deadline = time.monotonic() + LOCK_TIMEOUT_SEC
+    if os.name == "nt":
+        import msvcrt
+        while True:
+            try:
+                fh.seek(0)
+                msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+                return
+            except OSError:
+                if time.monotonic() > deadline:
+                    raise TimeoutError("playlist lock busy")
+                time.sleep(0.02)
+    else:
+        import fcntl
+        while True:
+            try:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return
+            except BlockingIOError:
+                if time.monotonic() > deadline:
+                    raise TimeoutError("playlist lock busy")
+                time.sleep(0.02)
+
+
+def _release_file_lock(fh):
+    try:
+        if os.name == "nt":
+            import msvcrt
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+    except OSError:
+        pass
+
+
+@contextlib.contextmanager
+def locked():
+    """Hold the playlist lock of the active profile. Reentrant within a thread."""
+    with _THREAD_LOCK:
+        held = getattr(_LOCK_STATE, "held", None)
+        if held is None:
+            _LOCK_STATE.held = held = {}
+        suffix = _ACTIVE_SUFFIX.get()
+        if held.get(suffix):
+            held[suffix] += 1
+            try:
+                yield
+            finally:
+                held[suffix] -= 1
+            return
+        os.makedirs(CONFIG_DIR, exist_ok=True)
+        fh = open(os.path.join(CONFIG_DIR, f"playlists{suffix}.lock"), "a+b")
+        try:
+            _acquire_file_lock(fh)
+            held[suffix] = 1
+            try:
+                yield
+            finally:
+                held[suffix] = 0
+                _release_file_lock(fh)
+        finally:
+            fh.close()
+
+
+def _with_lock(fn):
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        with locked():
+            return fn(*args, **kwargs)
+    return wrapper
+
 
 def load_playlists():
-    p = PLAYLISTS_FILE
-    if not os.path.exists(p) and not PROFILE_SUFFIX:
+    p = _playlists_file()
+    if not os.path.exists(p) and not _ACTIVE_SUFFIX.get():
         p = os.path.join(CONFIG_DIR, "custom_playlists.json")
     if not os.path.exists(p):
         return []
@@ -56,18 +172,20 @@ def load_playlists():
                     if not item.get("customCover") and item.get("image"):
                         item["customCover"] = item["image"]
             if needs_save:
-                save_playlists(data)
+                with locked():
+                    save_playlists(data)
             return data
     except Exception:
         return []
 
 def save_playlists(playlists):
     os.makedirs(CONFIG_DIR, exist_ok=True)
-    tmp = PLAYLISTS_FILE + ".tmp"
+    dest = _playlists_file()
+    tmp = dest + ".tmp"
     try:
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(playlists, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, PLAYLISTS_FILE)
+        os.replace(tmp, dest)
         return True
     except Exception as e:
         sys.stderr.write(f"Error saving custom playlists: {e}\n")
@@ -93,6 +211,7 @@ def get_track_unique_key(track):
         return track.get("title", "")
     return str(track)
 
+@_with_lock
 def create_playlist(title, initial_tracks=None, description="", custom_cover=""):
     if not title or not title.strip():
         title = "New Playlist"
@@ -126,6 +245,7 @@ def create_playlist(title, initial_tracks=None, description="", custom_cover="")
     save_playlists(playlists)
     return new_pl
 
+@_with_lock
 def rename_playlist(pl_id, new_title, new_description=None, new_cover=None):
     """Rename a playlist and, when new_cover is given ("" clears it), set its cover in the same write.
 
@@ -155,6 +275,7 @@ def _apply_cover(target, image_path):
     target["customCover"] = image_path.strip() if image_path else ""
     target["image"] = target["customCover"] or (target["tracks"][0].get("image", "") if target.get("tracks") else "")
 
+@_with_lock
 def set_playlist_cover(pl_id, image_path):
     playlists = load_playlists()
     target = None
@@ -169,6 +290,7 @@ def set_playlist_cover(pl_id, image_path):
     save_playlists(playlists)
     return {"success": True, "playlist": target}
 
+@_with_lock
 def reorder_tracks(pl_id, from_index, to_index):
     playlists = load_playlists()
     target = None
@@ -190,6 +312,7 @@ def reorder_tracks(pl_id, from_index, to_index):
         return {"success": True, "playlist": target}
     return {"success": False, "error": "Invalid indices"}
 
+@_with_lock
 def delete_playlist(pl_id):
     playlists = load_playlists()
     filtered = [p for p in playlists if p.get("id") != pl_id]
@@ -204,6 +327,7 @@ def delete_playlist(pl_id):
         sys.stderr.write(f"Error updating favorite playlists on delete: {e}\n")
     return {"success": True, "remaining": len(filtered)}
 
+@_with_lock
 def add_tracks_to_playlist(pl_id, new_tracks):
     playlists = load_playlists()
     target = None
@@ -236,6 +360,7 @@ def add_tracks_to_playlist(pl_id, new_tracks):
     save_playlists(playlists)
     return {"success": True, "added": added, "total": len(target["tracks"])}
 
+@_with_lock
 def remove_track_from_playlist(pl_id, track_identifier):
     playlists = load_playlists()
     target = None
@@ -261,8 +386,8 @@ def remove_track_from_playlist(pl_id, track_identifier):
     return {"success": True, "total": len(target["tracks"])}
 
 def load_favorite_playlists():
-    p = FAVORITE_PLAYLISTS_FILE
-    if not os.path.exists(p) and not PROFILE_SUFFIX:
+    p = _favorites_file()
+    if not os.path.exists(p) and not _ACTIVE_SUFFIX.get():
         p = os.path.join(CONFIG_DIR, "favorite_playlists.json")
     if not os.path.exists(p):
         return []
@@ -275,16 +400,18 @@ def load_favorite_playlists():
 
 def save_favorite_playlists(favs):
     os.makedirs(CONFIG_DIR, exist_ok=True)
-    tmp = FAVORITE_PLAYLISTS_FILE + ".tmp"
+    dest = _favorites_file()
+    tmp = dest + ".tmp"
     try:
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(favs, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, FAVORITE_PLAYLISTS_FILE)
+        os.replace(tmp, dest)
         return True
     except Exception as e:
         sys.stderr.write(f"Error saving favorite playlists: {e}\n")
         return False
 
+@_with_lock
 def toggle_favorite_playlist(pl_data):
     if not pl_data:
         return {"success": False, "error": "No playlist data"}
@@ -338,6 +465,7 @@ def toggle_favorite_playlist(pl_data):
         save_favorite_playlists(favs)
         return {"success": True, "isFavorite": True, "playlistId": pl_id, "favorites": favs}
 
+@_with_lock
 def remove_favorite_playlist(pl_id):
     if not pl_id:
         return {"success": False}
@@ -401,6 +529,7 @@ def export_playlists(dest):
 def _playlist_id(pl):
     return str(pl.get("id") or pl.get("playlistId") or pl.get("browseId") or "")
 
+@_with_lock
 def import_playlists(src):
     """Merge a backup into the current playlists. Never deletes anything:
     unknown playlists are added, known ones (same id) gain the tracks they lack."""
@@ -491,6 +620,106 @@ def import_playlists(src):
         return {"success": False, "error": "write_failed"}
     return {"success": True, "added": added, "updated": updated,
             "tracksAdded": tracks_added, "favoritesAdded": favs_added}
+
+# ---------------------------------------------------------------------------
+# HTTP: POST /api/playlists/<op> (route_dispatcher on Linux, auth_server on Windows).
+# Every answer is a playlist write result: the op's own fields plus the playlists and favorites as they are
+# on disk after the op, read under the same lock, so the QML store can replace its optimistic patch.
+# ---------------------------------------------------------------------------
+def _op_list(body):
+    return {"success": True}
+
+
+def _op_create(body):
+    tracks = body.get("tracks") or []
+    if not isinstance(tracks, list):
+        return {"success": False, "error": "invalid_tracks"}
+    pl = create_playlist(str(body.get("title") or ""), tracks,
+                         str(body.get("description") or ""), str(body.get("cover") or ""))
+    return {"success": True, "playlist": pl}
+
+
+def _op_rename(body):
+    cover = body.get("cover") if "cover" in body else None
+    desc = body.get("description") if "description" in body else None
+    return rename_playlist(str(body.get("id") or ""), str(body.get("title") or ""),
+                           None if desc is None else str(desc), None if cover is None else str(cover))
+
+
+def _op_add(body):
+    tracks = body.get("tracks")
+    if isinstance(tracks, dict):
+        tracks = [tracks]
+    if not isinstance(tracks, list):
+        return {"success": False, "error": "invalid_tracks"}
+    return add_tracks_to_playlist(str(body.get("id") or ""), tracks)
+
+
+def _op_remove(body):
+    track = body.get("track")
+    if track in (None, ""):
+        return {"success": False, "error": "no_track"}
+    return remove_track_from_playlist(str(body.get("id") or ""), track)
+
+
+def _op_reorder(body):
+    try:
+        return reorder_tracks(str(body.get("id") or ""), int(body.get("from")), int(body.get("to")))
+    except (TypeError, ValueError):
+        return {"success": False, "error": "Invalid indices"}
+
+
+def _op_delete(body):
+    pl_id = str(body.get("id") or "")
+    if not pl_id:
+        return {"success": False, "error": "Playlist not found"}
+    return delete_playlist(pl_id)
+
+
+def _op_toggle_favorite(body):
+    res = toggle_favorite_playlist(body.get("playlist"))
+    res.pop("favorites", None)
+    return res
+
+
+HTTP_OPS = {
+    "list": _op_list,
+    "list_favorites": _op_list,
+    "create": _op_create,
+    "rename": _op_rename,
+    "add": _op_add,
+    "remove": _op_remove,
+    "reorder": _op_reorder,
+    "delete": _op_delete,
+    "toggle_favorite": _op_toggle_favorite,
+}
+
+
+def handle_http(op, body):
+    """Run one playlist op for an HTTP request. Returns (status_code, response_dict)."""
+    handler = HTTP_OPS.get(op)
+    if handler is None:
+        return 404, {"success": False, "error": f"unknown_op: {op}"}
+    if not isinstance(body, dict):
+        body = {}
+    try:
+        with profile_scope(body.get("profile", "")), locked():
+            res = handler(body)
+            res["playlists"] = load_playlists()
+            res["favorites"] = load_favorite_playlists()
+    except TimeoutError:
+        return 503, {"success": False, "error": "busy"}
+    except Exception as e:
+        sys.stderr.write(f"Playlist op {op} failed: {e}\n")
+        return 500, {"success": False, "error": "internal", "detail": str(e)}
+    return (200 if res.get("success") else 400), res
+
+
+def handle_http_path(handler, path, body):
+    """Shared by both routers: path is /api/playlists/<op>."""
+    status, res = handle_http(path.rstrip("/").rsplit("/", 1)[-1], body)
+    handler._send_json(res, status)
+
 
 def handle_cli(args=None):
     if args is None:

@@ -27,3 +27,6 @@ jobs:
 
       - name: Quickshell seam contract (load all QML through compat)
         run: python scripts/verify_qml_compat.py
+
+      - name: Playlist writes (HTTP ops, profile scope, cross-process lock, both routers)
+        run: python scripts/test_playlist_backend.py

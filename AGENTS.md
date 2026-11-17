@@ -64,6 +64,7 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 ├── scripts/
 │   ├── verify_codebase.py          # Kiểm tra AST scope, py_compile & QML/JS contracts (< 1s)
 │   ├── verify_qml_compat.py        # Contract test Quickshell seam: nạp toàn bộ QML qua compat (~2s)
+│   ├── test_playlist_backend.py    # Test ghi danh sách phát: HTTP ops, profile, khóa liên tiến trình
 │   └── run_dual_profile_test.sh    # Launcher test 2 profile song song (user1 & user2)
 ├── cloud_relay/                    # Cloudflare Worker & D1 Serverless Global Relay
 │   ├── schema.sql                  # Schema D1 (users, friendships, events, notes)

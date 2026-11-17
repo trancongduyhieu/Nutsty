@@ -99,6 +99,11 @@ except (ImportError, ValueError):
     import music_routes
     import social_routes
 
+try:
+    from . import playlist_manager
+except (ImportError, ValueError):
+    import playlist_manager
+
 pc.configure_windows_ssl()
 
 PORT = 17890
@@ -322,7 +327,9 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def do_POST(self):
-        if self.path in ("/api/auth/cookies", "/api/auth/sync"):
+        if self.path.startswith("/api/playlists/"):
+            playlist_manager.handle_http_path(self, self.path.split("?", 1)[0], self._read_post_json())
+        elif self.path in ("/api/auth/cookies", "/api/auth/sync"):
             music_routes.handle_post_auth_cookies(self, self._read_post_body())
         elif self.path in ("/api/auth/auto-sync", "/api/auth/auto_sync"):
             music_routes.handle_post_auth_auto_sync(self)

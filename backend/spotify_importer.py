@@ -747,29 +747,30 @@ class SpotifyImportManager:
                     self.error = "Không thể tìm thấy nguồn âm thanh phù hợp cho các bài hát."
                 return
 
-            # Save to custom_playlists.json via playlist_manager (SSOT)
-            existing_playlists = playlist_manager.load_playlists()
-            new_id = f"custom_pl_spotify_{pid}_{int(time.time())}"
-            final_cover = cover_image or (resolved_tracks[0].get("image") if resolved_tracks else "")
-            new_playlist = {
-                "id": new_id,
-                "playlistId": new_id,
-                "title": title,
-                "name": title,
-                "description": desc,
-                "image": final_cover,
-                "customCover": final_cover,
-                "trackCount": len(resolved_tracks),
-                "tracks": resolved_tracks,
-                "source": "spotify_import",
-                "spotifyId": pid,
-                "isCustom": True,
-                "isLocal": True,
-                "type": "custom",
-                "createdAt": int(time.time() * 1000)
-            }
-            existing_playlists.insert(0, new_playlist)
-            playlist_manager.save_playlists(existing_playlists)
+            # Save to custom_playlists.json via playlist_manager (SSOT), under its lock so a concurrent playlist write is not lost
+            with playlist_manager.locked():
+                existing_playlists = playlist_manager.load_playlists()
+                new_id = f"custom_pl_spotify_{pid}_{int(time.time())}"
+                final_cover = cover_image or (resolved_tracks[0].get("image") if resolved_tracks else "")
+                new_playlist = {
+                    "id": new_id,
+                    "playlistId": new_id,
+                    "title": title,
+                    "name": title,
+                    "description": desc,
+                    "image": final_cover,
+                    "customCover": final_cover,
+                    "trackCount": len(resolved_tracks),
+                    "tracks": resolved_tracks,
+                    "source": "spotify_import",
+                    "spotifyId": pid,
+                    "isCustom": True,
+                    "isLocal": True,
+                    "type": "custom",
+                    "createdAt": int(time.time() * 1000)
+                }
+                existing_playlists.insert(0, new_playlist)
+                playlist_manager.save_playlists(existing_playlists)
 
             with self._lock:
                 self.active = False

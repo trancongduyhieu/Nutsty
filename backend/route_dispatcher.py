@@ -24,10 +24,12 @@ try:
     from . import platform_compat as pc
     from . import music_routes
     from . import social_routes
+    from . import playlist_manager
 except (ImportError, ValueError):
     import platform_compat as pc
     import music_routes
     import social_routes
+    import playlist_manager
 
 
 class MockResponseHandler:
@@ -194,6 +196,8 @@ def dispatch_request(method, path, query_dict, body_str):
             social_routes.handle_post_friend_respond(handler, req_json)
         elif clean_path == "/api/friends/remove":
             social_routes.handle_post_friend_remove(handler, req_json)
+        elif clean_path.startswith("/api/playlists/"):
+            playlist_manager.handle_http_path(handler, clean_path, req_json)
         else:
             handler._send_json({"error": f"Not found: {clean_path}"}, 404)
     else:
