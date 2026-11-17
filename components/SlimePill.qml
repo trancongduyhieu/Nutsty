@@ -70,9 +70,24 @@ Rectangle {
         if (Math.abs(nl - leftEdge) > 4) {
             movingRight = dir;
             impactArmed = true;
+            // The leading edge leaves now; the trailing edge stays stuck for a moment and is then
+            // dragged after it, so the leading side clearly reaches the wall first
+            if (movingRight) rightEdge = nr; else leftEdge = nl;
+            trailRelease.restart();
+            return;
         }
+        trailRelease.stop();
         leftEdge = nl;
         rightEdge = nr;
+    }
+    property int trailDelay: 120
+    Timer {
+        id: trailRelease
+        interval: pill.trailDelay
+        onTriggered: {
+            if (pill.movingRight) pill.leftEdge = pill.goalLeft;
+            else pill.rightEdge = pill.goalRight;
+        }
     }
     onTargetXChanged: settle()
     onTargetWidthChanged: settle()
