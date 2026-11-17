@@ -43,17 +43,36 @@ ColumnLayout {
         color: Theme.textPrimary
     }
 
-    GridLayout {
+    // Tiles are placed by hand rather than in a GridLayout so that, like the other Home rows,
+    // their width and position follow the window with the same spring when the side panel opens
+    readonly property int gap: 10
+    readonly property int tileHeight: 60
+    readonly property int rows: Math.ceil(entries.length / columns)
+    property real tileWidth: (width - (columns - 1) * gap) / columns
+    Behavior on tileWidth { SpringAnimation { spring: 4; damping: 0.4; epsilon: 0.25 } }
+    property real gridHeight: rows * tileHeight + Math.max(0, rows - 1) * gap
+    Behavior on gridHeight { SpringAnimation { spring: 4; damping: 0.4; epsilon: 0.25 } }
+
+    Item {
         Layout.fillWidth: true
-        columns: root.columns
-        columnSpacing: 10
-        rowSpacing: 10
+        Layout.preferredHeight: root.gridHeight
 
         Repeater {
             model: root.entries
             delegate: Rectangle {
                 id: tile
                 required property var modelData
+                required property int index
+                x: (index % root.columns) * (root.tileWidth + root.gap)
+                y: Math.floor(index / root.columns) * (root.tileHeight + root.gap)
+                width: root.tileWidth
+                height: root.tileHeight
+                Behavior on x { SpringAnimation { spring: 4; damping: 0.4; epsilon: 0.25 } }
+                Behavior on y { SpringAnimation { spring: 4; damping: 0.4; epsilon: 0.25 } }
+                // Tiles that appear because a column was added fade in instead of popping
+                opacity: 0
+                Component.onCompleted: opacity = 1
+                Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
                 readonly property string kind: modelData.kind
                 readonly property var pl: modelData.pl
                 readonly property bool current: root.playingId !== "" && root.playingId === modelData.key
@@ -63,8 +82,6 @@ ColumnLayout {
                 readonly property int count: kind === "liked" ? root.likedCount
                     : kind === "downloads" ? root.downloadsCount : (pl.tracks ? pl.tracks.length : 0)
 
-                Layout.fillWidth: true
-                Layout.preferredHeight: 60
                 // Content layer, not glass: a thin material like the queue rows (translucent fill,
                 // lighter at the top, 1px hairline). Hover and "playing" are told by the accent hairline.
                 radius: 14
