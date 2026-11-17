@@ -32,7 +32,7 @@ Rectangle {
     signal spotifyImportRequested()
 
     property var albumMetadata: null
-    property string downloadsSubTab: "tracks" // "tracks", "playlists", "favorites"
+    property string downloadsSubTab: "playlists" // "playlists", "favorites", "tracks" (Đã tải)
     onDownloadsSubTabChanged: {
         if (sortPopover.isOpen) {
             sortPopover.isOpen = false;
@@ -331,21 +331,33 @@ Rectangle {
                 }
 
                 // Normal View Header: Title, Count & View Options (Downloads Sub-tabs)
-                RowLayout {
+                // Narrow (e.g. with the Mochy panel open): the tabs drop under the title instead of
+                // pushing the whole page wider than the window
+                GridLayout {
+                    id: headerGrid
                     Layout.fillWidth: true
                     visible: root.albumMetadata === null
-                    spacing: 16
+                    readonly property bool roomy: titleRow.implicitWidth + (subTabTrack.visible ? subTabTrack.implicitWidth : 120) + 48 <= width
+                    columns: roomy ? 3 : 1
+                    columnSpacing: 16
+                    rowSpacing: 12
 
                     // Title & Static Count
                     RowLayout {
+                        id: titleRow
                         spacing: 12
+                        Layout.fillWidth: !headerGrid.roomy
+                        Layout.minimumWidth: 0
 
                         Text {
+                            Layout.fillWidth: !headerGrid.roomy
+                            Layout.minimumWidth: 0
+                            elide: Text.ElideRight
                             text: {
                                 if (!root.isDownloadsView) return root.sectionTitle;
                                 if (root.downloadsSubTab === "playlists") return I18n.tr("Danh sách phát cá nhân của bạn", "Your Personal Playlists");
                                 if (root.downloadsSubTab === "favorites") return I18n.tr("Bài hát yêu thích", "Favorite Songs");
-                                return I18n.tr("Tải xuống", "Downloads");
+                                return I18n.tr("Đã tải", "Downloaded");
                             }
                             font.family: Theme.fontFamily
                             font.pixelSize: 28
@@ -378,124 +390,91 @@ Rectangle {
                         }
                     }
 
-                    Item { Layout.fillWidth: true }
+                    Item { Layout.fillWidth: true; visible: headerGrid.roomy }
 
-                    // Downloads Sub-tab Switcher: Ambient Fluid Text [ Bài hát | Danh sách phát | Yêu thích ]
-                    Row {
+                    // Library sub-tabs [ Danh sách phát | Yêu thích | Đã tải ] as one segmented track;
+                    // the last one is remembered in win.lastLibrarySubTab
+                    Rectangle {
+                        id: subTabTrack
                         visible: root.isDownloadsView
-                        Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
-                        spacing: 6
+                        Layout.alignment: headerGrid.roomy ? (Qt.AlignVCenter | Qt.AlignRight) : (Qt.AlignVCenter | Qt.AlignLeft)
+                        implicitWidth: subTabRow.implicitWidth + 8
+                        Layout.preferredWidth: subTabRow.implicitWidth + 8
+                        Layout.preferredHeight: 40
+                        radius: 20
+                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.08)
+                        border.width: 1
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18)
 
-                        // Subtab 1: Bài hát
+                        // One shared pill slides to the active tab, same spring as NowPlayingActionRow
                         Rectangle {
-                            implicitWidth: trksText.implicitWidth + 24
-                            implicitHeight: 30
-                            width: implicitWidth
-                            height: implicitHeight
-                            radius: 15
-                            color: root.downloadsSubTab === "tracks" 
-                                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) 
-                                   : (trksH.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent")
-                            border.color: root.downloadsSubTab === "tracks" 
-                                          ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40) 
-                                          : "transparent"
-                            border.width: 1
-                            Behavior on color { ColorAnimation { duration: 150 } }
-                            Behavior on border.color { ColorAnimation { duration: 150 } }
-                            HoverHandler { id: trksH }
-
-                            Text {
-                                id: trksText
-                                anchors.centerIn: parent
-                                text: I18n.tr("Bài hát", "Songs")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 13
-                                font.bold: root.downloadsSubTab === "tracks"
-                                color: root.downloadsSubTab === "tracks" ? root.accentColor : (trksH.hovered ? "#ffffff" : Theme.textSecondary)
-                                Behavior on color { ColorAnimation { duration: 150 } }
+                            id: subTabPill
+                            readonly property Item target: {
+                                var keys = ["playlists", "favorites", "tracks"];
+                                return subTabRepeater.count === keys.length ? subTabRepeater.itemAt(Math.max(0, keys.indexOf(root.downloadsSubTab))) : null;
                             }
+                            visible: target !== null
+                            x: subTabRow.x + (target ? target.x : 0)
+                            y: subTabRow.y
+                            width: target ? target.width : 0
+                            height: 32
+                            radius: 16
+                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.26)
+                            border.width: 1
+                            border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                            Behavior on x { SpringAnimation { spring: 4.5; damping: 0.38; epsilon: 0.25 } }
+                            Behavior on width { SpringAnimation { spring: 4.5; damping: 0.38; epsilon: 0.25 } }
+                        }
 
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    root.downloadsSubTab = "tracks";
-                                    if (typeof win !== "undefined" && win) {
-                                        win.browsingTracks = win.allTracks;
+                        Row {
+                            id: subTabRow
+                            anchors.centerIn: parent
+                            spacing: 2
+
+                            Repeater {
+                                id: subTabRepeater
+                                model: [
+                                    { key: "playlists", vi: "Danh sách phát", en: "Playlists", icon: "../assets/icons/material/ms-library_music-fill.svg" },
+                                    { key: "favorites", vi: "Yêu thích", en: "Favorites", icon: "../assets/icons/material/ms-favorite-fill.svg" },
+                                    { key: "tracks", vi: "Đã tải", en: "Downloaded", icon: "../assets/icons/material/ms-download.svg" }
+                                ]
+                                delegate: Rectangle {
+                                    id: subTab
+                                    required property var modelData
+                                    readonly property bool active: root.downloadsSubTab === modelData.key
+                                    // Concentric with the track: 20 - 4 = 16
+                                    width: subTabContent.implicitWidth + 28
+                                    height: 32
+                                    radius: 16
+                                    // The active fill is the sliding pill above; a tab only tints on hover
+                                    color: !subTab.active && subTabHover.hovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12) : "transparent"
+                                    Behavior on color { ColorAnimation { duration: 150 } }
+                                    HoverHandler { id: subTabHover; cursorShape: Qt.PointingHandCursor }
+                                    TapHandler { onTapped: root.downloadsSubTab = subTab.modelData.key }
+                                    Accessible.role: Accessible.PageTab
+                                    Accessible.name: subTabText.text
+
+                                    Row {
+                                        id: subTabContent
+                                        anchors.centerIn: parent
+                                        spacing: 7
+                                        AppIcon {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            source: subTab.modelData.icon
+                                            iconSize: 15
+                                            color: subTab.active ? Qt.lighter(root.accentColor, 1.2) : Theme.textSecondary
+                                        }
+                                        Text {
+                                            id: subTabText
+                                            text: I18n.tr(subTab.modelData.vi, subTab.modelData.en)
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 13
+                                            font.weight: subTab.active ? Font.DemiBold : Font.Medium
+                                            color: subTab.active || subTabHover.hovered ? "#ffffff" : Theme.textSecondary
+                                            Behavior on color { ColorAnimation { duration: 150 } }
+                                        }
                                     }
                                 }
-                            }
-                        }
-
-                        // Subtab 2: Danh sách phát
-                        Rectangle {
-                            implicitWidth: plsText.implicitWidth + 24
-                            implicitHeight: 30
-                            width: implicitWidth
-                            height: implicitHeight
-                            radius: 15
-                            color: root.downloadsSubTab === "playlists" 
-                                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) 
-                                   : (plsH.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent")
-                            border.color: root.downloadsSubTab === "playlists" 
-                                          ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40) 
-                                          : "transparent"
-                            border.width: 1
-                            Behavior on color { ColorAnimation { duration: 150 } }
-                            Behavior on border.color { ColorAnimation { duration: 150 } }
-                            HoverHandler { id: plsH }
-
-                            Text {
-                                id: plsText
-                                anchors.centerIn: parent
-                                text: I18n.tr("Danh sách phát", "Playlists")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 13
-                                font.bold: root.downloadsSubTab === "playlists"
-                                color: root.downloadsSubTab === "playlists" ? root.accentColor : (plsH.hovered ? "#ffffff" : Theme.textSecondary)
-                                Behavior on color { ColorAnimation { duration: 150 } }
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.downloadsSubTab = "playlists"
-                            }
-                        }
-
-                        // Subtab 3: Yêu thích (Favorite Playlists)
-                        Rectangle {
-                            implicitWidth: favsText.implicitWidth + 24
-                            implicitHeight: 30
-                            width: implicitWidth
-                            height: implicitHeight
-                            radius: 15
-                            color: root.downloadsSubTab === "favorites" 
-                                   ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) 
-                                   : (favsH.hovered ? Qt.rgba(1, 1, 1, 0.07) : "transparent")
-                            border.color: root.downloadsSubTab === "favorites" 
-                                          ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40) 
-                                          : "transparent"
-                            border.width: 1
-                            Behavior on color { ColorAnimation { duration: 150 } }
-                            Behavior on border.color { ColorAnimation { duration: 150 } }
-                            HoverHandler { id: favsH }
-
-                            Text {
-                                id: favsText
-                                anchors.centerIn: parent
-                                text: I18n.tr("Yêu thích", "Favorites")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 13
-                                font.bold: root.downloadsSubTab === "favorites"
-                                color: root.downloadsSubTab === "favorites" ? root.accentColor : (favsH.hovered ? "#ffffff" : Theme.textSecondary)
-                                Behavior on color { ColorAnimation { duration: 150 } }
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.downloadsSubTab = "favorites"
                             }
                         }
                     }
@@ -1325,7 +1304,7 @@ Rectangle {
                                             anchors.centerIn: parent
                                             source: "../assets/icons/media-playback-start-symbolic.svg"
                                             iconSize: 14
-                                            color: "#000000"
+                                            color: (root.accentColor.r * 0.299 + root.accentColor.g * 0.587 + root.accentColor.b * 0.114) > 0.6 ? "#0c0d10" : "#ffffff"
                                         }
 
                                         MouseArea {

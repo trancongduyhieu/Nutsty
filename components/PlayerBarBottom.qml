@@ -21,7 +21,8 @@ Item {
     property real volume: 100.0
     property real prevVolume: 100.0
     property bool isShuffle: false
-    property bool isRepeat: false
+    property string repeatMode: "off"   // "off" | "all" (queue) | "one" (current song)
+    readonly property bool repeatOn: repeatMode !== "off"
     property bool isLyricsActive: false
     property bool isNowPlayingOpen: false
     property bool isQueueActive: false
@@ -454,19 +455,22 @@ Item {
                     HoverHandler { id: repH }
                     scale: repH.hovered ? 1.08 : 1.0
                     Behavior on scale { NumberAnimation { duration: 120 } }
+                    // Material repeat / repeat_one (the "1" sits inside the loop), same pair as NowPlayingControls
                     AppIcon {
                         anchors.centerIn: parent
-                        source: "../assets/icons/media-playlist-repeat-symbolic.svg"
-                        iconSize: 20
-                        color: root.isRepeat ? root.accentColor : "#ffffff"
+                        source: root.repeatMode === "one" ? "../assets/icons/material/ms-repeat_one.svg"
+                                                          : "../assets/icons/material/ms-repeat.svg"
+                        iconSize: 26
+                        color: root.repeatOn ? root.accentColor : "#ffffff"
                     }
+                    // Loop the queue: a dot under the icon
                     Rectangle {
                         width: 3; height: 3; radius: 1.5
                         color: root.accentColor
                         anchors.bottom: parent.bottom
                         anchors.bottomMargin: 8
                         anchors.horizontalCenter: parent.horizontalCenter
-                        visible: root.isRepeat
+                        visible: root.repeatMode === "all"
                     }
                     MouseArea {
                         anchors.fill: parent

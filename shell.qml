@@ -125,7 +125,7 @@ Scope {
 
     property string currentView: "home" // "home", "library", "playlist", "search"
     property string previousView: "home"
-    property string lastLibrarySubTab: "tracks" // "tracks", "playlists", "favorites"
+    property string lastLibrarySubTab: "playlists" // "playlists", "favorites", "tracks" (Đã tải)
     property string lastLibraryView: "library"  // "library", "custom_playlist_detail"
     property var homeMoods: []
     property string selectedMood: "All"
@@ -345,7 +345,9 @@ Scope {
     property var seekDebounceTimer: seekDebounceTimer
     property var rapidNavDebounceTimer: rapidNavDebounceTimer
     property string toastMessage: ""
+    property string toastKind: "info"
     property bool toastVisible: false
+    property NotificationStore notificationStore: NotificationStore {}
     property string localApiUrl: "http://127.0.0.1:17890"
     property string notesApiUrl: Quickshell.env("NUTSTY_WORKER_URL") || "http://127.0.0.1:17890"
     property string appVersion: "2.0.0"
@@ -781,23 +783,25 @@ Scope {
                 try { res = JSON.parse(data); } catch (e) { return; }
                 playlistBackupProc.gotResult = true;
                 if (!res || !res.success) {
-                    win.showToast(win.playlistBackupErrorText(res ? res.error : ""));
+                    win.notify("error", win.playlistBackupErrorText(res ? res.error : ""));
                 } else if (win.playlistBackupAction === "export") {
-                    win.showToast(I18n.tr("Đã xuất " + res.playlists + " danh sách phát và " + res.favorites + " mục yêu thích",
-                                          "Exported " + res.playlists + " playlists and " + res.favorites + " favorites"));
+                    win.notify("library", I18n.tr("Đã xuất " + res.playlists + " danh sách phát, " + (res.likedSongs || 0) + " bài yêu thích, " + (res.downloads || 0) + " bài đã tải",
+                                          "Exported " + res.playlists + " playlists, " + (res.likedSongs || 0) + " liked songs, " + (res.downloads || 0) + " downloaded songs"));
                 } else {
-                    var changed = res.added + res.updated + res.favoritesAdded;
-                    win.showToast(changed === 0
-                        ? I18n.tr("Không có gì mới, danh sách phát đã đầy đủ", "Nothing new, your playlists are already up to date")
-                        : I18n.tr("Đã nhập " + res.added + " danh sách mới, bổ sung " + res.tracksAdded + " bài, " + res.favoritesAdded + " mục yêu thích",
-                                  "Imported " + res.added + " new playlists, " + res.tracksAdded + " added songs, " + res.favoritesAdded + " favorites"));
-                    if (changed > 0) playlistStore.reload();
+                    var likedAdded = res.likedAdded || 0;
+                    var changed = res.added + res.updated + res.favoritesAdded + likedAdded;
+                    win.notify("library", changed === 0
+                        ? I18n.tr("Không có gì mới, thư viện đã đầy đủ", "Nothing new, your library is already up to date")
+                        : I18n.tr("Đã nhập " + res.added + " danh sách mới, bổ sung " + res.tracksAdded + " bài, " + likedAdded + " bài yêu thích",
+                                  "Imported " + res.added + " new playlists, " + res.tracksAdded + " added songs, " + likedAdded + " liked songs"));
+                    if (res.added + res.updated + res.favoritesAdded > 0) playlistStore.reload();
+                    if (likedAdded > 0) likedSongsFileView.reload();
                 }
             }
         }
         onExited: {
             win.playlistBackupBusy = false;
-            if (!gotResult) win.showToast(win.playlistBackupErrorText(""));
+            if (!gotResult) win.notify("error", win.playlistBackupErrorText(""));
         }
     }
 
@@ -1115,7 +1119,7 @@ Scope {
                         settingsModal.spotifyStatusSuccess = true;
                         settingsModal.spotifyStatusMessage = I18n.tr("Đã liên kết tài khoản Spotify thành công!", "Connected Spotify account successfully!");
                         settingsModal.spotifyAutoSyncing = false;
-                        win.showToast(I18n.tr("Đã kết nối tài khoản Spotify thành công!", "Connected Spotify account successfully!"));
+                        win.notify("success", I18n.tr("Đã kết nối tài khoản Spotify thành công!", "Connected Spotify account successfully!"));
                         return;
                     }
                     if (res.error) {
@@ -1334,10 +1338,10 @@ Scope {
                         win.updateStatusMessage = st.message || "";
                         if (st.status === "ready") {
                             win.isDownloadingUpdate = false;
-                            win.showToast(I18n.tr("Đã tải xong bản cập nhật!", "Update download complete!"));
+                            win.notify("update", I18n.tr("Đã tải xong bản cập nhật!", "Update download complete!"));
                         } else if (st.status === "error") {
                             win.isDownloadingUpdate = false;
-                            win.showToast(I18n.tr("Lỗi cập nhật: " + (st.error || ""), "Update error: " + (st.error || "")));
+                            win.notify("error", I18n.tr("Lỗi cập nhật: " + (st.error || ""), "Update error: " + (st.error || "")));
                         }
                     } catch(e) {}
                 }
@@ -1584,11 +1588,20 @@ Scope {
         return SocialEngine.unfriendUser(win, targetEmail);
     }
 
-    function showToast(msg) {
+    // kind picks the toast icon: update, listen, friend, library, download, success, error, info
+    function showToast(msg, kind) {
         if (!msg) return;
         win.toastMessage = msg;
+        win.toastKind = kind || "info";
         win.toastVisible = true;
         toastTimer.restart();
+    }
+
+    // Toast + a line in the bell's history, for events worth finding again later
+    function notify(kind, msg) {
+        if (!msg) return;
+        win.showToast(msg, kind);
+        win.notificationStore.add(kind, msg);
     }
 
     function openExternalUrl(targetUrl) {
@@ -1635,7 +1648,7 @@ Scope {
                             var title = I18n.tr("Cập nhật Nutsty khả dụng!", "Nutsty update available!");
                             var msg = I18n.tr("Đã có phiên bản " + data.latest_version + ". Nhấn vào Cài đặt để cập nhật.",
                                               "Version " + data.latest_version + " is available. Go to Settings to update.");
-                            win.showToast(title + " (" + data.latest_version + ")");
+                            win.notify("update", title + " (" + data.latest_version + ")");
 
                             if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && typeof __NutstyBridge.showTrayNotification === "function") {
                                 __NutstyBridge.showTrayNotification(title, msg);
@@ -1646,18 +1659,18 @@ Scope {
                         }
                     } catch(e) {
                         if (isManual) {
-                            win.showToast(I18n.tr("Lỗi kiểm tra cập nhật", "Error checking for updates"));
+                            win.showToast(I18n.tr("Lỗi kiểm tra cập nhật", "Error checking for updates"), "error");
                         }
                     }
                 } else if (isManual) {
-                    win.showToast(I18n.tr("Không thể kết nối đến máy chủ cập nhật", "Could not reach update server"));
+                    win.showToast(I18n.tr("Không thể kết nối đến máy chủ cập nhật", "Could not reach update server"), "error");
                 }
             }
         };
         xhr.onerror = function() {
             win.isCheckingUpdate = false;
             if (isManual) {
-                win.showToast(I18n.tr("Không thể kết nối đến máy chủ cập nhật", "Could not reach update server"));
+                win.showToast(I18n.tr("Không thể kết nối đến máy chủ cập nhật", "Could not reach update server"), "error");
             }
         };
         try {
@@ -1682,7 +1695,7 @@ Scope {
                     updateStatusPollTimer.restart();
                 } else {
                     win.isDownloadingUpdate = false;
-                    win.showToast(I18n.tr("Không thể bắt đầu cập nhật", "Failed to start update"));
+                    win.showToast(I18n.tr("Không thể bắt đầu cập nhật", "Failed to start update"), "error");
                 }
             }
         };
@@ -1693,7 +1706,7 @@ Scope {
     }
 
     function applyUpdateAndRestart() {
-        win.showToast(I18n.tr("Đang áp dụng bản cập nhật...", "Applying update..."));
+        win.showToast(I18n.tr("Đang áp dụng bản cập nhật...", "Applying update..."), "update");
         var appPath = "";
         if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && typeof __NutstyBridge.getAppDir === "function") {
             appPath = __NutstyBridge.getAppDir();
@@ -1862,7 +1875,26 @@ Scope {
     property real volume: 100.0
 
     property bool isShuffle: false
-    property bool isRepeat: false
+    // "off" | "all" (loop the queue / playlist) | "one" (loop the current song); see playback_engine.js
+    property string repeatMode: "off"
+    readonly property bool isRepeat: repeatMode === "one"
+    function cycleRepeatMode() {
+        win.repeatMode = win.repeatMode === "off" ? "all" : (win.repeatMode === "all" ? "one" : "off");
+        win.queueEndedKey = "";
+        win.saveSettings();
+    }
+    // Shuffle without repeats: keys heard this round, and the order they played in (for Previous)
+    property var shufflePlayed: ({})
+    property var shuffleHistory: []
+    property string queueEndedKey: ""
+    function resetShuffleRound() {
+        win.shufflePlayed = ({});
+        win.shuffleHistory = [];
+        win.shuffleNextPick = null;
+    }
+    onIsShuffleChanged: resetShuffleRound()
+    onPlayingPlaylistIdChanged: resetShuffleRound()
+    onPlayingSourceTitleChanged: resetShuffleRound()
     property bool isNowPlayingOpen: false
     property alias showAmberolDetails: win.isNowPlayingOpen
     property bool isMochySidePanelOpen: false
@@ -2259,7 +2291,7 @@ Scope {
                             win.currentView = "library";
                             win.currentAlbumMetadata = null;
                             mainGrid.albumMetadata = null;
-                            mainGrid.downloadsSubTab = win.lastLibrarySubTab || "tracks";
+                            mainGrid.downloadsSubTab = win.lastLibrarySubTab || "playlists";
                             if (mainGrid.downloadsSubTab === "tracks") {
                                 win.browsingTracks = win.allTracks;
                             }
@@ -2281,18 +2313,8 @@ Scope {
                 onSettingsClicked: {
                     settingsModal.visible = true;
                 }
-                unreadNotificationsCount: win.unreadFriendRequestsCount + (win.hasAppUpdate ? 1 : 0)
-                onNotificationsClicked: (xPos, yPos) => {
-                    if (win.unreadFriendRequestsCount > 0) {
-                        friendRequestsPopover.toggleAt(win.pendingFriendRequests, xPos, yPos);
-                    } else if (win.hasAppUpdate) {
-                        settingsModal.currentTab = 0;
-                        settingsModal.visible = true;
-                        win.showToast(I18n.tr("Đã có bản cập nhật mới: " + win.latestVersion, "New update available: " + win.latestVersion));
-                    } else {
-                        friendRequestsPopover.toggleAt(win.pendingFriendRequests, xPos, yPos);
-                    }
-                }
+                unreadNotificationsCount: win.unreadFriendRequestsCount + (win.hasAppUpdate ? 1 : 0) + win.notificationStore.unread
+                onNotificationsClicked: (xPos, yPos) => notificationCenter.toggleAt(xPos, yPos)
 
                 onTabSelected: tab => win.filterByTab(tab)
                 onCloseWindowRequested: {
@@ -2444,6 +2466,12 @@ Scope {
                             onPlayFriendTrackRequested: trk => win.playFriendTrack(trk)
                             onAddFriendRequested: win.promptAddFriend()
                             onOpenStoryRequested: (friendData, idx) => friendStoryModalLoader.ensure().openWithIndex(idx)
+                            likedCount: win.likedTracksList.length
+                            downloadsCount: win.allTracks.length
+                            myPlaylists: win.homeShortcutPlaylists
+                            playingSourceId: win.playingPlaylistId
+                            onLibraryOpenRequested: (kind, pl) => win.openLibrarySource(kind, pl)
+                            onLibraryPlayRequested: (kind, pl) => win.playLibrarySource(kind, pl)
                         }
 
                         MainTrackGrid {
@@ -2824,15 +2852,27 @@ Scope {
                         function onIsNowPlayingOpenChanged() {
                             revealCloseAnim.stop();
                             revealOpenAnim.stop();
+                            revealCloseWarmup.stop();
                             if (win.isNowPlayingOpen) {
+                                ytNowPlayingView.revealArmed = false;
                                 if (ytNowPlayingView.revealReach <= 0.0) ytNowPlayingView.prepareReveal();
                                 ytNowPlayingView.revealSpinTo = ytNowPlayingView.revealSpin + Math.PI * 1.6;
                                 revealOpenAnim.start();
                             } else {
                                 ytNowPlayingView.revealSpinTo = ytNowPlayingView.revealSpin + Math.PI * 1.4;
-                                revealCloseAnim.start();
+                                // Turn the mask layer and its backdrop copies on while the view is still full
+                                // (reach 1 shows everything), and start shrinking only once they have rendered.
+                                // Starting both in one frame showed an empty, unmasked frame before the animation.
+                                ytNowPlayingView.revealArmed = true;
+                                revealCloseWarmup.restart();
                             }
                         }
+                    }
+                    property bool revealArmed: false
+                    Timer {
+                        id: revealCloseWarmup
+                        interval: 34   // about two frames at 60 Hz
+                        onTriggered: if (!win.isNowPlayingOpen) revealCloseAnim.start()
                     }
                     SequentialAnimation {
                         id: revealOpenAnim
@@ -2849,9 +2889,10 @@ Scope {
                         id: revealCloseAnim
                         NumberAnimation { target: ytNowPlayingView; property: "revealReach"; to: 0.0; duration: 520; easing.type: Easing.OutCubic }
                         NumberAnimation { target: ytNowPlayingView; property: "revealSpin"; to: ytNowPlayingView.revealSpinTo; duration: 520; easing.type: Easing.OutCubic }
+                        onFinished: ytNowPlayingView.revealArmed = false
                     }
 
-                    layer.enabled: revealReach > 0.0 && revealReach < 0.999
+                    layer.enabled: revealReach > 0.0 && (revealArmed || revealReach < 0.999)
                     layer.effect: ShaderEffect {
                         property variant source
                         property vector2d u_size: Qt.vector2d(ytNowPlayingView.width, ytNowPlayingView.height)
@@ -2901,7 +2942,7 @@ Scope {
                     isPlaying: win.isPlaying
                     isLoadingAudio: win.uiLoadingAudio
                     isShuffle: win.isShuffle
-                    isRepeat: win.isRepeat
+                    repeatMode: win.repeatMode
                     volume: win.volume
                     queueTracks: win.currentTracks
                     playingPlaylistTitle: win.playingSourceTitle || I18n.tr("Hàng đợi", "Queue")
@@ -2918,7 +2959,7 @@ Scope {
                     onNextRequested: win.playNext()
                     onPrevRequested: win.playPrev()
                     onShuffleToggleRequested: { win.isShuffle = !win.isShuffle; win.saveSettings(); }
-                    onRepeatToggleRequested: { win.isRepeat = !win.isRepeat; win.saveSettings(); }
+                    onRepeatToggleRequested: win.cycleRepeatMode()
                     onVolumeChangeRequested: v => win.setVolume(v)
                     onPlayTrackRequested: (trk, index) => {
                         if (trk && ((trk.path && trk.path.startsWith("ytdl://")) || trk.videoId)) {
@@ -2998,7 +3039,7 @@ Scope {
             totalDuration: win.totalDuration
             volume: win.volume
             isShuffle: win.isShuffle
-            isRepeat: win.isRepeat
+            repeatMode: win.repeatMode
             isLyricsActive: win.isMochySidePanelOpen && win.mochyActiveTab === "lyrics"
             isNowPlayingOpen: win.isNowPlayingOpen
             isQueueActive: win.isMochySidePanelOpen && win.mochyActiveTab === "queue"
@@ -3049,10 +3090,7 @@ Scope {
                 win.isShuffle = !win.isShuffle;
                 win.saveSettings();
             }
-            onToggleRepeat: {
-                win.isRepeat = !win.isRepeat;
-                win.saveSettings();
-            }
+            onToggleRepeat: win.cycleRepeatMode()
             onOpenArtistRequested: (name, chId) => {
                 win.loadArtistDetails(chId || name);
             }
@@ -3684,6 +3722,8 @@ Scope {
             z: 10010
             sourceComponent: CreatePlaylistModal {
                 accentColor: win.accentColor
+                appDir: win.appDir
+                songCover: win.currentTrack ? (win.currentResolvedCover || win.currentTrack.image || win.currentTrack.cover || win.currentTrack.thumbnail || "") : ""
                 onPlaylistCreated: (title, desc, cover, tracks) => win.createCustomPlaylist(title, desc, cover, tracks)
                 onPlaylistUpdated: (plId, title, desc, cover) => win.updateCustomPlaylist(plId, title, desc, cover)
             }
@@ -3723,6 +3763,20 @@ Scope {
             friends: win.mergedFriendsList
             canInvite: win.canInviteToListen
             onInviteRequested: friend => win.sendListenInvite(friend)
+        }
+
+        NotificationCenter {
+            id: notificationCenter
+            store: win.notificationStore
+            accentColor: win.accentColor
+            friendRequestCount: win.unreadFriendRequestsCount
+            hasUpdate: win.hasAppUpdate
+            latestVersion: win.latestVersion
+            onFriendRequestsRequested: (xPos, yPos) => friendRequestsPopover.toggleAt(win.pendingFriendRequests, xPos, yPos)
+            onUpdateRequested: {
+                settingsModal.currentTab = 0;
+                settingsModal.visible = true;
+            }
         }
 
         FriendRequestsPopover {
@@ -3788,7 +3842,7 @@ Scope {
             }
             onEnqueueRequested: trk => {
                 win.appendTrackToQueue(trk);
-                win.showToast(I18n.tr("Đã thêm vào hàng đợi", "Added to queue"));
+                win.showToast(I18n.tr("Đã thêm vào hàng đợi", "Added to queue"), "success");
             }
         }
 
@@ -3806,47 +3860,16 @@ Scope {
             accentColor: win.accentColor
         }
 
-        // Floating Toast Notification
-        Rectangle {
+        AppToast {
             id: toastNotification
             z: 10000
             anchors.horizontalCenter: parent.horizontalCenter
-            y: win.toastVisible ? 24 : -50
-            opacity: win.toastVisible ? 1.0 : 0.0
-            visible: opacity > 0.01
-            height: 38
-            width: Math.min(480, toastRow.implicitWidth + 32)
-            radius: 19
-            color: Qt.rgba(0.08, 0.09, 0.12, 0.92)
-            border.color: Qt.rgba(win.accentColor.r, win.accentColor.g, win.accentColor.b, 0.45)
-            border.width: 1
-            clip: true
-
-            Behavior on y { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
-            Behavior on opacity { NumberAnimation { duration: 200 } }
-
-            Row {
-                id: toastRow
-                anchors.centerIn: parent
-                spacing: 8
-
-                Rectangle {
-                    width: 6; height: 6; radius: 3
-                    color: win.accentColor
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-
-                Text {
-                    text: win.toastMessage
-                    color: "#ffffff"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 12
-                    font.bold: true
-                    anchors.verticalCenter: parent.verticalCenter
-                    elide: Text.ElideRight
-                    maximumLineCount: 1
-                }
-            }
+            message: win.toastMessage
+            kind: win.toastKind
+            shown: win.toastVisible
+            accentColor: win.accentColor
+            onHoldChanged: hold => hold ? toastTimer.stop() : toastTimer.restart()
+            onDismissed: win.toastVisible = false
         }
     }
 
@@ -3981,7 +4004,8 @@ Scope {
         try {
             var obj = JSON.parse(raw);
             if (obj.isShuffle !== undefined) win.isShuffle = !!obj.isShuffle;
-            if (obj.isRepeat !== undefined) win.isRepeat = !!obj.isRepeat;
+            if (obj.repeatMode === "off" || obj.repeatMode === "all" || obj.repeatMode === "one") win.repeatMode = obj.repeatMode;
+            else if (obj.isRepeat !== undefined) win.repeatMode = obj.isRepeat ? "one" : "off";
             if (obj.syncHistoryToGoogle !== undefined) win.syncHistoryToGoogle = !!obj.syncHistoryToGoogle;
             if (obj.followedArtists !== undefined && Array.isArray(obj.followedArtists)) {
                 win.followedArtists = obj.followedArtists;
@@ -4058,7 +4082,7 @@ Scope {
                     win.saveSettings();
                 });
             }
-            console.log("DEBUG Nutsty settings loaded: isShuffle=" + win.isShuffle + ", isRepeat=" + win.isRepeat + ", lyricsPreset=" + win.desktopLyricsPreset + ", language=" + win.currentLanguage + ", streamingQuality=" + win.streamingQuality + ", downloadQuality=" + win.downloadQuality + ", lyricsSource=" + win.lyricsSource + ", canvasPreference=" + win.canvasPreference);
+            console.log("DEBUG Nutsty settings loaded: isShuffle=" + win.isShuffle + ", repeatMode=" + win.repeatMode + ", lyricsPreset=" + win.desktopLyricsPreset + ", language=" + win.currentLanguage + ", streamingQuality=" + win.streamingQuality + ", downloadQuality=" + win.downloadQuality + ", lyricsSource=" + win.lyricsSource + ", canvasPreference=" + win.canvasPreference);
         } catch(e) {}
     }
 
@@ -4071,7 +4095,7 @@ Scope {
     function saveSettings() {
         var data = JSON.stringify({
             isShuffle: win.isShuffle,
-            isRepeat: win.isRepeat,
+            repeatMode: win.repeatMode,
             lastSeenVersion: win.lastSeenVersion,
             syncHistoryToGoogle: win.syncHistoryToGoogle,
             followedArtists: win.followedArtists,
@@ -4214,6 +4238,8 @@ Scope {
         Component.onCompleted: {
             if (loaded) parseLikedSongs();
         }
+        // Re-read after a backup import merged songs into the file
+        onTextChanged: parseLikedSongs()
 
         function parseLikedSongs() {
             var raw = text();
@@ -4318,8 +4344,8 @@ Scope {
         return PlaybackEngine.togglePlay(win, pollTimer);
     }
 
-    function playNext() {
-        return PlaybackEngine.playNext(win);
+    function playNext(autoAdvance) {
+        return PlaybackEngine.playNext(win, autoAdvance === true);
     }
 
     function playPrev() {
@@ -4477,7 +4503,7 @@ Scope {
         win.likedSongsMap = updated;
         win.likedSongsRevision++;
         win.isCurrentTrackLiked = true;
-        win.showToast(I18n.tr("Đã thêm vào bài hát yêu thích", "Added to favorite songs"));
+        win.showToast(I18n.tr("Đã thêm vào bài hát yêu thích", "Added to favorite songs"), "success");
         if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) {
             ytNowPlayingView.currentLikeStatus = "LIKE";
         }
@@ -4644,7 +4670,7 @@ Scope {
     function createCustomPlaylist(title, desc, cover, tracks) {
         var cleanTitle = (title && title.trim()) ? title.trim() : ("Playlist #" + ((win.customPlaylists ? win.customPlaylists.length : 0) + 1));
         playlistStore.create(cleanTitle, desc, cover, tracks || [],
-            () => win.showToast(I18n.tr("Đã tạo danh sách phát mới", "New playlist created")));
+            () => win.showToast(I18n.tr("Đã tạo danh sách phát mới", "New playlist created"), "success"));
     }
 
     function createCustomPlaylistFromTracks(tracks) {
@@ -4655,7 +4681,56 @@ Scope {
     function updateCustomPlaylist(plId, newTitle, newDesc, newCover) {
         if (!plId) return;
         playlistStore.update(plId, newTitle, newDesc, newCover,
-            () => win.showToast(I18n.tr("Đã cập nhật danh sách phát", "Playlist updated")));
+            () => win.showToast(I18n.tr("Đã cập nhật danh sách phát", "Playlist updated"), "success"));
+    }
+
+    // Home "Của bạn": the playlist that is playing comes first, then the stored order
+    readonly property var homeShortcutPlaylists: {
+        var list = (win.customPlaylists || []).slice();
+        var pid = win.playingPlaylistId;
+        if (!pid) return list;
+        var idx = list.findIndex(p => p && (p.id || p.playlistId) === pid);
+        if (idx > 0) list.unshift(list.splice(idx, 1)[0]);
+        return list;
+    }
+
+    // Opens the library on a tab ("playlists", "favorites", "tracks")
+    function openLibraryTab(tab) {
+        win.isNowPlayingOpen = false;
+        win.showAmberolDetails = false;
+        if (win.currentView !== "library" && win.currentView !== "custom_playlist_detail") win.previousView = win.currentView;
+        win.currentView = "library";
+        win.lastLibraryView = "library";
+        win.currentAlbumMetadata = null;
+        mainGrid.albumMetadata = null;
+        mainGrid.downloadsSubTab = tab;
+        win.lastLibrarySubTab = tab;
+        if (tab === "tracks") win.browsingTracks = win.allTracks;
+        win.mainSectionTitle = "Downloads";
+        mainGrid.sectionTitle = "Downloads";
+        win.loadCustomPlaylists();
+        win.loadFavoritePlaylists();
+    }
+
+    function openLibrarySource(kind, pl) {
+        if (kind === "liked") win.openLibraryTab("favorites");
+        else if (kind === "downloads") win.openLibraryTab("tracks");
+        else win.handleSelectPlaylist(pl);
+    }
+
+    function playLibrarySource(kind, pl) {
+        if (kind === "playlist") {
+            win.playCustomPlaylist(pl, false);
+            return;
+        }
+        var tracks = kind === "liked" ? win.likedTracksList : win.allTracks;
+        if (!tracks || tracks.length === 0) {
+            win.showToast(I18n.tr("Danh sách phát rỗng", "Playlist is empty"));
+            return;
+        }
+        win.playCustomPlaylistTracks(tracks, false);
+        win.playingPlaylistId = kind;
+        win.playingSourceTitle = kind === "liked" ? I18n.tr("Bài hát yêu thích", "Liked songs") : I18n.tr("Đã tải", "Downloads");
     }
 
     function playCustomPlaylist(pl, shuffle) {
@@ -4710,7 +4785,7 @@ Scope {
 
     function addTrackToCustomPlaylist(plId, track) {
         if (!plId || !track) return;
-        playlistStore.addTracks(plId, [track], () => win.showToast(I18n.tr("Đã thêm vào danh sách phát", "Added to playlist")));
+        playlistStore.addTracks(plId, [track], () => win.showToast(I18n.tr("Đã thêm vào danh sách phát", "Added to playlist"), "success"));
     }
 
     function reorderTrackInCustomPlaylist(plId, fromIdx, toIdx) {
@@ -5421,7 +5496,7 @@ Scope {
             win.currentView = "library";
             libLoader.reload();
             win.browsingTracks = win.allTracks;
-            mainGrid.downloadsSubTab = win.lastLibrarySubTab || "tracks";
+            mainGrid.downloadsSubTab = win.lastLibrarySubTab || "playlists";
             mainGrid.sectionTitle = "Downloads";
         }
         function showHome() {

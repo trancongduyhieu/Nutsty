@@ -28,6 +28,11 @@ Rectangle {
 
     property var friendsNotes: []
     property var myLatestNote: null
+    // "Của bạn" shortcuts
+    property int likedCount: 0
+    property int downloadsCount: 0
+    property var myPlaylists: []
+    property string playingSourceId: ""
 
     readonly property var activeMoodList: (root.moods && root.moods.length > 0) ? root.moods : [
         { "title": "All", "params": "" },
@@ -128,6 +133,8 @@ Rectangle {
     signal playFriendTrackRequested(var trk)
     signal addFriendRequested()
     signal openStoryRequested(var friendData, int index)
+    signal libraryOpenRequested(string kind, var pl)
+    signal libraryPlayRequested(string kind, var pl)
 
     function getGreeting() {
         var h = new Date().getHours();
@@ -295,6 +302,20 @@ Rectangle {
                     onOpenStoryRequested: (friendData, idx) => root.openStoryRequested(friendData, idx)
                     onPlayTrackRequested: track => root.playFriendTrackRequested(track)
                     onAddFriendClicked: root.addFriendRequested()
+                }
+
+                // 4. Your library: liked songs, downloads, playlists - one click to play
+                YourLibraryShortcuts {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 8
+                    accentColor: root.accentColor
+                    likedCount: root.likedCount
+                    downloadsCount: root.downloadsCount
+                    playlists: root.myPlaylists
+                    playingId: root.playingSourceId
+                    isPlaying: root.isPlaying
+                    onOpenRequested: (kind, pl) => root.libraryOpenRequested(kind, pl)
+                    onPlayRequested: (kind, pl) => root.libraryPlayRequested(kind, pl)
                 }
             }
         }

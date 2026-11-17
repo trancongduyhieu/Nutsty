@@ -24,8 +24,8 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 >    - Khi ở tiếng Việt (`locale === "vi"`): 100% tiếng Việt thuần túy. Khi ở tiếng Anh (`locale === "en"`): 100% tiếng Anh chuẩn. Không để sót tiếng Anh nửa nạc nửa mỡ.
 > 3. **PORTABILITY & NON-HARDCODING**: Tuyệt đối không hardcode đường dẫn người dùng (như `/home/apple/...`). Luôn dùng `Quickshell.env("HOME")` hoặc `pathlib.Path.home()`.
 > 4. **WAYBAR & STATUS BAR THUỘC NOCTALIA**: Tinh chỉnh thanh trạng thái Waybar/Noctalia là của repo `noctalia-shell`, không trộn lẫn vào code của Nutsty.
-> 5. **RANH GIỚI NGHIÊM NGẶT GIỮA TODO.MD VÀ AGENTS.MD**:
->    - `TODO.md`: Chứa toàn bộ lộ trình (Roadmap), danh sách công việc cần làm kèm checklist `[ ]` / `[x]`.
+> 5. **RANH GIỚI NGHIÊM NGẶT GIỮA GITHUB ISSUES VÀ AGENTS.MD**:
+>    - **GitHub Issues** (`gh issue list`): Nơi duy nhất chứa lộ trình, ý tưởng và bug (nhãn `bug`, `idea`, `roadmap`, `windows`, `from-friends`...). Không tạo lại `TODO.md`.
 >    - `AGENTS.md`: Là cẩm nang kiến trúc và chuẩn kỹ thuật của codebase. **CHỈ CHỨA NHỮNG GÌ ĐÃ ĐƯỢC THỰC THI VÀ KIỂM CHỨNG THÀNH CÔNG**.
 > 6. **QUY TRÌNH NGHIÊN CỨU TRƯỚC KHI THAY ĐỔI (RESEARCH WORKFLOW)**:
 >    - Trước khi thêm thư viện mới, thay đổi kiến trúc hoặc áp dụng pattern mới, AI **BẮT BUỘC** phải:
@@ -120,8 +120,7 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 │   ├── TrackRow.qml                # Dòng hiển thị bài hát trong hàng đợi
 │   └── UserNoteDetailModal.qml     # Modal xem/xóa ghi chú cá nhân Dark Glass
 ├── .agents/rules/                  # Quy tắc & kiến trúc chuyên sâu phân tầng
-├── AGENTS.md                       # File này (Hiến pháp kiến trúc tối cao)
-└── TODO.md                         # Danh sách tính năng và lộ trình phát triển đã chốt
+└── AGENTS.md                       # File này (Hiến pháp kiến trúc tối cao)
 ```
 
 ---

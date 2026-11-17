@@ -11,6 +11,9 @@ import threading
 import contextlib
 import contextvars
 import functools
+import base64
+import glob
+from pathlib import Path
 
 try:
     from . import platform_compat as pc
@@ -269,6 +272,8 @@ def rename_playlist(pl_id, new_title, new_description=None, new_cover=None):
     if new_cover is not None:
         _apply_cover(target, new_cover)
     save_playlists(playlists)
+    if new_cover is not None:
+        prune_generated_covers()
     return {"success": True, "playlist": target}
 
 def _apply_cover(target, image_path):
@@ -288,6 +293,7 @@ def set_playlist_cover(pl_id, image_path):
 
     _apply_cover(target, image_path)
     save_playlists(playlists)
+    prune_generated_covers()
     return {"success": True, "playlist": target}
 
 @_with_lock
@@ -317,6 +323,7 @@ def delete_playlist(pl_id):
     playlists = load_playlists()
     filtered = [p for p in playlists if p.get("id") != pl_id]
     save_playlists(filtered)
+    prune_generated_covers()
     # Also clean up from favorite playlists if present
     try:
         favs = load_favorite_playlists()
@@ -478,11 +485,95 @@ def remove_favorite_playlist(pl_id):
     return {"success": True, "favorites": filtered}
 
 # ---------------------------------------------------------------------------
-# Backup: export / import custom + favorite playlists as one JSON file
+# Backup: export / import custom + favorite playlists, liked songs and the
+# downloaded-song list as one JSON file
 # ---------------------------------------------------------------------------
 BACKUP_FORMAT = "nutsty-playlists"
-BACKUP_VERSION = 1
+BACKUP_VERSION = 2  # v2 adds likedSongs + downloads; v1 files still import
 MAX_BACKUP_BYTES = 50 * 1024 * 1024
+# The custom_pl_ prefix is what makes the UI treat a playlist as local (PlaylistStore.isCustom);
+# without it the playlist is opened as a YouTube one and shows up empty.
+CUSTOM_ID_PREFIX = "custom_pl_"
+DOWNLOADS_PLAYLIST_ID = CUSTOM_ID_PREFIX + "backup_downloads"
+_LEGACY_DOWNLOADS_IDS = ("nutsty_backup_downloads",)
+LIBRARY_JSON = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "library.json")
+_DOWNLOAD_FIELDS = ("title", "artist", "album", "duration", "duration_ms", "image", "videoId", "path", "filename")
+
+
+def _liked_file():
+    return os.path.join(CONFIG_DIR, f"nutsty_liked_songs{_ACTIVE_SUFFIX.get()}.json")
+
+
+def _read_json(path, default):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, type(default)) else default
+    except Exception:
+        return default
+
+
+def _write_json(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
+        return True
+    except Exception as e:
+        sys.stderr.write(f"Error writing {path}: {e}\n")
+        return False
+
+
+def _ui_is_vietnamese():
+    settings = _read_json(os.path.join(CONFIG_DIR, f"nutsty_settings{_ACTIVE_SUFFIX.get()}.json"), {})
+    return str(settings.get("language") or "vi").lower().startswith("vi")
+
+
+def _lookup_video_id(title, artist):
+    """YouTube Music match for a downloaded file that has no videoId (cached by stream_resolver)."""
+    try:
+        try:
+            from .stream_resolver import resolve_video_id_for_track
+        except (ImportError, ValueError):
+            from stream_resolver import resolve_video_id_for_track
+        return resolve_video_id_for_track("", title, artist) or ""
+    except Exception as e:
+        sys.stderr.write(f"videoId lookup failed for {title!r}: {e}\n")
+        return ""
+
+
+def _downloaded_tracks():
+    """Every song in library.json. Each keeps its local path (plays the file when it is still there,
+    e.g. after a reinstall) and a videoId (streams it on another computer). Files saved without a
+    videoId get one looked up by title + artist, flagged videoIdMatched."""
+    out = []
+    for t in _read_json(LIBRARY_JSON, []):
+        if not isinstance(t, dict) or not (t.get("title") or t.get("path")):
+            continue
+        item = {k: t[k] for k in _DOWNLOAD_FIELDS if t.get(k) not in (None, "")}
+        item["name"] = item.get("title", "")
+        if not str(item.get("videoId") or "").strip():
+            vid = _lookup_video_id(item.get("title", ""), item.get("artist", ""))
+            if vid:
+                item["videoId"] = vid
+                item["videoIdMatched"] = True
+        out.append(item)
+    return out
+
+
+def _restore_download(t):
+    """Backup entry -> playable track on this computer, or None."""
+    local = str(t.get("path") or "")
+    vid = str(t.get("videoId") or "").strip()
+    track = dict(t)
+    if local and not local.startswith("ytdl://") and os.path.isfile(local):
+        return track
+    if vid:
+        track["path"] = "ytdl://" + vid
+        return track
+    return None
 
 def _to_local_path(path_or_url):
     """Accept a plain path or a file:// URL (what QML FileDialog returns)."""
@@ -496,6 +587,107 @@ def _to_local_path(path_or_url):
             p = "//" + parsed.netloc + p  # UNC share on Windows
     return os.path.expanduser(p)
 
+
+# ---------------------------------------------------------------------------
+# Cover files: generated covers live in <config>/nutsty_covers. Files no playlist of any profile
+# points to are removed; backups carry local cover images inline so they survive a move.
+# ---------------------------------------------------------------------------
+COVERS_DIRNAME = "nutsty_covers"
+COVER_GRACE_SEC = 3600            # a cover just made in an open dialog is not referenced yet
+MAX_EMBED_COVER_BYTES = 8 * 1024 * 1024
+_COVER_EXTS = (".png", ".jpg", ".jpeg", ".webp")
+_COVER_MAGIC = (b"\x89PNG", b"\xff\xd8\xff", b"RIFF")
+
+
+def _covers_dir():
+    return os.path.join(CONFIG_DIR, COVERS_DIRNAME)
+
+
+def _is_local_ref(ref):
+    r = str(ref or "").strip()
+    return r.lower().startswith("file:") or (r != "" and os.path.isabs(os.path.expanduser(r)))
+
+
+def _norm(path):
+    return os.path.normcase(os.path.abspath(path))
+
+
+def prune_generated_covers():
+    """Delete files in nutsty_covers that no profile's playlist uses. Never raises."""
+    try:
+        folder = _covers_dir()
+        if not os.path.isdir(folder):
+            return 0
+        used = set()
+        for f in glob.glob(os.path.join(CONFIG_DIR, "custom_playlists*.json")):
+            for pl in _read_json(f, []):
+                if isinstance(pl, dict):
+                    for key in ("customCover", "image"):
+                        if _is_local_ref(pl.get(key)):
+                            used.add(_norm(_to_local_path(pl.get(key))))
+        removed, now = 0, time.time()
+        for name in os.listdir(folder):
+            path = os.path.join(folder, name)
+            if not name.lower().endswith(_COVER_EXTS) or not os.path.isfile(path):
+                continue
+            if _norm(path) in used or now - os.path.getmtime(path) < COVER_GRACE_SEC:
+                continue
+            os.remove(path)
+            removed += 1
+        return removed
+    except Exception as e:
+        sys.stderr.write(f"Error pruning generated covers: {e}\n")
+        return 0
+
+
+def _embed_cover(pl):
+    """Copy of a playlist with its local cover image inlined as base64 (others are returned as is)."""
+    ref = pl.get("customCover") if isinstance(pl, dict) else None
+    if not _is_local_ref(ref):
+        return pl
+    path = _to_local_path(ref)
+    try:
+        if not path.lower().endswith(_COVER_EXTS) or os.path.getsize(path) > MAX_EMBED_COVER_BYTES:
+            return pl
+        with open(path, "rb") as f:
+            data = f.read()
+    except OSError:
+        return pl
+    out = dict(pl)
+    out["coverFile"] = {"name": os.path.basename(path), "data": base64.b64encode(data).decode("ascii")}
+    return out
+
+
+def _restore_cover(cover_file, seq=0):
+    """Write a backup's inline cover into nutsty_covers; returns its file URL or ""."""
+    if not isinstance(cover_file, dict):
+        return ""
+    ext = os.path.splitext(str(cover_file.get("name") or ""))[1].lower()
+    if ext not in _COVER_EXTS:
+        return ""
+    try:
+        data = base64.b64decode(str(cover_file.get("data") or ""), validate=True)
+    except Exception:
+        return ""
+    if not data or len(data) > MAX_EMBED_COVER_BYTES or not data.startswith(_COVER_MAGIC):
+        return ""
+    folder = _covers_dir()
+    try:
+        os.makedirs(folder, exist_ok=True)
+        path = os.path.join(folder, f"cover_{int(time.time() * 1000)}_{seq}{ext}")
+        with open(path, "wb") as f:
+            f.write(data)
+    except OSError as e:
+        sys.stderr.write(f"Error restoring cover: {e}\n")
+        return ""
+    return Path(path).resolve().as_uri()
+
+
+def _local_cover_missing(pl):
+    ref = pl.get("customCover")
+    return _is_local_ref(ref) and not os.path.isfile(_to_local_path(ref))
+
+
 def export_playlists(dest):
     dest = _to_local_path(dest)
     if not dest:
@@ -504,14 +696,18 @@ def export_playlists(dest):
         dest += ".json"
     playlists = load_playlists()
     favorites = load_favorite_playlists()
+    liked = _read_json(_liked_file(), {})
+    downloads = _downloaded_tracks()
     payload = {
         "format": BACKUP_FORMAT,
         "version": BACKUP_VERSION,
         "app": "Nutsty",
         "appVersion": getattr(pc, "APP_VERSION", ""),
         "exportedAt": int(time.time()),
-        "playlists": playlists,
+        "playlists": [_embed_cover(p) for p in playlists],
         "favorites": favorites,
+        "likedSongs": liked,
+        "downloads": downloads,
     }
     try:
         parent = os.path.dirname(dest)
@@ -524,7 +720,8 @@ def export_playlists(dest):
     except Exception as e:
         sys.stderr.write(f"Error exporting playlists: {e}\n")
         return {"success": False, "error": "write_failed", "detail": str(e)}
-    return {"success": True, "path": dest, "playlists": len(playlists), "favorites": len(favorites)}
+    return {"success": True, "path": dest, "playlists": len(playlists), "favorites": len(favorites),
+            "likedSongs": len(liked), "downloads": len(downloads)}
 
 def _playlist_id(pl):
     return str(pl.get("id") or pl.get("playlistId") or pl.get("browseId") or "")
@@ -532,7 +729,9 @@ def _playlist_id(pl):
 @_with_lock
 def import_playlists(src):
     """Merge a backup into the current playlists. Never deletes anything:
-    unknown playlists are added, known ones (same id) gain the tracks they lack."""
+    unknown playlists are added, known ones (same id) gain the tracks they lack.
+    Liked songs are merged into the liked list; the downloaded-song list becomes one
+    playlist (fixed id, so importing twice only tops it up)."""
     src = _to_local_path(src)
     if not src or not os.path.isfile(src):
         return {"success": False, "error": "not_found"}
@@ -545,28 +744,60 @@ def import_playlists(src):
         return {"success": False, "error": "invalid_json"}
 
     # Our own backup format, or a raw copy of custom_playlists.json (a plain list)
+    in_liked, in_downloads = {}, []
+    updated_legacy = False
     if isinstance(data, dict) and data.get("format") == BACKUP_FORMAT:
         in_pls = data.get("playlists") or []
         in_favs = data.get("favorites") or []
+        in_liked = data.get("likedSongs") or {}
+        in_downloads = data.get("downloads") or []
     elif isinstance(data, list):
         in_pls, in_favs = data, []
     else:
         return {"success": False, "error": "unsupported"}
     if not isinstance(in_pls, list) or not isinstance(in_favs, list):
         return {"success": False, "error": "unsupported"}
+    if not isinstance(in_liked, dict):
+        in_liked = {}
+    if not isinstance(in_downloads, list):
+        in_downloads = []
+
+    in_pls = list(in_pls)
+    dl_tracks = [r for r in (_restore_download(t) for t in in_downloads if isinstance(t, dict)) if r]
+    downloads_skipped = len(in_downloads) - len(dl_tracks)
+    if dl_tracks:
+        title = "Bài hát đã tải (bản sao lưu)" if _ui_is_vietnamese() else "Downloaded songs (backup)"
+        in_pls.append({"id": DOWNLOADS_PLAYLIST_ID, "title": title, "tracks": dl_tracks})
 
     playlists = load_playlists()
+    # Undo the first version of this import, which saved the downloads playlist under an id
+    # the UI did not treat as local
+    for p in playlists:
+        if isinstance(p, dict) and _playlist_id(p) in _LEGACY_DOWNLOADS_IDS:
+            p["id"] = p["playlistId"] = DOWNLOADS_PLAYLIST_ID
+            updated_legacy = True
     by_id = {_playlist_id(p): p for p in playlists if isinstance(p, dict) and _playlist_id(p)}
-    added = updated = tracks_added = 0
+    added = updated = tracks_added = covers_restored = 0
     now_ms = int(time.time() * 1000)
 
     for pl in in_pls:
         if not isinstance(pl, dict):
             continue
         tracks = [t for t in (pl.get("tracks") or []) if isinstance(t, (dict, str))]
+        cover_file = pl.get("coverFile")
         pid = _playlist_id(pl)
+        if pid in _LEGACY_DOWNLOADS_IDS:
+            pid = DOWNLOADS_PLAYLIST_ID
+        elif pid and not pid.startswith(CUSTOM_ID_PREFIX):
+            pid = CUSTOM_ID_PREFIX + pid
         existing = by_id.get(pid) if pid else None
         if existing is not None:
+            # Same playlist already here: only bring the cover back if its file is gone
+            if cover_file and _local_cover_missing(existing):
+                url = _restore_cover(cover_file, covers_restored)
+                if url:
+                    _apply_cover(existing, url)
+                    covers_restored += 1
             have = {get_track_unique_key(t) for t in existing.get("tracks", [])}
             new_tracks = [t for t in tracks if get_track_unique_key(t) not in have]
             if new_tracks:
@@ -583,6 +814,16 @@ def import_playlists(src):
             pid = f"custom_pl_{now_ms}"
         title = str(pl.get("title") or pl.get("name") or "Playlist").strip() or "Playlist"
         entry = dict(pl)
+        entry.pop("coverFile", None)
+        url = _restore_cover(cover_file, covers_restored) if cover_file else ""
+        if url:
+            entry["customCover"] = url
+            entry["image"] = url
+            covers_restored += 1
+        elif _local_cover_missing(entry):
+            # Cover chosen on the other machine and not in the backup: fall back to the first track
+            entry["customCover"] = ""
+            entry["image"] = ""
         entry.update({
             "id": pid,
             "playlistId": pid,
@@ -614,12 +855,31 @@ def import_playlists(src):
             fav_ids.add(fid)
             favs_added += 1
 
-    if (added or updated) and not save_playlists(playlists):
+    liked_added = 0
+    if in_liked:
+        liked = _read_json(_liked_file(), {})
+        have_vids = {str(v.get("videoId")) for v in liked.values() if isinstance(v, dict) and v.get("videoId")}
+        for key, song in in_liked.items():
+            if not isinstance(song, dict) or key in liked:
+                continue
+            vid = str(song.get("videoId") or "")
+            if vid and vid in have_vids:
+                continue
+            liked[key] = song
+            if vid:
+                have_vids.add(vid)
+            liked_added += 1
+
+    if (added or updated or updated_legacy or covers_restored) and not save_playlists(playlists):
         return {"success": False, "error": "write_failed"}
     if favs_added and not save_favorite_playlists(favs):
         return {"success": False, "error": "write_failed"}
+    if liked_added and not _write_json(_liked_file(), liked):
+        return {"success": False, "error": "write_failed"}
     return {"success": True, "added": added, "updated": updated,
-            "tracksAdded": tracks_added, "favoritesAdded": favs_added}
+            "tracksAdded": tracks_added, "favoritesAdded": favs_added, "likedAdded": liked_added,
+            "coversRestored": covers_restored,
+            "downloadsSkipped": downloads_skipped}
 
 # ---------------------------------------------------------------------------
 # HTTP: POST /api/playlists/<op> (route_dispatcher on Linux, auth_server on Windows).

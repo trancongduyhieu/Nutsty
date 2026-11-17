@@ -18,7 +18,7 @@ Item {
     // True while AutoMix is blending two songs (drives the "Cooking" labels here and on the player bar)
     readonly property bool autoMixing: autoMix.mixing
     property bool isShuffle: false
-    property bool isRepeat: false
+    property string repeatMode: "off"
     property real volume: 100
     property var queueTracks: []
     property string playingPlaylistTitle: I18n.tr("Hàng đợi", "Queue")
@@ -1375,7 +1375,7 @@ Item {
                 isPlaying: root.isPlaying
                 isLoadingAudio: root.isLoadingAudio
                 isShuffle: root.isShuffle
-                isRepeat: root.isRepeat
+                repeatMode: root.repeatMode
                 volume: root.volume
                 qualityText: root.track ? root.audioQualityText : ""
                 mixing: autoMix.mixing

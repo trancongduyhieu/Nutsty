@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Effects
 import "."
 
 Item {
@@ -67,29 +66,9 @@ Item {
         return palettes[Math.abs(hash) % palettes.length];
     }
 
-    // Mask for concentric rounded corners (Must be declared before container with static layer)
-    Rectangle {
-        id: maskRect
-        anchors.fill: parent
-        radius: root.radius
-        color: "#ffffff"
-        visible: false
-        layer.enabled: true
-        layer.smooth: true
-        smooth: true
-        antialiasing: true
-    }
-
     Item {
         id: container
         anchors.fill: parent
-        layer.enabled: root.radius > 0
-        layer.smooth: true
-        layer.effect: MultiEffect {
-            maskEnabled: true
-            maskSource: maskRect
-            autoPaddingEnabled: false
-        }
 
         // Base foundation
         Rectangle {
@@ -177,6 +156,12 @@ Item {
                 }
             }
         }
+    }
+
+    RoundedClip {
+        anchors.fill: parent
+        target: container
+        radius: root.radius
     }
 
     // 1px Hairline border overlay

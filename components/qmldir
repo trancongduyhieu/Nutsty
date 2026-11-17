@@ -1,6 +1,7 @@
 AmberolDetailView 1.0 AmberolDetailView.qml
 AnimeMVKineticLyrics 1.0 AnimeMVKineticLyrics.qml
 AppIcon 1.0 AppIcon.qml
+AppToast 1.0 AppToast.qml
 AppleMusicDesktopLyrics 1.0 AppleMusicDesktopLyrics.qml
 AppleMusicWordFlow 1.0 AppleMusicWordFlow.qml
 AutoMixBridge 1.0 AutoMixBridge.qml
@@ -12,6 +13,7 @@ CategorizedSearchView 1.0 CategorizedSearchView.qml
 CircularSpinner 1.0 CircularSpinner.qml
 CoListenersPopover 1.0 CoListenersPopover.qml
 ContentView 1.0 ContentView.qml
+CoverGeneratorPanel 1.0 CoverGeneratorPanel.qml
 CreatePlaylistModal 1.0 CreatePlaylistModal.qml
 DesktopLyricsWidget 1.0 DesktopLyricsWidget.qml
 DesktopMusicWidget 1.0 DesktopMusicWidget.qml
@@ -25,6 +27,7 @@ FloatingChatBubble 1.0 FloatingChatBubble.qml
 FriendRequestsPopover 1.0 FriendRequestsPopover.qml
 FriendStoryModal 1.0 FriendStoryModal.qml
 FriendsPulseBar 1.0 FriendsPulseBar.qml
+GeneratedCover 1.0 GeneratedCover.qml
 GachaAnimeLyricsView 1.0 GachaAnimeLyricsView.qml
 HomeFeedView 1.0 HomeFeedView.qml
 singleton I18n 1.0 I18n.qml
@@ -46,11 +49,15 @@ CommentRow 1.0 CommentRow.qml
 PanelRimBorder 1.0 PanelRimBorder.qml
 NowPlayingControls 1.0 NowPlayingControls.qml
 NowPlayingActionRow 1.0 NowPlayingActionRow.qml
+NotificationCenter 1.0 NotificationCenter.qml
+NotificationStore 1.0 NotificationStore.qml
 NavArrowButton 1.0 NavArrowButton.qml
 NavSidebar 1.0 NavSidebar.qml
 ParticleBackground 1.0 ParticleBackground.qml
+RoundedClip 1.0 RoundedClip.qml
 PlaylistCollageThumbnail 1.0 PlaylistCollageThumbnail.qml
 PlaylistDetailView 1.0 PlaylistDetailView.qml
+PlaylistStore 1.0 PlaylistStore.qml
 PlaylistTrackSearchModal 1.0 PlaylistTrackSearchModal.qml
 PlayerBar 1.0 PlayerBar.qml
 PlayerBarBottom 1.0 PlayerBarBottom.qml
@@ -83,3 +90,4 @@ EmptyState 1.0 EmptyState.qml
 ShapeLoader 1.0 ShapeLoader.qml
 ShimmerText 1.0 ShimmerText.qml
 LazyModalLoader 1.0 LazyModalLoader.qml
+YourLibraryShortcuts 1.0 YourLibraryShortcuts.qml

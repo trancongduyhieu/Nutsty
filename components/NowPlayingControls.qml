@@ -17,7 +17,7 @@ ColumnLayout {
     property bool isPlaying: false
     property bool isLoadingAudio: false
     property bool isShuffle: false
-    property bool isRepeat: false
+    property string repeatMode: "off"   // "off" | "all" (queue) | "one" (current song)
     property real volume: 100
     property string qualityText: ""
     property bool mixing: false   // AutoMix is blending: "Cooking" with a light sweep replaces the specs
@@ -187,10 +187,11 @@ ColumnLayout {
             iconScale: 0.7
             onClicked: ctl.nextClicked()
         }
+        // Loop queue: repeat icon + the toggle dot; loop one: repeat_one icon (has the "1")
         NowPlayingCtlButton {
-            icon: ctl.iconDir + (ctl.isRepeat ? "ms-repeat_one.svg" : "ms-repeat.svg")
+            icon: ctl.iconDir + (ctl.repeatMode === "one" ? "ms-repeat_one.svg" : "ms-repeat.svg")
             toggle: true
-            on: ctl.isRepeat
+            on: ctl.repeatMode !== "off"
             size: 40
             onClicked: ctl.repeatClicked()
         }

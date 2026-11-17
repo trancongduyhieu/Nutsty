@@ -387,24 +387,6 @@ Item {
         return scales;
     }
 
-    // Concentric Mask (Option 1: Flat left R=0, concentric right R=20; Option 2: All corners R=20)
-    Item {
-        id: panelMask
-        anchors.fill: parent
-        visible: false
-        layer.enabled: root.isPanelRenderable
-        layer.samples: 8
-        layer.smooth: true
-        Rectangle {
-            anchors.fill: parent
-            topLeftRadius: root.panelStyle === 1 ? 0 : root.panelRadius
-            bottomLeftRadius: root.panelStyle === 1 ? 0 : root.panelRadius
-            topRightRadius: root.panelRadius
-            bottomRightRadius: root.panelRadius
-            color: "#ffffff"
-        }
-    }
-
     // -------------------------------------------------------------------------
     // OPTION 1: FLUSH SPLIT-RAIL ELEVATION SHADOW (Behind panel, casting leftward)
     // -------------------------------------------------------------------------
@@ -449,10 +431,13 @@ Item {
         id: panelContainer
         anchors.fill: parent
         layer.enabled: root.isPanelRenderable
-        layer.effect: MultiEffect {
-            maskEnabled: true
-            maskSource: panelMask
-            autoPaddingEnabled: false
+        // SDF corner clip (rounded_clip.frag): anti-aliased edge with no dark fringe,
+        // which the old MultiEffect mask left at all four corners
+        layer.effect: ShaderEffect {
+            readonly property real leftR: root.panelStyle === 1 ? 0 : root.panelRadius
+            property vector2d u_resolution: Qt.vector2d(Math.max(1, width), Math.max(1, height))
+            property vector4d u_radii: Qt.vector4d(leftR, root.panelRadius, root.panelRadius, leftR)
+            fragmentShader: Qt.resolvedUrl("../assets/shaders/rounded_clip.frag.qsb")
         }
 
         // =====================================================================

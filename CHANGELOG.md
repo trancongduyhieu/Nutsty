@@ -5,9 +5,19 @@ Tất cả các tính năng mới và cải tiến của Nutsty được lưu tr
 ## [2.0.1] - 2026-11-17
 
 ### Added
-- **Sao lưu và khôi phục danh sách phát**: Vào Cài đặt, mục Tài khoản, phần Sao lưu danh sách phát. Bấm "Xuất file" để lưu toàn bộ danh sách phát bạn tự tạo cùng các danh sách đã yêu thích vào một file, rồi giữ file đó trong USB, Google Drive hay gửi qua tin nhắn. Khi đổi máy hoặc cài lại Windows, bấm "Nhập file" và chọn file đó để lấy lại tất cả. Nhập file chỉ thêm vào chứ không xóa gì: danh sách chưa có sẽ được thêm mới, danh sách đã có sẽ được bổ sung những bài còn thiếu, nên nhập lại nhiều lần cũng không bị trùng.
+- **Sao lưu và khôi phục thư viện**: Vào Cài đặt, mục Tài khoản, phần Sao lưu danh sách phát. Bấm "Xuất file" để lưu vào một file toàn bộ danh sách phát bạn tự tạo, các danh sách đã yêu thích, bài hát yêu thích và danh sách bài đã tải về, rồi giữ file đó trong USB, Google Drive hay gửi qua tin nhắn. Khi đổi máy hoặc cài lại Windows, bấm "Nhập file" và chọn file đó để lấy lại tất cả. Nhập file chỉ thêm vào chứ không xóa gì: danh sách chưa có sẽ được thêm mới, danh sách đã có sẽ được bổ sung những bài còn thiếu, nên nhập lại nhiều lần cũng không bị trùng.
+- **Mục "Của bạn" trên Trang chủ**: Ngay dưới lời chào và hàng ghi chú của bạn bè là các ô Bài hát yêu thích, Đã tải và những danh sách phát của bạn. Bấm vào ô để mở, di chuột lên ô rồi bấm nút tròn để phát ngay. Danh sách đang phát luôn đứng đầu và có biểu tượng sóng nhạc.
+- **Tự tạo ảnh bìa cho danh sách phát**: Trong bảng sửa danh sách phát, chọn ảnh bìa từ máy hoặc tự tạo một bìa mới với tên danh sách, chọn kiểu chữ, màu và mẫu dựng sẵn. Chữ tiếng Việt có dấu hiển thị đúng font. Bìa tạo ra luôn bo góc gọn gàng, không còn viền đen ở góc.
+- **Bảng sửa danh sách phát mới**: Bố cục gọn gàng hơn, xem trước ảnh bìa ngay khi chỉnh, các nút mang màu của bài đang phát.
+- **Trung tâm thông báo**: Bấm biểu tượng chuông để xem lại những thông báo đã qua (thêm vào danh sách phát, tải xong, lời mời nghe cùng...). Thông báo nổi cũng có biểu tượng riêng cho từng loại, dễ nhận ra hơn.
+- **Lặp lại và phát ngẫu nhiên đúng kiểu**: Nút lặp có ba chế độ: tắt (hết danh sách thì dừng), lặp cả danh sách, và lặp một bài. Phát ngẫu nhiên giờ phát hết mọi bài trong danh sách rồi mới quay lại bài đã nghe, không còn một bài bị lặp lại liên tục, và nút bài trước quay về đúng bài vừa nghe.
+- **Thư viện sắp xếp lại**: Ba mục Danh sách phát, Yêu thích và Đã tải nằm trong một thanh chọn bo tròn, có vệt sáng trượt mượt sang mục bạn chọn. Thư viện mở sẵn ở Danh sách phát và nhớ mục bạn xem lần trước.
 
 ### Fixed
+- **Tiêu đề thư viện không còn bị cắt khi mở bảng cạnh bên**: Khi màn hình hẹp, tiêu đề và thanh chọn mục tự xuống hàng thay vì bị cắt mất ở hai bên.
+- **Góc bảng cạnh bên không còn viền đen**: Bốn góc bo của bảng áp phích cạnh bên giờ mịn, không còn răng cưa tối.
+- **Đóng màn hình Đang phát không còn nháy**: Khi thu nhỏ ảnh bìa về thanh phát nhạc, màn hình phía sau không còn lộ ra một thoáng trước khi hiệu ứng bắt đầu.
+- **Thông báo căn giữa khi di chuột**: Vùng sáng khi di chuột lên một thông báo nằm cân giữa, không còn dính sát mép trái.
 - **Bản Windows mở được trở lại**: Một số máy Windows báo lỗi "Failed to load QML root object" và không mở được ứng dụng sau khi cài bản 2.0.0. Lỗi này đã được sửa, ứng dụng mở bình thường như trước.
 - **Sửa tên và ảnh bìa danh sách phát cùng lúc không còn bị mất**: Trước đây khi vừa đổi tên vừa đổi ảnh bìa trong một lần sửa, đôi khi chỉ một trong hai thay đổi được giữ lại. Giờ cả hai luôn được lưu.
 - **Mở thư mục chứa bài hát trên Windows**: Lựa chọn mở thư mục chứa file trong menu chuột phải của bài hát giờ hoạt động trên Windows, mở đúng thư mục trong File Explorer.

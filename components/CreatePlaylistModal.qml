@@ -1,25 +1,44 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls.Basic
-import QtQuick.Effects
+import QtQuick.Dialogs
+import QtCore
 import "."
+import "cover_art.js" as CoverArt
 
+// Create / edit a playlist. The cover is the main control: click it to pick an image,
+// or generate one. Pasting an image link is still possible but folded away.
 Rectangle {
     id: root
 
     anchors.fill: parent
-    color: Qt.rgba(0, 0, 0, 0.65)
+    color: Qt.rgba(0, 0, 0, 0.6)
     visible: false
     z: 10010
 
     property color accentColor: Theme.accent
+    property string appDir: ""
+    property string songCover: ""
     property bool editMode: false
     property string targetPlaylistId: ""
     property var attachedTracks: []
+    property bool linkOpen: false
 
     signal closeRequested()
     signal playlistCreated(string title, string description, string cover, var tracks)
     signal playlistUpdated(string plId, string title, string description, string cover)
+
+    // Same tinted-ground recipe as the cover panel, keyed to the app accent
+    readonly property real accentHue: CoverArt.hexToOklch(accentColor.toString()).h
+    readonly property color ground: CoverArt.oklchToHex(0.18, 0.025, accentHue)
+    readonly property color field: CoverArt.oklchToHex(0.22, 0.03, accentHue)
+    readonly property color mutedText: CoverArt.oklchToHex(0.80, 0.03, accentHue)
+    readonly property color faintText: CoverArt.oklchToHex(0.62, 0.03, accentHue)
+    readonly property color hairline: Qt.rgba(1, 1, 1, 0.10)
+    readonly property bool hasCover: coverInput.text.trim() !== ""
+    readonly property bool canSubmit: titleInput.text.trim().length > 0
+
+    function isLink(s) { return /^https?:\/\//i.test(s || ""); }
 
     function openCreate(tracks) {
         root.editMode = false;
@@ -28,6 +47,7 @@ Rectangle {
         titleInput.text = "";
         descInput.text = "";
         coverInput.text = "";
+        root.linkOpen = false;
         root.visible = true;
         titleInput.forceActiveFocus();
     }
@@ -40,11 +60,13 @@ Rectangle {
         titleInput.text = pl.title || pl.name || "";
         descInput.text = pl.description || "";
         coverInput.text = pl.customCover || pl.cover || "";
+        root.linkOpen = root.isLink(coverInput.text);
         root.visible = true;
         titleInput.forceActiveFocus();
     }
 
     function closeModal() {
+        coverGenerator.close();
         titleInput.focus = false;
         descInput.focus = false;
         coverInput.focus = false;
@@ -66,66 +88,145 @@ Rectangle {
         root.closeModal();
     }
 
-    // Dismiss on background click
+    Keys.onEscapePressed: root.closeModal()
+
+    // ---------- small building blocks ----------
+    component PillButton: Rectangle {
+        id: btn
+        property string label: ""
+        property string icon: ""
+        property bool primary: false
+        property bool enabledState: true
+        property string hint: ""
+        signal clicked()
+        implicitHeight: 38
+        implicitWidth: btnRow.implicitWidth + (label !== "" ? (primary ? 36 : 28) : 18)
+        radius: height / 2
+        color: primary
+               ? (btnArea.containsMouse ? Qt.lighter(root.accentColor, 1.10) : root.accentColor)
+               : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, btnArea.containsMouse ? 0.24 : 0.14)
+        opacity: enabledState ? 1.0 : 0.4
+        Behavior on color { ColorAnimation { duration: 120 } }
+        Accessible.role: Accessible.Button
+        Accessible.name: label !== "" ? label : hint
+        ToolTip.visible: hint !== "" && btnArea.containsMouse
+        ToolTip.text: hint
+        ToolTip.delay: 400
+        Row {
+            id: btnRow
+            anchors.centerIn: parent
+            spacing: 7
+            AppIcon {
+                visible: btn.icon !== ""
+                anchors.verticalCenter: parent.verticalCenter
+                source: btn.icon
+                iconSize: 15
+                color: btn.primary ? CoverArt.contrast(root.accentColor.toString()) : Qt.lighter(root.accentColor, 1.35)
+            }
+            Text {
+                visible: btn.label !== ""
+                anchors.verticalCenter: parent.verticalCenter
+                text: btn.label
+                font.family: Theme.fontFamily
+                font.pixelSize: 13
+                font.weight: btn.primary ? Font.Bold : Font.Medium
+                color: btn.primary ? CoverArt.contrast(root.accentColor.toString()) : "#ffffff"
+            }
+        }
+        MouseArea {
+            id: btnArea
+            anchors.fill: parent
+            hoverEnabled: true
+            enabled: btn.enabledState
+            cursorShape: Qt.PointingHandCursor
+            onClicked: btn.clicked()
+        }
+    }
+
+    component FieldLabel: Text {
+        font.family: Theme.fontFamily
+        font.pixelSize: 12
+        font.weight: Font.DemiBold
+        color: root.mutedText
+    }
+
+    component FieldBox: Rectangle {
+        property bool focused: false
+        radius: 12
+        color: root.field
+        border.width: 1
+        border.color: focused ? root.accentColor : root.hairline
+        Behavior on border.color { ColorAnimation { duration: 120 } }
+    }
+
     MouseArea {
         anchors.fill: parent
         onClicked: root.closeModal()
     }
 
-    // Modal Card
+    FileDialog {
+        id: coverFileDialog
+        title: I18n.tr("Chọn ảnh bìa", "Choose a cover image")
+        fileMode: FileDialog.OpenFile
+        nameFilters: [I18n.tr("Ảnh (*.png *.jpg *.jpeg *.webp *.gif *.bmp)", "Images (*.png *.jpg *.jpeg *.webp *.gif *.bmp)")]
+        currentFolder: StandardPaths.writableLocation(StandardPaths.PicturesLocation)
+        // file:// URL works as an Image source on both Linux and Windows
+        onAccepted: coverInput.text = String(selectedFile)
+    }
+
     Rectangle {
         id: card
-        width: Math.min(500, root.width - 32)
-        height: formCol.implicitHeight + 48
+        readonly property bool wide: width >= 540
+        width: Math.min(600, root.width - 32)
+        height: formCol.implicitHeight
         anchors.centerIn: parent
-        radius: 20
-        color: Qt.rgba(0.08, 0.09, 0.13, 0.96)
-        border.color: Qt.rgba(255, 255, 255, 0.14)
+        radius: 24
+        color: root.ground
+        border.color: root.hairline
         border.width: 1
 
-        // Consume click so background doesn't trigger
-        MouseArea {
-            anchors.fill: parent
-            onClicked: {}
-        }
+        MouseArea { anchors.fill: parent }
 
         ColumnLayout {
             id: formCol
-            anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.margins: 24
-            spacing: 20
+            spacing: 0
 
-            // Header Row
+            // ---------- header ----------
             RowLayout {
                 Layout.fillWidth: true
+                Layout.leftMargin: 28
+                Layout.rightMargin: 20
+                Layout.topMargin: 22
+                Layout.bottomMargin: 20
                 spacing: 12
 
                 Text {
                     Layout.fillWidth: true
-                    text: root.editMode ? I18n.tr("Chỉnh sửa danh sách phát", "Edit Playlist")
-                                       : I18n.tr("Tạo danh sách phát mới", "Create New Playlist")
+                    text: root.editMode ? I18n.tr("Chỉnh sửa danh sách phát", "Edit playlist")
+                                        : I18n.tr("Danh sách phát mới", "New playlist")
                     font.family: Theme.fontFamily
-                    font.pixelSize: 18
+                    font.pixelSize: 20
                     font.weight: Font.Bold
                     color: "#ffffff"
                     elide: Text.ElideRight
                 }
 
                 Rectangle {
-                    width: 30
-                    height: 30
-                    radius: 15
-                    color: closeArea.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : "transparent"
-
+                    Layout.preferredWidth: 34
+                    Layout.preferredHeight: 34
+                    radius: 17
+                    color: closeArea.containsMouse
+                           ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) : "transparent"
+                    Accessible.role: Accessible.Button
+                    Accessible.name: I18n.tr("Đóng", "Close")
                     AppIcon {
                         anchors.centerIn: parent
                         source: "../assets/icons/window-close-symbolic.svg"
                         iconSize: 14
-                        color: closeArea.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.6)
+                        color: closeArea.containsMouse ? "#ffffff" : root.mutedText
                     }
-
                     MouseArea {
                         id: closeArea
                         anchors.fill: parent
@@ -136,231 +237,294 @@ Rectangle {
                 }
             }
 
-            // Body Layout: Preview on Left, Inputs on Right
-            RowLayout {
+            // ---------- body: cover | fields ----------
+            GridLayout {
                 Layout.fillWidth: true
-                spacing: 18
+                Layout.leftMargin: 28
+                Layout.rightMargin: 28
+                columns: card.wide ? 2 : 1
+                columnSpacing: 24
+                rowSpacing: 20
 
-                // Live Collage / Gradient Preview
-                PlaylistCollageThumbnail {
-                    Layout.preferredWidth: 110
-                    Layout.preferredHeight: 110
-                    radius: 14
-                    customCover: coverInput.text.trim()
-                    tracks: root.attachedTracks
-                    playlistTitle: titleInput.text.trim()
-                    accentColor: root.accentColor
+                // Cover column
+                ColumnLayout {
+                    Layout.alignment: card.wide ? Qt.AlignTop : Qt.AlignHCenter
+                    Layout.fillWidth: false
+                    Layout.preferredWidth: 184
+                    Layout.maximumWidth: 184
+                    spacing: 12
+
+                    Item {
+                        id: coverBox
+                        Layout.preferredWidth: 184
+                        Layout.preferredHeight: 184
+                        Accessible.role: Accessible.Button
+                        Accessible.name: I18n.tr("Chọn ảnh bìa", "Choose a cover image")
+
+                        PlaylistCollageThumbnail {
+                            anchors.fill: parent
+                            radius: 16
+                            customCover: coverInput.text.trim()
+                            tracks: root.attachedTracks
+                            playlistTitle: titleInput.text.trim()
+                            accentColor: root.accentColor
+                        }
+
+                        // Hover: "change image" over a scrim, same radius as the cover
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 16
+                            color: Qt.rgba(0, 0, 0, 0.55)
+                            opacity: coverArea.containsMouse ? 1 : 0
+                            Behavior on opacity { NumberAnimation { duration: 140 } }
+                            Column {
+                                anchors.centerIn: parent
+                                spacing: 8
+                                AppIcon {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    source: "../assets/icons/image-cover-symbolic.svg"
+                                    iconSize: 26
+                                    color: "#ffffff"
+                                }
+                                Text {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: root.hasCover ? I18n.tr("Đổi ảnh", "Change image") : I18n.tr("Chọn ảnh", "Choose image")
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 13
+                                    font.weight: Font.DemiBold
+                                    color: "#ffffff"
+                                }
+                            }
+                        }
+
+                        MouseArea {
+                            id: coverArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: coverFileDialog.open()
+                        }
+
+                        // Remove the custom cover, back to the automatic one
+                        Rectangle {
+                            visible: root.hasCover
+                            anchors.top: parent.top
+                            anchors.right: parent.right
+                            anchors.margins: 8
+                            width: 30
+                            height: 30
+                            radius: 15
+                            color: removeArea.containsMouse ? Qt.rgba(244 / 255, 63 / 255, 94 / 255, 0.85) : Qt.rgba(0, 0, 0, 0.55)
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Accessible.role: Accessible.Button
+                            Accessible.name: I18n.tr("Bỏ ảnh bìa", "Remove cover")
+                            ToolTip.visible: removeArea.containsMouse
+                            ToolTip.text: I18n.tr("Bỏ ảnh bìa", "Remove cover")
+                            ToolTip.delay: 400
+                            AppIcon {
+                                anchors.centerIn: parent
+                                source: "../assets/icons/material/ms-remove.svg"
+                                iconSize: 15
+                                color: "#ffffff"
+                            }
+                            MouseArea {
+                                id: removeArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: { coverInput.text = ""; root.linkOpen = false; }
+                            }
+                        }
+                    }
+
+                    PillButton {
+                        Layout.fillWidth: true
+                        label: I18n.tr("Tạo ảnh bìa", "Generate cover")
+                        icon: "../assets/icons/material/ms-palette.svg"
+                        onClicked: coverGenerator.open(titleInput.text.trim())
+                    }
                 }
 
-                // Input Fields
+                // Fields column
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: 10
+                    Layout.alignment: Qt.AlignTop
+                    spacing: 8
 
-                    // Title Input
-                    ColumnLayout {
+                    FieldLabel { text: I18n.tr("Tên", "Name") }
+                    FieldBox {
                         Layout.fillWidth: true
-                        spacing: 4
-
-                        Text {
-                            text: I18n.tr("Tên danh sách", "Playlist Name")
+                        Layout.preferredHeight: 46
+                        focused: titleInput.activeFocus
+                        TextField {
+                            id: titleInput
+                            anchors.fill: parent
+                            anchors.leftMargin: 14
+                            anchors.rightMargin: 14
+                            verticalAlignment: TextInput.AlignVCenter
+                            leftPadding: 0
+                            rightPadding: 0
+                            color: "#ffffff"
                             font.family: Theme.fontFamily
-                            font.pixelSize: 11
+                            font.pixelSize: 15
                             font.weight: Font.Medium
-                            color: Qt.rgba(255, 255, 255, 0.65)
-                        }
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            height: 38
-                            radius: 10
-                            color: Qt.rgba(255, 255, 255, 0.06)
-                            border.color: titleInput.activeFocus ? root.accentColor : Qt.rgba(255, 255, 255, 0.1)
-                            border.width: 1
-
-                            TextField {
-                                id: titleInput
-                                anchors.fill: parent
-                                anchors.leftMargin: 12
-                                anchors.rightMargin: 12
-                                verticalAlignment: TextInput.AlignVCenter
-                                color: "#ffffff"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 13
-                                placeholderText: I18n.tr("Nhập tên danh sách phát...", "Enter playlist title...")
-                                placeholderTextColor: Qt.rgba(255, 255, 255, 0.3)
-                                background: null
-                                selectByMouse: true
-                                Keys.onReturnPressed: root.submitForm()
-                                Keys.onEnterPressed: root.submitForm()
-                            }
+                            placeholderText: I18n.tr("Đặt tên cho danh sách", "Give it a name")
+                            placeholderTextColor: root.faintText
+                            background: null
+                            selectByMouse: true
+                            Keys.onReturnPressed: root.submitForm()
+                            Keys.onEnterPressed: root.submitForm()
                         }
                     }
 
-                    // Description Input
-                    ColumnLayout {
+                    FieldLabel {
+                        Layout.topMargin: 10
+                        text: I18n.tr("Mô tả", "Description")
+                    }
+                    FieldBox {
                         Layout.fillWidth: true
-                        spacing: 4
-
-                        Text {
-                            text: I18n.tr("Mô tả (tùy chọn)", "Description (optional)")
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 11
-                            font.weight: Font.Medium
-                            color: Qt.rgba(255, 255, 255, 0.65)
-                        }
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            height: 38
-                            radius: 10
-                            color: Qt.rgba(255, 255, 255, 0.06)
-                            border.color: descInput.activeFocus ? root.accentColor : Qt.rgba(255, 255, 255, 0.1)
-                            border.width: 1
-
-                            TextField {
+                        Layout.preferredHeight: 96
+                        focused: descInput.activeFocus
+                        ScrollView {
+                            anchors.fill: parent
+                            anchors.margins: 2
+                            TextArea {
                                 id: descInput
-                                anchors.fill: parent
-                                anchors.leftMargin: 12
-                                anchors.rightMargin: 12
-                                verticalAlignment: TextInput.AlignVCenter
+                                leftPadding: 12
+                                rightPadding: 12
+                                topPadding: 10
+                                bottomPadding: 10
+                                wrapMode: TextEdit.Wrap
                                 color: "#ffffff"
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 13
-                                placeholderText: I18n.tr("Mô tả ngắn...", "Brief description...")
-                                placeholderTextColor: Qt.rgba(255, 255, 255, 0.3)
+                                placeholderText: I18n.tr("Không bắt buộc", "Optional")
+                                placeholderTextColor: root.faintText
                                 background: null
                                 selectByMouse: true
-                                Keys.onReturnPressed: root.submitForm()
-                                Keys.onEnterPressed: root.submitForm()
+                                // Enter saves; Shift+Enter starts a new line
+                                Keys.onReturnPressed: event => {
+                                    if (event.modifiers & Qt.ShiftModifier) event.accepted = false;
+                                    else root.submitForm();
+                                }
                             }
+                        }
+                    }
+
+                    // Image link: folded away, most people pick or generate instead
+                    Text {
+                        Layout.topMargin: 6
+                        visible: !root.linkOpen
+                        text: I18n.tr("Dùng liên kết ảnh", "Use an image link")
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                        font.weight: Font.DemiBold
+                        font.underline: linkArea.containsMouse
+                        color: Qt.lighter(root.accentColor, 1.3)
+                        MouseArea {
+                            id: linkArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: { root.linkOpen = true; coverInput.forceActiveFocus(); }
+                        }
+                    }
+
+                    FieldLabel {
+                        Layout.topMargin: 10
+                        visible: root.linkOpen
+                        text: I18n.tr("Liên kết ảnh bìa", "Cover image link")
+                    }
+                    FieldBox {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 42
+                        visible: root.linkOpen
+                        focused: coverInput.activeFocus
+                        TextField {
+                            id: coverInput
+                            anchors.fill: parent
+                            anchors.leftMargin: 14
+                            anchors.rightMargin: 14
+                            verticalAlignment: TextInput.AlignVCenter
+                            leftPadding: 0
+                            rightPadding: 0
+                            color: "#ffffff"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            placeholderText: I18n.tr("https://… hoặc đường dẫn tệp", "https://… or a file path")
+                            placeholderTextColor: root.faintText
+                            background: null
+                            selectByMouse: true
+                            Keys.onReturnPressed: root.submitForm()
+                            Keys.onEnterPressed: root.submitForm()
                         }
                     }
                 }
             }
 
-            // Cover URL Input
-            ColumnLayout {
+            // ---------- footer ----------
+            Rectangle {
                 Layout.fillWidth: true
-                spacing: 4
-
-                Text {
-                    text: I18n.tr("Ảnh bìa tùy chỉnh (tùy chọn)", "Custom Cover URL (optional)")
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 11
-                    font.weight: Font.Medium
-                    color: Qt.rgba(255, 255, 255, 0.65)
-                }
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 38
-                    radius: 10
-                    color: Qt.rgba(255, 255, 255, 0.06)
-                    border.color: coverInput.activeFocus ? root.accentColor : Qt.rgba(255, 255, 255, 0.1)
-                    border.width: 1
-
-                    TextField {
-                        id: coverInput
-                        anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        verticalAlignment: TextInput.AlignVCenter
-                        color: "#ffffff"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 13
-                        placeholderText: I18n.tr("Dán URL ảnh hoặc đường dẫn file...", "Paste image URL or file path...")
-                        placeholderTextColor: Qt.rgba(255, 255, 255, 0.3)
-                        background: null
-                        selectByMouse: true
-                        Keys.onReturnPressed: root.submitForm()
-                        Keys.onEnterPressed: root.submitForm()
-                    }
-                }
+                Layout.topMargin: 24
+                Layout.preferredHeight: 1
+                color: root.hairline
             }
 
-            // Action Buttons
             RowLayout {
                 Layout.fillWidth: true
-                Layout.topMargin: 8
-                spacing: 12
+                Layout.leftMargin: 28
+                Layout.rightMargin: 20
+                Layout.topMargin: 14
+                Layout.bottomMargin: 16
+                spacing: 8
 
-                Item { Layout.fillWidth: true }
+                Text {
+                    Layout.fillWidth: true
+                    text: root.attachedTracks.length > 0
+                          ? I18n.tr(root.attachedTracks.length + " bài hát", root.attachedTracks.length + (root.attachedTracks.length === 1 ? " song" : " songs"))
+                          : ""
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 12
+                    color: root.faintText
+                    elide: Text.ElideRight
+                }
 
-                // Cancel Button
-                Rectangle {
-                    Layout.preferredWidth: 90
-                    Layout.preferredHeight: 38
-                    radius: 19
-                    color: cancelArea.containsMouse ? Qt.rgba(255, 255, 255, 0.1) : Qt.rgba(255, 255, 255, 0.05)
-                    border.color: Qt.rgba(255, 255, 255, 0.12)
-                    border.width: 1
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: I18n.tr("Hủy", "Cancel")
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 13
-                        font.weight: Font.Medium
-                        color: "#ffffff"
-                    }
-
+                Text {
+                    text: I18n.tr("Hủy", "Cancel")
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 13
+                    font.weight: Font.Medium
+                    color: cancelArea.containsMouse ? "#ffffff" : root.mutedText
+                    Layout.rightMargin: 10
+                    Accessible.role: Accessible.Button
+                    Accessible.name: text
                     MouseArea {
                         id: cancelArea
                         anchors.fill: parent
+                        anchors.margins: -10
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.closeModal()
                     }
                 }
 
-                // Submit Button (Dynamic Chromatic Accent)
-                Rectangle {
-                    id: submitBtn
-                    readonly property bool canSubmit: titleInput.text.trim().length > 0
-                    Layout.preferredWidth: 120
-                    Layout.preferredHeight: 38
-                    radius: 19
-                    color: canSubmit
-                           ? (submitArea.containsMouse ? Qt.lighter(root.accentColor, 1.15) : root.accentColor)
-                           : Qt.rgba(255, 255, 255, 0.08)
-                    opacity: canSubmit ? 1.0 : 0.5
-                    border.color: canSubmit ? Qt.rgba(255, 255, 255, 0.25) : "transparent"
-                    border.width: 1
-
-                    Behavior on color { ColorAnimation { duration: 150 } }
-
-                    Row {
-                        anchors.centerIn: parent
-                        spacing: 6
-
-                        AppIcon {
-                            anchors.verticalCenter: parent.verticalCenter
-                            source: root.editMode ? "../assets/icons/emblem-ok-symbolic.svg" : "../assets/icons/list-add-symbolic.svg"
-                            iconSize: 14
-                            color: submitBtn.canSubmit ? "#000000" : Qt.rgba(255, 255, 255, 0.4)
-                        }
-
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: root.editMode ? I18n.tr("Lưu", "Save") : I18n.tr("Tạo mới", "Create")
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 13
-                            font.weight: Font.Bold
-                            color: submitBtn.canSubmit ? "#000000" : Qt.rgba(255, 255, 255, 0.4)
-                        }
-                    }
-
-                    MouseArea {
-                        id: submitArea
-                        anchors.fill: parent
-                        enabled: submitBtn.canSubmit
-                        hoverEnabled: true
-                        cursorShape: submitBtn.canSubmit ? Qt.PointingHandCursor : Qt.ArrowCursor
-                        onClicked: root.submitForm()
-                    }
+                PillButton {
+                    primary: true
+                    enabledState: root.canSubmit
+                    label: root.editMode ? I18n.tr("Lưu", "Save") : I18n.tr("Tạo", "Create")
+                    icon: root.editMode ? "../assets/icons/emblem-ok-symbolic.svg" : "../assets/icons/list-add-symbolic.svg"
+                    onClicked: root.submitForm()
                 }
             }
         }
+    }
+
+    CoverGeneratorPanel {
+        id: coverGenerator
+        z: 10
+        accentColor: root.accentColor
+        appDir: root.appDir
+        songCover: root.songCover
+        onCoverGenerated: url => coverInput.text = url
     }
 }

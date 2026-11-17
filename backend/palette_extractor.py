@@ -356,6 +356,34 @@ def main():
 
 SONG_PALETTES_CACHE = Path(pc.get_cache_dir()) / "song_palettes.json"
 
+def _open_image(clean_src: str):
+    """Open an http(s) URL, file:// URL or local path as a PIL image; None if missing."""
+    if clean_src.startswith("http://") or clean_src.startswith("https://"):
+        import urllib.request
+        import io
+        req = urllib.request.Request(clean_src, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+        })
+        with urllib.request.urlopen(req, timeout=6, context=pc.get_ssl_context()) as resp:
+            content = resp.read()
+        img = Image.open(io.BytesIO(content))
+    else:
+        path_str = clean_src
+        if path_str.startswith("file:///"):
+            if len(path_str) > 9 and path_str[9] == ":":
+                path_str = path_str[8:]
+            else:
+                path_str = path_str[7:]
+        elif path_str.startswith("file://"):
+            path_str = path_str[7:]
+        p = Path(os.path.expanduser(path_str))
+        if not p.exists():
+            return None
+        img = Image.open(p)
+    return img
+
+
 def extract_song_palette(img_src: str) -> dict:
     default_res = {
         "highlightColor": "#deb06c",
@@ -403,29 +431,9 @@ def extract_song_palette(img_src: str) -> dict:
         pass
 
     try:
-        if clean_src.startswith("http://") or clean_src.startswith("https://"):
-            import urllib.request
-            import io
-            req = urllib.request.Request(clean_src, headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
-            })
-            with urllib.request.urlopen(req, timeout=6, context=pc.get_ssl_context()) as resp:
-                content = resp.read()
-            img = Image.open(io.BytesIO(content))
-        else:
-            path_str = clean_src
-            if path_str.startswith("file:///"):
-                if len(path_str) > 9 and path_str[9] == ":":
-                    path_str = path_str[8:]
-                else:
-                    path_str = path_str[7:]
-            elif path_str.startswith("file://"):
-                path_str = path_str[7:]
-            p = Path(os.path.expanduser(path_str))
-            if not p.exists():
-                return default_res
-            img = Image.open(p)
+        img = _open_image(clean_src)
+        if img is None:
+            return default_res
 
         pal = extract_adaptive_palette(img, is_light=False)
         res = {
@@ -457,12 +465,54 @@ def extract_song_palette(img_src: str) -> dict:
         sys.stderr.write(f"[extract_song_palette error]: {e}\n")
         return default_res
 
+def extract_cover_colors(img_src: str = "", k: int = 5) -> dict:
+    """k dominant OKLAB colours for the generated playlist covers.
+
+    Empty src means the current wallpaper. Lightness is spread over
+    0.28..0.86 (darkest to lightest, hue kept) so a night wallpaper does not
+    yield five near-black swatches. Also makes sure the covers folder exists,
+    since the QML side saves its PNGs there and cannot create folders itself.
+    """
+    cover_dir = Path(pc.get_config_dir()) / "nutsty_covers"
+    cover_dir.mkdir(parents=True, exist_ok=True)
+    res = {"colors": [], "coverDir": str(cover_dir)}
+    if not HAS_PIL:
+        return res
+    try:
+        src = str(img_src or "").strip()
+        img = _open_image(src) if src else Image.open(get_current_wallpaper())
+        if img is None:
+            return res
+        img = img.convert("RGB")
+        img.thumbnail((96, 96))
+        pixels = getattr(img, "get_flattened_data", img.getdata)()
+        pts = [rgb_to_oklab(*px)[:3] for px in pixels]
+        cents = kmeans_oklab(pts, k, 10)
+        if len(cents) < k or len(cents[0]) < 4:
+            return res
+        cents = sorted(cents, key=lambda c: c[0])
+        out = []
+        for i, (_L, a, b, _n) in enumerate(cents):
+            chroma = math.hypot(a, b)
+            chroma = max(chroma, 0.04) * (1.0 if chroma < 0.03 else 1.15)
+            L = 0.28 + 0.58 * (i / (k - 1) if k > 1 else 0.5)
+            out.append(oklch_to_hex(L, chroma, math.atan2(b, a)))
+        res["colors"] = out
+    except Exception as e:
+        sys.stderr.write(f"[extract_cover_colors error]: {e}\n")
+    return res
+
+
 def handle_cli(args=None):
     if args is None:
         args = sys.argv[1:]
     if args and args[0] == "song_palette":
         src = args[1] if len(args) > 1 else ""
         res = extract_song_palette(src)
+        print(json.dumps(res, ensure_ascii=False))
+        return res
+    if args and args[0] == "cover_colors":
+        res = extract_cover_colors(args[1] if len(args) > 1 else "")
         print(json.dumps(res, ensure_ascii=False))
         return res
     return main()

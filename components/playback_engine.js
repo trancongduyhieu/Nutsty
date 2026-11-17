@@ -150,8 +150,63 @@ function dispatchPlay(win, path, title, artist, image, epoch) {
     }
 }
 
-// Next track the queue will play; shuffle picks are remembered so the
-// AutoMix analysis and the real switch agree on the same song.
+// Repeat modes (win.repeatMode): "off" stops when the queue runs out, "all" starts the queue
+// (or a new shuffle round) again, "one" replays the current song when it ends naturally.
+// A skip pressed by the user always moves on, wrapping around like "all".
+//
+// Shuffle draws without replacement: win.shufflePlayed holds the keys already heard this
+// round, so 1 -> 5 -> 6 -> 1 cannot happen until every song in the queue has played.
+
+function markShufflePlayed(win, key) {
+    if (!key) return;
+    var played = win.shufflePlayed || {};
+    if (played[key]) return;
+    var copy = Object.assign({}, played);
+    copy[key] = true;
+    win.shufflePlayed = copy;
+}
+
+// Bookkeeping when shuffle moves from curKey to nextTrk (skip, natural end or AutoMix)
+function noteShuffleAdvance(win, curKey, nextTrk) {
+    if (!win.isShuffle) return;
+    markShufflePlayed(win, curKey);
+    var nextKey = trackKeyOf(nextTrk);
+    // Every song of the round has played: start a new round from here
+    if (nextKey && (win.shufflePlayed || {})[nextKey]) {
+        win.shufflePlayed = {};
+        markShufflePlayed(win, curKey);
+    }
+    win.shuffleHistory = (win.shuffleHistory || []).concat([curKey]).slice(-200);
+}
+
+// Index of the song after curIdx, or -1 when playback should stop (end of queue, repeat off).
+// Does not change state, so peekNextTrack and playNext can share it.
+function chooseNextIndex(win, curIdx, userSkip) {
+    var list = win.currentTracks;
+    var n = list.length;
+    if (curIdx === -1) return 0;
+    var wrap = userSkip || win.repeatMode === "all";
+    if (win.isShuffle && n > 1) {
+        var curKey = trackKeyOf(list[curIdx]);
+        var played = win.shufflePlayed || {};
+        var fresh = [], others = [];
+        for (var i = 0; i < n; i++) {
+            if (i === curIdx) continue;
+            var k = trackKeyOf(list[i]);
+            if (k && k === curKey) continue;
+            others.push(i);
+            if (!k || !played[k]) fresh.push(i);
+        }
+        var pool = fresh.length > 0 ? fresh : (wrap ? others : []);
+        if (pool.length === 0) return -1;
+        return pool[Math.floor(Math.random() * pool.length)];
+    }
+    if (curIdx + 1 < n) return curIdx + 1;
+    return wrap ? 0 : -1;
+}
+
+// Next track the queue will play when the current one ends; shuffle picks are remembered so
+// the AutoMix analysis and the real switch agree on the same song.
 function peekNextTrack(win) {
     if (!win.currentTrack || !win.currentTracks || win.currentTracks.length === 0) return null;
     var curIdx = win.currentTracks.findIndex(t => win.isSameTrack(t, win.currentTrack));
@@ -162,14 +217,14 @@ function peekNextTrack(win) {
         if (pick && pick.fromKey === curKey && pick.index < win.currentTracks.length && pick.index !== curIdx) {
             return win.currentTracks[pick.index];
         }
-        var idx = curIdx;
-        while (idx === curIdx) idx = Math.floor(Math.random() * win.currentTracks.length);
+        markShufflePlayed(win, curKey);
+        var idx = chooseNextIndex(win, curIdx, false);
+        if (idx < 0) return null;
         win.shuffleNextPick = { fromKey: curKey, index: idx };
         return win.currentTracks[idx];
     }
-    var nextIdx = curIdx + 1;
-    if (nextIdx >= win.currentTracks.length) nextIdx = 0;
-    return win.currentTracks[nextIdx];
+    var nextIdx = chooseNextIndex(win, curIdx, false);
+    return nextIdx < 0 ? null : win.currentTracks[nextIdx];
 }
 
 function playablePathOf(win, trk) {
@@ -227,7 +282,7 @@ function publishMixUpcoming(win, nextTrk, leadSec, blendSec) {
 }
 
 function maybeStartCrossfade(win, seekGrace) {
-    if (!win.crossfadeEnabled || win.isRepeat || win.listeningAlongFriend) { clearMixUpcoming(win); return false; }
+    if (!win.crossfadeEnabled || win.repeatMode === "one" || win.listeningAlongFriend) { clearMixUpcoming(win); return false; }
     if (win.isLoadingAudio || !win.isPlaying || seekGrace) return false;
     if (win.isSleepTimerActive && win.sleepTimerMode === "end_of_track") { clearMixUpcoming(win); return false; }
     var dur = win.totalDuration;
@@ -263,6 +318,7 @@ function maybeStartCrossfade(win, seekGrace) {
     win.crossfadeHandoverPath = win.lastMpvPath || "";
     win.crossfadeHandoverUntil = win.crossfadeHandoverPath ? Date.now() + 15000 : 0;
     win.shuffleNextPick = null;
+    noteShuffleAdvance(win, key, nextTrk);
     // The blend itself starts when the outgoing track reaches fade_at (the daemon waits for it)
     win.mixActive = { from: win.currentTrack, to: nextTrk, fromKey: key, toKey: trackKeyOf(nextTrk),
                       blendAtMs: Date.now() + Math.max(0.3, leadSec) * 1000, durMs: plan.duration * 1000,
@@ -586,7 +642,7 @@ function triggerRapidTrackSwitch(win, targetTrack) {
     }
 }
 
-function playNext(win) {
+function playNext(win, autoAdvance) {
     if (win.listeningAlongFriend && !win.isSyncingFromFriend && !win.guestCanControlHost) {
         win.showToast(I18n.tr("Host đã khóa quyền chuyển bài hát", "Host disabled track skipping"));
         return;
@@ -601,26 +657,29 @@ function playNext(win) {
         return;
     }
     if (!win.currentTrack || !win.currentTracks || win.currentTracks.length === 0) return;
+    var userSkip = !autoAdvance;
     var curIdx = win.currentTracks.findIndex(t => win.isSameTrack(t, win.currentTrack));
-    var nextIdx = 0;
-    if (curIdx === -1) {
-        nextIdx = 0;
-    } else if (win.isShuffle && win.currentTracks.length > 1) {
+    var curKey = trackKeyOf(win.currentTrack);
+    var nextIdx = -1;
+    if (win.isShuffle && win.currentTracks.length > 1 && curIdx !== -1) {
+        markShufflePlayed(win, curKey);
         var pick = win.shuffleNextPick;
-        if (pick && pick.fromKey === trackKeyOf(win.currentTrack) && pick.index < win.currentTracks.length && pick.index !== curIdx) {
+        if (pick && pick.fromKey === curKey && pick.index < win.currentTracks.length && pick.index !== curIdx) {
             nextIdx = pick.index;
         } else {
-            nextIdx = curIdx;
-            while (nextIdx === curIdx) {
-                nextIdx = Math.floor(Math.random() * win.currentTracks.length);
-            }
+            nextIdx = chooseNextIndex(win, curIdx, userSkip);
         }
         win.shuffleNextPick = null;
+        if (nextIdx >= 0) noteShuffleAdvance(win, curKey, win.currentTracks[nextIdx]);
     } else {
-        nextIdx = curIdx + 1;
-        if (nextIdx >= win.currentTracks.length) {
-            nextIdx = 0;
-        }
+        nextIdx = chooseNextIndex(win, curIdx, userSkip);
+    }
+    if (nextIdx < 0) {
+        // End of the queue with repeat off: stop on the last song instead of starting over
+        win.queueEndedKey = curKey;
+        win.isPlaying = false;
+        Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
+        return;
     }
     var nextTrk = win.currentTracks[nextIdx];
     if (nextTrk) {
@@ -639,6 +698,21 @@ function playPrev(win) {
         return;
     }
     var curIdx = win.currentTracks.findIndex(t => win.isSameTrack(t, win.currentTrack));
+    // Shuffle: go back to the song that actually played before, not the queue neighbour
+    if (win.isShuffle) {
+        var hist = (win.shuffleHistory || []).slice();
+        while (hist.length > 0) {
+            var key = hist.pop();
+            var hIdx = win.currentTracks.findIndex(t => trackKeyOf(t) === key);
+            if (hIdx !== -1 && hIdx !== curIdx) {
+                win.shuffleHistory = hist;
+                win.shuffleNextPick = null;
+                triggerRapidTrackSwitch(win, win.currentTracks[hIdx]);
+                return;
+            }
+        }
+        win.shuffleHistory = [];
+    }
     var prevIdx = (curIdx === -1 || curIdx === 0) ? (win.currentTracks.length - 1) : (curIdx - 1);
     var prevTrk = win.currentTracks[prevIdx];
     if (prevTrk) {
@@ -1157,7 +1231,11 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
         if (maybeStartCrossfade(win, seekGraceAdv)) return;
         var isNearEnd = !seekGraceAdv && win.totalDuration > 3 && win.currentTime >= (win.totalDuration - 1.0);
         var isEofStopped = !seekGraceAdv && (!s.is_playing && !s.is_paused && win.totalDuration > 3 && win.currentTime >= (win.totalDuration - 4.0));
-        if (!win.isLoadingAudio && (win.isPlaying || isEofStopped) && (isNearEnd || isEofStopped)) {
+        // Stopped on the last song (repeat off): stay put until the song changes or is replayed/seeked back
+        var stoppedAtQueueEnd = win.queueEndedKey && win.queueEndedKey === trackKeyOf(win.currentTrack)
+            && win.currentTime >= win.totalDuration - 4.0;
+        if (!stoppedAtQueueEnd && win.queueEndedKey) win.queueEndedKey = "";
+        if (!stoppedAtQueueEnd && !win.isLoadingAudio && (win.isPlaying || isEofStopped) && (isNearEnd || isEofStopped)) {
             if (win.isSleepTimerActive && win.sleepTimerMode === "end_of_track") {
                 win.isSleepTimerActive = false;
                 win.sleepTimerFadeTriggered = false;
@@ -1165,10 +1243,10 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
                 win.sleepTimerRemainingSeconds = 0;
                 win.isPlaying = false;
                 Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
-            } else if (win.isRepeat) {
+            } else if (win.repeatMode === "one") {
                 win.seekAudio(0.0);
             } else {
-                win.playNext();
+                win.playNext(true);
             }
         }
     } catch(e) {

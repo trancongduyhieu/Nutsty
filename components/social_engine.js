@@ -528,7 +528,7 @@ function _pruneSilentListeners(win) {
     for (var g = 0; g < gone.length; g++) delete _listenerSeenAt[gone[g]];
     if (coListenersPopover.visible) coListenersPopover.openAt(win.activeCoListenersDetails);
     var who = removedNames.length > 0 ? removedNames.join(", ") : I18n.tr("Bạn bè", "Friend");
-    win.showToast(I18n.tr(who + " đã mất kết nối khỏi phòng nghe cùng", who + " dropped out of the listening session"));
+    win.notify("listen", I18n.tr(who + " đã mất kết nối khỏi phòng nghe cùng", who + " dropped out of the listening session"));
 }
 
 function ensureCoListenerRegistered(win, ev, showJoinToast) {
@@ -587,7 +587,7 @@ function ensureCoListenerRegistered(win, ev, showJoinToast) {
     win.activeCoListenersDetails = curDetails;
 
     if (isNewListener && showJoinToast) {
-        win.showToast(I18n.tr(jName + " đang nghe cùng bạn", jName + " is listening along with you"));
+        win.notify("listen", I18n.tr(jName + " đang nghe cùng bạn", jName + " is listening along with you"));
         win.sendSocialEventFast("permission_update", rawEmail, { allow_control: win.allowCoListenerControl });
     }
     return isNewListener;
@@ -656,9 +656,9 @@ function pollSocialEventsFast(win) {
                                 var leaveMsg = (ev.event === "kick")
                                     ? I18n.tr("Bạn đã bị mời ra khỏi phòng nghe cùng", "You were removed from the co-listening session")
                                     : I18n.tr(fromName + " đã dừng phát cùng bạn", fromName + " stopped co-listening with you");
-                                win.showToast(leaveMsg);
+                                win.notify("listen", leaveMsg);
                             } else {
-                                win.showToast(I18n.tr(fromName + " đã dừng nghe cùng bạn", fromName + " stopped listening along with you"));
+                                win.notify("listen", I18n.tr(fromName + " đã dừng nghe cùng bạn", fromName + " stopped listening along with you"));
                             }
                         } else if (ev.event === "pause") {
                             var role = sessionRole(win, ev);
@@ -760,6 +760,8 @@ function pollSocialEventsFast(win) {
                                     });
                                     if (matchS) sAvatar = matchS.avatar_url || "";
                                 }
+                                var sTitle = ev.data.track.title || ev.data.track.name || "";
+                                win.notificationStore.add("listen", I18n.tr(sFrom + " gợi ý bài " + sTitle, sFrom + " suggested " + sTitle));
                                 suggestTrackToast.showSuggestion(sFrom, sAvatar, ev.data.track);
                             }
                         } else if (ev.event === "listen_invite") {
@@ -782,12 +784,12 @@ function pollSocialEventsFast(win) {
                         } else if (ev.event === "friend_request") {
                             win.fetchFriendsDataFast();
                             var frName = ev.from_name || ev.from_email || I18n.tr("Ai đó", "Someone");
-                            win.showToast(I18n.tr(frName + " đã gửi lời mời kết bạn", frName + " sent a friend request"));
+                            win.notify("friend", I18n.tr(frName + " đã gửi lời mời kết bạn", frName + " sent a friend request"));
                         } else if (ev.event === "friend_accepted") {
                             win.fetchFriendsDataFast();
                             win.fetchFriendsNotesFast();
                             var faName = ev.from_name || ev.from_email || I18n.tr("Bạn bè", "Friend");
-                            win.showToast(I18n.tr(faName + " đã chấp nhận lời mời kết bạn", faName + " accepted friend request"));
+                            win.notify("friend", I18n.tr(faName + " đã chấp nhận lời mời kết bạn", faName + " accepted friend request"));
                         } else if (ev.event === "friend_removed") {
                             win.fetchFriendsDataFast();
                             win.fetchFriendsNotesFast();
@@ -911,7 +913,7 @@ function sendFriendRequest(win, targetEmail) {
                 try {
                     var res = JSON.parse(xhr.responseText);
                     if (res.accepted || res.status === "accepted") {
-                        win.showToast(I18n.tr("Hai bạn đã trở thành bạn bè!", "You are now friends!"));
+                        win.notify("friend", I18n.tr("Hai bạn đã trở thành bạn bè!", "You are now friends!"));
                         win.fetchFriendsDataFast();
                         win.fetchFriendsNotesFast();
                     } else {
@@ -1099,7 +1101,7 @@ function startListeningAlong(win, friend) {
     }
     if (!wasAlreadyListening) {
         var friendName = friend.user_name || I18n.tr("Bạn bè", "Friend");
-        win.showToast(I18n.tr("Đang nghe cùng " + friendName, "Listening along with " + friendName));
+        win.showToast(I18n.tr("Đang nghe cùng " + friendName, "Listening along with " + friendName), "listen");
         var joinTarget = friend.tag || friend.user_id || friend.user_email || "";
         if (joinTarget) {
             win.lastJoinHeartbeatTimestamp = Date.now();
@@ -1156,7 +1158,7 @@ function sendListenInvite(win, friend) {
             allow_control: Boolean(win.allowCoListenerControl)
         }
     });
-    win.showToast(I18n.tr("Đã mời " + name + " nghe cùng", "Invited " + name + " to listen along"));
+    win.showToast(I18n.tr("Đã mời " + name + " nghe cùng", "Invited " + name + " to listen along"), "listen");
     return true;
 }
 
@@ -1189,6 +1191,7 @@ function handleListenInvite(win, ev) {
         received_at: Date.now()
     };
     var busy = Boolean(win.listeningAlongFriend) || (win.activeCoListeners && win.activeCoListeners.length > 0);
+    win.notificationStore.add("listen", I18n.tr(invite.user_name + " mời bạn nghe cùng", invite.user_name + " invited you to listen along"));
     listenInviteToast.showInvite(invite, busy);
 }
 
