@@ -63,6 +63,7 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 ├── assets/                         # Font Instrument Serif, SVG icons, dữ liệu tĩnh
 ├── scripts/
 │   ├── verify_codebase.py          # Kiểm tra AST scope, py_compile & QML/JS contracts (< 1s)
+│   ├── verify_qml_compat.py        # Contract test Quickshell seam: nạp toàn bộ QML qua compat (~2s)
 │   └── run_dual_profile_test.sh    # Launcher test 2 profile song song (user1 & user2)
 ├── cloud_relay/                    # Cloudflare Worker & D1 Serverless Global Relay
 │   ├── schema.sql                  # Schema D1 (users, friendships, events, notes)
@@ -139,7 +140,7 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 ## 5. Quy Chuẩn Kiểm Tra Trước Khi Hoàn Thành (Mandatory Verification)
 
 Mọi thay đổi mã nguồn trước khi báo cáo hoàn thành hoặc commit đều **BẮT BUỘC** trải qua quy trình kiểm thử 4 bước:
-1. **Kiểm tra tĩnh toàn diện (< 1s)**: `python scripts/verify_codebase.py` (kiểm tra `py_compile`, AST symbol scope chống `NameError`, và hợp đồng QML/JS).
+1. **Kiểm tra tĩnh toàn diện (< 1s)**: `python scripts/verify_codebase.py` (kiểm tra `py_compile`, AST symbol scope chống `NameError`, và hợp đồng QML/JS), rồi `python scripts/verify_qml_compat.py` (nạp mọi QML qua `compat/`, bắt API Quickshell mà Windows thiếu). Cả hai chạy trong CI `verify.yml`.
 2. **Kiểm tra cú pháp QML**: `qmllint components/*.qml shell.qml` (hoặc trình nạp QML).
 3. **Thực nghiệm giao diện trực quan**: Chạy ứng dụng qua `run_command` -> Chụp ảnh màn hình -> Xem trực tiếp bằng `view_file` để đánh giá kết quả thực tế.
 4. **Git Commit & Push**: Đảm bảo commit thông điệp rõ ràng theo chuẩn Conventional Commits và push lên nhánh `main`.

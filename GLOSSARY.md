@@ -11,6 +11,8 @@ Từ vựng kiến trúc (module, interface, seam, adapter, depth...) theo skill
 - **compat layer**: `compat/Quickshell/*` cùng NutstyBridge, đóng vai Quickshell trên Windows (PySide6).
   Mọi API Quickshell mà component dùng phải có ở đây, nếu không Windows crash lúc nạp `shell.qml`.
   _Tránh_: "shim Windows", "lớp giả lập".
+- **seam contract test**: `scripts/verify_qml_compat.py`, nạp mọi file QML qua compat layer; là test surface
+  của Quickshell seam. Thêm API Quickshell mới vào QML thì phải thêm vào compat cho tới khi test qua.
 - **NutstyBridge** (`__NutstyBridge`): QObject Python mà `launcher_win.py` đưa vào QML trên Windows
   (env, readFile, runProcess, execDetached, mask cửa sổ). Chỉ tồn tại trên Windows.
 - **BACKEND_MAP**: Bảng trong `launcher_win.py` ánh xạ tên script backend sang module Python chạy

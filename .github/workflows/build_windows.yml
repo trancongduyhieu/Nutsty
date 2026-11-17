@@ -29,6 +29,13 @@ jobs:
           pip install -r requirements_win.txt
           pip install pyinstaller
 
+      - name: Verify Codebase and Quickshell Seam Contract
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python scripts/verify_codebase.py
+          python scripts/verify_qml_compat.py
+
       - name: Download Standalone Windows Binaries (yt-dlp and mpv)
         shell: pwsh
         run: |

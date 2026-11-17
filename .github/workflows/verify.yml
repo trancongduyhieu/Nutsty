@@ -1,0 +1,29 @@
+name: Verify Codebase
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Qt runtime libraries
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+
+      - name: Install PySide6
+        run: pip install "PySide6>=6.5.0"
+
+      - name: Static checks (py_compile, AST scope, QML/JS contracts)
+        run: python scripts/verify_codebase.py
+
+      - name: Quickshell seam contract (load all QML through compat)
+        run: python scripts/verify_qml_compat.py
