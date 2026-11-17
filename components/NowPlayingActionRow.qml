@@ -39,15 +39,14 @@ Item {
         border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
     }
 
-    Rectangle {
+    SlimePill {
         id: highlight
         y: root.highlightInset
         height: parent.height - 2 * root.highlightInset
-        width: root.segment - 2 * root.highlightInset
-        x: root.activeIndex * root.segment + root.highlightInset
+        targetWidth: root.segment - 2 * root.highlightInset
+        targetX: root.activeIndex * root.segment + root.highlightInset
         radius: root.radius - root.highlightInset
         color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.26)
-        Behavior on x { SpringAnimation { spring: 4.5; damping: 0.38; epsilon: 0.25 } }
     }
 
     Row {

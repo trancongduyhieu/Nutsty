@@ -55,6 +55,7 @@ NavArrowButton 1.0 NavArrowButton.qml
 NavSidebar 1.0 NavSidebar.qml
 ParticleBackground 1.0 ParticleBackground.qml
 RoundedClip 1.0 RoundedClip.qml
+SlimePill 1.0 SlimePill.qml
 PlaylistCollageThumbnail 1.0 PlaylistCollageThumbnail.qml
 PlaylistDetailView 1.0 PlaylistDetailView.qml
 PlaylistStore 1.0 PlaylistStore.qml

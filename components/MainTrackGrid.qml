@@ -406,24 +406,23 @@ Rectangle {
                         border.width: 1
                         border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18)
 
-                        // One shared pill slides to the active tab, same spring as NowPlayingActionRow
-                        Rectangle {
+                        // One shared pill moves to the active tab like slime (SlimePill, also used by
+                        // NowPlayingActionRow): the edge ahead lands first, the edge behind wobbles after it
+                        SlimePill {
                             id: subTabPill
                             readonly property Item target: {
                                 var keys = ["playlists", "favorites", "tracks"];
                                 return subTabRepeater.count === keys.length ? subTabRepeater.itemAt(Math.max(0, keys.indexOf(root.downloadsSubTab))) : null;
                             }
                             visible: target !== null
-                            x: subTabRow.x + (target ? target.x : 0)
+                            targetX: subTabRow.x + (target ? target.x : 0)
                             y: subTabRow.y
-                            width: target ? target.width : 0
+                            targetWidth: target ? target.width : 0
                             height: 32
                             radius: 16
                             color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.26)
                             border.width: 1
                             border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
-                            Behavior on x { SpringAnimation { spring: 4.5; damping: 0.38; epsilon: 0.25 } }
-                            Behavior on width { SpringAnimation { spring: 4.5; damping: 0.38; epsilon: 0.25 } }
                         }
 
                         Row {
