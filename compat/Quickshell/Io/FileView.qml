@@ -8,6 +8,9 @@ Item {
     property string _content: ""
 
     signal fileChanged()
+    // Mirrors Quickshell FileView: text() is a function, textChanged fires when the content changes.
+    signal textChanged()
+    on_ContentChanged: root.textChanged()
 
     function reload() {
         if (!path) return;

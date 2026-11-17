@@ -9,6 +9,11 @@ Window {
     color: "transparent"
     visible: false
 
+    // Quickshell windows size themselves through implicitWidth/implicitHeight;
+    // QtQuick.Window has no such properties, so declare them for parity.
+    property real implicitWidth: 0
+    property real implicitHeight: 0
+
     width: (screen && screen.geometry) ? screen.geometry.width : Screen.width
     height: (screen && screen.geometry) ? screen.geometry.height : Screen.height
     x: (screen && screen.geometry) ? screen.geometry.x : 0
