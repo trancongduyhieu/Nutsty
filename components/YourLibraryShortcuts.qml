@@ -20,17 +20,21 @@ ColumnLayout {
 
     readonly property int columns: width >= 900 ? 4 : (width >= 560 ? 3 : 2)
 
+    // Built without looking at `columns`: a new array would make the Repeater rebuild every tile
+    // (and flash) each time the column count changes while the side panel slides
+    readonly property int maxTiles: 8
     readonly property var entries: {
         var list = [];
         if (likedCount > 0) list.push({ kind: "liked", key: "liked", pl: null });
         if (downloadsCount > 0) list.push({ kind: "downloads", key: "downloads", pl: null });
         var pls = playlists || [];
-        for (var i = 0; i < pls.length && list.length < columns * 2; i++) {
+        for (var i = 0; i < pls.length && list.length < maxTiles; i++) {
             if (pls[i] && pls[i].tracks && pls[i].tracks.length > 0)
                 list.push({ kind: "playlist", key: pls[i].id || pls[i].playlistId || "", pl: pls[i] });
         }
-        return list.slice(0, columns * 2);
+        return list;
     }
+    readonly property int shownCount: Math.min(entries.length, columns * 2)
 
     visible: entries.length > 0
     spacing: 12
@@ -48,8 +52,10 @@ ColumnLayout {
     readonly property int gap: 10
     readonly property int tileHeight: 60
     // Fewer tiles than columns: the tiles share the whole row instead of leaving a gap at the end
-    readonly property int usedColumns: Math.max(1, Math.min(columns, entries.length))
-    readonly property int rows: Math.ceil(entries.length / usedColumns)
+    readonly property int usedColumns: Math.max(1, Math.min(columns, shownCount))
+    readonly property int rows: Math.ceil(shownCount / usedColumns)
+    // Only the tile width springs, like the card widths of the other Home rows. Positions are
+    // computed from the animated width, so neighbours always sit exactly one gap apart.
     property real tileWidth: (width - (usedColumns - 1) * gap) / usedColumns
     Behavior on tileWidth { SpringAnimation { spring: 4; damping: 0.4; epsilon: 0.25 } }
     property real gridHeight: rows * tileHeight + Math.max(0, rows - 1) * gap
@@ -69,12 +75,11 @@ ColumnLayout {
                 y: Math.floor(index / root.usedColumns) * (root.tileHeight + root.gap)
                 width: root.tileWidth
                 height: root.tileHeight
-                Behavior on x { SpringAnimation { spring: 4; damping: 0.4; epsilon: 0.25 } }
-                Behavior on y { SpringAnimation { spring: 4; damping: 0.4; epsilon: 0.25 } }
-                // Tiles that appear because a column was added fade in instead of popping
-                opacity: 0
-                Component.onCompleted: opacity = 1
-                Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                // Tiles beyond two rows are kept but hidden; they fade in when a column is added
+                readonly property bool shown: index < root.shownCount
+                opacity: shown ? 1 : 0
+                visible: opacity > 0.01
+                Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                 readonly property string kind: modelData.kind
                 readonly property var pl: modelData.pl
                 readonly property bool current: root.playingId !== "" && root.playingId === modelData.key
