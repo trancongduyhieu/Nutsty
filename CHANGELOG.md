@@ -2,10 +2,19 @@
 
 Tất cả các tính năng mới và cải tiến của Nutsty được lưu trữ tại đây.
 
-## [2.0.0] - 2026-11-16
+## [2.0.1] - 2026-11-17
 
 ### Added
 - **Sao lưu và khôi phục danh sách phát**: Vào Cài đặt, mục Tài khoản, phần Sao lưu danh sách phát. Bấm "Xuất file" để lưu toàn bộ danh sách phát bạn tự tạo cùng các danh sách đã yêu thích vào một file, rồi giữ file đó trong USB, Google Drive hay gửi qua tin nhắn. Khi đổi máy hoặc cài lại Windows, bấm "Nhập file" và chọn file đó để lấy lại tất cả. Nhập file chỉ thêm vào chứ không xóa gì: danh sách chưa có sẽ được thêm mới, danh sách đã có sẽ được bổ sung những bài còn thiếu, nên nhập lại nhiều lần cũng không bị trùng.
+
+### Fixed
+- **Bản Windows mở được trở lại**: Một số máy Windows báo lỗi "Failed to load QML root object" và không mở được ứng dụng sau khi cài bản 2.0.0. Lỗi này đã được sửa, ứng dụng mở bình thường như trước.
+- **Sửa tên và ảnh bìa danh sách phát cùng lúc không còn bị mất**: Trước đây khi vừa đổi tên vừa đổi ảnh bìa trong một lần sửa, đôi khi chỉ một trong hai thay đổi được giữ lại. Giờ cả hai luôn được lưu.
+- **Mở thư mục chứa bài hát trên Windows**: Lựa chọn mở thư mục chứa file trong menu chuột phải của bài hát giờ hoạt động trên Windows, mở đúng thư mục trong File Explorer.
+
+## [2.0.0] - 2026-11-16
+
+### Added
 - **Công tắc Chế độ nhẹ trong Cài đặt**: Vào Cài đặt, mục Tài khoản, chọn Chế độ nhẹ. Tự động (mặc định) chỉ bật khi máy không có card đồ họa, Bật dùng cho laptop yếu hay bị giật, Tắt luôn giữ đủ hiệu ứng. Khi bật, nền ảnh bìa và sóng âm đứng yên, mép danh sách không mờ dần và thanh thời gian cập nhật thưa hơn để máy chạy mượt và mát hơn.
 - **Mời bạn bè nghe cùng**: Khi đang nghe nhạc, mở danh sách người nghe cùng trên thanh phát nhạc và chọn "Mời thêm bạn bè", hoặc bấm "Mời nghe cùng" trong ghi chú của bạn bè. Người được mời thấy một thông báo kèm bìa đĩa, tên bài và ảnh đại diện của bạn, chỉ cần bấm "Nghe cùng" là vào phát cùng lúc, hoặc "Để sau" để bỏ qua. Lời mời hết hạn sau 2 phút, mỗi người chỉ được mời lại sau 30 giây, và nếu người nhận đang nghe cùng ai khác thì thông báo sẽ nhắc rằng nhận lời sẽ rời phiên hiện tại.
 - **Bình luận YouTube ngay trong bảng bên phải**: Nút mới ở giữa đáy bảng bên phải mở danh sách bình luận của bài đang nghe, kèm ảnh đại diện, thời gian, lượt thích và dấu bình luận đã ghim. Cuộn xuống để xem thêm, bấm vào một bình luận để xem các phản hồi. Khi đã đăng nhập Google, bạn có thể viết bình luận, trả lời người khác và bấm thích bình luận ngay tại đó.
@@ -72,8 +81,6 @@ Tất cả các tính năng mới và cải tiến của Nutsty được lưu tr
 - **Phân tách hoàn hảo cử chỉ Nhấn giữ (Hold) và Nhấp nhanh (Click) trên thanh phát nhạc**: Khôi phục trọn vẹn khả năng nhấn giữ chuột trái ở bất kỳ đâu trên thanh phát nhạc để kích hoạt hiệu ứng quầng sáng Spotlight rực rỡ và phóng to nhẹ theo con trỏ chuột mà không bị kẹt bởi tiêu đề hay tên nghệ sĩ. Thao tác nhấp chuột nhanh sẽ mở/đóng bảng áp phích cạnh bên dứt khoát, và khi buông chuột sau khi nhấn giữ ngắm Spotlight thì thanh nhạc tự động thu về êm đềm mà không làm gián đoạn hay đóng/mở bảng áp phích ngoài ý muốn.
 
 ### Fixed
-- **Sửa tên và ảnh bìa danh sách phát cùng lúc không còn bị mất**: Trước đây khi vừa đổi tên vừa đổi ảnh bìa trong một lần sửa, đôi khi chỉ một trong hai thay đổi được giữ lại. Giờ cả hai luôn được lưu.
-- **Mở thư mục chứa bài hát trên Windows**: Lựa chọn mở thư mục chứa file trong menu chuột phải của bài hát giờ hoạt động trên Windows, mở đúng thư mục trong File Explorer.
 - **Không còn ngốn CPU trên máy không có card đồ họa**: Trên máy ảo hoặc máy chưa cài driver card màn hình, mở Nutsty lên và phát nhạc từng chiếm tới 70-90% CPU. Giờ ứng dụng tự nhận ra và chuyển sang chế độ nhẹ: nền ảnh bìa đứng yên thay vì chuyển động, sóng âm cạnh ảnh bạn bè đứng yên, thanh thời gian cập nhật thưa hơn, mép danh sách không còn mờ dần khi cuộn. CPU chỉ còn khoảng 10-20%. Máy có card đồ họa bình thường vẫn giữ nguyên mọi hiệu ứng.
 - **Nghe cùng không còn nhận lệnh lạ**: Sau khi rời phòng nghe cùng, đôi khi bạn vẫn bị coi là người nghe của chính chủ phòng cũ, và chủ phòng lại nhảy theo khi bạn tua bài. Giờ chỉ người đang thật sự ở trong phòng mới điều khiển được bài hát.
 - **Tự dọn người nghe đã thoát**: Khi bạn bè tắt ứng dụng hoặc mất mạng mà không bấm rời phòng, khoảng nửa phút sau họ tự biến khỏi danh sách người nghe cùng kèm một thông báo nhỏ, thanh phát nhạc thu gọn lại như cũ.
