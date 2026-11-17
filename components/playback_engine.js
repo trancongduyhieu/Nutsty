@@ -1462,8 +1462,7 @@ function loadPlaylistTracks(win, pl) {
     win.mainSectionTitle = pl.title || pl.name || "Playlist";
     mainGrid.sectionTitle = pl.title || pl.name || "Playlist";
 
-    var isCustomPl = !!pl.isCustom || String(pid).startsWith("custom_") || pl.source === "spotify_import" || (pl.tracks && pl.tracks.length >= 0 && pl.isLocal);
-    if (isCustomPl) {
+    if (win.isCustomPlaylist(pl)) {
         var foundTracks = pl.tracks || [];
         if (win.customPlaylists) {
             for (var i = 0; i < win.customPlaylists.length; i++) {
@@ -1486,13 +1485,3 @@ function loadPlaylistTracks(win, pl) {
     playlistTracksProc.running = true;
 }
 
-function deleteCustomPlaylist(win, plId) {
-    if (!plId) return;
-    Quickshell.execDetached([
-        "python3", win.appDir + "/backend/playlist_manager.py", "delete", plId
-    ]);
-    refreshPlaylistsTimer.restart();
-    if (win.activePlaylistId === plId && win.currentView === "playlist") {
-        win.currentView = "home";
-    }
-}
