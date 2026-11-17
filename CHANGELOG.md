@@ -2,7 +2,12 @@
 
 Tất cả các tính năng mới và cải tiến của Nutsty được lưu trữ tại đây.
 
-## [2.0.1] - 2026-11-17
+Số phiên bản có dạng `A.B.C`, ví dụ `1.2.0`:
+- **C (số thứ 3)** tăng khi bản mới chỉ sửa lỗi và chỉnh nhỏ, không có tính năng mới. Ví dụ `2.1.0` lên `2.1.1`.
+- **B (số thứ 2)** tăng khi có tính năng mới mà mọi thứ cũ vẫn dùng bình thường. Số thứ 3 về 0, ví dụ `2.1.3` lên `2.2.0`.
+- **A (số đầu tiên)** tăng khi có thay đổi lớn buộc bạn làm lại gì đó hoặc dữ liệu, cài đặt của bản cũ không dùng được nữa. Hai số sau về 0, ví dụ `2.4.1` lên `3.0.0`.
+
+## [2.1.0] - 2026-11-17
 
 ### Added
 - **Sao lưu và khôi phục thư viện**: Vào Cài đặt, mục Tài khoản, phần Sao lưu danh sách phát. Bấm "Xuất file" để lưu vào một file toàn bộ danh sách phát bạn tự tạo, các danh sách đã yêu thích, bài hát yêu thích và danh sách bài đã tải về, rồi giữ file đó trong USB, Google Drive hay gửi qua tin nhắn. Khi đổi máy hoặc cài lại Windows, bấm "Nhập file" và chọn file đó để lấy lại tất cả. Nhập file chỉ thêm vào chứ không xóa gì: danh sách chưa có sẽ được thêm mới, danh sách đã có sẽ được bổ sung những bài còn thiếu, nên nhập lại nhiều lần cũng không bị trùng.

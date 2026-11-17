@@ -113,3 +113,15 @@ FileView {
   - Mỗi mục ghi dạng `- **Tính năng thân thiện**: Giải thích dễ hiểu giá trị mang lại cho người dùng bình thường`.
   - Tuyệt đối CẤM lạm dụng thuật ngữ kỹ thuật (như "IPC", "Quickshell C++", "PySide6", "GLSL shader", "MultiEffect Gaussian Glow", "rolling wave lift -2.0px"...).
   - Tuyệt đối CẤM đưa các bước tải/cài đặt (như "Bước 1", "Bước 2", "Bước 3") vào changelog hiển thị trong ứng dụng. Bộ lọc `parseChangelogText()` sẽ tự động bỏ qua nếu phát hiện.
+
+---
+
+## Pattern 5: Đánh Số Phiên Bản & Phát Hành (SemVer)
+- **Bài toán**: Chọn đúng số khi ra bản mới, và giữ mọi chỗ ghi số phiên bản khớp nhau để ứng dụng không báo "có bản mới" mãi.
+- **Quy tắc `MAJOR.MINOR.PATCH`** (ví dụ `1.2.0`):
+  - **Số thứ 3 (PATCH)**: chỉ sửa lỗi và chỉnh nhỏ, không có tính năng mới. `2.1.0 -> 2.1.1`.
+  - **Số thứ 2 (MINOR)**: có ít nhất 1 tính năng mới người dùng thấy được (mục `### Added`), dữ liệu cũ vẫn dùng bình thường. Số thứ 3 về 0: `2.1.3 -> 2.2.0`.
+  - **Số đầu (MAJOR)**: thay đổi lớn buộc người dùng làm lại gì đó hoặc phá tương thích: định dạng dữ liệu/cài đặt cũ không đọc được, bỏ tính năng, đổi hẳn cách dùng. Hai số sau về 0: `2.4.1 -> 3.0.0`.
+- **Nguồn chuẩn**: `APP_VERSION` trong `backend/platform_compat.py`. Tiêu đề `## [x.y.z] - YYYY-MM-DD` mới nhất của `CHANGELOG.md` và các giá trị mặc định trong `shell.qml`, `SettingsModal.qml`, `WhatsNewModal.qml`, `auth_server.py`, `nutsty-daemon/src/main.rs` phải trùng; `verify_codebase.py` báo lỗi nếu lệch.
+- **Phát hành**: tag `vX.Y.Z` đúng bằng `APP_VERSION`, nếu không workflow `build_windows.yml` dừng. Release notes lấy đúng mục của phiên bản đó và gắn link tới `CHANGELOG.md` trên GitHub; modal Điểm mới có nút mở cùng link đó.
+- **Footgun**: Đặt bản có tính năng mới là PATCH (như 2.0.1 ban đầu, đổi thành 2.1.0) khiến người dùng tưởng chỉ sửa lỗi và bỏ qua cập nhật.

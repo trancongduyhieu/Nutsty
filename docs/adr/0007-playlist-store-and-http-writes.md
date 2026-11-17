@@ -17,7 +17,7 @@ the file is written with `refreshPlaylistsTimer` (300 ms) and reloads everything
 
 Problems this causes:
 1. **Lost writes**: two writes started close together each load the file, modify their copy and save; the
-   second save overwrites the first (seen with rename + set cover, fixed ad hoc in 2.0.1). `spotify_importer.py`
+   second save overwrites the first (seen with rename + set cover, fixed ad hoc in 2.1.0). `spotify_importer.py`
    also writes the same file from another process.
 2. **No result**: `execDetached` returns nothing, so a failed write still shows a success toast and the UI keeps
    an optimistic patch that never reached disk.

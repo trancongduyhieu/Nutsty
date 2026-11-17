@@ -22,9 +22,11 @@ Item {
     property bool closingGuard: false
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
     property Item backgroundSourceItem: null
-    property string versionString: (typeof win !== "undefined" && win.appVersion) ? win.appVersion : "2.0.0"
+    property string versionString: (typeof win !== "undefined" && win.appVersion) ? win.appVersion : "2.1.0"
     property string customReleaseNotes: ""
     property var changelogItems: []
+    // Every version's notes, kept on GitHub
+    readonly property string changelogUrl: "https://github.com/trancongduyhieu/Nutsty/blob/main/CHANGELOG.md"
 
     signal closeRequested()
 
@@ -65,7 +67,7 @@ Item {
                 var hMatch = line.match(/^##\s+\[?v?([0-9\.\-_a-zA-Z]+)\]?/);
                 if (hMatch) {
                     var ver = hMatch[1].replace(/^[vV]/, "").trim();
-                    if (targetNorm && ver.indexOf(targetNorm) === 0) {
+                    if (targetNorm && ver === targetNorm) {
                         capturing = true;
                         foundAny = true;
                         continue;
@@ -272,7 +274,7 @@ Item {
                         Text {
                             id: verTagTxt
                             anchors.centerIn: parent
-                            text: "v" + (root.versionString || "2.0.0")
+                            text: "v" + (root.versionString || "2.1.0")
                             font.family: Theme.fontFamily
                             font.pixelSize: 10
                             font.bold: true
@@ -392,6 +394,41 @@ Item {
             // =================================================================
             RowLayout {
                 Layout.fillWidth: true
+
+                Rectangle {
+                    implicitHeight: 28
+                    implicitWidth: linkText.implicitWidth + 24
+                    radius: 6
+                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, linkMouse.containsMouse ? 0.22 : 0.12)
+                    border.width: 1
+                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.30)
+                    Behavior on color { ColorAnimation { duration: 120 } }
+
+                    Text {
+                        id: linkText
+                        anchors.centerIn: parent
+                        text: I18n.tr("Xem mọi phiên bản trên GitHub", "All versions on GitHub")
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                        font.bold: true
+                        color: Qt.lighter(root.accentColor, 1.3)
+                    }
+
+                    MouseArea {
+                        id: linkMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (typeof win !== "undefined" && typeof win.openExternalUrl === "function")
+                                win.openExternalUrl(root.changelogUrl);
+                            else
+                                Qt.openUrlExternally(root.changelogUrl);
+                        }
+                    }
+                    Accessible.role: Accessible.Link
+                    Accessible.name: linkText.text
+                }
 
                 Item { Layout.fillWidth: true }
 
