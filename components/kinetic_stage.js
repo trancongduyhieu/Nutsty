@@ -535,6 +535,15 @@ function film(motion, t) {
                 f.bulge = Math.max(f.bulge, 0.05 * k);
             }
         }
+        // A peak's big moment: the bulb switching on, or the hero landing
+        if (L.pile.role === "peak") {
+            var hit = t - peakOnAt(L);
+            if (hit >= 0 && hit < 0.5) {
+                var kp = Math.exp(-hit * 10);
+                f.chroma = Math.max(f.chroma, 5 * kp);
+                f.bulge = Math.max(f.bulge, 0.07 * kp);
+            }
+        }
         var ex = t - L.pile.exitAt, xs = L.pile.exitStyle;
         if (L.slot === 0 && ex >= 0 && ex < 0.12 && (xs === "lift" || !xs)) { f.tear = 1 - ex / 0.12; f.smear = Math.max(f.smear, 14 * f.tear); }
         if (L.slot === 0 && xs === "smudge" && ex >= 0 && ex < L.pile.exitDur) {
@@ -672,6 +681,15 @@ function camera(L, t, W, H) {
         }
     }
     cam.s *= 1 + 0.035 * punch;
+    // the stamp slams down and the frame shakes for a beat
+    if (P.role === "peak" && P.fx === "stamp") {
+        var sh = t - peakOnAt(L);
+        if (sh >= 0 && sh < 0.25) {
+            var fr = Math.floor(t * 60), amp = 4 * (1 - sh / 0.25);
+            cam.x += amp * M.rs(P.seed, fr, 451);
+            cam.y += amp * M.rs(P.seed, fr, 452);
+        }
+    }
     return cam;
 }
 
@@ -920,6 +938,44 @@ function markShape(kind, sd, w, h) {
         if (fl) S = S.map(function (st) { return st.map(function (p) { return { x: w - p.x, y: p.y }; }); });
         break;
     }
+    case "bulb": {
+        // a bulb hanging from its cord: screw base on top, the glass below
+        for (i = 0; i < 2; i++) S.push([{ x: w * 0.36, y: h * (0.06 + 0.1 * i) }, { x: w * 0.64, y: h * (0.04 + 0.1 * i) }]);
+        pts = [];
+        var gr = Math.min(w * 0.44, h * 0.36), gy = h * 0.6;
+        var ga0 = -Math.PI / 2 + 0.55;
+        pts.push({ x: w * 0.36, y: h * 0.24 });
+        for (i = 0; i <= 36; i++) {
+            var gang = ga0 + i / 36 * (2 * Math.PI - 1.1);
+            pts.push({ x: w / 2 + gr * Math.cos(gang), y: gy + gr * Math.sin(gang) });
+        }
+        pts.push({ x: w * 0.64, y: h * 0.24 });
+        S.push(pts);
+        break;
+    }
+    case "cord":
+        pts = [];
+        for (i = 0; i <= 24; i++) { u = i / 24; pts.push({ x: w / 2 + w * 0.12 * Math.sin(u * 9 + M.r(sd, 1, 841) * 6) * u, y: h * u }); }
+        S.push(pts);
+        break;
+    case "rays": {
+        // focus lines out from the middle, like a manga panel
+        n = 14;
+        for (i = 0; i < n; i++) {
+            var ra = (i + 0.4 * M.rs(sd, i, 842)) / n * 2 * Math.PI, r0 = 0.25 + 0.25 * M.r(sd, i, 843);
+            S.push([{ x: w / 2 + w / 2 * r0 * Math.cos(ra), y: h / 2 + h / 2 * r0 * Math.sin(ra) },
+                    { x: w / 2 + w / 2 * Math.cos(ra), y: h / 2 + h / 2 * Math.sin(ra) }]);
+        }
+        break;
+    }
+    case "inkfill":
+        // a marker scribbled back and forth behind the whole line
+        n = Math.max(12, Math.round(w / (h * 0.12)));
+        pts = [];
+        for (i = 0; i <= n; i++)
+            pts.push({ x: w * (i / n) + h * 0.06 * M.rs(sd, i, 844), y: h * ((i % 2 ? 0.88 : 0.12) + 0.06 * M.rs(sd, i, 845)) });
+        S.push(pts);
+        break;
     case "strike": {
         // a fast line through the middle of the letters, sometimes back again
         var sl = 0.12 * M.rs(sd, 5, 821);
@@ -994,11 +1050,74 @@ function doodleStrokes(L, t, di, w, h) {
     return drawStrokes(markShape(d.kind, sd, w, h), prog, sd, t, h, true);
 }
 
+// A peak line's big move. The bulb drops on its cord from enterAt (a damped spring, overshooting and
+// bouncing back up, swinging as it settles) and switches on at peakOnAt; until then the line sits
+// in the dark. A spotlight ring closes over the hero's sung time, then dims the rest of the line.
+function peakOnAt(L) {
+    if (!L) return 0;
+    var hw = L.words[L.heroWi >= 0 ? L.heroWi : 0];
+    var land = hw.start - LEAD;
+    return L.pile && L.pile.fx === "bulb" ? Math.max(land, L.enterAt + 0.7) : land;
+}
+//   { on, lit (0..1), dark (alpha multiplier), bulbY (hero em, 0 = rest), bulbTilt (deg), cone, heroS, restA }
+function peakState(L, t) {
+    var st = { on: false, lit: 1, dark: 1, bulbY: 0, bulbTilt: 0, cone: 0, heroS: 1, restA: 1 };
+    if (!L || !L.pile || L.pile.role !== "peak") return st;
+    var fx = L.pile.fx, on = peakOnAt(L);
+    if (fx === "bulb") {
+        var tau = Math.max(0, t - L.enterAt);
+        st.bulbY = -4.5 * Math.exp(-4 * tau) * Math.cos(7 * tau);
+        st.bulbTilt = 14 * Math.exp(-2.5 * tau) * Math.sin(6 * tau + 0.5);
+        st.on = t >= on;
+        st.lit = st.on ? M.E.outQuad((t - on) / 0.12) : 0;
+        st.dark = st.on ? 1 : 0.25;
+        st.cone = st.lit;
+    } else if (fx === "spot") {
+        var hw = L.words[L.heroWi];
+        var close = hw.start - LEAD + Math.max(0.3, hw.end - hw.start);
+        st.restA = M.lerp(1, 0.3, M.E.outQuad((t - close) / 0.25));
+        st.heroS = 1 + 0.5 * M.E.outBack(M.clamp((t - close) / 0.3), 1.7);
+        st.on = t >= on;
+    } else st.on = t >= on;
+    return st;
+}
+var PEAK_PARTS = { bulb: ["bulb", "cord", "glow"], spot: ["ring"], rays: ["rays"], ink: ["ink"], stamp: ["stamp"] };
+// Strokes for one part of a peak's move in a w x h box; [] when the pile's fx has no such part
+function peakStrokes(L, t, part, w, h) {
+    if (!L || !L.pile || L.pile.role !== "peak" || w < 2 || h < 2) return [];
+    var parts = PEAK_PARTS[L.pile.fx];
+    if (!parts || parts.indexOf(part) < 0) return [];
+    var hw = L.words[L.heroWi >= 0 ? L.heroWi : 0], land = hw.start - LEAD, on = peakOnAt(L);
+    var kind = part, prog = 0;
+    switch (part) {
+    case "bulb":
+    case "cord": prog = M.clamp((t - L.enterAt) / 0.2); break;
+    case "glow": kind = "rays"; prog = M.E.outQuad((t - on) / 0.2); break;
+    case "rays": prog = inOutSine((t - land + 0.05) / Math.max(0.6, L.end - land)); break;
+    case "ring": prog = M.E.outQuad((t - land) / Math.max(0.3, hw.end - hw.start)); break;
+    case "stamp": kind = "box"; prog = M.E.outQuad((t - land + 0.04) / 0.12); break;
+    case "ink": kind = "inkfill"; prog = M.clamp((t - L.start) / Math.max(0.4, L.end - L.start)); break;
+    }
+    if (prog <= 0) return [];
+    var sd = L.seed + 500 + part.length * 13;
+    return drawStrokes(markShape(kind, sd, w, h), prog, sd, t, h, true);
+}
+
 // One word: { s, alpha, rot (deg), dx, dy (em), ghosts: [{ dx, dy (em), a } x4], bar, barDx [3] (em), under }
 //   bar      0..1 how far the redaction bar has slid across a profane word
 //   barDx    the bar's three strips glitch sideways now and then, showing scraps underneath
 //   under    0..1 hand-drawn underline under a hand-lettered hero
 function wordFx(L, t, wi) {
+    var fx = wordFxBase(L, t, wi);
+    if (!L || !L.pile || L.pile.role !== "peak") return fx;
+    // A peak: the line waits in the dark for the bulb, and a spotlight dims all but the hero
+    var ps = peakState(L, t);
+    fx.alpha *= ps.dark;
+    if (wi === L.heroWi) fx.s *= ps.heroS;
+    else fx.alpha *= ps.restA;
+    return fx;
+}
+function wordFxBase(L, t, wi) {
     var fx = { s: 1, alpha: 1, rot: 0, dx: 0, dy: 0, ghosts: [g0(), g0(), g0(), g0()], bar: 0, barDx: [0, 0, 0], under: 0 };
     if (!L || !L.words[wi]) return fx;
     var w = L.words[wi];

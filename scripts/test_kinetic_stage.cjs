@@ -174,6 +174,93 @@ test("peak dressing and fallback", () => {
     assert.strictEqual(P.fx, "ink");
 });
 
+// A built long song with its first peak forced to one fx (the runtime reads P.fx each frame)
+function peakWith(fx) {
+    const m = K.build(longSong(), { max: true });
+    const P = m.piles.find(P => P.role === "peak");
+    P.fx = fx;
+    return { m: m, P: P, L: P.lines[0] };
+}
+function finiteDeep(o, where) {
+    if (typeof o === "number") { assert.ok(isFinite(o), "non-finite number in " + where); return; }
+    if (o && typeof o === "object") for (const k in o) finiteDeep(o[k], where + "." + k);
+}
+
+test("bulb springs", () => {
+    const { L } = peakWith("bulb");
+    const at = tau => K.peakState(L, L.enterAt + tau);
+    assert.ok(at(0).bulbY < -4, "starts high: " + at(0).bulbY);
+    let over = false;
+    for (let tau = 0.01; tau < 0.6; tau += 0.01) if (at(tau).bulbY > 0) over = true;
+    assert.ok(over, "never overshoots its rest");
+    assert.ok(Math.abs(at(1.5).bulbY) < 0.05 && Math.abs(at(1.5).bulbTilt) < 0.5, "not settled");
+});
+
+test("bulb lights on cue", () => {
+    const { L } = peakWith("bulb");
+    const on = K.peakOnAt(L);
+    assert.strictEqual(K.peakState(L, on - 0.05).on, false);
+    assert.ok(K.peakState(L, on - 0.05).dark <= 0.25 + 1e-9);
+    const s = K.peakState(L, on + 0.2);
+    assert.strictEqual(s.on, true);
+    assert.ok(s.cone > 0.9);
+    assert.strictEqual(s.dark, 1);
+});
+
+test("spot dims the rest", () => {
+    const { L } = peakWith("spot");
+    const t = K.peakOnAt(L) + Math.max(0.3, L.words[L.heroWi].end - L.words[L.heroWi].start) + 0.5;
+    const other = L.mainIdx.find(wi => wi !== L.heroWi);
+    assert.ok(K.wordFx(L, t, other).alpha <= 0.31, "rest alpha " + K.wordFx(L, t, other).alpha);
+    assert.ok(K.wordFx(L, t, L.heroWi).s >= 1.45, "hero scale " + K.wordFx(L, t, L.heroWi).s);
+});
+
+test("peak parts follow the fx", () => {
+    const parts = ["bulb", "cord", "glow", "rays", "ring", "stamp", "ink"];
+    const uses = { bulb: ["bulb", "cord", "glow"], spot: ["ring"], rays: ["rays"], ink: ["ink"], stamp: ["stamp"] };
+    for (const fx of K.PEAK_FX) {
+        const { L } = peakWith(fx);
+        const t = L.end + 0.2;
+        for (const part of parts) {
+            const n = K.peakStrokes(L, t, part, 300, 200).length;
+            if (uses[fx].indexOf(part) >= 0) assert.ok(n > 0, fx + " draws no " + part);
+            else assert.strictEqual(n, 0, fx + " draws " + part);
+        }
+    }
+});
+
+test("non-peak lines untouched", () => {
+    const m = K.build(longSong(), { max: true });
+    const L = m.piles.find(P => P.role === "stack" || P.role === "duo").lines[0];
+    for (let t = L.enterAt; t < L.end + 1; t += 0.1) {
+        const s = K.peakState(L, t);
+        assert.ok(s.lit === 1 && s.dark === 1 && s.heroS === 1 && s.restA === 1 && s.cone === 0);
+        for (const part of ["bulb", "cord", "glow", "rays", "ring", "stamp", "ink"])
+            assert.strictEqual(K.peakStrokes(L, t, part, 300, 200).length, 0);
+    }
+});
+
+test("NaN sweep", () => {
+    for (const max of [false, true]) {
+        const m = K.build(longSong().concat(demo.map(e => Object.assign({}, e, { time: (e.time !== undefined ? e.time : 0) + 200 }))), { max: max });
+        for (let t = 0; t < 230; t += 0.05) {
+            finiteDeep(K.film(m, t), "film");
+            for (const li of K.visibleAt(m.lines, t)) {
+                const L = m.lines[li];
+                finiteDeep(K.lineState(L, t, 880), "lineState");
+                finiteDeep(K.camera(L, t, 880, 300), "camera");
+                finiteDeep(K.peakState(L, t), "peakState");
+                for (const part of ["bulb", "cord", "glow", "rays", "ring", "stamp", "ink"]) finiteDeep(K.peakStrokes(L, t, part, 300, 200), part);
+                for (const role of ["line", "hero", "hilite", "exit"]) finiteDeep(K.penStrokes(L, t, role, 400, 40), role);
+                L.words.forEach((w, wi) => {
+                    finiteDeep(K.wordFx(L, t, wi), "wordFx");
+                    w.chars.forEach((c, ci) => finiteDeep(K.letterState(L, t, wi, ci), "letterState"));
+                });
+            }
+        }
+    }
+});
+
 let failed = 0;
 for (const [name, fn] of tests) {
     try { fn(); console.log("ok " + name); }
