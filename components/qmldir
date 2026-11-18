@@ -33,6 +33,7 @@ ExpressiveLyricsView 1.0 ExpressiveLyricsView.qml
 LyricsPresetCard 1.0 LyricsPresetCard.qml
 singleton LyricsPresets 1.0 LyricsPresets.qml
 LyricsPresetView 1.0 LyricsPresetView.qml
+MotionLyricsView 1.0 MotionLyricsView.qml
 HomeFeedView 1.0 HomeFeedView.qml
 singleton I18n 1.0 I18n.qml
 singleton LibraryData 1.0 LibraryData.qml

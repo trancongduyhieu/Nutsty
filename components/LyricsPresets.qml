@@ -23,7 +23,10 @@ QtObject {
           width: 960, widthRatio: 0.65, yRatio: 0.68, height: 260, hideWithoutLyrics: false },
         { id: 5, titleVi: "Mẫu 5: Biểu cảm Mochy", titleEn: "Preset 5: Mochy Expressive",
           subtitleVi: "Chữ nhấn • Dòng xếp chồng", subtitleEn: "Shout words • Stacked lines",
-          width: 880, widthRatio: 0.55, yRatio: 0.64, height: 250, hideWithoutLyrics: true }
+          width: 880, widthRatio: 0.55, yRatio: 0.64, height: 250, hideWithoutLyrics: true },
+        { id: 6, titleVi: "Mẫu 6: Biến hóa chuyển động", titleEn: "Preset 6: Motion Variations",
+          subtitleVi: "Mỗi câu một kiểu • Theo JIZURA", subtitleEn: "A new move every line • After JIZURA",
+          width: 880, widthRatio: 0.55, yRatio: 0.66, height: 220, hideWithoutLyrics: true }
     ]
 
     readonly property int fallbackId: 2

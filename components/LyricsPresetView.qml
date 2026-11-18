@@ -40,6 +40,7 @@ Item {
         case 3: return minimalGlide;
         case 4: return motionTypography;
         case 5: return mochyExpressive;
+        case 6: return motionVariations;
         }
         return appleMusic;
     }
@@ -120,6 +121,22 @@ Item {
     Component {
         id: mochyExpressive
         ExpressiveLyricsView {
+            activeLyrics: root.activeLyrics
+            currentTime: root.currentTime
+            isPlaying: root.isPlaying
+            colHighlight: root.colHighlight
+            colActiveText: root.colActiveText
+            colShadowDir: root.colShadowDir
+            colShadowAmb: root.colShadowAmb
+            isLightArea: root.isLightArea
+        }
+    }
+
+    // Each song picks a mood, each line its own enter / hold / exit (motion_recipes.js).
+    // A fixed-style preset is this same view with `family` set.
+    Component {
+        id: motionVariations
+        MotionLyricsView {
             activeLyrics: root.activeLyrics
             currentTime: root.currentTime
             isPlaying: root.isPlaying
