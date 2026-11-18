@@ -1947,7 +1947,7 @@ Item {
                             flickable: billFlick
                             fadeLength: 72 * root.u
                             alwaysFade: true
-                            when: !root.liteMode && pBill.enter > 0.99
+                            when: !root.liteMode && root.shows(pBill)
                         }
                         Item {
                             id: receipt
