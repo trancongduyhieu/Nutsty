@@ -38,14 +38,18 @@ var TREAT = {
     marker:  { hero: "marker", minor: "marker", minorSize: 0.58, base: 64, byWord: true,  cases: ["upper"],                   jitter: 2.8 }
 };
 var TREAT_ORDER = ["slam", "rise", "decode", "karaoke", "hand", "marker"];
-var SHOT_ORDER = ["push", "dutch", "orbit", "tiltUp", "drift"];
+var SHOT_ORDER = ["push", "dutch", "orbit", "tiltUp", "drift", "dolly", "low", "roll", "crane"];
 // Words in ( ) or [ ] are backing vocals and ad-libs; each line picks one look for them
+// They leave the line: brackets dropped, stacked in a small column to its left or right, behind a
+// thin accent rule. adlib is handwriting, hollow is outlined caps, shout is accent marker caps.
 var PAREN = {
-    adlib:   { font: "hand",   size: 0.50, upper: false, rot: -6, dy: -0.55, tone: 0.78 },
-    whisper: { font: "soft",   size: 0.56, upper: false, rot: 0,  dy: 0,     tone: 0.55 },
-    shout:   { font: "marker", size: 0.62, upper: true,  rot: 5,  dy: -0.08, tone: 0.9 }
+    adlib:   { font: "hand",   size: 0.46, upper: false, rot: -5, tone: 0.8,  hollow: false },
+    hollow:  { font: "heavy",  size: 0.50, upper: true,  rot: 0,  tone: 0.95, hollow: true },
+    shout:   { font: "marker", size: 0.52, upper: true,  rot: 4,  tone: 0.92, hollow: false }
 };
-var PAREN_ORDER = ["adlib", "whisper", "shout"];
+var PAREN_ORDER = ["adlib", "hollow", "shout"];
+// How the words of a line sit: level, a zigzag (one up, one down), stairs climbing, or an arc
+var STAGGER_ORDER = ["zig", "stairs", "arc", "zig"];
 
 var FUNC = {};
 ("a an the and or but so to of in on at by for from with as is am are was were be been it its i im " +
@@ -66,6 +70,7 @@ function isProfane(text) {
     return PROFANE[b] === true || b.indexOf("fuck") >= 0 || b.indexOf("shit") >= 0;
 }
 function cased(text, up) { return Array.from(up ? text.toUpperCase() : text.toLowerCase()); }
+function unbracket(text) { return String(text).replace(/[()\[\]]/g, ""); }
 
 function build(lyrics) {
     lyrics = lyrics || [];
@@ -113,6 +118,13 @@ function build(lyrics) {
         var pk = Math.floor(M.r(seed, 12, 412) * PAREN_ORDER.length);
         if (PAREN_ORDER[pk] === prevParen) pk = (pk + 1) % PAREN_ORDER.length;
         var parenLook = PAREN_ORDER[pk];
+        // Words off the level line, like hand-set type: decode stays on its grid
+        var stagger = treat === "decode" || M.r(seed, 13, 413) < 0.3 ? ""
+                    : STAGGER_ORDER[Math.floor(M.r(seed, 14, 414) * STAGGER_ORDER.length)];
+        var stAmp = 0.12 + 0.1 * M.r(seed, 15, 415);
+        var stDir = M.r(seed, 16, 416) < 0.5 ? -1 : 1;
+        L.stagger = stagger;
+        L.tilt = stagger === "" ? 0 : (2 + 3 * M.r(seed, 17, 417)) * (M.r(seed, 18, 418) < 0.5 ? -1 : 1);
 
         // Backing vocals: everything between ( ) or [ ]
         var depth = 0;
@@ -137,7 +149,10 @@ function build(lyrics) {
         // A line that is all backing vocal is set bigger and level: nothing else to sit beside
         var allParen = words.every(function (x) { return x.paren; });
 
-        var n = 0, estW = 0;
+        var n = 0, estW = 0, sideW = 0, mainCount = 0, mainIdx = [], sideIdx = [];
+        for (var c0 = 0; c0 < words.length; c0++) {
+            if (words[c0].paren && !allParen) sideIdx.push(c0); else mainIdx.push(c0);
+        }
         for (var w = 0; w < words.length; w++) {
             var wd = words[w];
             var hero = heroes[w] === true;
@@ -148,15 +163,17 @@ function build(lyrics) {
                 var PL = PAREN[parenLook];
                 wd.look = parenLook;
                 wd.font = PL.font;
-                wd.size = PL.size * (allParen ? 1.7 : 1);
+                wd.size = PL.size * (allParen ? 1.9 : 1);
                 wd.sx = 1;
-                wd.italic = parenLook === "whisper";
-                wd.chars = cased(wd.text, PL.upper);
-                wd.rot = PL.rot + 2 * M.rs(seed, w, 501);
-                wd.jy = allParen ? 0 : PL.dy;
+                wd.italic = false;
+                wd.hollow = PL.hollow;
+                wd.chars = cased(unbracket(wd.text), PL.upper);
+                wd.rot = allParen ? PL.rot : 2 * M.rs(seed, w, 501);
+                wd.jy = 0;
                 wd.tone = PL.tone;
             } else {
                 wd.look = "";
+                wd.hollow = false;
                 wd.font = hero ? T.hero : T.minor;
                 wd.size = (hero ? 1 : T.minorSize) * (1 + 0.05 * J * M.rs(seed, w, 503));
                 wd.sx = hero ? heroSx : 1;
@@ -165,6 +182,12 @@ function build(lyrics) {
                 wd.chars = cased(wd.text, up);
                 wd.rot = J * 2.2 * M.rs(seed, w, 501);
                 wd.jy = J * 0.035 * M.rs(seed, w, 502);
+                // Stagger in em of this word, against the line's own baseline
+                var m = mainCount++, sj = 0;
+                if (stagger === "zig") { sj = (m % 2 ? 1 : -1) * stAmp; wd.rot += (m % 2 ? 2.5 : -2.5) * stDir; }
+                else if (stagger === "stairs") sj = stDir * stAmp * 0.9 * (m - (mainIdx.length - 1) / 2);
+                else if (stagger === "arc") { var ax = mainIdx.length > 1 ? m / (mainIdx.length - 1) * 2 - 1 : 0; sj = -stAmp * 1.6 * (1 - ax * ax); wd.rot += ax * 5 * stDir; }
+                wd.jy += sj / wd.size;
                 wd.tone = 1;
             }
             wd.g0 = n;
@@ -174,12 +197,18 @@ function build(lyrics) {
             var nc = wd.chars.length;
             wd.step = Math.min(0.11, (wd.end - wd.start) * 0.85 / Math.max(1, nc));
             wd.estW = nc * ADV[wd.font] * wd.size * wd.sx;
-            estW += wd.estW + (w > 0 ? 0.3 * T.minorSize : 0);
+            if (wd.paren && !allParen) sideW = Math.max(sideW, wd.estW);
+            else estW += wd.estW + (w > 0 ? 0.3 * T.minorSize : 0);
             n += nc;
         }
         for (var hp = 0; hp < words.length; hp++) if (words[hp].paren) { prevParen = parenLook; break; }
         L.n = n;
-        L.estW = estW;        // in units of base px
+        L.mainIdx = mainIdx;
+        L.sideIdx = sideIdx;
+        L.side = M.r(seed, 19, 419) < 0.5 ? -1 : 1;      // backing vocals go left (-1) or right (1)
+        L.sideRows = sideIdx.length;
+        L.sideH = sideIdx.length * PAREN[parenLook].size * 1.05;   // in base px
+        L.estW = estW + (sideIdx.length ? sideW + 0.5 : 0);        // in units of base px
         L.enterAt = start - (T.byWord ? 0.3 : 0.45);
         lines.push(L);
     }
@@ -190,10 +219,13 @@ function build(lyrics) {
     for (var p = 0; p < lines.length; p++) {
         var cur = lines[p];
         var prev = p > 0 ? lines[p - 1] : null;
-        if (!pile || pile.lines.length >= PILE_MAX || (prev && cur.start - prev.end > PILE_GAP)) {
-            pile = { lines: [], seed: cur.seed };
+        if (!pile || pile.lines.length >= pile.max || (prev && cur.start - prev.end > PILE_GAP)) {
+            // A pile is either a stack of up to three lines or a single line on its own, set bigger
+            var solo = M.r(cur.seed, 20, 420) < 0.35;
+            pile = { lines: [], seed: cur.seed, max: solo ? 1 : PILE_MAX, solo: solo };
             piles.push(pile);
         }
+        if (pile.solo) cur.base = Math.round(cur.base * 1.22);
         cur.pile = pile;
         cur.slot = pile.lines.length;
         pile.lines.push(cur);
@@ -214,6 +246,8 @@ function build(lyrics) {
         prevShot = P.shot;
         P.side = M.r(P.seed, 7, 407) < 0.5 ? -1 : 1;
         P.frameX = 0.03 * M.r(P.seed, 8, 408);
+        // A single line sits off-centre, left or right, the way a title card would
+        if (P.solo && M.r(P.seed, 21, 421) < 0.6) P.frameX = 0.06 + 0.04 * M.r(P.seed, 22, 422);
         P.startAt = P.lines[0].enterAt;
     }
     for (var g = 0; g < lines.length; g++) lines[g].goneAt = lines[g].pile.goneAt;
@@ -243,7 +277,8 @@ function gapAt(motion, t) {
 // Old film look for the whole stage: grain, flicker, a tear and fringe on cuts, a hair, scratches
 function film(motion, t) {
     var f = { frame: Math.floor(t * 24), grain: 0.32, scan: 0.12, flicker: 1, chroma: 0, tear: 0,
-              hair: 0, hairX: 0.1, hairAmp: 0.01, hairPhase: 0, scratchX: 0.5, scratchA: 0 };
+              hair: 0, hairX: 0.1, hairAmp: 0.01, hairPhase: 0, scratchX: 0.5, scratchA: 0,
+              smear: 0, smearDir: 1, bulge: 0 };
     if (!motion || !motion.lines) return f;
     var seed = motion.seed | 0;
     f.flicker = 1 + 0.045 * M.rs(seed, f.frame, 601);
@@ -256,15 +291,20 @@ function film(motion, t) {
         if (L.goneAt < t - 1) continue;
         var since = t - L.enterAt;
         if (since >= 0 && since < 0.4) f.chroma = Math.max(f.chroma, 3.5 * Math.exp(-since * 9));
-        if (L.treat === "slam") {
+        if (L.treat === "slam" || L.treat === "marker") {
             for (var w = 0; w < L.words.length; w++) {
                 if (!L.words[w].hero) continue;
                 var sl = t - (L.words[w].start - LEAD);
-                if (sl >= 0 && sl < 0.3) f.chroma = Math.max(f.chroma, 4 * Math.exp(-sl * 12));
+                if (sl < 0 || sl >= 0.3) continue;
+                var k = Math.exp(-sl * 12);
+                f.chroma = Math.max(f.chroma, 4 * k);
+                // light smears sideways off the word as it hits, and the frame swells a touch
+                if (k * 18 > f.smear) { f.smear = 18 * k; f.smearDir = M.r(L.seed, w, 611) < 0.5 ? -1 : 1; }
+                f.bulge = Math.max(f.bulge, 0.05 * k);
             }
         }
         var ex = t - L.pile.exitAt;
-        if (L.slot === 0 && ex >= 0 && ex < 0.12) f.tear = 1 - ex / 0.12;
+        if (L.slot === 0 && ex >= 0 && ex < 0.12) { f.tear = 1 - ex / 0.12; f.smear = Math.max(f.smear, 14 * f.tear); }
     }
 
     // A projector hair in a quarter of the 2.5 s slots, for 0.8 to 1.6 s, mostly near an edge
@@ -301,8 +341,10 @@ function visibleAt(lines, t) {
     return out;
 }
 
-function fitOf(L, W) { return Math.min(1, (W * 0.84) / Math.max(1, L.estW * L.base)); }
-function heightOf(L, W) { return L.base * 1.3 * fitOf(L, W); }
+// Share of the box width a line may fill: less when its pile is set off-centre
+function roomOf(L) { return 0.84 - 2 * (L && L.pile ? L.pile.frameX : 0); }
+function fitOf(L, W) { return Math.min(1, (W * roomOf(L)) / Math.max(1, L.estW * L.base)); }
+function heightOf(L, W) { return L.base * Math.max(1.3, (L.sideH || 0) + 0.2) * fitOf(L, W); }
 
 // Where a line sits in its pile: { y, s, alpha, blur, fit } (y is the offset of its centre)
 function lineState(L, t, W) {
@@ -357,6 +399,14 @@ function camera(L, t, W, H) {
     case "orbit":  cam.ry = d * M.lerp(26, 6, inOutSine(cu)); cam.s = 1.02; break;
     case "tiltUp": cam.rx = M.lerp(20, 8, M.E.outCubic(cu)); cam.s = 1.01 + 0.02 * cu; break;
     case "drift":  cam.x = d * W * 0.03 * (cu * 2 - 1); cam.rot = d * 1.5; break;
+    // pulls back from close: the line starts cropped big and settles
+    case "dolly":  cam.s = M.lerp(1.16, 1, M.E.outQuart((t - P.startAt) / 1.4)); break;
+    // looking up at the words from below
+    case "low":    cam.rx = M.lerp(-24, -12, M.E.outCubic(cu)); cam.s = 1.03; cam.rot = -d * 2; break;
+    // a slow barrel roll that never quite levels out
+    case "roll":   cam.rot = d * M.lerp(-9, -3, inOutSine(cu)); cam.ry = d * 10; cam.s = 1.02; break;
+    // rises from below the line and tips forward
+    case "crane":  cam.y = H * 0.07 * (1 - e); cam.rx = M.lerp(14, 4, e); cam.s = 1.01 + 0.03 * cu; break;
     }
     cam.x += d * W * P.frameX;
     var punch = 0;
@@ -392,12 +442,13 @@ function wordFx(L, t, wi) {
             if (M.r(L.seed + wi, slot * 3 + b, 701) < 0.28) fx.barDx[b] = 0.32 * M.rs(L.seed + wi, slot * 3 + b, 702);
     }
 
-    if (w.paren && !L.byWord) {
-        // Backing vocals in a line-triggered treatment still come in on their own words
-        var qp = (t - (land - 0.18)) / 0.18;
+    if (w.paren) {
+        // Backing vocals come in on their own words, sliding out from the line's side
+        var qp = (t - (land - 0.2)) / 0.2;
         if (qp <= 0) { fx.alpha = 0; return fx; }
-        fx.alpha = M.E.outQuart(qp);
-        fx.dy = 0.25 * (1 - fx.alpha);
+        var ep = M.E.outQuart(qp);
+        fx.alpha = ep;
+        fx.dx = (L.side || 1) * 0.6 * (1 - ep);
         return fx;
     }
 
@@ -474,6 +525,8 @@ function letterState(L, t, wi, ci) {
         st.tone = 0.85;
     }
 
+    if (w.paren) { st.tone *= w.tone; return st; }
+
     if (L.treat === "rise") {
         // Letters rise from a baseline mask, cascading across the line within half a second
         var t0 = L.enterAt + Math.min(0.033, 0.5 / span) * i;
@@ -503,6 +556,5 @@ function letterState(L, t, wi, ci) {
         st.rot = 3 * M.rs(L.seed, i, 706);
         st.dy = 0.03 * M.rs(L.seed, i, 707);
     }
-    if (w.paren) st.tone *= w.tone;
     return st;
 }
