@@ -119,15 +119,24 @@ Item {
         expandAnim.start();
     }
 
+    // where the page was scrolled when this pull began, -1 between pulls
+    property real pullFromY: -1
     function pullTo(dy) {
         if (root.stage !== "collapsed" && root.stage !== "pulling") return;
-        if (root.stage === "collapsed" && (dy <= 0 || overviewFlick.contentY > 1 || root.pageOpen || root.flying)) return;
+        if (root.pageOpen || root.flying) return;
+        // scrolled down a little: the pull first scrolls the page back to the top, then stretches
+        if (root.pullFromY < 0) root.pullFromY = overviewFlick.contentY;
+        if (root.pullFromY > 0)
+            overviewFlick.contentY = Math.max(0, Math.min(overviewFlick.contentHeight - overviewFlick.height, root.pullFromY - dy));
+        var rest = dy - root.pullFromY;
+        if (root.stage === "collapsed" && rest <= 0) return;
         expandAnim.stop();
-        root.stage = dy > 0 ? "pulling" : "collapsed";
-        root.expand = Math.max(0, Math.min(0.8, dy * 0.62 / root.pullRange));
+        root.stage = rest > 0 ? "pulling" : "collapsed";
+        root.expand = Math.max(0, Math.min(0.8, rest * 0.62 / root.pullRange));
     }
 
     function pullEnd(dy, velocityY) {
+        root.pullFromY = -1;
         if (root.stage !== "pulling") return;
         if (root.expand > 0.16 || velocityY > 1600) root.expandFully();
         else root.collapse();

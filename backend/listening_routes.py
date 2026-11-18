@@ -1,6 +1,7 @@
 """HTTP handlers for listening history: count plays (>= 30s) and report totals."""
 
 import os
+import random
 import pathlib
 import re
 
@@ -212,26 +213,42 @@ def handle_get_recap_artist_song(handler, query):
     """A popular song by the recap's top artist other than the month's #1 song, so the artist page
     has music of its own when the listener only played that one song of theirs."""
     artist = (query.get("artist", [""])[0] or "").strip()
-    exclude = (query.get("exclude", [""])[0] or "").strip().lower()
+    exclude = (query.get("exclude", [""])[0] or "").strip().casefold()
     exclude_id = _video_id(query.get("exclude_id", [""])[0] or "")
     try:
         if not artist:
             raise ValueError("no artist")
+        # a second song of theirs the listener played this month comes first, even one played
+        # after the recap was built or outside its top ten
+        year = int((query.get("year", ["0"])[0] or "0") or 0)
+        month = int((query.get("month", ["0"])[0] or "0") or 0)
+        if year and month:
+            own = database.get_artist_other_song(year, month, artist, exclude)
+            if own and own.get("track_id"):
+                handler._send_json({"success": True, "title": own["title"], "track_id": own["track_id"],
+                                    "cover_url": own.get("cover_url") or "", "plays": int(own.get("plays") or 0),
+                                    "fresh": False}, 200)
+                return
+        # otherwise one of their popular songs at random, so each open can bring a new one
         try:
             from . import catalog_engine
         except (ImportError, ValueError):
             import catalog_engine
+        picks = []
         for t in (catalog_engine.get_artist(artist) or {}).get("popular", []) or []:
             vid = t.get("videoId") or ""
             title = (t.get("title") or "").strip()
             if not vid or not title or vid == exclude_id:
                 continue
-            if exclude and title.lower().startswith(exclude):
+            if exclude and title.casefold().startswith(exclude):
                 continue
-            handler._send_json({"success": True, "title": title, "track_id": vid,
-                                "cover_url": t.get("image") or ""}, 200)
+            picks.append({"title": title, "track_id": vid, "cover_url": t.get("image") or ""})
+        if not picks:
+            handler._send_json({"success": False}, 200)
             return
-        handler._send_json({"success": False}, 200)
+        choice = random.choice(picks)
+        choice.update({"success": True, "plays": 0, "fresh": True})
+        handler._send_json(choice, 200)
     except Exception as e:
         handler._send_json({"success": False, "error": str(e)}, 500)
 

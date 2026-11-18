@@ -236,13 +236,15 @@ Item {
             try {
                 var r = JSON.parse(xhr.responseText);
                 if (!r.success || !r.track_id || !root.heroArtist || root.heroArtist.artist !== artist) return;
-                root.artistPick = { title: r.title, cover_url: r.cover_url || "", track_id: r.track_id, plays: 0, fresh: true };
+                root.artistPick = { title: r.title, cover_url: r.cover_url || "", track_id: r.track_id,
+                                    plays: r.plays || 0, fresh: r.fresh !== false };
                 root.resolveSnippet(r.track_id);
             } catch (e) {}
         };
         xhr.open("GET", root.apiUrl + "/api/listening/artist_song?artist=" + encodeURIComponent(artist)
                  + "&exclude=" + encodeURIComponent(root.heroSong.title || "")
-                 + "&exclude_id=" + encodeURIComponent(root.heroSong.track_id || ""));
+                 + "&exclude_id=" + encodeURIComponent(root.heroSong.track_id || "")
+                 + "&year=" + (root.stats.year || 0) + "&month=" + (root.stats.month || 0));
         xhr.send();
     }
     // the artist's own photo; the cover of their top song only when no photo was found
@@ -536,10 +538,11 @@ Item {
     }
     onRecapChanged: { root.snippetUrls = ({}); root.prefetchSnippets(); root.fetchArtistPick(); }
     Component.onCompleted: { root.prefetchSnippets(); root.fetchArtistPick(); }
-    // a lookup that failed while the backend was still waking up gets another go on each open
+    // asked again on each open: a song of theirs played since, or another of their popular songs
+    // (a lookup that failed while the backend was still waking up gets another go too)
     onActiveChanged: {
         if (!root.active) return;
-        if (root.artistOwnsHeroSong && !root.artistPick) root.fetchArtistPick();
+        if (root.artistOwnsHeroSong) root.fetchArtistPick();
         root.prefetchSnippets();
     }
     property real snippetVolume: 0

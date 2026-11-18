@@ -415,6 +415,28 @@ def get_period_stats(year: int, month: int = 0) -> Dict[str, Any]:
         conn.close()
 
 
+def get_artist_other_song(year: int, month: int, artist: str, exclude_title: str) -> Optional[Dict[str, Any]]:
+    """The artist's most played song that month other than `exclude_title`, read live, so a song
+    played after the recap was built still counts."""
+    conn = get_connection()
+    try:
+        # SQLite's lower() leaves non-ASCII letters (Đ, Ạ...) alone, so titles are matched in Python
+        skip = (exclude_title or "").strip().casefold()
+        for r in conn.execute("""
+            SELECT MAX(title) AS title, MAX(track_id) AS track_id, COUNT(*) AS plays,
+                   (SELECT c.cover_url FROM playback_events c WHERE c.title = p.title
+                      AND c.artist = p.artist AND c.cover_url != '' ORDER BY c.id DESC LIMIT 1) AS cover_url
+            FROM playback_events p
+            WHERE strftime('%Y-%m', timestamp, 'localtime') = ? AND artist = ? AND track_id != ''
+            GROUP BY title ORDER BY plays DESC, SUM(listened_ms) DESC LIMIT 10;
+        """, (f"{int(year):04d}-{int(month):02d}", artist)).fetchall():
+            if (r["title"] or "").strip().casefold() != skip:
+                return dict(r)
+        return None
+    finally:
+        conn.close()
+
+
 def get_monthly_recap(force: bool = False, today: Optional[datetime] = None) -> Dict[str, Any]:
     """The monthly recap if one is ready, by the same rules as Mochy; force shows whatever exists."""
     today = today or datetime.now()
