@@ -9,8 +9,9 @@ import "kinetic_stage.js" as Stage
 // treatment, case and font, and its hero words are set heavy, wide or condensed in the accent
 // colour; most lines sit off the level (zigzag, stairs or arc) and tilted. Some piles are a single
 // big line set off-centre. Backing vocals in ( ) drop their brackets and stack in a small column
-// to the left or right of the line. Some lines get a pen scribble: a loose coil under them or a
-// ring round the hero word. Profanity goes under a glitching redaction bar, long breaks
+// to the left or right of the line. Most lines get a pen mark: a coil, underline, double line,
+// zigzag or wave under them, or a ring, box, ticks or arrow on the hero word. A pile leaves by
+// lifting away, being struck through, smudged sideways or scribbled out. Profanity goes under a glitching redaction bar, long breaks
 // show waiting dots. The whole stage runs through an old-film pass (film_tv.frag): grain and
 // scanlines inside the letters, a hair and scratches, a light smear and swell on big hits.
 Item {
@@ -49,6 +50,32 @@ Item {
     }
     function weightFor(key) { return key === "heavy" ? Font.Black : (key === "mono" ? Font.Bold : Font.Normal); }
     function withAlpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a); }
+
+    // A pen mark of up to three strokes, each a list of { x, y } from Stage.penStrokes
+    component PenMark: Shape {
+        id: pen
+        property var strokes: []
+        property color ink: "white"
+        property real penW: 2
+        function poly(i) { return i < strokes.length ? strokes[i].map(function (p) { return Qt.point(p.x, p.y); }) : []; }
+        visible: strokes.length > 0
+        preferredRendererType: Shape.CurveRenderer
+        ShapePath {
+            strokeColor: pen.ink; strokeWidth: pen.penW; fillColor: "transparent"
+            capStyle: ShapePath.RoundCap; joinStyle: ShapePath.RoundJoin
+            PathPolyline { path: pen.poly(0) }
+        }
+        ShapePath {
+            strokeColor: pen.strokes.length > 1 ? pen.ink : "transparent"; strokeWidth: pen.penW * 0.85; fillColor: "transparent"
+            capStyle: ShapePath.RoundCap; joinStyle: ShapePath.RoundJoin
+            PathPolyline { path: pen.poly(1) }
+        }
+        ShapePath {
+            strokeColor: pen.strokes.length > 2 ? pen.ink : "transparent"; strokeWidth: pen.penW * 0.85; fillColor: "transparent"
+            capStyle: ShapePath.RoundCap; joinStyle: ShapePath.RoundJoin
+            PathPolyline { path: pen.poly(2) }
+        }
+    }
     function mix(a, b, k) { return Qt.rgba(a.r + (b.r - a.r) * k, a.g + (b.g - a.g) * k, a.b + (b.b - a.b) * k, 1); }
 
     implicitWidth: 880
@@ -261,9 +288,10 @@ Item {
                             Scale {
                                 origin.x: lineBody.width / 2
                                 origin.y: lineItem.lineH / 2
-                                xScale: lineItem.ls.s * lineItem.fit
+                                xScale: lineItem.ls.s * lineItem.fit * lineItem.ls.sx
                                 yScale: lineItem.ls.s * lineItem.fit
-                            }
+                            },
+                            Translate { x: lineItem.ls.dx }
                         ]
 
                         Row {
@@ -277,26 +305,33 @@ Item {
                             }
                         }
 
-                        // Pen coil under the line: loose loops drawn left to right as the line is sung
-                        Shape {
-                            id: coil
-                            readonly property real prog: lineItem.line && lineItem.line.scribble === "coil" ? Stage.scribbleProg(lineItem.line, lineItem.t) : 0
-                            readonly property var pts: prog > 0 ? Stage.scribblePts(lineItem.line, lineItem.t, width, height, prog) : []
-                            visible: pts.length > 1
-                            x: wordsRow.x + Math.round(wordsRow.width * 0.08)
-                            y: lineItem.lineH - Math.round(lineItem.base * 0.06)
-                            width: Math.round(wordsRow.width * 0.62)
-                            height: Math.round(lineItem.base * 0.4)
+                        // Pen mark under the line, drawn as the line is sung: a loose coil, an underline
+                        // with a flick, a double line, a zigzag or a wave
+                        PenMark {
+                            id: underMark
+                            readonly property string kind: lineItem.line ? Stage.markKind(lineItem.line, "line") : ""
+                            readonly property bool coil: kind === "coil"
+                            x: wordsRow.x + Math.round(wordsRow.width * (coil ? 0.08 : 0.03))
+                            y: lineItem.lineH - Math.round(lineItem.base * (coil ? 0.06 : 0.02))
+                            width: Math.round(wordsRow.width * (coil ? 0.62 : 0.9))
+                            height: Math.round(lineItem.base * (coil ? 0.4 : (kind === "double" || kind === "wave" ? 0.3 : 0.22)))
                             rotation: -1.5
-                            preferredRendererType: Shape.CurveRenderer
-                            ShapePath {
-                                strokeColor: root.withAlpha(root.colActiveText, 0.72)
-                                strokeWidth: Math.max(2, lineItem.base * 0.04)
-                                fillColor: "transparent"
-                                capStyle: ShapePath.RoundCap
-                                joinStyle: ShapePath.RoundJoin
-                                PathPolyline { path: coil.pts.map(function (p) { return Qt.point(p.x, p.y); }) }
-                            }
+                            strokes: kind ? Stage.penStrokes(lineItem.line, lineItem.t, "line", width, height) : []
+                            ink: root.withAlpha(root.colActiveText, 0.72)
+                            penW: Math.max(2, lineItem.base * 0.04)
+                        }
+
+                        // Pen exit: struck through or scribbled out as the pile leaves
+                        PenMark {
+                            readonly property string kind: lineItem.line ? Stage.markKind(lineItem.line, "exit") : ""
+                            x: wordsRow.x
+                            y: 0
+                            width: wordsRow.width
+                            height: lineItem.lineH
+                            z: 3
+                            strokes: kind ? Stage.penStrokes(lineItem.line, lineItem.t, "exit", width, height) : []
+                            ink: root.withAlpha(root.colHighlight, 0.92)
+                            penW: Math.max(2.5, lineItem.base * (kind === "scrawl" ? 0.045 : 0.06))
                         }
 
                         // Backing vocals, brackets dropped: a small stacked column beside the line,
@@ -376,28 +411,23 @@ Item {
                                 z: 2
                             }
 
-                            // Pen ring round the hero word, drawn just after it lands, overshooting its start
-                            Shape {
-                                id: ring
+                            // Pen mark on the hero word, drawn just after it lands: a ring or a rough box
+                            // round it, three shout ticks off a corner, or an arrow swooping in
+                            PenMark {
                                 readonly property bool on: lineItem.line.ringWi === wordItem.wi
-                                readonly property real prog: on ? Stage.scribbleProg(lineItem.line, lineItem.t) : 0
-                                readonly property var pts: prog > 0 ? Stage.scribblePts(lineItem.line, lineItem.t, width, height, prog) : []
-                                visible: pts.length > 1
-                                x: -Math.round(wordItem.px * 0.28)
-                                y: wordItem.bl - Math.round(wordItem.px * 0.98)
-                                width: wordItem.width + Math.round(wordItem.px * 0.56)
-                                height: Math.round(wordItem.px * 1.3)
-                                rotation: -3
+                                readonly property string kind: on ? Stage.markKind(lineItem.line, "hero") : ""
+                                readonly property bool round: kind === "ring" || kind === "box"
+                                readonly property real pad: kind === "ring" ? 0.28 : (kind === "box" ? 0.16 : 0)
+                                x: -Math.round(wordItem.px * pad)
+                                readonly property real boxH: kind === "ring" ? 1.3 : (kind === "box" ? 1.06 : (kind === "ticks" ? 1.3 : 0.95))
+                                y: wordItem.bl - Math.round(wordItem.px * (kind === "ring" ? 0.98 : (kind === "box" ? 0.86 : 0.78)))
+                                width: wordItem.width + Math.round(wordItem.px * pad * 2)
+                                height: Math.round(wordItem.px * boxH)
+                                rotation: kind === "box" ? -1.5 : (round ? -3 : 0)
                                 z: 2
-                                preferredRendererType: Shape.CurveRenderer
-                                ShapePath {
-                                    strokeColor: root.withAlpha(root.colHighlight, 0.85)
-                                    strokeWidth: Math.max(2, wordItem.px * 0.045)
-                                    fillColor: "transparent"
-                                    capStyle: ShapePath.RoundCap
-                                    joinStyle: ShapePath.RoundJoin
-                                    PathPolyline { path: ring.pts.map(function (p) { return Qt.point(p.x, p.y); }) }
-                                }
+                                strokes: kind ? Stage.penStrokes(lineItem.line, lineItem.t, "hero", width, height) : []
+                                ink: root.withAlpha(root.colHighlight, 0.85)
+                                penW: Math.max(2, wordItem.px * 0.045)
                             }
 
                             // Redaction bar over a profane word: three strips that glitch sideways now and then

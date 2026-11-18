@@ -19,7 +19,7 @@
 var LEAD = 0.05;          // visual hits land a touch before the sung onset
 var PILE_MAX = 3;
 var PILE_GAP = 2.6;       // a longer break than this starts a new pile
-var EXIT_DUR = 0.22;
+var EXIT_DUR = 0.22;      // the plain lift-and-blur exit; the pen exits take longer (EXITS)
 var GAP_PX = 10;
 var GAP_MIN = 3.5;        // a break this long shows the waiting dots
 
@@ -48,6 +48,14 @@ var PAREN = {
     shout:   { font: "marker", size: 0.52, upper: true,  rot: 4,  tone: 0.92, hollow: false }
 };
 var PAREN_ORDER = ["adlib", "hollow", "shout"];
+// Pen marks drawn over the frame. Line marks run under the whole line as it is sung; hero marks
+// sit on the hero word just after it lands.
+var LINE_MARKS = ["coil", "under", "double", "zigzag", "wave"];
+var HERO_MARKS = ["ring", "box", "ticks", "arrow"];
+// How a pile leaves, and for how long: lift (rise and blur), strike (a pen line through each line,
+// then fade), smudge (smeared sideways into a blur), scrawl (scribbled out, then fade)
+var EXITS = { lift: 0.22, strike: 0.6, smudge: 0.42, scrawl: 0.66 };
+var EXIT_ORDER = ["strike", "smudge", "scrawl", "lift", "strike", "scrawl"];
 // How the words of a line sit: level, a zigzag (one up, one down), stairs climbing, or an arc
 var STAGGER_ORDER = ["zig", "stairs", "arc", "zig"];
 
@@ -204,16 +212,23 @@ function build(lyrics) {
         }
         for (var hp = 0; hp < words.length; hp++) if (words[hp].paren) { prevParen = parenLook; break; }
 
-        // Pen scribbles, as if someone drew on the frame: a looping coil under the line, or a ring
-        // round the hero word. Never on decode lines (they are the machine look) or under echoes.
+        // Pen marks, as if someone drew on the frame. Most lines get one, never the same kind twice
+        // in a row; never on decode lines (the machine look), and no line mark under echoes.
         var hasEcho = words.some(function (x) { return x.echo; });
         L.scribble = "";
+        L.markRole = "";
         L.ringWi = -1;
-        if (treat !== "decode" && prevScribble === "" && M.r(seed, 23, 423) < 0.55) {
+        if (treat !== "decode" && M.r(seed, 23, 423) < 0.82) {
             var heroWi = scores[0].wi;
-            var canRing = heroes[heroWi] === true && !words[heroWi].censor;
-            if (canRing && (hasEcho || M.r(seed, 24, 424) < 0.45)) { L.scribble = "ring"; L.ringWi = heroWi; }
-            else if (!hasEcho) L.scribble = "coil";
+            var pool = [];
+            if (heroes[heroWi] === true && !words[heroWi].censor) pool = pool.concat(HERO_MARKS);
+            if (!hasEcho) pool = pool.concat(LINE_MARKS);
+            pool = pool.filter(function (k) { return k !== prevScribble; });
+            if (pool.length > 0) {
+                L.scribble = pool[Math.floor(M.r(seed, 24, 424) * pool.length)];
+                L.markRole = HERO_MARKS.indexOf(L.scribble) >= 0 ? "hero" : "line";
+                if (L.markRole === "hero") L.ringWi = heroWi;
+            }
         }
         prevScribble = L.scribble;
         L.n = n;
@@ -244,16 +259,24 @@ function build(lyrics) {
         cur.slot = pile.lines.length;
         pile.lines.push(cur);
     }
-    var prevShot = "";
+    var prevShot = "", prevExit = "";
     for (var q = 0; q < piles.length; q++) {
         var P = piles[q];
         var last = P.lines[P.lines.length - 1];
         var next = q + 1 < piles.length ? piles[q + 1].lines[0] : null;
         // Hold the pile at least a beat after its last word, then cut before the next pile sings
+        var xk = Math.floor(M.r(P.seed, 25, 425) * EXIT_ORDER.length);
+        if (EXIT_ORDER[xk] === prevExit) xk = (xk + 1) % EXIT_ORDER.length;
+        P.exitStyle = EXIT_ORDER[xk];
+        // A pen exit needs room before the next pile sings; a tight cut falls back to the lift
+        if (next && next.start - 0.3 - (EXITS[P.exitStyle] - EXIT_DUR) < Math.max(last.start + 0.4, last.end - 0.8)) P.exitStyle = "lift";
+        prevExit = P.exitStyle;
+        P.exitDur = EXITS[P.exitStyle];
+        var extra = P.exitDur - EXIT_DUR;
         if (!next) P.exitAt = last.end + 1.4;
-        else P.exitAt = Math.max(last.start + 0.4, Math.min(next.start - 0.3, last.end + 1.6));
-        P.goneAt = P.exitAt + EXIT_DUR + 0.04 * PILE_MAX + 0.05;
-        if (next) next.enterAt = Math.min(next.start - 0.08, Math.max(next.enterAt, P.exitAt + EXIT_DUR * 0.8));
+        else P.exitAt = Math.max(last.start + 0.4, Math.min(next.start - 0.3 - extra, last.end + 1.6));
+        P.goneAt = P.exitAt + P.exitDur + 0.04 * PILE_MAX + 0.05;
+        if (next) next.enterAt = Math.min(next.start - 0.08, Math.max(next.enterAt, P.exitAt + P.exitDur * 0.8));
         var sk = Math.floor(M.r(P.seed, 6, 406) * SHOT_ORDER.length);
         if (SHOT_ORDER[sk] === prevShot) sk = (sk + 1) % SHOT_ORDER.length;
         P.shot = SHOT_ORDER[sk];
@@ -317,8 +340,12 @@ function film(motion, t) {
                 f.bulge = Math.max(f.bulge, 0.05 * k);
             }
         }
-        var ex = t - L.pile.exitAt;
-        if (L.slot === 0 && ex >= 0 && ex < 0.12) { f.tear = 1 - ex / 0.12; f.smear = Math.max(f.smear, 14 * f.tear); }
+        var ex = t - L.pile.exitAt, xs = L.pile.exitStyle;
+        if (L.slot === 0 && ex >= 0 && ex < 0.12 && (xs === "lift" || !xs)) { f.tear = 1 - ex / 0.12; f.smear = Math.max(f.smear, 14 * f.tear); }
+        if (L.slot === 0 && xs === "smudge" && ex >= 0 && ex < L.pile.exitDur) {
+            f.smear = Math.max(f.smear, 24 * Math.sin(Math.PI * ex / L.pile.exitDur));
+            f.smearDir = L.pile.side || 1;
+        }
     }
 
     // A projector hair in a quarter of the 2.5 s slots, for 0.8 to 1.6 s, mostly near an edge
@@ -362,7 +389,7 @@ function heightOf(L, W) { return L.base * Math.max(1.3, (L.sideH || 0) + 0.2) * 
 
 // Where a line sits in its pile: { y, s, alpha, blur, fit } (y is the offset of its centre)
 function lineState(L, t, W) {
-    var st = { y: 0, s: 1, alpha: 1, blur: 0, fit: fitOf(L, W) };
+    var st = { y: 0, s: 1, alpha: 1, blur: 0, fit: fitOf(L, W), sx: 1, dx: 0 };
     if (!L) return st;
     var P = L.pile;
     // Walk from the newest line already in down to this one; each newer line pushes the ones above it
@@ -384,10 +411,26 @@ function lineState(L, t, W) {
     st.s = s;
     st.alpha = M.lerp(0.4, 1, M.clamp((s - 0.6) / 0.4));
     if (t >= P.exitAt) {
-        var qx = M.E.inCubic((t - P.exitAt - 0.04 * L.slot) / EXIT_DUR);
-        st.y -= 36 * qx;
-        st.alpha *= 1 - qx;
-        st.blur = 14 * qx;
+        var ex = t - P.exitAt - 0.04 * L.slot, dur = P.exitDur || EXIT_DUR;
+        if (P.exitStyle === "strike" || P.exitStyle === "scrawl") {
+            // the pen goes through first (penStrokes), then the crossed-out line fades
+            var qf = M.E.inCubic((ex - 0.55 * dur) / (0.45 * dur));
+            st.alpha *= 1 - qf;
+            st.blur = 6 * qf;
+            st.y += 8 * qf;
+        } else if (P.exitStyle === "smudge") {
+            // dragged sideways under a thumb: it stretches, slides and blurs out
+            var qs = M.clamp(ex / dur);
+            st.sx = 1 + 0.28 * qs * qs;
+            st.dx = (P.side || 1) * 46 * qs * qs;
+            st.blur = 26 * qs;
+            st.alpha *= 1 - M.E.inCubic(qs);
+        } else {
+            var qx = M.E.inCubic(ex / dur);
+            st.y -= 36 * qx;
+            st.alpha *= 1 - qx;
+            st.blur = 14 * qx;
+        }
     }
     // Karaoke lines arrive whole, focusing in
     if (L.treat === "karaoke") {
@@ -439,29 +482,47 @@ function camera(L, t, W, H) {
 
 function inOutSine(x) { x = M.clamp(x); return -(Math.cos(Math.PI * x) - 1) / 2; }
 
-// Pen scribbles. Points are in px for a box of w x h; prog 0..1 is how much of the stroke is drawn.
-// The stroke "boils" (redraws with fresh wobble eight times a second) like hand-drawn animation.
-//   coil  a run of loose loops, like a pen testing itself in a margin
-//   ring  a pen ring round a word that overshoots where it started
-function scribbleProg(L, t) {
-    if (!L || !L.scribble) return 0;
-    if (L.scribble === "ring") {
-        var w = L.words[L.ringWi];
-        return M.E.outQuad((t - (w.start - LEAD + 0.12)) / 0.42);
+// Pen marks: strokes (up to three) of { x, y } points in px for a box of w x h.
+//   role "line"  under the line (coil, under, double, zigzag, wave), drawn as the line is sung
+//   role "hero"  round the hero word (ring, box, ticks, arrow), drawn just after it lands
+//   role "exit"  through the line as its pile leaves (strike, scrawl)
+// Each stroke "boils" (redraws with fresh wobble eight times a second) like hand-drawn animation.
+function markKind(L, role) {
+    if (!L) return "";
+    if (role === "exit") {
+        var xs = L.pile ? L.pile.exitStyle : "";
+        return xs === "strike" || xs === "scrawl" ? xs : "";
     }
-    return inOutSine((t - (L.start + 0.15)) / 0.8);
+    return L.markRole === role ? L.scribble : "";
 }
-function scribblePts(L, t, w, h, prog) {
-    var out = [];
-    if (!L || !L.scribble || prog <= 0 || w < 2 || h < 2) return out;
-    var boil = Math.floor(t * 8);
-    var sd = L.seed + 77;
-    var pts = [];
-    if (L.scribble === "coil") {
+function markProg(L, t, role) {
+    var kind = markKind(L, role);
+    if (!kind) return 0;
+    if (role === "exit") {
+        var P = L.pile;
+        return M.E.outQuad((t - P.exitAt - 0.04 * L.slot) / (0.55 * P.exitDur));
+    }
+    if (role === "hero") {
+        var w = L.words[L.ringWi];
+        var dur = kind === "ticks" ? 0.3 : (kind === "arrow" ? 0.5 : 0.42);
+        return M.E.outQuad((t - (w.start - LEAD + 0.12)) / dur);
+    }
+    var ld = kind === "coil" ? 0.8 : (kind === "double" ? 0.6 : 0.45);
+    // short marks wait for the line to get going; the coil runs along with it
+    var at = kind === "coil" ? L.start + 0.15 : L.start + Math.min(0.5, (L.end - L.start) * 0.4);
+    return inOutSine((t - at) / ld);
+}
+
+function markShape(kind, sd, w, h) {
+    var S = [];
+    var i, u, n, pts;
+    switch (kind) {
+    case "coil": {
         var loops = Math.max(3, Math.round(w / (h * 1.7)));
         var a = w / (loops * 2 * Math.PI);
         var steps = loops * 20;
-        for (var i = 0; i <= steps; i++) {
+        pts = [];
+        for (i = 0; i <= steps; i++) {
             var th = i / steps * loops * 2 * Math.PI;
             var li = Math.floor(th / (2 * Math.PI));
             // every loop its own size and lean, the way a hand never repeats itself
@@ -470,29 +531,154 @@ function scribblePts(L, t, w, h, prog) {
             var lean = 0.25 * M.rs(sd, li, 808);
             var cy0 = Math.cos(th);
             var x = a * th - b * Math.sin(th) + b + lean * h * (1 - cy0) * 0.5;
-            var y = h / 2 - h / 2 * hk * cy0 + h * 0.15 * M.rs(sd, li, 802);
-            pts.push({ x: x * (w / (w + 2 * a * 2.7)), y: y });
+            pts.push({ x: x * (w / (w + 2 * a * 2.7)), y: h / 2 - h / 2 * hk * cy0 + h * 0.15 * M.rs(sd, li, 802) });
         }
-    } else {
-        var cx = w / 2, cy = h / 2, rx = w / 2, ry = h / 2;
-        var th0 = -2.2 + 0.6 * M.rs(sd, 1, 803);
-        var turns = 1.18;
-        var n = 64;
-        for (var j = 0; j <= n; j++) {
-            var u = j / n;
-            var ang = th0 + u * turns * 2 * Math.PI;
-            var grow = 1 + 0.1 * u + 0.05 * Math.sin(3 * ang + M.r(sd, 2, 804) * 6);
-            pts.push({ x: cx + rx * grow * Math.cos(ang), y: cy + ry * grow * Math.sin(ang) });
-        }
+        S.push(pts);
+        break;
     }
-    var amp = Math.max(0.8, h * 0.03);
-    var last = (pts.length - 1) * M.clamp(prog);
-    var full = Math.floor(last);
-    for (var k = 0; k <= full; k++)
-        out.push({ x: pts[k].x + amp * M.rs(sd + boil, k, 805), y: pts[k].y + amp * M.rs(sd + boil, k, 806) });
-    if (full < pts.length - 1 && last > full) {
-        var f = last - full, p0 = pts[full], p1 = pts[full + 1];
-        out.push({ x: p0.x + (p1.x - p0.x) * f, y: p0.y + (p1.y - p0.y) * f });
+    case "under":
+    case "double": {
+        var rows = kind === "double" ? 2 : 1;
+        for (var r = 0; r < rows; r++) {
+            pts = [];
+            var x0 = r ? 0.12 + 0.08 * M.r(sd, r, 811) : 0.01, x1 = r ? 0.84 + 0.1 * M.r(sd, r, 812) : 0.99;
+            var sag = 0.18 * M.rs(sd, r, 813), y0 = 0.32 + r * 0.38;
+            for (i = 0; i <= 24; i++) {
+                u = i / 24;
+                var y = y0 + sag * Math.sin(Math.PI * u);
+                // the pen flicks up as it leaves the paper
+                if (u > 0.9) y -= 0.9 * Math.pow((u - 0.9) / 0.1, 2) * (r ? 0.5 : 1);
+                pts.push({ x: w * (x0 + (x1 - x0) * u), y: h * y });
+            }
+            S.push(pts);
+        }
+        break;
+    }
+    case "zigzag":
+        n = Math.max(6, Math.round(w / (h * 0.75)));
+        pts = [];
+        for (i = 0; i <= n; i++)
+            pts.push({ x: w * (i / n) + h * 0.12 * M.rs(sd, i, 814), y: h * ((i % 2 ? 0.78 : 0.22) + 0.1 * M.rs(sd, i, 815)) });
+        S.push(pts);
+        break;
+    case "wave": {
+        var per = 2.5 + 1.5 * M.r(sd, 1, 816), ph = M.r(sd, 2, 817) * 6.28;
+        pts = [];
+        for (i = 0; i <= 64; i++) {
+            u = i / 64;
+            pts.push({ x: w * u, y: h * (0.5 + 0.32 * Math.sin(u * per * 2 * Math.PI + ph) * (0.7 + 0.3 * Math.sin(u * 3.1 + ph))) });
+        }
+        S.push(pts);
+        break;
+    }
+    case "ring": {
+        var th0 = -2.2 + 0.6 * M.rs(sd, 1, 803);
+        pts = [];
+        for (i = 0; i <= 64; i++) {
+            u = i / 64;
+            var ang = th0 + u * 1.18 * 2 * Math.PI;
+            var grow = 1 + 0.1 * u + 0.05 * Math.sin(3 * ang + M.r(sd, 2, 804) * 6);
+            pts.push({ x: w / 2 + w / 2 * grow * Math.cos(ang), y: h / 2 + h / 2 * grow * Math.sin(ang) });
+        }
+        S.push(pts);
+        break;
+    }
+    case "box":
+        // a rough box gone round twice, the second time a little off
+        for (var bx = 0; bx < 2; bx++) {
+            var o = bx * 0.05, k = bx ? 0.78 : 1.06;
+            var cs = [[o, 0.04 - o], [1 + o * 0.5, o], [1 - o, 1 + o], [-o * 0.5, 0.96 + o * 0.3], [o + 0.04, -0.02]];
+            pts = [];
+            for (i = 0; i < 4; i++) {
+                var c0 = cs[i], c1 = cs[i + 1];
+                for (var sgi = 0; sgi < 8; sgi++) {
+                    u = sgi / 8;
+                    pts.push({ x: w * (c0[0] + (c1[0] - c0[0]) * u), y: h * (c0[1] + (c1[1] - c0[1]) * u) });
+                }
+            }
+            pts.push({ x: w * cs[4][0], y: h * cs[4][1] });
+            S.push(pts.slice(0, Math.max(2, Math.round(pts.length * k))));
+        }
+        break;
+    case "ticks": {
+        // three short emphasis strokes off one top corner, like a comic shout
+        var right = M.r(sd, 3, 818) < 0.5;
+        var ox = right ? w + h * 0.04 : -h * 0.04, oy = h * 0.08;
+        for (var tk = 0; tk < 3; tk++) {
+            var an = (right ? -1 : -1) * (Math.PI / 2) + (right ? 1 : -1) * (0.25 + tk * 0.42);
+            var d0 = h * 0.12, d1 = h * (0.38 + 0.08 * M.r(sd, tk, 819));
+            S.push([{ x: ox + Math.cos(an) * d0, y: oy + Math.sin(an) * d0 }, { x: ox + Math.cos(an) * (d0 + d1) * 0.5, y: oy + Math.sin(an) * (d0 + d1) * 0.5 },
+                    { x: ox + Math.cos(an) * d1, y: oy + Math.sin(an) * d1 }]);
+        }
+        break;
+    }
+    case "arrow": {
+        // a swoosh in from below-left (or right) that ends in an arrowhead at the word
+        var fl = M.r(sd, 4, 820) < 0.5;
+        var P0 = { x: -h * 0.95, y: h * 1.35 }, C = { x: -h * 0.85, y: h * 0.45 }, P1 = { x: -h * 0.08, y: h * 0.55 };
+        pts = [];
+        for (i = 0; i <= 20; i++) {
+            u = i / 20;
+            var q0 = (1 - u) * (1 - u), q1 = 2 * u * (1 - u), q2 = u * u;
+            pts.push({ x: q0 * P0.x + q1 * C.x + q2 * P1.x, y: q0 * P0.y + q1 * C.y + q2 * P1.y });
+        }
+        var dxA = P1.x - C.x, dyA = P1.y - C.y, lA = Math.sqrt(dxA * dxA + dyA * dyA);
+        dxA /= lA; dyA /= lA;
+        var hl = h * 0.2;
+        function rot(dx, dy, a) { return { x: dx * Math.cos(a) - dy * Math.sin(a), y: dx * Math.sin(a) + dy * Math.cos(a) }; }
+        var hA = rot(-dxA, -dyA, 0.55), hB = rot(-dxA, -dyA, -0.55);
+        S.push(pts);
+        S.push([{ x: P1.x + hA.x * hl, y: P1.y + hA.y * hl }, P1, { x: P1.x + hB.x * hl, y: P1.y + hB.y * hl }]);
+        if (fl) S = S.map(function (st) { return st.map(function (p) { return { x: w - p.x, y: p.y }; }); });
+        break;
+    }
+    case "strike": {
+        // a fast line through the middle of the letters, sometimes back again
+        var sl = 0.12 * M.rs(sd, 5, 821);
+        pts = [];
+        for (i = 0; i <= 20; i++) { u = i / 20; pts.push({ x: w * (-0.03 + 1.06 * u), y: h * (0.6 + sl * (u - 0.5)) }); }
+        S.push(pts);
+        if (M.r(sd, 6, 822) < 0.5) {
+            pts = [];
+            for (i = 0; i <= 20; i++) { u = i / 20; pts.push({ x: w * (1.02 - 1.0 * u), y: h * (0.68 - sl * (0.5 - u) + 0.04 * u) }); }
+            S.push(pts);
+        }
+        break;
+    }
+    case "scrawl":
+        // scribbled out: tight back-and-forth strokes marching across the line
+        n = Math.max(10, Math.round(w / (h * 0.16)));
+        pts = [];
+        for (i = 0; i <= n; i++)
+            pts.push({ x: w * (i / n) + h * 0.08 * M.rs(sd, i, 823), y: h * ((i % 2 ? 0.84 : 0.3) + 0.08 * M.rs(sd, i, 824)) });
+        S.push(pts);
+        break;
+    }
+    return S;
+}
+
+function penStrokes(L, t, role, w, h) {
+    var out = [];
+    var kind = markKind(L, role);
+    var prog = markProg(L, t, role);
+    if (!kind || prog <= 0 || w < 2 || h < 2) return out;
+    var sd = L.seed + 77 + (role === "exit" ? 5 : 0);
+    var shape = markShape(kind, sd, w, h);
+    var boil = Math.floor(t * 8);
+    var amp = Math.min(2.2, Math.max(0.8, h * 0.03));
+    var ns = shape.length;
+    for (var si = 0; si < ns; si++) {
+        var sp = M.clamp(prog * ns - si);     // strokes are drawn one after another
+        if (sp <= 0) break;
+        var pts = shape[si], st = [];
+        var last = (pts.length - 1) * sp, full = Math.floor(last);
+        for (var k = 0; k <= full; k++)
+            st.push({ x: pts[k].x + amp * M.rs(sd + boil + si * 31, k, 805), y: pts[k].y + amp * M.rs(sd + boil + si * 31, k, 806) });
+        if (full < pts.length - 1 && last > full) {
+            var f = last - full, p0 = pts[full], p1 = pts[full + 1];
+            st.push({ x: p0.x + (p1.x - p0.x) * f, y: p0.y + (p1.y - p0.y) * f });
+        }
+        if (st.length > 1) out.push(st);
     }
     return out;
 }
