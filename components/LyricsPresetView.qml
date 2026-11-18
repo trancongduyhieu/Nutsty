@@ -42,6 +42,7 @@ Item {
         case 5: return mochyExpressive;
         case 6: return motionVariations;
         case 7: return kineticStage;
+        case 8: return kineticStage;
         }
         return appleMusic;
     }
@@ -149,7 +150,8 @@ Item {
         }
     }
 
-    // Lines pile up, each with its own type treatment; one camera move per pile (kinetic_stage.js)
+    // Lines pile up, each with its own type treatment; one camera move per pile (kinetic_stage.js).
+    // Preset 8 is the same stage in its maximal cut, covered in pen marks and doodles.
     Component {
         id: kineticStage
         KineticStageView {
@@ -161,6 +163,7 @@ Item {
             colShadowDir: root.colShadowDir
             colShadowAmb: root.colShadowAmb
             isLightArea: root.isLightArea
+            maximal: root.meta.id === 8
         }
     }
 }

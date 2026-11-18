@@ -11,7 +11,9 @@ import "kinetic_stage.js" as Stage
 // big line set off-centre. Backing vocals in ( ) drop their brackets and stack in a small column
 // to the left or right of the line. Most lines get a pen mark: a coil, underline, double line,
 // zigzag or wave under them, or a ring, box, ticks or arrow on the hero word. A pile leaves by
-// lifting away, being struck through, smudged sideways or scribbled out. Profanity goes under a glitching redaction bar, long breaks
+// lifting away, being struck through, smudged sideways or scribbled out. With `maximal` (preset 8)
+// every line gets all of it at once: double-drawn strokes, a marker swipe behind the hero, a ring
+// round the line, and doodles scattered round it. Profanity goes under a glitching redaction bar, long breaks
 // show waiting dots. The whole stage runs through an old-film pass (film_tv.frag): grain and
 // scanlines inside the letters, a hair and scratches, a light smear and swell on big hits.
 Item {
@@ -26,6 +28,8 @@ Item {
     property color colShadowDir: "#a6020305"
     property color colShadowAmb: "#66000000"
     property bool isLightArea: false
+    // Preset 8: the maximal cut, every line covered in pen marks and doodles (kinetic_stage.js)
+    property bool maximal: false
 
     FontLoader { id: heavyFont; source: "../assets/fonts/Montserrat-Black.ttf" }
     FontLoader { id: softFont; source: "../assets/fonts/InstrumentSerif-Italic.ttf" }
@@ -51,30 +55,34 @@ Item {
     function weightFor(key) { return key === "heavy" ? Font.Black : (key === "mono" ? Font.Bold : Font.Normal); }
     function withAlpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a); }
 
-    // A pen mark of up to three strokes, each a list of { x, y } from Stage.penStrokes
+    // One stroke of a PenMark: the idx-th list of { x, y } from Stage.penStrokes / doodleStrokes
+    component PenStroke: ShapePath {
+        property Item owner
+        property int idx: 0
+        readonly property bool used: owner !== null && idx < owner.strokes.length
+        strokeColor: used ? owner.ink : "transparent"
+        strokeWidth: owner ? owner.penW * (idx === 0 ? 1 : 0.85) : 1
+        fillColor: "transparent"
+        capStyle: owner ? owner.cap : ShapePath.RoundCap
+        joinStyle: ShapePath.RoundJoin
+        PathPolyline { path: used ? owner.strokes[idx].map(function (p) { return Qt.point(p.x, p.y); }) : [] }
+    }
+
+    // A pen mark of up to six strokes (three, each drawn twice in the maximal cut)
     component PenMark: Shape {
         id: pen
         property var strokes: []
         property color ink: "white"
         property real penW: 2
-        function poly(i) { return i < strokes.length ? strokes[i].map(function (p) { return Qt.point(p.x, p.y); }) : []; }
+        property int cap: ShapePath.RoundCap
         visible: strokes.length > 0
         preferredRendererType: Shape.CurveRenderer
-        ShapePath {
-            strokeColor: pen.ink; strokeWidth: pen.penW; fillColor: "transparent"
-            capStyle: ShapePath.RoundCap; joinStyle: ShapePath.RoundJoin
-            PathPolyline { path: pen.poly(0) }
-        }
-        ShapePath {
-            strokeColor: pen.strokes.length > 1 ? pen.ink : "transparent"; strokeWidth: pen.penW * 0.85; fillColor: "transparent"
-            capStyle: ShapePath.RoundCap; joinStyle: ShapePath.RoundJoin
-            PathPolyline { path: pen.poly(1) }
-        }
-        ShapePath {
-            strokeColor: pen.strokes.length > 2 ? pen.ink : "transparent"; strokeWidth: pen.penW * 0.85; fillColor: "transparent"
-            capStyle: ShapePath.RoundCap; joinStyle: ShapePath.RoundJoin
-            PathPolyline { path: pen.poly(2) }
-        }
+        PenStroke { owner: pen; idx: 0 }
+        PenStroke { owner: pen; idx: 1 }
+        PenStroke { owner: pen; idx: 2 }
+        PenStroke { owner: pen; idx: 3 }
+        PenStroke { owner: pen; idx: 4 }
+        PenStroke { owner: pen; idx: 5 }
     }
     function mix(a, b, k) { return Qt.rgba(a.r + (b.r - a.r) * k, a.g + (b.g - a.g) * k, a.b + (b.b - a.b) * k, 1); }
 
@@ -96,7 +104,7 @@ Item {
     ListModel { id: visibleLines }
 
     function rebuild() {
-        root.motion = Stage.build(root.activeLyrics);
+        root.motion = Stage.build(root.activeLyrics, { max: root.maximal });
         visibleLines.clear();
         syncVisible();
     }
@@ -138,6 +146,7 @@ Item {
         if (root.renderable) advanceClock();
     }
     onActiveLyricsChanged: rebuild()
+    onMaximalChanged: rebuild()
     onRenderableChanged: if (renderable) { root.animClock = root.currentTime; advanceClock(); }
     Component.onCompleted: { root.animClock = root.currentTime; rebuild(); }
 
@@ -311,14 +320,42 @@ Item {
                             id: underMark
                             readonly property string kind: lineItem.line ? Stage.markKind(lineItem.line, "line") : ""
                             readonly property bool coil: kind === "coil"
-                            x: wordsRow.x + Math.round(wordsRow.width * (coil ? 0.08 : 0.03))
-                            y: lineItem.lineH - Math.round(lineItem.base * (coil ? 0.06 : 0.02))
-                            width: Math.round(wordsRow.width * (coil ? 0.62 : 0.9))
-                            height: Math.round(lineItem.base * (coil ? 0.4 : (kind === "double" || kind === "wave" ? 0.3 : 0.22)))
-                            rotation: -1.5
+                            readonly property bool wrap: kind === "wrap"     // a big ring round the whole line
+                            x: wrap ? wordsRow.x - Math.round(lineItem.base * 0.4) : wordsRow.x + Math.round(wordsRow.width * (coil ? 0.08 : 0.03))
+                            y: wrap ? -Math.round(lineItem.base * 0.3) : lineItem.lineH - Math.round(lineItem.base * (coil ? 0.06 : 0.02))
+                            width: wrap ? wordsRow.width + Math.round(lineItem.base * 0.8) : Math.round(wordsRow.width * (coil ? 0.62 : 0.9))
+                            height: wrap ? lineItem.lineH + Math.round(lineItem.base * 0.6)
+                                         : Math.round(lineItem.base * (coil ? 0.4 : (kind === "double" || kind === "wave" ? 0.3 : 0.22)))
+                            rotation: wrap ? -2 : -1.5
                             strokes: kind ? Stage.penStrokes(lineItem.line, lineItem.t, "line", width, height) : []
                             ink: root.withAlpha(root.colActiveText, 0.72)
                             penW: Math.max(2, lineItem.base * 0.04)
+                        }
+
+                        // Doodles scattered round the line in the maximal cut: stars, bursts, spirals, hearts...
+                        Repeater {
+                            model: lineItem.line && lineItem.line.doodles ? lineItem.line.doodles.length : 0
+                            delegate: PenMark {
+                                id: doodle
+                                required property int index
+                                readonly property var d: lineItem.line.doodles[index]
+                                readonly property real sz: Math.round(lineItem.base * d.k)
+                                // never on the side the backing vocals sit
+                                readonly property string spot: lineItem.hasSide && ((d.spot === "left" && lineItem.side < 0) || (d.spot === "right" && lineItem.side > 0)) ? "above" : d.spot
+                                width: sz
+                                height: sz
+                                x: spot === "left" ? wordsRow.x - sz * 1.15
+                                 : spot === "right" ? wordsRow.x + wordsRow.width + sz * 0.15
+                                 : wordsRow.x + d.u * wordsRow.width - sz / 2
+                                y: spot === "above" ? -sz * 0.8
+                                 : spot === "below" ? lineItem.lineH + sz * 0.05
+                                 : lineItem.lineH / 2 - sz / 2 + (d.u - 0.5) * sz
+                                rotation: d.rot
+                                z: 2
+                                strokes: Stage.doodleStrokes(lineItem.line, lineItem.t, index, width, height)
+                                ink: root.withAlpha(d.accent ? root.colHighlight : root.colActiveText, 0.85)
+                                penW: Math.max(2, lineItem.base * 0.035)
+                            }
                         }
 
                         // Pen exit: struck through or scribbled out as the pile leaves
@@ -396,6 +433,21 @@ Item {
                                 Rotation { origin.x: wordItem.width / 2; origin.y: wordItem.bl - wordItem.px * 0.35; angle: wordItem.word.rot + wordItem.fx.rot },
                                 Translate { x: wordItem.fx.dx * wordItem.px; y: (wordItem.fx.dy + wordItem.word.jy) * wordItem.px }
                             ]
+
+                            // Marker swipe behind the hero in the maximal cut, laid down as the word is sung
+                            PenMark {
+                                readonly property string kind: lineItem.line.hiWi === wordItem.wi ? "hilite" : ""
+                                x: -Math.round(wordItem.px * 0.06)
+                                y: wordItem.bl - Math.round(wordItem.px * 0.7)
+                                width: wordItem.width + Math.round(wordItem.px * 0.12)
+                                height: Math.round(wordItem.px * 0.62)
+                                rotation: -2
+                                z: -1
+                                strokes: kind ? Stage.penStrokes(lineItem.line, lineItem.t, "hilite", width, height) : []
+                                ink: root.withAlpha(root.colHighlight, 0.22)
+                                penW: Math.round(wordItem.px * 0.42)
+                                cap: ShapePath.FlatCap
+                            }
 
                             // Hand-drawn underline under a hand-lettered hero, drawn once the word is sung
                             Rectangle {

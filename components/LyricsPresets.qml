@@ -29,6 +29,9 @@ QtObject {
           width: 880, widthRatio: 0.55, yRatio: 0.66, height: 220, hideWithoutLyrics: true },
         { id: 7, titleVi: "Mẫu 7: Sân khấu chữ", titleEn: "Preset 7: Type Stage",
           subtitleVi: "Câu chồng hoặc câu đơn • Chất phim cũ", subtitleEn: "Stacked or single lines • Old film look",
+          width: 880, widthRatio: 0.55, yRatio: 0.60, height: 300, hideWithoutLyrics: true },
+        { id: 8, titleVi: "Mẫu 8: Sân khấu chữ tối đa", titleEn: "Preset 8: Type Stage Max",
+          subtitleVi: "Vẽ tay kín khung • Nét đôi, hình vẽ nguệch ngoạc", subtitleEn: "Pen marks everywhere • Double strokes, doodles",
           width: 880, widthRatio: 0.55, yRatio: 0.60, height: 300, hideWithoutLyrics: true }
     ]
 

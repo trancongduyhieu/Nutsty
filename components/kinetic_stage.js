@@ -15,6 +15,11 @@
 // Craft rules after scenario-labs' kinetic music video motion library (MIT,
 // github.com/scenario-labs/skills); hash noise and easing from motion_recipes.js (after JIZURA).
 // Everything is a pure function of the clock, so seeking or looping never pops.
+//
+// build(lyrics, { max: true }) is the maximal cut (preset 8): every line gets a mark under it and
+// one on its hero, a marker swipe behind the hero, a ring round the whole line now and then, and
+// doodles (stars, bursts, spirals, hearts...) scattered round it, more of them on the loud lines.
+// Every stroke is drawn twice, the second pass a little off, after rough.js (MIT, roughjs.com).
 
 var LEAD = 0.05;          // visual hits land a touch before the sung onset
 var PILE_MAX = 3;
@@ -56,6 +61,12 @@ var HERO_MARKS = ["ring", "box", "ticks", "arrow"];
 // then fade), smudge (smeared sideways into a blur), scrawl (scribbled out, then fade)
 var EXITS = { lift: 0.22, strike: 0.6, smudge: 0.42, scrawl: 0.66 };
 var EXIT_ORDER = ["strike", "smudge", "scrawl", "lift", "strike", "scrawl"];
+// The maximal cut: a ring round the whole line joins the line marks, the exits are all pen work,
+// and doodles are scattered round each line
+var LINE_MARKS_MAX = ["coil", "under", "double", "zigzag", "wave", "wrap"];
+var EXIT_ORDER_MAX = ["scrawl", "strike", "smudge", "strike", "scrawl"];
+var DOODLES = ["star", "sparkle", "burst", "speed", "spiral", "bang", "heart", "cross"];
+var DOODLE_SPOTS = ["above", "above", "left", "right", "above", "below"];
 // How the words of a line sit: level, a zigzag (one up, one down), stairs climbing, or an arc
 var STAGGER_ORDER = ["zig", "stairs", "arc", "zig"];
 
@@ -80,8 +91,9 @@ function isProfane(text) {
 function cased(text, up) { return Array.from(up ? text.toUpperCase() : text.toLowerCase()); }
 function unbracket(text) { return String(text).replace(/[()\[\]]/g, ""); }
 
-function build(lyrics) {
+function build(lyrics, opts) {
     lyrics = lyrics || [];
+    var maxi = !!(opts && opts.max);
     var songSeed = 0;
     for (var s = 0; s < lyrics.length && s < 4; s++) songSeed ^= M.hashText(String(lyrics[s].text || "") + s);
 
@@ -89,7 +101,7 @@ function build(lyrics) {
     var prevTreat = "";
     var prevCase = "";
     var prevParen = "";
-    var prevScribble = "";
+    var prevScribble = "", prevLineMark = "", prevHeroMark = "";
     for (var i = 0; i < lyrics.length; i++) {
         var start = M.toSec(lyrics[i].time !== undefined ? lyrics[i].time : lyrics[i].startTime);
         var nextStart = i + 1 < lyrics.length ? M.toSec(lyrics[i + 1].time !== undefined ? lyrics[i + 1].time : lyrics[i + 1].startTime) : start + 4;
@@ -215,22 +227,66 @@ function build(lyrics) {
         // Pen marks, as if someone drew on the frame. Most lines get one, never the same kind twice
         // in a row; never on decode lines (the machine look), and no line mark under echoes.
         var hasEcho = words.some(function (x) { return x.echo; });
+        var heroWi = scores[0].wi;
+        var heroOk = heroes[heroWi] === true && !words[heroWi].censor;
         L.scribble = "";
-        L.markRole = "";
+        L.lineMark = "";
+        L.heroMark = "";
         L.ringWi = -1;
-        if (treat !== "decode" && M.r(seed, 23, 423) < 0.82) {
-            var heroWi = scores[0].wi;
-            var pool = [];
-            if (heroes[heroWi] === true && !words[heroWi].censor) pool = pool.concat(HERO_MARKS);
-            if (!hasEcho) pool = pool.concat(LINE_MARKS);
-            pool = pool.filter(function (k) { return k !== prevScribble; });
-            if (pool.length > 0) {
-                L.scribble = pool[Math.floor(M.r(seed, 24, 424) * pool.length)];
-                L.markRole = HERO_MARKS.indexOf(L.scribble) >= 0 ? "hero" : "line";
-                if (L.markRole === "hero") L.ringWi = heroWi;
+        L.hiWi = -1;
+        L.doodles = [];
+        L.rough = maxi;
+        if (!maxi) {
+            if (treat !== "decode" && M.r(seed, 23, 423) < 0.82) {
+                var pool = [];
+                if (heroOk) pool = pool.concat(HERO_MARKS);
+                if (!hasEcho) pool = pool.concat(LINE_MARKS);
+                pool = pool.filter(function (k) { return k !== prevScribble; });
+                if (pool.length > 0) {
+                    L.scribble = pool[Math.floor(M.r(seed, 24, 424) * pool.length)];
+                    if (HERO_MARKS.indexOf(L.scribble) >= 0) { L.heroMark = L.scribble; L.ringWi = heroWi; }
+                    else L.lineMark = L.scribble;
+                }
+            }
+            prevScribble = L.scribble;
+        } else {
+            // Everything at once: a mark under the line and one on its hero, a marker swipe behind
+            // the hero, and doodles round it. Decode lines keep their letters clean but still get doodles.
+            var loud = treat === "slam" || treat === "marker" ? 1 : 0;
+            if (treat !== "decode") {
+                if (heroOk) {
+                    var hp0 = HERO_MARKS.filter(function (k) { return k !== prevHeroMark; });
+                    L.heroMark = hp0[Math.floor(M.r(seed, 26, 426) * hp0.length)];
+                    L.ringWi = heroWi;
+                    if (L.heroMark !== "box" && M.r(seed, 27, 427) < 0.8) L.hiWi = heroWi;
+                }
+                if (M.r(seed, 28, 428) < 0.9) {
+                    // echo copies slide down under the hero, so those lines only get the ring round them
+                    var lp0 = (hasEcho ? ["wrap", "", ""] : LINE_MARKS_MAX).filter(function (k) { return k !== prevLineMark; });
+                    L.lineMark = lp0[Math.floor(M.r(seed, 29, 429) * lp0.length)];
+                }
+            }
+            prevHeroMark = L.heroMark;
+            prevLineMark = L.lineMark;
+            L.scribble = L.lineMark || L.heroMark;
+            // More doodles on the loud lines and the ones with two heroes
+            var nd = Math.min(5, 2 + 2 * loud + (scores.length > 1 && heroes[scores[1].wi] ? 1 : 0) + (M.r(seed, 30, 430) < 0.4 ? 1 : 0));
+            var span = Math.max(0.4, (words[words.length - 1].end - start) * 0.8);
+            for (var di = 0; di < nd; di++) {
+                var spot = DOODLE_SPOTS[Math.floor(M.r(seed, di, 431) * DOODLE_SPOTS.length)];
+                if (spot === "below" && L.lineMark) spot = "above";
+                L.doodles.push({
+                    kind: DOODLES[Math.floor(M.r(seed, di, 432) * DOODLES.length)],
+                    spot: spot,
+                    u: 0.08 + 0.84 * ((di + 0.5 * M.r(seed, di, 433)) / nd),   // spread along the line
+                    k: 0.75 + 0.4 * M.r(seed, di, 434) + 0.15 * loud,           // size, share of base
+                    rot: 24 * M.rs(seed, di, 435),
+                    accent: M.r(seed, di, 436) < 0.55,
+                    at: start - 0.1 + span * di / nd + 0.15 * M.r(seed, di, 437),
+                    dur: 0.22 + 0.14 * M.r(seed, di, 438)
+                });
             }
         }
-        prevScribble = L.scribble;
         L.n = n;
         L.mainIdx = mainIdx;
         L.sideIdx = sideIdx;
@@ -265,9 +321,10 @@ function build(lyrics) {
         var last = P.lines[P.lines.length - 1];
         var next = q + 1 < piles.length ? piles[q + 1].lines[0] : null;
         // Hold the pile at least a beat after its last word, then cut before the next pile sings
-        var xk = Math.floor(M.r(P.seed, 25, 425) * EXIT_ORDER.length);
-        if (EXIT_ORDER[xk] === prevExit) xk = (xk + 1) % EXIT_ORDER.length;
-        P.exitStyle = EXIT_ORDER[xk];
+        var XO = maxi ? EXIT_ORDER_MAX : EXIT_ORDER;
+        var xk = Math.floor(M.r(P.seed, 25, 425) * XO.length);
+        if (XO[xk] === prevExit) xk = (xk + 1) % XO.length;
+        P.exitStyle = XO[xk];
         // A pen exit needs room before the next pile sings; a tight cut falls back to the lift
         if (next && next.start - 0.3 - (EXITS[P.exitStyle] - EXIT_DUR) < Math.max(last.start + 0.4, last.end - 0.8)) P.exitStyle = "lift";
         prevExit = P.exitStyle;
@@ -296,7 +353,7 @@ function build(lyrics) {
         var from = piles[gq].goneAt, to = piles[gq + 1].lines[0].enterAt;
         if (to - from >= GAP_MIN) gaps.push({ from: from, to: to });
     }
-    return { lines: lines, piles: piles, gaps: gaps, seed: songSeed };
+    return { lines: lines, piles: piles, gaps: gaps, seed: songSeed, max: maxi };
 }
 
 // The waiting dots between piles: { alpha, prog (0..1 towards the next line), t0 }
@@ -493,7 +550,10 @@ function markKind(L, role) {
         var xs = L.pile ? L.pile.exitStyle : "";
         return xs === "strike" || xs === "scrawl" ? xs : "";
     }
-    return L.markRole === role ? L.scribble : "";
+    if (role === "line") return L.lineMark || "";
+    if (role === "hero") return L.heroMark || "";
+    if (role === "hilite") return L.hiWi >= 0 ? "hilite" : "";
+    return "";
 }
 function markProg(L, t, role) {
     var kind = markKind(L, role);
@@ -502,12 +562,16 @@ function markProg(L, t, role) {
         var P = L.pile;
         return M.E.outQuad((t - P.exitAt - 0.04 * L.slot) / (0.55 * P.exitDur));
     }
+    if (role === "hilite") {
+        var hw = L.words[L.hiWi];
+        return M.E.outCubic((t - (hw.start - LEAD - 0.04)) / 0.26);
+    }
     if (role === "hero") {
         var w = L.words[L.ringWi];
         var dur = kind === "ticks" ? 0.3 : (kind === "arrow" ? 0.5 : 0.42);
         return M.E.outQuad((t - (w.start - LEAD + 0.12)) / dur);
     }
-    var ld = kind === "coil" ? 0.8 : (kind === "double" ? 0.6 : 0.45);
+    var ld = kind === "coil" ? 0.8 : (kind === "double" || kind === "wrap" ? 0.6 : 0.45);
     // short marks wait for the line to get going; the coil runs along with it
     var at = kind === "coil" ? L.start + 0.15 : L.start + Math.min(0.5, (L.end - L.start) * 0.4);
     return inOutSine((t - at) / ld);
@@ -571,6 +635,92 @@ function markShape(kind, sd, w, h) {
         S.push(pts);
         break;
     }
+    case "hilite": {
+        // a marker swipe through the middle of the word, a touch uphill
+        pts = [];
+        for (i = 0; i <= 8; i++) { u = i / 8; pts.push({ x: w * (-0.02 + 1.04 * u), y: h * (0.55 - 0.1 * u + 0.06 * M.rs(sd, i, 825)) }); }
+        S.push(pts);
+        break;
+    }
+    case "star": {
+        // five points drawn in one go, the way a doodled star is
+        pts = [];
+        var a0 = -Math.PI / 2 + 0.3 * M.rs(sd, 1, 826);
+        for (i = 0; i <= 5; i++) {
+            var sa = a0 + i * 4 * Math.PI / 5;
+            pts.push({ x: w / 2 + w * 0.48 * Math.cos(sa), y: h / 2 + h * 0.48 * Math.sin(sa) });
+        }
+        S.push(pts);
+        break;
+    }
+    case "sparkle": {
+        // a four-point twinkle with pinched sides, plus a tiny one beside it
+        pts = [];
+        for (i = 0; i <= 32; i++) {
+            var ta = i / 32 * 2 * Math.PI;
+            var rr = 0.12 + 0.38 * Math.pow(Math.abs(Math.cos(2 * ta)), 3);
+            pts.push({ x: w / 2 + w * rr * Math.cos(ta), y: h / 2 + h * rr * Math.sin(ta) });
+        }
+        S.push(pts);
+        S.push([{ x: w * 0.88, y: h * 0.02 }, { x: w * 0.88, y: h * 0.24 }]);
+        S.push([{ x: w * 0.77, y: h * 0.13 }, { x: w * 0.99, y: h * 0.13 }]);
+        break;
+    }
+    case "burst": {
+        // a jagged comic burst
+        n = 18;
+        pts = [];
+        for (i = 0; i <= n; i++) {
+            var ba = i / n * 2 * Math.PI;
+            var br = (i % 2 ? 0.26 : 0.5) * (0.85 + 0.25 * M.r(sd, i % n, 827));
+            pts.push({ x: w / 2 + w * br * Math.cos(ba), y: h / 2 + h * br * Math.sin(ba) });
+        }
+        S.push(pts);
+        break;
+    }
+    case "speed":
+        // three motion lines, ragged at the back
+        for (i = 0; i < 3; i++) {
+            var sy = h * (0.25 + 0.25 * i), sx0 = w * (0.1 + 0.25 * M.r(sd, i, 828));
+            S.push([{ x: sx0, y: sy }, { x: w * 0.98, y: sy - h * 0.06 }]);
+        }
+        break;
+    case "spiral": {
+        pts = [];
+        for (i = 0; i <= 40; i++) {
+            u = i / 40;
+            var pa = u * 2.6 * 2 * Math.PI, pr = 0.04 + 0.46 * u;
+            pts.push({ x: w / 2 + w * pr * Math.cos(pa), y: h / 2 + h * pr * Math.sin(pa) });
+        }
+        S.push(pts);
+        break;
+    }
+    case "bang":
+        // two exclamation marks, the dots as tiny loops
+        for (i = 0; i < 2; i++) {
+            var bx0 = w * (0.3 + 0.38 * i), lean0 = w * 0.06;
+            S.push([{ x: bx0 + lean0, y: h * 0.02 }, { x: bx0 + lean0 * 0.4, y: h * 0.4 }, { x: bx0, y: h * 0.66 }]);
+            var dpts = [];
+            for (var dk = 0; dk <= 8; dk++) { var da = dk / 8 * 2 * Math.PI; dpts.push({ x: bx0 + w * 0.045 * Math.cos(da), y: h * 0.88 + h * 0.06 * Math.sin(da) }); }
+            S.push(dpts);
+        }
+        break;
+    case "heart": {
+        pts = [];
+        for (i = 0; i <= 40; i++) {
+            var hta = i / 40 * 2 * Math.PI;
+            var hx = 16 * Math.pow(Math.sin(hta), 3);
+            var hy = 13 * Math.cos(hta) - 5 * Math.cos(2 * hta) - 2 * Math.cos(3 * hta) - Math.cos(4 * hta);
+            pts.push({ x: w / 2 + w * 0.48 * hx / 16, y: h * 0.46 - h * 0.48 * hy / 16 });
+        }
+        S.push(pts);
+        break;
+    }
+    case "cross":
+        S.push([{ x: w * 0.1, y: h * 0.15 }, { x: w * 0.9, y: h * 0.85 }]);
+        S.push([{ x: w * 0.88, y: h * 0.12 }, { x: w * 0.12, y: h * 0.9 }]);
+        break;
+    case "wrap":
     case "ring": {
         var th0 = -2.2 + 0.6 * M.rs(sd, 1, 803);
         pts = [];
@@ -657,30 +807,53 @@ function markShape(kind, sd, w, h) {
     return S;
 }
 
-function penStrokes(L, t, role, w, h) {
+// Draws the strokes of one mark up to prog (0..1), one stroke after another. A rough mark (the
+// maximal cut) gets a second pass of every stroke, wobblier and a little off, after rough.js.
+function drawStrokes(shape, prog, sd, t, h, rough) {
     var out = [];
-    var kind = markKind(L, role);
-    var prog = markProg(L, t, role);
-    if (!kind || prog <= 0 || w < 2 || h < 2) return out;
-    var sd = L.seed + 77 + (role === "exit" ? 5 : 0);
-    var shape = markShape(kind, sd, w, h);
     var boil = Math.floor(t * 8);
     var amp = Math.min(2.2, Math.max(0.8, h * 0.03));
     var ns = shape.length;
-    for (var si = 0; si < ns; si++) {
-        var sp = M.clamp(prog * ns - si);     // strokes are drawn one after another
-        if (sp <= 0) break;
-        var pts = shape[si], st = [];
-        var last = (pts.length - 1) * sp, full = Math.floor(last);
-        for (var k = 0; k <= full; k++)
-            st.push({ x: pts[k].x + amp * M.rs(sd + boil + si * 31, k, 805), y: pts[k].y + amp * M.rs(sd + boil + si * 31, k, 806) });
-        if (full < pts.length - 1 && last > full) {
-            var f = last - full, p0 = pts[full], p1 = pts[full + 1];
-            st.push({ x: p0.x + (p1.x - p0.x) * f, y: p0.y + (p1.y - p0.y) * f });
+    var passes = rough && ns <= 3 ? 2 : 1;
+    for (var pass = 0; pass < passes; pass++) {
+        var pa = pass ? amp * 1.6 : amp;
+        var ox = pass ? amp * 1.3 * M.rs(sd, 9, 829) : 0, oy = pass ? amp * 1.3 * M.rs(sd, 10, 830) : 0;
+        for (var si = 0; si < ns; si++) {
+            // strokes are drawn one after another; the second pass trails its first a little
+            var sp = M.clamp(prog * ns - si);
+            if (pass) sp = M.clamp(sp * 1.25 - 0.25);
+            if (sp <= 0) break;
+            var pts = shape[si], st = [];
+            var last = (pts.length - 1) * sp, full = Math.floor(last);
+            var ks = sd + boil + si * 31 + pass * 977;
+            for (var k = 0; k <= full; k++)
+                st.push({ x: pts[k].x + ox + pa * M.rs(ks, k, 805), y: pts[k].y + oy + pa * M.rs(ks, k, 806) });
+            if (full < pts.length - 1 && last > full) {
+                var f = last - full, p0 = pts[full], p1 = pts[full + 1];
+                st.push({ x: p0.x + ox + (p1.x - p0.x) * f, y: p0.y + oy + (p1.y - p0.y) * f });
+            }
+            if (st.length > 1) out.push(st);
         }
-        if (st.length > 1) out.push(st);
     }
     return out;
+}
+
+function penStrokes(L, t, role, w, h) {
+    var kind = markKind(L, role);
+    var prog = markProg(L, t, role);
+    if (!kind || prog <= 0 || w < 2 || h < 2) return [];
+    var sd = L.seed + 77 + (role === "exit" ? 5 : 0) + (role === "hilite" ? 11 : 0);
+    return drawStrokes(markShape(kind, sd, w, h), prog, sd, t, h, L.rough === true);
+}
+
+// Doodle di of a maximal line, in a w x h box: drawn quickly once its moment comes, then it stays
+function doodleStrokes(L, t, di, w, h) {
+    var d = L && L.doodles ? L.doodles[di] : null;
+    if (!d || w < 2 || h < 2) return [];
+    var prog = M.E.outQuad((t - d.at) / d.dur);
+    if (prog <= 0) return [];
+    var sd = L.seed + 300 + di * 17;
+    return drawStrokes(markShape(d.kind, sd, w, h), prog, sd, t, h, true);
 }
 
 // One word: { s, alpha, rot (deg), dx, dy (em), ghosts: [{ dx, dy (em), a } x4], bar, barDx [3] (em), under }
