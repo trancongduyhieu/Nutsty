@@ -535,6 +535,13 @@ function film(motion, t) {
                 f.bulge = Math.max(f.bulge, 0.05 * k);
             }
         }
+        // A rush flickers its colour fringe on every word
+        if (L.pile.role === "rush") {
+            for (var rw = 0; rw < L.words.length; rw++) {
+                var rs = t - (L.words[rw].start - LEAD);
+                if (rs >= 0 && rs < 0.3) f.chroma = Math.max(f.chroma, 2.5 * Math.exp(-rs * 10));
+            }
+        }
         // A peak's big moment: the bulb switching on, or the hero landing
         if (L.pile.role === "peak") {
             var hit = t - peakOnAt(L);
@@ -681,6 +688,16 @@ function camera(L, t, W, H) {
         }
     }
     cam.s *= 1 + 0.035 * punch;
+    // a rush jolts the camera on every word
+    if (P.role === "rush") {
+        var R = P.lines[0], jolt = 0, jw = 0;
+        for (var rw = 0; rw < R.words.length; rw++) {
+            var js = t - (R.words[rw].start - LEAD);
+            if (js >= 0 && js < 0.3) { var jk = Math.exp(-js * 14); if (jk > jolt) { jolt = jk; jw = rw; } }
+        }
+        cam.rot += 1.2 * jolt * (M.r(R.seed, jw, 453) < 0.5 ? -1 : 1);
+        cam.s *= 1 + 0.02 * jolt;
+    }
     // the stamp slams down and the frame shakes for a beat
     if (P.role === "peak" && P.fx === "stamp") {
         var sh = t - peakOnAt(L);
@@ -774,6 +791,16 @@ function markShape(kind, sd, w, h) {
         }
         break;
     }
+    case "rushline":
+        // a tight zigzag with a fast under stroke below it
+        n = Math.max(8, Math.round(w / (h * 0.5)));
+        pts = [];
+        for (i = 0; i <= n; i++)
+            pts.push({ x: w * (i / n) + h * 0.08 * M.rs(sd, i, 818), y: h * ((i % 2 ? 0.62 : 0.12) + 0.08 * M.rs(sd, i, 819)) });
+        S.push(pts);
+        S.push([{ x: w * 0.02, y: h * (0.9 + 0.04 * M.rs(sd, 1, 820)) }, { x: w * 0.5, y: h * (0.86 + 0.05 * M.rs(sd, 2, 821)) },
+                { x: w * 0.98, y: h * (0.92 + 0.04 * M.rs(sd, 3, 822)) }]);
+        break;
     case "zigzag":
         n = Math.max(6, Math.round(w / (h * 0.75)));
         pts = [];
@@ -953,6 +980,9 @@ function markShape(kind, sd, w, h) {
         S.push(pts);
         break;
     }
+    case "tick":
+        S.push([{ x: w * 0.08, y: h * 0.55 }, { x: w * 0.36, y: h * 0.88 }, { x: w * 0.94, y: h * 0.08 }]);
+        break;
     case "cord":
         pts = [];
         for (i = 0; i <= 24; i++) { u = i / 24; pts.push({ x: w / 2 + w * 0.12 * Math.sin(u * 9 + M.r(sd, 1, 841) * 6) * u, y: h * u }); }
@@ -1003,9 +1033,9 @@ function markShape(kind, sd, w, h) {
 
 // Draws the strokes of one mark up to prog (0..1), one stroke after another. A rough mark (the
 // maximal cut) gets a second pass of every stroke, wobblier and a little off, after rough.js.
-function drawStrokes(shape, prog, sd, t, h, rough) {
+function drawStrokes(shape, prog, sd, t, h, rough, boilRate) {
     var out = [];
-    var boil = Math.floor(t * 8);
+    var boil = Math.floor(t * (boilRate || 8));
     var amp = Math.min(2.2, Math.max(0.8, h * 0.03));
     var ns = shape.length;
     var passes = rough && ns <= 3 ? 2 : 1;
@@ -1037,7 +1067,23 @@ function penStrokes(L, t, role, w, h) {
     var prog = markProg(L, t, role);
     if (!kind || prog <= 0 || w < 2 || h < 2) return [];
     var sd = L.seed + 77 + (role === "exit" ? 5 : 0) + (role === "hilite" ? 11 : 0);
-    return drawStrokes(markShape(kind, sd, w, h), prog, sd, t, h, L.rough === true);
+    return drawStrokes(markShape(kind, sd, w, h), prog, sd, t, h, L.rough === true, L.boil);
+}
+
+// The mark on word wi: the hero mark on the hero, or a rush line's tick / small ring on any word
+function wordMarkKind(L, wi) {
+    if (!L) return "";
+    if (wi === L.ringWi && L.heroMark) return L.heroMark;
+    return (L.wordMarks && L.wordMarks[wi]) || "";
+}
+function wordStrokes(L, t, wi, w, h) {
+    var kind = wordMarkKind(L, wi);
+    if (!kind || w < 2 || h < 2) return [];
+    if (wi === L.ringWi && kind === L.heroMark) return penStrokes(L, t, "hero", w, h);
+    var prog = M.E.outQuad((t - (L.words[wi].start - LEAD)) / 0.18);
+    if (prog <= 0) return [];
+    var sd = L.seed + 900 + wi * 23;
+    return drawStrokes(markShape(kind, sd, w, h), prog, sd, t, h, true, L.boil);
 }
 
 // Doodle di of a maximal line, in a w x h box: drawn quickly once its moment comes, then it stays
@@ -1047,7 +1093,7 @@ function doodleStrokes(L, t, di, w, h) {
     var prog = M.E.outQuad((t - d.at) / d.dur);
     if (prog <= 0) return [];
     var sd = L.seed + 300 + di * 17;
-    return drawStrokes(markShape(d.kind, sd, w, h), prog, sd, t, h, true);
+    return drawStrokes(markShape(d.kind, sd, w, h), prog, sd, t, h, true, L.boil);
 }
 
 // A peak line's big move. The bulb drops on its cord from enterAt (a damped spring, overshooting and
@@ -1100,7 +1146,7 @@ function peakStrokes(L, t, part, w, h) {
     }
     if (prog <= 0) return [];
     var sd = L.seed + 500 + part.length * 13;
-    return drawStrokes(markShape(kind, sd, w, h), prog, sd, t, h, true);
+    return drawStrokes(markShape(kind, sd, w, h), prog, sd, t, h, true, L.boil);
 }
 
 // One word: { s, alpha, rot (deg), dx, dy (em), ghosts: [{ dx, dy (em), a } x4], bar, barDx [3] (em), under }

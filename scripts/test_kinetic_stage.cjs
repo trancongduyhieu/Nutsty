@@ -240,6 +240,34 @@ test("non-peak lines untouched", () => {
     }
 });
 
+test("rush word marks", () => {
+    const m = K.build(longSong(), { max: true });
+    const L = m.piles.find(P => P.role === "rush").lines[0];
+    const wi = L.mainIdx.find(i => i !== L.ringWi);
+    const land = L.words[wi].start - K.LEAD;
+    assert.ok(["tick", "ring"].indexOf(K.wordMarkKind(L, wi)) >= 0);
+    assert.strictEqual(K.wordStrokes(L, land - 0.05, wi, 120, 60).length, 0);
+    assert.ok(K.wordStrokes(L, land + 0.2, wi, 120, 60).length > 0);
+    // a duo keeps the old hero mark on its hero and nothing elsewhere
+    const D = m.piles.find(P => P.role === "duo" || P.role === "stack").lines.find(L => L.ringWi >= 0);
+    assert.strictEqual(K.wordMarkKind(D, D.ringWi), D.heroMark);
+    D.mainIdx.filter(i => i !== D.ringWi).forEach(i => assert.strictEqual(K.wordMarkKind(D, i), ""));
+});
+
+test("rush line mark draws", () => { const m=K.build(longSong(),{max:true}); const R=m.piles.find(P=>P.role==="rush").lines[0];
+  assert.strictEqual(R.lineMark,"rushline");
+  const S=K.penStrokes(R,R.end,"line",400,40); assert.ok(S.length>=2, "zigzag and under stroke"); });
+test("rush boils faster", () => {
+    const m = K.build(longSong(), { max: true });
+    const R = m.piles.find(P => P.role === "rush").lines[0];
+    const wi = R.mainIdx[0];
+    const t0 = Math.ceil((R.end + 0.3) * 12) / 12 + 0.001;
+    assert.notStrictEqual(JSON.stringify(K.wordStrokes(R, t0, wi, 120, 60)), JSON.stringify(K.wordStrokes(R, t0 + 1 / 12, wi, 120, 60)));
+    const N = m.piles.find(P => P.role === "stack").lines.find(L => L.lineMark);
+    const t1 = Math.ceil((N.end + 1) * 8) / 8 + 0.01;
+    assert.strictEqual(JSON.stringify(K.penStrokes(N, t1, "line", 400, 40)), JSON.stringify(K.penStrokes(N, t1 + 0.05, "line", 400, 40)));
+});
+
 test("NaN sweep", () => {
     for (const max of [false, true]) {
         const m = K.build(longSong().concat(demo.map(e => Object.assign({}, e, { time: (e.time !== undefined ? e.time : 0) + 200 }))), { max: max });
@@ -254,6 +282,7 @@ test("NaN sweep", () => {
                 for (const role of ["line", "hero", "hilite", "exit"]) finiteDeep(K.penStrokes(L, t, role, 400, 40), role);
                 L.words.forEach((w, wi) => {
                     finiteDeep(K.wordFx(L, t, wi), "wordFx");
+                    finiteDeep(K.wordStrokes(L, t, wi, 120, 60), "wordStrokes");
                     w.chars.forEach((c, ci) => finiteDeep(K.letterState(L, t, wi, ci), "letterState"));
                 });
             }
