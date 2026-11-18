@@ -158,6 +158,7 @@ Item {
             activeLyrics: root.activeLyrics
             currentTime: root.currentTime
             isPlaying: root.isPlaying
+            artist: (root.currentTrack && root.currentTrack.artist) ? root.currentTrack.artist : ""
             colHighlight: root.colHighlight
             colActiveText: root.colActiveText
             colShadowDir: root.colShadowDir

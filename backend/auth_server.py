@@ -245,6 +245,8 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             listening_routes.handle_get_listening_recap(self, query)
         elif path == "/api/listening/stats":
             listening_routes.handle_get_listening_stats(self, query)
+        elif path == "/api/listening/genre":
+            listening_routes.handle_get_listening_genre(self, query)
         elif path == "/api/listening/genres":
             listening_routes.handle_get_listening_genres(self, query)
         elif path == "/api/listening/snippet":

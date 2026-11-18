@@ -253,6 +253,57 @@ def handle_get_recap_artist_song(handler, query):
         handler._send_json({"success": False, "error": str(e)}, 500)
 
 
+_genre_fail_cache = set()  # artists that failed lookup this run; never retried
+
+
+def handle_get_listening_genre(handler, query):
+    """Single-artist genre lookup for the kinetic lyrics stage. Shares the on-disk cache and
+    _lookup_genre with handle_get_listening_genres, but never retries a failed artist within
+    the same process lifetime."""
+    import json
+    import threading
+    global _genre_lock
+    val = query.get("artist", [""])
+    artist = (val[0] if isinstance(val, (list, tuple)) else str(val or "")).strip()
+    try:
+        if not artist:
+            handler._send_json({"success": True, "genre": ""}, 200)
+            return
+        if _genre_lock is None:
+            _genre_lock = threading.Lock()
+        key = artist.lower()
+        with _genre_lock:
+            path = _genre_cache_path()
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    known = json.load(f)
+            except Exception:
+                known = {}
+            cached = known.get(key)
+            if cached is not None:
+                handler._send_json({"success": True, "genre": cached}, 200)
+                return
+            if key in _genre_fail_cache:
+                handler._send_json({"success": True, "genre": ""}, 200)
+                return
+            try:
+                g = _lookup_genre(artist)
+            except Exception:
+                g = ""
+            if g:
+                known[key] = g
+                try:
+                    with open(path, "w", encoding="utf-8") as f:
+                        json.dump(known, f, ensure_ascii=False)
+                except Exception:
+                    pass
+            else:
+                _genre_fail_cache.add(key)
+        handler._send_json({"success": True, "genre": g}, 200)
+    except Exception as e:
+        handler._send_json({"success": False, "error": str(e)}, 500)
+
+
 def handle_get_recap_snippet(handler, query):
     """A playable URL for one recap song: the file itself when it is on disk, otherwise its audio stream."""
     track = (query.get("track", [""])[0] or "").strip()

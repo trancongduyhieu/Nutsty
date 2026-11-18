@@ -88,11 +88,22 @@ var PROP_D = { balloon: 0.9, note: 1.0, plane: 0.8, roll: 0.7, vine: 0, jack: 0,
 // a prop lands no sooner than this after its line starts coming in, so the line is whole by then
 var PROP_SETTLE = 0.6;
 var PEAK_FX = ["bulb", "spot", "rays", "ink", "stamp"].concat(PROP_FX);
+var SHARED_PEAKS = ["spot", "rays", "ink", "stamp"];
 var DUO_FX = ["arrow", "brace", "versus", "swoop", "pair"];
 var STACK_FX = ["notebook", "numbers", "stairs", "frame", "draft"];
 var PILE_DOODLES = 5;     // doodles a whole duo or stack may carry
 var RUSH_DOODLES = 10;    // one per word on a rush line, at most this many
 var RUSH_KINDS = ["speed", "sparkle", "bang", "burst"];
+var SETS = {
+    sweet: { doodles: DOODLES, rush: RUSH_KINDS, peaks: PEAK_FX },
+    rough: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS },
+    street: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS },
+    dance: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS },
+    calm: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS },
+    classic: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS },
+    anime: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS },
+    folk: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS }
+};
 // How the words of a line sit: level, a zigzag (one up, one down), stairs climbing, or an arc
 var STAGGER_ORDER = ["zig", "stairs", "arc", "zig"];
 
@@ -157,13 +168,190 @@ function tempoRoles(lines) {
     return roles;
 }
 
+// Rate of a whole song: median letters per second across non-empty lines
+function songMedianRate(lyrics) {
+    if (!lyrics || lyrics.length === 0) return 0;
+    var rates = [];
+    for (var i = 0; i < lyrics.length; i++) {
+        var entry = lyrics[i];
+        if (!entry) continue;
+        if (entry.words && entry.words.length > 0) {
+            var r = rateOf(entry);
+            if (r > 0) rates.push(r);
+        } else {
+            var start = M.toSec(entry.time !== undefined ? entry.time : entry.startTime);
+            var nextStart = i + 1 < lyrics.length ? M.toSec(lyrics[i + 1].time !== undefined ? lyrics[i + 1].time : lyrics[i + 1].startTime) : start + 4;
+            var words = M.wordsOf(entry, nextStart);
+            if (words && words.length > 0) {
+                var L = { start: start, end: words[words.length - 1].end, words: words };
+                var r2 = rateOf(L);
+                if (r2 > 0) rates.push(r2);
+            }
+        }
+    }
+    if (rates.length === 0) return 0;
+    rates.sort(function (a, b) { return a - b; });
+    return quantile(rates, 0.5);
+}
+
+var LOVE_WORDS = {};
+("yêu thương nhớ tim hôn love loving lover loves loved baby babe heart hearts kiss kisses kissing kissed darling sweetheart honey")
+    .split(" ").forEach(function (w) { if (w) LOVE_WORDS[w] = true; });
+
+// Love-word threshold tuned on the 14 real .lrc files in ~/Music/Downloads_Phone/:
+//   0.1044 (26/249) Beggin'
+//   0.0556 (14/252) Từng Quen
+//   0.0544 (24/441) Dù Cho Mai Về Sau
+//   0.0543 (14/258) Không Buông
+//   0.0538 ( 5/ 93) Overdose
+//   0.0441 (12/272) Overthink
+//   0.0320 ( 4/125) Earrings
+//   0.0286 (15/524) Chúng Ta Của Tương Lai
+//   0.0255 ( 4/157) Self Aware
+//   0.0216 ( 5/232) giữ lấy làm gì
+//   0.0106 ( 2/189) 05 (Không Phai)
+//   0.0000 ( 0/151) Let me battle
+//   0.0000 ( 0/ 75) 死神
+//   0.0000 ( 0/ 57) 西楼别序
+// Threshold 0.035 cleanly separates romantic ballads (>= 4.4%) from non-ballads.
+var SWEET_LOVE_THRESHOLD = 0.035;
+
+function loveScore(lyrics) {
+    if (!lyrics || lyrics.length === 0) return 0;
+    var loveCount = 0, contentCount = 0;
+    function addWord(w) {
+        var b = bare(w).replace(/\u0443/g, "y");
+        if (!b) return;
+        var isLove = LOVE_WORDS[b] === true;
+        var isFunc = FUNC[b] === true;
+        if (!isFunc || isLove) contentCount++;
+        if (isLove) loveCount++;
+    }
+    for (var i = 0; i < lyrics.length; i++) {
+        var entry = lyrics[i];
+        if (!entry) continue;
+        if (entry.words && entry.words.length > 0) {
+            for (var w = 0; w < entry.words.length; w++) {
+                var wd = entry.words[w];
+                var t = (wd && wd.text) ? String(wd.text) : "";
+                if (t) addWord(t);
+            }
+            continue;
+        }
+        var text = String(entry.text || "");
+        var parts = text.split(/\s+/);
+        for (var p = 0; p < parts.length; p++) {
+            if (parts[p]) addWord(parts[p]);
+        }
+    }
+    return contentCount > 0 ? (loveCount / contentCount) : 0;
+}
+
+var GENRE_MAP = {
+    // Pop family (maps to 'pop', which is a family, not a set)
+    "pop": "pop", "k-pop": "pop", "j-pop": "pop", "c-pop": "pop", "cantopop": "pop", "mandopop": "pop",
+    "teen pop": "pop", "britpop": "pop", "dance-pop": "pop", "electropop": "pop", "synthpop": "pop",
+    "indie pop": "pop", "power pop": "pop", "v-pop": "pop",
+
+    // Rough set (rock, metal, punk, etc.)
+    "rock": "rough", "hard rock": "rough", "metal": "rough", "heavy metal": "rough",
+    "death metal/black metal": "rough", "death metal": "rough", "black metal": "rough",
+    "punk": "rough", "punk rock": "rough", "alternative": "rough", "alternative rock": "rough",
+    "grunge": "rough", "emo": "rough", "goth": "rough", "gothic": "rough", "industrial": "rough",
+    "hardcore": "rough", "rock & roll": "rough", "psychedelic": "rough", "garage rock": "rough",
+    "post-punk": "rough", "metalcore": "rough", "thrash metal": "rough",
+
+    // Street set (hip-hop, rap, trap)
+    "hip-hop/rap": "street", "hip-hop": "street", "rap": "street", "hip hop": "street",
+    "gangsta rap": "street", "trap": "street", "east coast rap": "street", "west coast rap": "street",
+    "underground rap": "street", "old school rap": "street", "urban": "street", "hardcore rap": "street",
+    "uk drill": "street", "drill": "street",
+
+    // Dance set (electronic, house, techno...)
+    "dance": "dance", "electronic": "dance", "house": "dance", "techno": "dance", "trance": "dance",
+    "dubstep": "dance", "drum & bass": "dance", "dnb": "dance", "edm": "dance", "club": "dance",
+    "breakbeat": "dance", "idm": "dance", "hardstyle": "dance", "electronica": "dance",
+    "ambient house": "dance", "deep house": "dance", "tech house": "dance", "garage": "dance",
+
+    // Calm set (ambient, new age, classical...)
+    "new age": "calm", "ambient": "calm", "downtempo": "calm", "chillout": "calm", "instrumental": "calm",
+    "classical": "calm", "orchestral": "calm", "opera": "calm", "chamber music": "calm", "meditation": "calm",
+    "relaxation": "calm", "healing": "calm", "sleep": "calm", "choral": "calm", "piano": "calm",
+
+    // Classic set (jazz, blues, funk, soul...)
+    "jazz": "classic", "smooth jazz": "classic", "big band": "classic", "bebop": "classic",
+    "blues": "classic", "contemporary blues": "classic", "delta blues": "classic", "chicago blues": "classic",
+    "funk": "classic", "disco": "classic", "motown": "classic", "soul": "classic", "r&b/soul": "classic",
+    "neo-soul": "classic", "doo wop": "classic", "rhythm and blues": "classic", "traditional pop": "classic",
+
+    // Anime set (soundtracks, anime, game...)
+    "anime": "anime", "soundtrack": "anime", "soundtracks": "anime", "original score": "anime",
+    "film score": "anime", "tv soundtrack": "anime", "video game": "anime", "video game music": "anime",
+    "disney": "anime", "kayokyoku": "anime", "enka": "anime", "musicals": "anime",
+
+    // Folk set (folk, country, regional, world...)
+    "folk": "folk", "country": "folk", "contemporary country": "folk", "country & western": "folk",
+    "americana": "folk", "bluegrass": "folk", "latin": "folk", "latin urban": "folk",
+    "reggae": "folk", "dancehall": "folk", "ska": "folk", "roots reggae": "folk", "dub": "folk",
+    "worldwide": "folk", "world": "folk", "african": "folk", "afrobeats": "folk", "afro-pop": "folk",
+    "brazilian": "folk", "samba": "folk", "bossa nova": "folk", "indian": "folk", "bollywood": "folk",
+    "celtic": "folk", "flamenco": "folk", "tango": "folk", "regional mexican": "folk", "traditional folk": "folk",
+
+    // Sweet family (vocal, easy listening, singer/songwriter, christian...)
+    "singer/songwriter": "sweet", "vocal": "sweet", "vocals": "sweet", "easy listening": "sweet",
+    "lounge": "sweet", "christian": "sweet", "gospel": "sweet", "christian & gospel": "sweet",
+    "children's music": "sweet", "kids": "sweet", "holiday": "sweet", "lullabies": "sweet"
+};
+
+function familyOf(genre) {
+    if (!genre || typeof genre !== "string") return null;
+    var s = genre.toLowerCase().trim();
+    if (!s) return null;
+    if (GENRE_MAP[s]) return GENRE_MAP[s];
+
+    // Keyword fallbacks
+    if (/\b(metal|rock|punk|grunge|emo|goth|hardcore)\b/.test(s) || s.indexOf("metal") >= 0 || s.indexOf("rock") >= 0) return "rough";
+    if (/\b(rap|hip-hop|hip hop|trap|drill)\b/.test(s)) return "street";
+    if (/\b(dance|house|techno|trance|dubstep|edm|dnb|electronic)\b/.test(s)) return "dance";
+    if (/\b(ambient|classical|new age|orchestral|downtempo|meditation|instrumental)\b/.test(s)) return "calm";
+    if (/\b(jazz|blues|funk|disco|motown|soul)\b/.test(s)) return "classic";
+    if (/\b(anime|soundtrack|score|disney|kayokyoku|enka)\b/.test(s)) return "anime";
+    if (/\b(folk|country|latin|reggae|african|brazilian|indian|world|celtic|samba|bossa)\b/.test(s)) return "folk";
+    if (/\b(singer\/songwriter|vocal|easy listening|christian|gospel|children|lullab)\b/.test(s)) return "sweet";
+    if (/\b(pop|k-pop|j-pop|c-pop)\b/.test(s)) return "pop";
+
+    return null;
+}
+
+function pickSet(genre, lyrics) {
+    var family = familyOf(genre);
+    var love = loveScore(lyrics);
+    var sweetLyrics = love >= SWEET_LOVE_THRESHOLD;
+    var med = songMedianRate(lyrics);
+    var fast = med >= 11.0;
+
+    if (family === "rough" || family === "street" || family === "dance") {
+        return (sweetLyrics && !fast) ? "sweet" : family;
+    }
+    if (family === "pop") {
+        return (fast && !sweetLyrics) ? "dance" : "sweet";
+    }
+    if (family === null) {
+        if (sweetLyrics) return "sweet";
+        if (fast) return "dance";
+        return "sweet";
+    }
+    return family;
+}
+
 // The maximal cut: give every pile its role and pick, then dress its lines for that role
-function dressPiles(piles) {
+function dressPiles(piles, set) {
+    var setCfg = (set && SETS[set]) ? SETS[set] : SETS.sweet;
     var lastFx = {};
     for (var q = 0; q < piles.length; q++) {
         var P = piles[q];
         if (!P.role) P.role = P.lines.length === 2 ? "duo" : "stack";
-        var pool = P.role === "peak" ? (P.lines[0].heroOk ? PEAK_FX : ["ink"])
+        var pool = P.role === "peak" ? (P.lines[0].heroOk ? setCfg.peaks : ["ink"])
                  : P.role === "duo" ? DUO_FX : (P.role === "stack" ? STACK_FX : []);
         P.fx = "";
         if (pool.length > 0) {
@@ -173,7 +361,7 @@ function dressPiles(piles) {
             lastFx[P.role] = P.fx;
         }
         if (P.role === "peak") dressPeak(P.lines[0]);
-        else if (P.role === "rush") dressRush(P.lines[0]);
+        else if (P.role === "rush") dressRush(P.lines[0], set);
         else { capDoodles(P); if (P.role === "duo") dressDuo(P); }
     }
 }
@@ -202,13 +390,14 @@ function dressPeak(L) {
 
 // A rush throws a doodle off every word as it lands, speed lines both sides, a zigzag and a line
 // under it, and a tick or a small ring on each word; its strokes boil half again as fast
-function dressRush(L) {
+function dressRush(L, set) {
+    var setCfg = (set && SETS[set]) ? SETS[set] : SETS.sweet;
     var main = L.mainIdx, n = Math.min(RUSH_DOODLES, main.length);
     L.doodles = [];
     for (var k = 0; k < n; k++) {
         var w = L.words[main[k]];
         L.doodles.push({
-            kind: RUSH_KINDS[Math.floor(M.r(L.seed, k, 441) * RUSH_KINDS.length)],
+            kind: setCfg.rush[Math.floor(M.r(L.seed, k, 441) * setCfg.rush.length)],
             spot: k % 2 ? "below" : "above",
             u: (k + 0.5) / main.length,
             k: 0.5 + 0.2 * M.r(L.seed, k, 442),
@@ -242,6 +431,9 @@ function capDoodles(P) {
 function build(lyrics, opts) {
     lyrics = lyrics || [];
     var maxi = !!(opts && opts.max);
+    var set = (opts && opts.set) ? opts.set : pickSet(null, lyrics);
+    if (!SETS[set]) set = "sweet";
+    var setCfg = SETS[set];
     var songSeed = 0;
     for (var s = 0; s < lyrics.length && s < 4; s++) songSeed ^= M.hashText(String(lyrics[s].text || "") + s);
 
@@ -431,7 +623,7 @@ function build(lyrics, opts) {
                 var spot = DOODLE_SPOTS[Math.floor(M.r(seed, di, 431) * DOODLE_SPOTS.length)];
                 if (spot === "below" && L.lineMark) spot = "above";
                 L.doodles.push({
-                    kind: DOODLES[Math.floor(M.r(seed, di, 432) * DOODLES.length)],
+                    kind: setCfg.doodles[Math.floor(M.r(seed, di, 432) * setCfg.doodles.length)],
                     spot: spot,
                     u: 0.08 + 0.84 * ((di + 0.5 * M.r(seed, di, 433)) / nd),   // spread along the line
                     k: 0.75 + 0.4 * M.r(seed, di, 434) + 0.15 * loud,           // size, share of base
@@ -474,7 +666,7 @@ function build(lyrics, opts) {
         cur.slot = pile.lines.length;
         pile.lines.push(cur);
     }
-    if (maxi) dressPiles(piles);
+    if (maxi) dressPiles(piles, set);
     var prevShot = "", prevExit = "";
     for (var q = 0; q < piles.length; q++) {
         var P = piles[q];
@@ -518,7 +710,7 @@ function build(lyrics, opts) {
         var from = piles[gq].goneAt, to = piles[gq + 1].lines[0].enterAt;
         if (to - from >= GAP_MIN) gaps.push({ from: from, to: to });
     }
-    return { lines: lines, piles: piles, gaps: gaps, seed: songSeed, max: maxi };
+    return { lines: lines, piles: piles, gaps: gaps, seed: songSeed, max: maxi, set: set };
 }
 
 // The waiting dots between piles: { alpha, prog (0..1 towards the next line), t0 }

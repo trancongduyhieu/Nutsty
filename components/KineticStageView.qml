@@ -34,6 +34,10 @@ Item {
     property bool isLightArea: false
     // Preset 8: the maximal cut, every line covered in pen marks and doodles (kinetic_stage.js)
     property bool maximal: false
+    property string artist: ""
+    property string currentGenre: ""
+    property var genreCache: ({})
+    readonly property string apiUrl: "http://127.0.0.1:17890"
 
     FontLoader { id: heavyFont; source: "../assets/fonts/Montserrat-Black.ttf" }
     FontLoader { id: softFont; source: "../assets/fonts/InstrumentSerif-Italic.ttf" }
@@ -82,9 +86,48 @@ Item {
 
     function rebuild() {
         root.bodyW = {};
-        root.motion = Stage.build(root.activeLyrics, { max: root.maximal });
+        var pickedSet = root.maximal ? Stage.pickSet(root.currentGenre, root.activeLyrics) : "sweet";
+        root.motion = Stage.build(root.activeLyrics, { max: root.maximal, set: pickedSet });
         visibleLines.clear();
         syncVisible();
+    }
+
+    function fetchGenre() {
+        var a = (root.artist || "").trim();
+        if (!a) {
+            root.currentGenre = "";
+            return;
+        }
+        var key = a.toLowerCase();
+        if (root.genreCache.hasOwnProperty(key)) {
+            var cached = root.genreCache[key];
+            if (cached !== root.currentGenre) {
+                root.currentGenre = cached;
+                if (root.maximal && root.activeLyrics && root.activeLyrics.length > 0) rebuild();
+            }
+            return;
+        }
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", root.apiUrl + "/api/listening/genre?artist=" + encodeURIComponent(a), true);
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                var g = "";
+                if (xhr.status === 200) {
+                    try {
+                        var res = JSON.parse(xhr.responseText);
+                        if (res && res.success && res.genre) g = res.genre;
+                    } catch (e) {}
+                }
+                root.genreCache[key] = g;
+                if ((root.artist || "").trim().toLowerCase() === key) {
+                    if (root.currentGenre !== g) {
+                        root.currentGenre = g;
+                        if (root.maximal && root.activeLyrics && root.activeLyrics.length > 0) rebuild();
+                    }
+                }
+            }
+        };
+        xhr.send();
     }
 
     function syncVisible() {
@@ -123,10 +166,15 @@ Item {
         if (Math.abs(root.currentTime - root.animClock) > 1.0) root.animClock = root.currentTime;
         if (root.renderable) advanceClock();
     }
+    onArtistChanged: fetchGenre()
     onActiveLyricsChanged: rebuild()
     onMaximalChanged: rebuild()
     onRenderableChanged: if (renderable) { root.animClock = root.currentTime; advanceClock(); }
-    Component.onCompleted: { root.animClock = root.currentTime; rebuild(); }
+    Component.onCompleted: {
+        root.animClock = root.currentTime;
+        if (root.artist) fetchGenre();
+        rebuild();
+    }
 
     readonly property var filmFx: Stage.film(root.motion, root.t)
     readonly property var gap: Stage.gapAt(root.motion, root.t)

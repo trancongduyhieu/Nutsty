@@ -448,10 +448,116 @@ test("stuck plane keeps clear of the next word", () => {
     for (const dt of [0.3, 1, 2]) assert.ok(maxX(pcs(L, on + dt)[0]) < PW_ + 0.5 * PX, "tail over the next word " + dt);
 });
 
+test("familyOf on real names", () => {
+    assert.strictEqual(K.familyOf("Pop"), "pop");
+    assert.strictEqual(K.familyOf("Hip-Hop/Rap"), "street");
+    assert.strictEqual(K.familyOf("J-Pop"), "pop");
+    assert.strictEqual(K.familyOf("Hard Rock"), "rough");
+    assert.strictEqual(K.familyOf("K-Pop"), "pop");
+    assert.strictEqual(K.familyOf("New Age"), "calm");
+    assert.strictEqual(K.familyOf("Death Metal/Black Metal"), "rough");
+    assert.strictEqual(K.familyOf("House"), "dance");
+    assert.strictEqual(K.familyOf("Smooth Jazz"), "classic");
+    assert.strictEqual(K.familyOf("Anime"), "anime");
+    assert.strictEqual(K.familyOf("Country"), "folk");
+    assert.strictEqual(K.familyOf("Unknown Genre"), null);
+    assert.strictEqual(K.familyOf(""), null);
+    assert.strictEqual(K.familyOf(null), null);
+});
+
+test("pickSet covers every branch of the rule", () => {
+    // 1. Sweet slow ballad lyrics (high love score, slow tempo)
+    const sweetBallad = song([
+        [0, "anh yêu em nhiều lắm em ơi"],
+        [3.0, "thương nhớ từng phút giây bên em"],
+        [6.0, "trái tim này trao trọn về em"]
+    ]);
+    assert.ok(K.loveScore(sweetBallad) >= 0.035, "sweetBallad should have sweet lyrics");
+    assert.ok(K.songMedianRate(sweetBallad) < 11.0, "sweetBallad should not be fast");
+
+    // 2. Fast non-sweet lyrics (low love score, fast tempo)
+    const fastNonSweet = song([
+        [0, FAST[0]],
+        [1.6, FAST[1]],
+        [3.2, FAST[2]],
+        [4.8, FAST[3]]
+    ]);
+    assert.ok(K.loveScore(fastNonSweet) < 0.035, "fastNonSweet should not have sweet lyrics");
+    assert.ok(K.songMedianRate(fastNonSweet) >= 11.0, "fastNonSweet should be fast");
+
+    // 3. Mid non-sweet lyrics (low love score, not fast)
+    const midNonSweet = song([
+        [0, "ngày mai nắng lên rồi trên phố xưa"],
+        [3.0, "bước chân ai đi về miền xa xôi"],
+        [6.0, "mây trôi lững lờ qua khung cửa sổ"]
+    ]);
+    assert.ok(K.loveScore(midNonSweet) < 0.035, "midNonSweet should not have sweet lyrics");
+    assert.ok(K.songMedianRate(midNonSweet) < 11.0, "midNonSweet should not be fast");
+
+    // 4. Fast sweet lyrics (high love score, fast tempo)
+    const fastSweet = song([
+        [0, "yêu em yêu em yêu em chạy thật nhanh không ngừng nghỉ"],
+        [1.5, "thương em thương em thương em vội vàng qua bao mùa mưa"],
+        [3.0, "nhớ em nhớ em nhớ em từng ngày trôi qua thật nhanh"]
+    ]);
+    assert.ok(K.loveScore(fastSweet) >= 0.035, "fastSweet should have sweet lyrics");
+    assert.ok(K.songMedianRate(fastSweet) >= 11.0, "fastSweet should be fast");
+
+    // Branch: Rough, street or dance family, and sweetLyrics and not fast -> sweet
+    assert.strictEqual(K.pickSet("Hard Rock", sweetBallad), "sweet");
+    assert.strictEqual(K.pickSet("Hip-Hop/Rap", sweetBallad), "sweet");
+    assert.strictEqual(K.pickSet("House", sweetBallad), "sweet");
+
+    // Fast rough/street/dance with sweet lyrics stays rough/street/dance
+    assert.strictEqual(K.pickSet("Hard Rock", fastSweet), "rough");
+    assert.strictEqual(K.pickSet("Hip-Hop/Rap", fastSweet), "street");
+    assert.strictEqual(K.pickSet("House", fastSweet), "dance");
+
+    // Non-sweet rough/street/dance stays rough/street/dance
+    assert.strictEqual(K.pickSet("Hard Rock", midNonSweet), "rough");
+    assert.strictEqual(K.pickSet("Hip-Hop/Rap", fastNonSweet), "street");
+    assert.strictEqual(K.pickSet("House", fastNonSweet), "dance");
+
+    // Branch: Pop family: dance when fast and not sweetLyrics, otherwise sweet
+    assert.strictEqual(K.pickSet("Pop", fastNonSweet), "dance");
+    assert.strictEqual(K.pickSet("K-Pop", fastNonSweet), "dance");
+    assert.strictEqual(K.pickSet("J-Pop", fastNonSweet), "dance");
+    assert.strictEqual(K.pickSet("Pop", fastSweet), "sweet");
+    assert.strictEqual(K.pickSet("Pop", midNonSweet), "sweet");
+    assert.strictEqual(K.pickSet("Pop", sweetBallad), "sweet");
+
+    // Branch: null family: sweet when sweetLyrics, dance when fast, otherwise sweet
+    assert.strictEqual(K.pickSet(null, sweetBallad), "sweet");
+    assert.strictEqual(K.pickSet(null, fastSweet), "sweet");
+    assert.strictEqual(K.pickSet(null, fastNonSweet), "dance");
+    assert.strictEqual(K.pickSet(null, midNonSweet), "sweet");
+
+    // Branch: Any other family: keep it
+    assert.strictEqual(K.pickSet("New Age", fastNonSweet), "calm");
+    assert.strictEqual(K.pickSet("Smooth Jazz", sweetBallad), "classic");
+    assert.strictEqual(K.pickSet("Anime", sweetBallad), "anime");
+    assert.strictEqual(K.pickSet("Country", fastSweet), "folk");
+    assert.strictEqual(K.pickSet("Singer/Songwriter", fastNonSweet), "sweet");
+});
+
+test("sweet set builds identical piles and fx", () => {
+    const ly = longSong();
+    const mSweet = K.build(ly, { max: true, set: "sweet" });
+    const mDefault = K.build(ly, { max: true }); // defaults to pickSet(null, ly) -> sweet
+    assert.strictEqual(mSweet.set, "sweet");
+    assert.strictEqual(mDefault.set, "sweet");
+    assert.strictEqual(mSweet.piles.length, mDefault.piles.length);
+    for (let i = 0; i < mSweet.piles.length; i++) {
+        assert.strictEqual(mSweet.piles[i].role, mDefault.piles[i].role);
+        assert.strictEqual(mSweet.piles[i].fx, mDefault.piles[i].fx);
+        assert.strictEqual(mSweet.piles[i].exitStyle, mDefault.piles[i].exitStyle);
+    }
+});
+
 test("NaN sweep", () => {
-    for (const max of [false, true]) {
-        const m = K.build(longSong().concat(demo.map(e => Object.assign({}, e, { time: (e.time !== undefined ? e.time : 0) + 200 }))), { max: max });
-        for (let t = 0; t < 230; t += 0.05) {
+    const fullSong = longSong().concat(demo.map(e => Object.assign({}, e, { time: (e.time !== undefined ? e.time : 0) + 200 })));
+    function sweep(m) {
+        for (let t = 0; t < 230; t += 0.1) {
             finiteDeep(K.film(m, t), "film");
             for (const li of K.visibleAt(m.lines, t)) {
                 const L = m.lines[li];
@@ -468,6 +574,12 @@ test("NaN sweep", () => {
                 });
             }
         }
+    }
+    // preset 7
+    sweep(K.build(fullSong, { max: false }));
+    // preset 8 over every set in SETS
+    for (const set of Object.keys(K.SETS)) {
+        sweep(K.build(fullSong, { max: true, set: set }));
     }
 });
 
