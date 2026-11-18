@@ -438,7 +438,7 @@ Rectangle {
 
                                         Text {
                                             id: noteTrackTitleText
-                                            text: root.attachedTrack ? (root.attachedTrack.title || root.attachedTrack.name || "Track") : ""
+                                            text: root.attachedTrack ? (root.attachedTrack.title || root.attachedTrack.name || I18n.tr("Bài hát", "Track")) : ""
                                             color: "#ffffff"
                                             font.family: Theme.fontFamily
                                             font.pixelSize: 12
@@ -865,7 +865,7 @@ Rectangle {
                             spacing: 3
 
                             Text {
-                                text: modelData.title || modelData.name || "Track"
+                                text: modelData.title || modelData.name || I18n.tr("Bài hát", "Track")
                                 color: songRowCard.isThisPreviewing ? root.accentColor : "#ffffff"
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 13
@@ -875,7 +875,7 @@ Rectangle {
                             }
 
                             Text {
-                                text: modelData.artist || "Unknown Artist"
+                                text: modelData.artist || I18n.tr("Nghệ sĩ chưa rõ", "Unknown Artist")
                                 color: Qt.rgba(1, 1, 1, 0.55)
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 11

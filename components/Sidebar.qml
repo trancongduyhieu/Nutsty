@@ -23,14 +23,14 @@ Rectangle {
             Layout.leftMargin: 6
             spacing: 8
 
-            Text {
-                text: "❄"
-                font.pixelSize: 18
+            AppIcon {
+                source: "../assets/icons/nutsty-outline-symbolic.svg"
+                iconSize: 18
                 color: Theme.accent
             }
 
             Text {
-                text: "frostify"
+                text: "Nutsty"
                 color: Theme.text
                 font.pixelSize: 15
                 font.bold: true
@@ -47,7 +47,7 @@ Rectangle {
 
                 Text {
                     anchors.centerIn: parent
-                    text: "OFFLINE"
+                    text: I18n.tr("NGOẠI TUYẾN", "OFFLINE")
                     color: Theme.accent
                     font.pixelSize: 8
                     font.bold: true
@@ -60,7 +60,7 @@ Rectangle {
             Layout.fillWidth: true
             Layout.leftMargin: 8
             Layout.topMargin: 6
-            text: "PLAYLISTS"
+            text: I18n.tr("DANH SÁCH PHÁT", "PLAYLISTS")
             color: Theme.subtext
             font.pixelSize: 10
             font.bold: true
@@ -96,13 +96,13 @@ Rectangle {
                     anchors.rightMargin: 10
                     spacing: 8
 
-                    Text {
-                        text: modelData.pinned ? "📌"
-                            : (modelData.id === "all" ? "♫"
-                            : (modelData.id === "simp" ? "🎧"
-                            : (modelData.id === "downloads" ? "📥" : "♥")))
+                    AppIcon {
+                        source: modelData.pinned ? "../assets/icons/emblem-favorite-symbolic.svg"
+                            : (modelData.id === "all" ? "../assets/icons/audio-only-symbolic.svg"
+                            : (modelData.id === "simp" ? "../assets/icons/media-optical-audio-symbolic.svg"
+                            : (modelData.id === "downloads" ? "../assets/icons/download-symbolic.svg" : "../assets/icons/favorite-border-symbolic.svg")))
                         color: plRow.isSelected ? Theme.selText : Theme.teal
-                        font.pixelSize: 13
+                        iconSize: 14
                     }
 
                     Text {
@@ -147,13 +147,13 @@ Rectangle {
                 spacing: 2
 
                 Text {
-                    text: "⌨ Phím tắt"
+                    text: I18n.tr("Phím tắt", "Shortcuts")
                     color: Theme.teal
                     font.pixelSize: 11
                     font.bold: true
                 }
                 Text {
-                    text: "Space: Phát/Dừng • ↑/↓: Chọn bài"
+                    text: I18n.tr("Space: Phát/Dừng • Lên/Xuống: Chọn bài", "Space: Play/Pause • Up/Down: Pick a track")
                     color: Theme.subtext
                     font.pixelSize: 10
                 }

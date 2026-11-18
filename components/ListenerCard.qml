@@ -640,7 +640,10 @@ Item {
                         visible: root.coated && !root.liteMode
                         property var flakes: []
                         function spawn(p, count) {
-                            var list = flakes;
+                            // a fresh array every time: re-assigning the same one sends no change, so
+                            // with nothing falling the animation below would stay asleep and the
+                            // new flakes would never be drawn
+                            var list = flakes.slice();
                             for (var i = 0; i < count; i++)
                                 list.push([p.x + 2 * root.unit + (Math.random() - 0.5) * 10 * root.unit,
                                            p.y + 2 * root.unit + (Math.random() - 0.5) * 6 * root.unit,
@@ -721,7 +724,8 @@ Item {
             last = p;
             coatingCanvas.pending = coatingCanvas.pending.concat(pts);
             coatingCanvas.requestPaint();
-            flakeCanvas.spawn(p, first ? 4 : 1 + Math.floor(Math.random() * 3));
+            // a press always knocks a little burst loose, a stroke sheds as it goes
+            flakeCanvas.spawn(p, first ? 6 + Math.floor(Math.random() * 3) : 1 + Math.floor(Math.random() * 3));
             scratchGrid.mark(pts, brush);
         }
         property real coinAngle: 0

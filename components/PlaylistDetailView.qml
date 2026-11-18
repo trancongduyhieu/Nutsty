@@ -405,7 +405,7 @@ Rectangle {
                     icon: "../assets/icons/material/ms-library_music-fill.svg"
                     shape: "puffy"
                     accentColor: root.accentColor
-                    title: I18n.tr("Danh sách phát chưa có bài hát nào", "This playlist has no tracks yet")
+                    title: I18n.pick("playlist.empty", ["Danh sách phát chưa có bài hát nào", "Trống trơn, thêm bài vào nhé", "Danh sách mới tinh, chưa bóc tem", "Chờ bài đầu tiên ghé chơi", "Vắng như chùa Bà Đanh", "Thêm vài bài cho có không khí", "Danh sách đẹp đó, chỉ thiếu nhạc thôi"], ["This playlist has no tracks yet", "All empty, add a few songs", "Brand new, still in the wrapper", "Waiting for its first song", "Quiet as a library", "Add a few songs to warm it up", "Nice playlist, just missing the music"])
                     description: I18n.tr("Tìm kiếm bài hát yêu thích để thêm ngay vào danh sách phát này", "Search and add your favorite songs directly to this playlist")
                     actionText: I18n.tr("Tìm & thêm bài hát", "Search & Add Songs")
                     onActionClicked: root.addTracksRequested(root.playlist)

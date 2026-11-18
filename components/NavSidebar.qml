@@ -606,7 +606,7 @@ Rectangle {
                             icon: "../assets/icons/material/ms-queue_music.svg"
                             shape: "clover"
                             accentColor: root.accentColor
-                            title: I18n.tr("Hàng đợi trống", "Queue is empty")
+                            title: I18n.pick("queue.empty", ["Hàng đợi trống", "Chưa ai xếp hàng cả", "Vắng như chợ chiều", "Hàng đợi đang ngồi chơi", "Thêm bài đi, kẻo nhạc hết giữa chừng", "Trống trơn, xếp vài bài vào nhé", "Hàng đợi khum có ai"], ["Queue is empty", "Nobody's in line", "Empty as a market at closing time", "The queue is taking a break", "Add songs before the music runs out", "All empty, line up a few songs", "Not a soul in the queue"])
                             description: I18n.tr("Chọn bài hát để bắt đầu", "Play a playlist or track to start")
                         }
                     }
@@ -743,7 +743,7 @@ Rectangle {
 
                                     Text {
                                         Layout.fillWidth: true
-                                        text: modelData.title || modelData.name || "Track"
+                                        text: modelData.title || modelData.name || I18n.tr("Bài hát", "Track")
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 12
                                         font.bold: true
@@ -753,7 +753,7 @@ Rectangle {
 
                                     Text {
                                         Layout.fillWidth: true
-                                        text: modelData.artist || modelData.author || "Cloud Stream"
+                                        text: modelData.artist || modelData.author || I18n.tr("Phát trực tuyến", "Cloud Stream")
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 11
                                         color: Theme.textSecondary

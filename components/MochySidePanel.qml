@@ -1132,7 +1132,7 @@ Item {
 
                     Text {
                         width: parent.width
-                        text: root.currentTrack ? (root.currentTrack.title || root.currentTrack.name || "Nutsty Track") : "Nutsty Music"
+                        text: root.currentTrack ? (root.currentTrack.title || root.currentTrack.name || I18n.tr("Bài hát Nutsty", "Nutsty Track")) : I18n.tr("Nhạc Nutsty", "Nutsty Music")
                         font.family: Theme.fontFamily
                         font.pixelSize: 26
                         font.bold: true
@@ -1355,7 +1355,7 @@ Item {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: root.currentTrack ? (root.currentTrack.title || root.currentTrack.name || "Nutsty Track") : ""
+                                    text: root.currentTrack ? (root.currentTrack.title || root.currentTrack.name || I18n.tr("Bài hát Nutsty", "Nutsty Track")) : ""
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 13
                                     font.bold: true
@@ -1365,7 +1365,7 @@ Item {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: root.currentTrack ? (root.currentTrack.artist || root.currentTrack.artists || "Unknown Artist") : ""
+                                    text: root.currentTrack ? (root.currentTrack.artist || root.currentTrack.artists || I18n.tr("Nghệ sĩ chưa rõ", "Unknown Artist")) : ""
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 11
                                     color: Qt.rgba(1, 1, 1, 0.75)
@@ -1492,7 +1492,7 @@ Item {
 
                             Text {
                                 Layout.fillWidth: true
-                                text: queueItem.modelData ? (queueItem.modelData.title || queueItem.modelData.name || "Track") : ""
+                                text: queueItem.modelData ? (queueItem.modelData.title || queueItem.modelData.name || I18n.tr("Bài hát", "Track")) : ""
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 13
                                 font.weight: Font.Medium
@@ -1502,7 +1502,7 @@ Item {
 
                             Text {
                                 Layout.fillWidth: true
-                                text: queueItem.modelData ? (queueItem.modelData.artist || queueItem.modelData.artists || "Unknown Artist") : ""
+                                text: queueItem.modelData ? (queueItem.modelData.artist || queueItem.modelData.artists || I18n.tr("Nghệ sĩ chưa rõ", "Unknown Artist")) : ""
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 11
                                 color: Qt.rgba(1, 1, 1, 0.72)
@@ -1583,7 +1583,7 @@ Item {
                     icon: "../assets/icons/material/ms-queue_music.svg"
                     shape: "clover"
                     accentColor: root.accentColor
-                    title: I18n.tr("Hàng đợi trống", "Queue is empty")
+                    title: I18n.pick("queue.empty", ["Hàng đợi trống", "Chưa ai xếp hàng cả", "Vắng như chợ chiều", "Hàng đợi đang ngồi chơi", "Thêm bài đi, kẻo nhạc hết giữa chừng", "Trống trơn, xếp vài bài vào nhé", "Hàng đợi khum có ai"], ["Queue is empty", "Nobody's in line", "Empty as a market at closing time", "The queue is taking a break", "Add songs before the music runs out", "All empty, line up a few songs", "Not a soul in the queue"])
                     description: I18n.tr("Chọn bài hát để bắt đầu danh sách phát", "Play a track to start the queue")
                 }
             }

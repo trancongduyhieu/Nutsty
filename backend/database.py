@@ -301,9 +301,18 @@ RECAP_FIRST_DAY = 3    # ...and not before this day; on the 1st and 2nd the prev
 
 def _recap_month_stats(conn, year: int, month: int) -> Dict[str, Any]:
     """Everything the recap shows for one calendar month (local time)."""
-    ym = f"{year:04d}-{month:02d}"
-    # stored in UTC; the month, weekday and hour are the listener's own
-    where = "strftime('%Y-%m', timestamp, 'localtime') = ?"
+    return _period_stats(conn, year, month)
+
+
+def _period_stats(conn, year: int, month: int = 0) -> Dict[str, Any]:
+    """One calendar month (month 1..12) or one whole year (month 0), in local time."""
+    if month:
+        ym = f"{year:04d}-{month:02d}"
+        # stored in UTC; the month, weekday and hour are the listener's own
+        where = "strftime('%Y-%m', timestamp, 'localtime') = ?"
+    else:
+        ym = f"{year:04d}"
+        where = "strftime('%Y', timestamp, 'localtime') = ?"
     song_key = "lower(title) || '|' || lower(COALESCE(artist, ''))"
     tot = conn.execute(f"""
         SELECT COUNT(*) AS plays, COALESCE(SUM(listened_ms), 0) AS ms,
@@ -353,7 +362,11 @@ def _recap_month_stats(conn, year: int, month: int) -> Dict[str, Any]:
                 out[i] = int(r["m"] or 0)
         return out
 
-    days_in_month = (datetime(year + (month == 12), month % 12 + 1, 1) - datetime(year, month, 1)).days
+    if month:
+        days_in_month = (datetime(year + (month == 12), month % 12 + 1, 1) - datetime(year, month, 1)).days
+        day_minutes = buckets("%d", days_in_month, offset=1)
+    else:
+        day_minutes = buckets("%m", 12, offset=1)     # a year: one bucket per month
     sun_first = buckets("%w", 7)                      # SQLite: 0 = Sunday
     return {
         "year": year, "month": month,
@@ -363,8 +376,43 @@ def _recap_month_stats(conn, year: int, month: int) -> Dict[str, Any]:
         "top_songs": songs, "top_artists": artists, "grid_songs": grid,
         "weekday_minutes": sun_first[1:] + sun_first[:1],  # Monday first
         "hour_minutes": buckets("%H", 24),
-        "day_minutes": buckets("%d", days_in_month, offset=1),
+        "day_minutes": day_minutes,
     }
+
+
+def get_artist_minutes(year: int, month: int = 0) -> List[Dict[str, Any]]:
+    """Every artist played in the month (or year, month 0) with their listening minutes, most first."""
+    ym, fmt = (f"{year:04d}-{month:02d}", "%Y-%m") if month else (f"{year:04d}", "%Y")
+    conn = get_connection()
+    try:
+        return [{"artist": r["artist"], "minutes": int(r["m"] or 0)} for r in conn.execute(f"""
+            SELECT artist, COALESCE(SUM(listened_ms), 0) / 60000.0 AS m FROM playback_events
+            WHERE strftime('{fmt}', timestamp, 'localtime') = ? AND artist NOT IN ('', 'Unknown')
+            GROUP BY lower(artist) ORDER BY m DESC LIMIT 60;
+        """, (ym,)).fetchall()]
+    finally:
+        conn.close()
+
+
+def get_period_stats(year: int, month: int = 0) -> Dict[str, Any]:
+    """The Stats page for one month or year, plus every month that has any listening (for the ruler)."""
+    conn = get_connection()
+    try:
+        stats = _period_stats(conn, year, month)
+        first = conn.execute(
+            "SELECT strftime('%Y-%m-%d', MIN(timestamp), 'localtime') AS d FROM playback_events;").fetchone()["d"]
+        # minutes per local day, all time: the ruler draws each day's tick as tall as its listening
+        days: Dict[str, int] = {}
+        for r in conn.execute("""
+            SELECT strftime('%Y-%m-%d', timestamp, 'localtime') AS d, COALESCE(SUM(listened_ms), 0) / 60000 AS m
+            FROM playback_events GROUP BY d;
+        """).fetchall():
+            days[r["d"]] = int(r["m"] or 0)
+        stats["first_day"] = first or ""
+        stats["daily_minutes"] = days
+        return stats
+    finally:
+        conn.close()
 
 
 def get_monthly_recap(force: bool = False, today: Optional[datetime] = None) -> Dict[str, Any]:

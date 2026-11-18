@@ -198,7 +198,7 @@ Item {
         id: flick
         anchors.fill: parent
         contentWidth: width
-        contentHeight: column.implicitHeight + 72
+        contentHeight: column.implicitHeight + 60 + 150   // clears the floating player bar
         clip: true
         boundsBehavior: Flickable.StopAtBounds
 
@@ -352,7 +352,7 @@ Item {
                 Layout.topMargin: 40
                 rowIndex: 3
                 title: I18n.tr("Nghe gần đây", "Recently played")
-                emptyText: I18n.tr("Bài bạn nghe sẽ hiện ở đây.", "Songs you play will show up here.")
+                emptyText: I18n.pick("profile.emptyRecent", ["Bài bạn nghe sẽ hiện ở đây.", "Nghe vài bài rồi quay lại đây nhé.", "Chỗ này còn trống, chờ bạn bật nhạc.", "Chưa nghe gì à? Lạ ghê.", "Nghe đi, ở đây ghi lại hết.", "Tai còn mới tinh, chưa nghe bài nào.", "Bật một bài là có ngay."], ["Songs you play will show up here.", "Play a few songs and come back.", "Still empty, waiting for you to press play.", "Haven't listened yet? Weird.", "Go listen, this spot keeps track.", "Brand-new ears, nothing played yet.", "Play one song and it's here."])
                 items: (root.overview && root.overview.recent) ? root.overview.recent : []
                 card: CoverCard {
                     image: modelData.cover_url || ""
@@ -366,7 +366,7 @@ Item {
                 Layout.topMargin: 32
                 rowIndex: 4
                 title: I18n.tr("Danh sách phát", "Playlists")
-                emptyText: I18n.tr("Bạn chưa tạo danh sách phát nào.", "You haven't made a playlist yet.")
+                emptyText: I18n.pick("profile.emptyPlaylists", ["Bạn chưa tạo danh sách phát nào.", "Chưa có danh sách nào, tạo thử một cái đi.", "Kệ còn trống, xếp danh sách đầu tiên nhé.", "Chưa tạo cái nào, lười ghê.", "Một danh sách cho lúc buồn chẳng hạn?", "Tạo đi, sau này còn có cái mà khoe.", "Nhạc hay thì gom lại một chỗ nhé."], ["You haven't made a playlist yet.", "No playlists yet, try making one.", "The shelf's empty, add your first playlist.", "None yet? Bit lazy, huh.", "How about one for the sad days?", "Make one now, show it off later.", "Good songs deserve a home."])
                 items: root.playlists || []
                 card: CoverCard {
                     image: modelData.customCover || modelData.image || modelData.cover || ""
@@ -383,8 +383,7 @@ Item {
                 Layout.topMargin: 32
                 rowIndex: 5
                 title: I18n.tr("Nghệ sĩ nghe nhiều", "Your top artists")
-                emptyText: I18n.tr("Nghe thêm vài bài là nghệ sĩ của bạn sẽ hiện ở đây.",
-                                   "Play a few more songs and your artists will show up here.")
+                emptyText: I18n.pick("profile.emptyArtists", ["Nghe thêm vài bài là nghệ sĩ của bạn sẽ hiện ở đây.", "Nghe thêm chút, nghệ sĩ ruột sẽ lộ diện.", "Nghệ sĩ còn đang ngại, nghe thêm cho họ ra mặt.", "Chưa đủ dữ kiện để đoán gu bạn.", "Nghe thêm vài bài là biết bạn đu ai.", "Gu của bạn vẫn còn là bí ẩn.", "Nghe nhiều vào, bảng này tự điền."], ["Play a few more songs and your artists will show up here.", "Keep listening, your favorites will reveal themselves.", "The artists are shy, listen more to coax them out.", "Not enough clues to guess your taste yet.", "A few more songs and we'll know who you stan.", "Your taste is still a mystery.", "Keep listening and this fills itself in."])
                 items: (root.overview && root.overview.artists) ? root.overview.artists : []
                 card: CoverCard {
                     round: true

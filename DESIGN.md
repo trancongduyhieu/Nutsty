@@ -18,6 +18,12 @@ colors:
   muted-rose: "#f43f5e"
   muted-rose-text: "#fda4af"
   muted-rose-text-hover: "#ffe4e6"
+  chart-1: "#3987E5"
+  chart-2: "#D95926"
+  chart-3: "#199E70"
+  chart-4: "#C98500"
+  chart-5: "#D55181"
+  chart-other: "#5A5A5A"
 typography:
   display:
     fontFamily: "Instrument Serif, Noto Serif, serif"
@@ -50,6 +56,7 @@ rounded:
   button: "8px"
   card: "12px"
   pill: "16px"
+  stat-card: "22px"
   panel: "24px"
 spacing:
   xs: "4px"
@@ -82,6 +89,9 @@ components:
   nav-arrow:
     backgroundColor: "{colors.honey-amber}"
     size: "32px"
+  card-stat:
+    rounded: "{rounded.stat-card}"
+    padding: "18px 22px"
   window:
     backgroundColor: "{colors.ink-app}"
     rounded: "{rounded.panel}"
@@ -97,7 +107,9 @@ Nutsty is a sheet of glass resting on the user's desktop. While nothing plays, t
 
 The UI is dense and quiet, made of small type (11 to 13px), hairline borders and concentric rounded corners. Expression goes into the large moments: the Now Playing view, the Instrument Serif lyrics and the Spotify import stage. Controls stay translucent and tinted. They brighten on hover instead of rising off the surface.
 
-Motion is quick and soft. Most transitions run 100 to 160ms with `Easing.OutCubic`, or `InOutQuad` for opacity and colour. Playful entrances use `OutBack`. The backdrop crossfades over 400ms and the cover over 900ms. Emphasized moves use the bezier `[0.42, 0, 0.16, 1]` or Material standard `[0.4, 0, 0.2, 1]`.
+Motion is quick and soft. Most transitions run 100 to 160ms with `Easing.OutCubic`, or `InOutQuad` for opacity and colour. Playful entrances use `OutBack`. The backdrop crossfades over 400ms and the cover over 900ms. Long moves (page morphs, cards opening, charts growing, the welcome card's flight) use Mochy's emphasized decelerate `[0.2, 0, 0, 1]`: 420ms to open a card, 320ms for a chevron, 900ms for a chart to grow, 1400ms for a figure to roll. Older code still uses `[0.42, 0, 0.16, 1]`; new code uses the Mochy curve.
+
+**Design lineage: Mochy for motion and layout, Swiftify for icons, the glass is Nutsty's own.** New screens take their layout and choreography from Mochy (`references/Mochy-Music/`): big bold titles that a scroll can collapse, cards that open in place into the detail behind them, figures that roll in, charts that grow in, and Material 3's emphasized-decelerate curve `[0.2, 0, 0, 1]` for anything that moves a long way. Swiftify (`references/swiftify/`) has no glass at all; it only sets the toggle icons and a few Material You motions, such as icon morphs. The Liquid Glass surfaces are Nutsty's own and owe nothing to either app. Both references are studied and rebuilt in QML, never pasted: their palettes give way to Nutsty's borrowed accent.
 
 Confirmed rejections: emoji anywhere in the UI, dead grey buttons, capsule shapes used by default, and box-in-a-box nesting.
 
@@ -121,6 +133,10 @@ The neutrals are near-black inks under one borrowed accent, plus muted rose rese
 - **Velvet Backdrop** (`velvet-backdrop`): the opaque layer that fades in under the cover aurora while playing.
 - **Hairline** (`hairline`) and **Divider** (`divider`): structural lines. Over glass, use white at 7% (idle), 18% (hover) or 8% (planar dividers).
 - **Text Primary / Secondary / Muted**: white for titles, about 70% grey for subtitles, about 45% grey for counters and dim icons.
+
+### Data
+- **Mark** (derived): the accent lifted to 70% lightness (`Qt.hsla(hue, max(0.55, sat), 0.70)`), so peaks read on dark cards whatever the wallpaper. One mark per chart: the peak bar, the top rank's share bar, the line itself. Everything else is neutral white at 20 to 40%.
+- **Chart 1 to 5 / Other**: the categorical order for genres, kept from Mochy because it is validated for colour blindness. Identity is never colour alone: a legend names the top five.
 
 ### Danger
 - **Muted Rose** (`muted-rose`): used for delete, sign-out and destructive actions only. The fill is 12% at rest and 24% on hover (shifting to `rgb(239,68,68)`). Text is `muted-rose-text`, or `muted-rose-text-hover` on hover.
@@ -197,6 +213,12 @@ Corners are gentle and concentric. Badges use 4 to 6px, buttons 8px, cards 10 to
 
 ### Signature: Listener Card
 A brushed-gold ID card (`ListenerCard.qml`) built from Honey Amber. A light band follows the tilt, and a strip on the right slides the owner's name past. Clicking it flips it to a Code 128 barcode on the back. The face renders into one supersampled layer with a transparent margin, so its edges stay clean while it turns in 3D. It appears in the first-run welcome (`WelcomeCardOverlay.qml`: the card flies in with gold confetti and a big "Chào xìn!" / "Hello!", then flies into the header avatar) and on the profile page. On the profile page it sits in a header of accent-tinted glass (never an opaque panel, since the wallpaper and song colours vary endlessly) over a white dot grid, with a giant NUTSTY in white at 6% drifting up the right edge.
+
+### Signature: Stats
+`StatsPage.qml`, opened from the profile ("Xem thống kê chi tiết"), follows Mochy's Stats screen. A 44px "Thống kê" title with "{year} Re'cap >" opening a month or year picker. Under it a ruler: every month (or year) laid on one line with a tick a day, the chosen one named large at the left; dragging lifts the marker to the middle, letting go springs to the nearest period with something in it, and a tap or the wheel picks one. Nutsty's own touch is that each day's tick is as tall as that day's listening, in the mark colour, so the ruler doubles as a chart of the year. Then six cards (total, genre, artist, song, weekday, hour) of accent-tinted glass at 22px radius, each opening in place into its detail (a line of every day, the top ten with share bars, weekday bars, a 24-hour line), with an "Expand all" chip, a rolling odometer for the total and a note that nothing leaves the computer except artist names for genre lookup. Lite mode skips the rolls and grows.
+
+### Version and About
+A glass card under the listening total: "Phiên bản & thông tin ứng dụng", the version large in tabular figures, and an accent pill "Giới thiệu" that opens What's New.
 
 ### Signature: Desktop Lyrics
 A layer-shell overlay (Linux) or frameless overlay (Windows) with four presets: Cinematic Serif, Apple Music DoF, Minimal Glide and Motion Typography. Legibility comes from layered cinematic shadows and never from a white halo.

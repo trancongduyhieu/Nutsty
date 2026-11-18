@@ -139,9 +139,10 @@ Rectangle {
     function getGreeting() {
         var h = new Date().getHours();
         var greet = "";
-        if (h >= 5 && h < 12) greet = I18n.tr("Chào buổi sáng", "Good Morning");
-        else if (h >= 12 && h < 18) greet = I18n.tr("Chào buổi chiều", "Good Afternoon");
-        else greet = I18n.tr("Chào buổi tối", "Good Evening");
+        if (h >= 5 && h < 12) greet = I18n.pick("home.greet.morning", ["Chào buổi sáng", "Dậy chưa hay còn nướng tiếp?", "Cà phê chưa? Nhạc có rồi nè", "Mắt nhắm mắt mở cũng phải có nhạc", "Sáng nay chọn nhạc gì cho tỉnh?", "Ngày mới, bật nhạc chữa lành", "Gét gô, sáng nay quẩy nhẹ", "Sáng sớm đã lên đồ cho tai"], ["Good Morning", "Up yet, or snoozing again?", "Coffee yet? The music's ready", "Eyes half open, music fully on", "What wakes you up this morning?", "New day, some healing tunes", "Let's go, an easy morning bop", "Dressing your ears for the day"]);
+        else if (h >= 12 && h < 18) greet = I18n.pick("home.greet.afternoon", ["Chào buổi chiều", "Ăn trưa no rồi, nghe gì cho tỉnh", "Hai giờ chiều, mí mắt nặng trĩu", "Việc dí sát gáy, có nhạc đỡ cho", "Cà phê chiều kèm một bài nhé", "Chiều nay quẩy nhẹ cho tỉnh ngủ", "Ngồi lì cả buổi rồi, nhún nhẹ đi", "Chiều nay nghe gì cho chữa lành?"], ["Good Afternoon", "Lunch is done, now wake up", "2 p.m. and the eyelids are winning", "Work breathing down your neck? Music helps", "Afternoon coffee, plus one song", "A little afternoon bop to stay awake", "Sat still all day? Have a little bounce", "Some afternoon healing, maybe?"]);
+        else if (h >= 18 && h < 22) greet = I18n.pick("home.greet.evening", ["Chào buổi tối", "Tối nay ăn gì, nghe gì?", "Xong việc rồi, giờ là của bạn", "Tắm xong nằm nghe nhạc là hết bài", "Tối nay quẩy hay nằm im chữa lành?", "Tối rồi, tai cũng cần được thương", "Một ngày dài, nhạc vô là hết mệt", "Tối nay tâm trạng gì cũng có nhạc"], ["Good Evening", "What's for dinner, and what's playing?", "Work's done, the evening is yours", "Fresh shower, lying down, music on. Unbeatable", "Party tonight, or a quiet heal?", "It's evening, your ears deserve some love", "Long day. Music fixes that", "Whatever the mood tonight, there's a song"]);
+        else greet = I18n.pick("home.greet.night", ["Chào buổi khuya", "Khuya rồi, chưa ngủ à?", "Hội cú đêm điểm danh", "Mai dậy nổi không đấy?", "Thức giờ này là mai tới công chuyện", "Đêm khuya, mở nhỏ thôi kẻo hàng xóm", "Đêm khuya tâm sự với tai nghe", "Một bài nữa thôi rồi ngủ, hứa đó"], ["Good Night", "Late already, still up?", "Night owls, roll call", "Are you even waking up tomorrow?", "Up this late? Tomorrow's gonna hurt", "Late night, keep it down for the neighbours", "Late-night heart-to-heart with your headphones", "One more song, then bed. Promise"]);
 
         if (root.accountName && root.accountName.trim() !== "") {
             return greet + ", " + root.accountName.trim();
@@ -886,7 +887,7 @@ Rectangle {
 
                                             Text {
                                                 Layout.fillWidth: true
-                                                text: (modelData.subtitle || modelData.artist || "Cloud Stream").split("\n")[0]
+                                                text: (modelData.subtitle || modelData.artist || I18n.tr("Phát trực tuyến", "Cloud Stream")).split("\n")[0]
                                                 font.family: Theme.fontFamily
                                                 font.pixelSize: 12
                                                 color: Theme.textSecondary
@@ -1169,7 +1170,7 @@ Rectangle {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: modelData.subtitle || modelData.artist || "Playlist"
+                                    text: modelData.subtitle || modelData.artist || I18n.tr("Danh sách phát", "Playlist")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 12
                                     color: Theme.textSecondary
@@ -1382,7 +1383,7 @@ Rectangle {
 
                                             Text {
                                                 Layout.fillWidth: true
-                                                text: (modelData.artist || "Cloud Stream").split("\n")[0]
+                                                text: (modelData.artist || I18n.tr("Phát trực tuyến", "Cloud Stream")).split("\n")[0]
                                                 font.family: Theme.fontFamily
                                                 font.pixelSize: 12
                                                 color: Theme.textSecondary
@@ -1606,7 +1607,7 @@ Rectangle {
 
                             Text {
                                 Layout.fillWidth: true
-                                text: modelData.subtitle || "Playlist"
+                                text: modelData.subtitle || I18n.tr("Danh sách phát", "Playlist")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 12
                                 color: Theme.textSecondary

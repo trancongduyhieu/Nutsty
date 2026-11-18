@@ -626,7 +626,7 @@ Rectangle {
                                 Text {
                                     id: srcText
                                     anchors.centerIn: parent
-                                    text: (root.track && root.track.isLocal) ? "LOCAL" : "CLOUD"
+                                    text: (root.track && root.track.isLocal) ? I18n.tr("TRÊN MÁY", "LOCAL") : I18n.tr("TRỰC TUYẾN", "ONLINE")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 10
                                     font.bold: true
@@ -680,7 +680,7 @@ Rectangle {
                             ColumnLayout {
                                 spacing: 2
                                 Text {
-                                    text: "CODEC"
+                                    text: I18n.tr("ĐỊNH DẠNG ÂM THANH", "CODEC")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 9
                                     font.bold: true
@@ -699,7 +699,7 @@ Rectangle {
                             ColumnLayout {
                                 spacing: 2
                                 Text {
-                                    text: "BITRATE"
+                                    text: I18n.tr("TỐC ĐỘ BIT", "BITRATE")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 9
                                     font.bold: true
@@ -718,7 +718,7 @@ Rectangle {
                             ColumnLayout {
                                 spacing: 2
                                 Text {
-                                    text: "SAMPLE RATE"
+                                    text: I18n.tr("TẦN SỐ LẤY MẪU", "SAMPLE RATE")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 9
                                     font.bold: true
@@ -737,14 +737,14 @@ Rectangle {
                             ColumnLayout {
                                 spacing: 2
                                 Text {
-                                    text: "CHANNELS"
+                                    text: I18n.tr("KÊNH ÂM THANH", "CHANNELS")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 9
                                     font.bold: true
                                     color: Theme.textMuted
                                 }
                                 Text {
-                                    text: root.audioSpecs ? root.audioSpecs.channels : "Stereo (2ch)"
+                                    text: root.audioSpecs ? root.audioSpecs.channels : I18n.tr("Nổi (2 kênh)", "Stereo (2ch)")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 12
                                     font.bold: true
@@ -1222,7 +1222,7 @@ Rectangle {
                                 // Expand / Collapse button
                                 Text {
                                     visible: descText.lineCount > 4 || (root.songDetails && root.songDetails.description && root.songDetails.description.length > 150)
-                                    text: infoDescCard.isExpanded ? I18n.tr("Thu gọn ▲", "Show less ▲") : I18n.tr("Xem thêm ▼", "Show more ▼")
+                                    text: infoDescCard.isExpanded ? I18n.tr("Thu gọn", "Show less") : I18n.tr("Xem thêm", "Show more")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 11
                                     font.bold: true
@@ -1267,7 +1267,7 @@ Rectangle {
                                 spacing: 2
 
                                 Text {
-                                    text: (root.songDetails && root.songDetails.albumBrowseId) ? "ALBUM" : "ALBUM / SINGLE"
+                                    text: (root.songDetails && root.songDetails.albumBrowseId) ? I18n.tr("TUYỂN TẬP", "ALBUM") : I18n.tr("TUYỂN TẬP / ĐĨA ĐƠN", "ALBUM / SINGLE")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 9
                                     font.bold: true
@@ -1291,7 +1291,7 @@ Rectangle {
                                 Text {
                                     visible: !(root.isDetailsLoading && (!root.track || !root.track.album))
                                     Layout.fillWidth: true
-                                    text: root.track && root.track.album ? root.track.album : (root.songDetails && root.songDetails.album ? root.songDetails.album : "Single")
+                                    text: root.track && root.track.album ? root.track.album : (root.songDetails && root.songDetails.album ? root.songDetails.album : I18n.tr("Đĩa đơn", "Single"))
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 12
                                     font.bold: true
@@ -1387,7 +1387,7 @@ Rectangle {
                                 }
 
                                 Text {
-                                    text: I18n.tr("Phát Radio", "Radio")
+                                    text: I18n.tr("Phát đài", "Radio")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 11
                                     font.bold: true
@@ -1680,7 +1680,7 @@ Rectangle {
                     // Empty Lyrics Fallback
                     Text {
                         anchors.centerIn: parent
-                        text: I18n.tr("Đang tải hoặc không có lời bài hát (Synced Lyrics) cho bài này.", "Loading or no synced lyrics available for this track.")
+                        text: I18n.tr("Đang tải hoặc không có lời bài hát (lời đồng bộ) cho bài này.", "Loading or no synced lyrics available for this track.")
                         font.family: Theme.fontFamily
                         font.pixelSize: 14
                         color: Theme.textSecondary

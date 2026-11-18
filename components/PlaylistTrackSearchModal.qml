@@ -449,7 +449,7 @@ Rectangle {
 
                             Text {
                                 Layout.fillWidth: true
-                                text: trk ? (trk.title || trk.name || "Track") : "Track"
+                                text: trk ? (trk.title || trk.name || I18n.tr("Bài hát", "Track")) : I18n.tr("Bài hát", "Track")
                                 color: rowCard.isThisPlaying ? root.accentColor : "#ffffff"
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 13
@@ -579,7 +579,7 @@ Rectangle {
                         Layout.alignment: Qt.AlignHCenter
                         text: root.trackSearchQuery.trim().length === 0
                               ? I18n.tr("Tìm kiếm bài hát yêu thích", "Search for your favorite songs")
-                              : I18n.tr("Không tìm thấy bài hát nào", "No songs found")
+                              : I18n.pick("addsongs.none", ["Không tìm thấy bài hát nào", "Lục tung cả lên vẫn không thấy", "Bài này trốn kỹ ghê", "Chẳng thấy đâu, thử tên khác xem", "U là trời, không có kết quả", "Tìm mỏi mắt vẫn trắng tay", "Thử gõ khác đi một chút xem"], ["No songs found", "Turned it all upside down, nothing", "This one's hiding well", "Nowhere to be seen, try another name", "Oh no, zero results", "Searched high and low, came up empty", "Try typing it a little differently"])
                         font.family: Theme.fontFamily
                         font.pixelSize: 15
                         font.bold: true

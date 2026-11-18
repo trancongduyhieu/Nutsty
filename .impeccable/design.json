@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-18T03:40:52.670876+00:00",
+  "generatedAt": "2026-11-18T09:57:37.837527+00:00",
   "title": "Design System: Nutsty",
   "extensions": {
     "colorMeta": {
@@ -64,6 +64,26 @@
           "#fda4af",
           "#ffe4e6"
         ]
+      },
+      "chart-categorical": {
+        "role": "data",
+        "displayName": "Chart Categorical",
+        "canonical": "#3987E5",
+        "tonalRamp": [
+          "#3987E5",
+          "#D95926",
+          "#199E70",
+          "#C98500",
+          "#D55181",
+          "#5A5A5A"
+        ],
+        "note": "Genre order from Mochy, validated for colour blindness; the last is Other. Always paired with a legend."
+      },
+      "mark": {
+        "role": "data",
+        "displayName": "Mark",
+        "canonical": "derived",
+        "note": "accentColor lifted to 70% lightness, saturation at least 0.55. One mark per chart (peak bar, #1 share bar, line)."
       }
     },
     "typographyMeta": {
@@ -125,6 +145,31 @@
         "name": "cover-crossfade",
         "value": "900ms",
         "purpose": "Cover art aurora on play/pause."
+      },
+      {
+        "name": "ease-emphasized-decelerate",
+        "value": "cubic-bezier(0.2, 0, 0, 1)",
+        "purpose": "Mochy's curve for long moves: page morphs, cards opening, charts growing, the welcome card's flight. Preferred for new code."
+      },
+      {
+        "name": "card-expand",
+        "value": "420ms emphasized-decelerate",
+        "purpose": "A stat card opening in place; 320ms for its chevron."
+      },
+      {
+        "name": "chart-grow",
+        "value": "900ms emphasized-decelerate",
+        "purpose": "Lines, bars and the genre ring growing in. Lite mode: instant."
+      },
+      {
+        "name": "odometer-roll",
+        "value": "1400ms emphasized-decelerate",
+        "purpose": "Figures rolling up through 0-9 to their value, higher places later. Lite mode: instant."
+      },
+      {
+        "name": "ruler-settle",
+        "value": "SpringAnimation spring 4.2 damping 0.42",
+        "purpose": "The Stats ruler settling on a period after a drag (velocity projected 0.18)."
       }
     ],
     "blur": [
@@ -193,6 +238,22 @@
       "description": "Dark organic glass menu tinted by accent.",
       "html": "<div class=\"ds-pop\"><div class=\"ds-pop-item ds-pop-on\">Thêm vào danh sách phát</div><div class=\"ds-pop-item\">Phát tiếp theo</div></div>",
       "css": ".ds-pop{width:220px;padding:6px;border-radius:12px;background:rgba(33,29,32,0.96);border:1px solid rgba(222,176,108,0.35)}.ds-pop-item{padding:8px 10px;border-radius:6px;color:#fff;font:500 13px Inter,sans-serif;border:1px solid transparent}.ds-pop-item:hover{background:rgba(222,176,108,0.14);border-color:rgba(222,176,108,0.25)}.ds-pop-on{background:rgba(222,176,108,0.26);border-color:rgba(222,176,108,0.45)}"
+    },
+    {
+      "name": "Stat Card",
+      "kind": "card",
+      "refersTo": "card-stat",
+      "description": "Accent-tinted glass at 22px radius, 18/22px padding, a 26px chevron box; clicking opens the detail in place (height 420ms, fade 260ms). Used by StatsPage.qml."
+    },
+    {
+      "name": "Stats Ruler",
+      "kind": "control",
+      "description": "Canvas ruler of months or years, a tick a day as tall as that day's listening; drag lifts the marker to the middle, release springs to the nearest open period, tap and wheel select. Periods with no data are grey and refuse the snap."
+    },
+    {
+      "name": "Version Card",
+      "kind": "card",
+      "description": "Profile card: 'Phiên bản & thông tin ứng dụng', the version at 34px tabular figures, an accent pill 'Giới thiệu' opening What's New."
     }
   ],
   "narrative": {

@@ -80,10 +80,10 @@ Rectangle {
                         border.color: Theme.accent
                         border.width: 1
 
-                        Text {
+                        AppIcon {
                             anchors.centerIn: parent
-                            text: "♫"
-                            font.pixelSize: 16
+                            source: "../assets/icons/audio-only-symbolic.svg"
+                            iconSize: 16
                             color: Theme.accent
                         }
                     }
@@ -102,7 +102,7 @@ Rectangle {
         // Song Title
         Text {
             Layout.fillWidth: true
-            text: root.item ? root.item.name : "Chưa chọn bài hát"
+            text: root.item ? root.item.name : I18n.tr("Chưa chọn bài hát", "No track selected")
             color: Theme.text
             font.pixelSize: 16
             font.bold: true
@@ -114,7 +114,7 @@ Rectangle {
         // Artist Name
         Text {
             Layout.fillWidth: true
-            text: root.item ? root.item.artist : "Frostify Offline"
+            text: root.item ? root.item.artist : I18n.tr("Nutsty ngoại tuyến", "Nutsty Offline")
             color: Theme.teal
             font.pixelSize: 13
             font.bold: true
@@ -134,24 +134,24 @@ Rectangle {
 
             RowLayout {
                 Layout.fillWidth: true
-                Text { text: "Nguồn:"; color: Theme.subtext; font.pixelSize: 11 }
+                Text { text: I18n.tr("Nguồn:", "Source:"); color: Theme.subtext; font.pixelSize: 11 }
                 Item { Layout.fillWidth: true }
-                Text { text: root.item ? root.item.source : "None"; color: Theme.text; font.pixelSize: 11; font.bold: true }
+                Text { text: root.item ? root.item.source : I18n.tr("Không có", "None"); color: Theme.text; font.pixelSize: 11; font.bold: true }
             }
 
             RowLayout {
                 Layout.fillWidth: true
-                Text { text: "Thời lượng:"; color: Theme.subtext; font.pixelSize: 11 }
+                Text { text: I18n.tr("Thời lượng:", "Duration:"); color: Theme.subtext; font.pixelSize: 11 }
                 Item { Layout.fillWidth: true }
                 Text { text: root.item ? root.item.duration : "0:00"; color: Theme.green; font.pixelSize: 11; font.family: "monospace" }
             }
 
             RowLayout {
                 Layout.fillWidth: true
-                Text { text: "Định dạng:"; color: Theme.subtext; font.pixelSize: 11 }
+                Text { text: I18n.tr("Định dạng:", "Format:"); color: Theme.subtext; font.pixelSize: 11 }
                 Item { Layout.fillWidth: true }
                 Text {
-                    text: root.item && root.item.path ? root.item.path.split('.').pop().toUpperCase() : "AUDIO"
+                    text: root.item && root.item.path ? root.item.path.split('.').pop().toUpperCase() : I18n.tr("ÂM THANH", "AUDIO")
                     color: Theme.teal
                     font.pixelSize: 11
                     font.bold: true
@@ -176,9 +176,9 @@ Rectangle {
                 anchors.rightMargin: 10
                 spacing: 8
 
-                Text { text: "⚡"; font.pixelSize: 12 }
+                AppIcon { source: "../assets/icons/process-working-symbolic.svg"; color: Theme.accent; iconSize: 14 }
                 Text {
-                    text: "Lossless Engine (MPV)"
+                    text: I18n.tr("Bộ phát không suy hao (MPV)", "Lossless engine (MPV)")
                     color: Theme.text
                     font.pixelSize: 11
                 }

@@ -120,7 +120,7 @@ ColumnLayout {
         ShimmerText {
             id: mixLabel
             anchors.centerIn: parent
-            text: I18n.tr("Cooking", "Cooking")
+            text: I18n.tr("Đang nấu", "Cooking")
             running: ctl.mixing
             opacity: ctl.mixing ? 1 : 0
             visible: opacity > 0.01

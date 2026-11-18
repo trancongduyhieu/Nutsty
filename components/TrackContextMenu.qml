@@ -463,7 +463,7 @@ Item {
 
             // Action 3: Start radio
             MenuItemButton {
-                text: I18n.tr("Phát Radio", "Start radio")
+                text: I18n.tr("Phát đài", "Start radio")
                 iconSource: "../assets/icons/radio-symbolic.svg"
                 onClicked: {
                     var t = root.track;

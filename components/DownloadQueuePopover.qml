@@ -390,7 +390,7 @@ Item {
                                             Item { Layout.fillWidth: true }
 
                                             Text {
-                                                text: "ETA: " + (modelData.eta || "--")
+                                                text: I18n.tr("Dự kiến: ", "ETA: ") + (modelData.eta || "--")
                                                 font.family: Theme.fontFamily
                                                 font.pixelSize: 10
                                                 color: Theme.textMuted

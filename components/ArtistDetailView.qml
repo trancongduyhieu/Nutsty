@@ -155,7 +155,7 @@ Item {
                         // Artist Name
                         Text {
                             Layout.fillWidth: true
-                            text: (root.artistData && root.artistData.metadata && root.artistData.metadata.name) ? root.artistData.metadata.name : (root.isLoading ? I18n.tr("Đang tải nghệ sĩ...", "Loading artist...") : I18n.tr("Nghệ sĩ", "Artist"))
+                            text: (root.artistData && root.artistData.metadata && root.artistData.metadata.name) ? root.artistData.metadata.name : (root.isLoading ? I18n.pick("artist.loading", ["Đang tải nghệ sĩ...", "Đang mời nghệ sĩ ra sân khấu...", "Nghệ sĩ đang chỉnh mic...", "Đang trải thảm đỏ...", "Đợi xíu, nghệ sĩ đang trang điểm...", "Đang gọi nghệ sĩ dậy...", "Sắp lên sóng rồi, giữ máy nha..."], ["Loading artist...", "Calling the artist to the stage...", "The artist is checking the mic...", "Rolling out the red carpet...", "One sec, the artist is in makeup...", "Waking the artist up...", "Going live soon, hold on..."]) : I18n.tr("Nghệ sĩ", "Artist"))
                             font.family: Theme.fontFamily
                             font.pixelSize: 32
                             font.bold: true
@@ -435,7 +435,7 @@ Item {
 
                                     Text {
                                         Layout.fillWidth: true
-                                        text: modelData.album || modelData.artist || "Single"
+                                        text: modelData.album || modelData.artist || I18n.tr("Đĩa đơn", "Single")
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 12
                                         color: Theme.textMuted
@@ -821,7 +821,7 @@ Item {
                                         var trk = {
                                             title: modelData.title,
                                             name: modelData.title,
-                                            artist: (root.artistData && root.artistData.metadata) ? root.artistData.metadata.name : "Artist",
+                                            artist: (root.artistData && root.artistData.metadata) ? root.artistData.metadata.name : I18n.tr("Nghệ sĩ", "Artist"),
                                             videoId: modelData.videoId,
                                             path: "ytdl://" + modelData.videoId,
                                             image: modelData.image
@@ -995,7 +995,7 @@ Item {
                         }
 
                         Text {
-                            text: parent.parent.isExpanded ? I18n.tr("Thu gọn ▲", "Show less ▲") : I18n.tr("Xem thêm ▼", "Show more ▼")
+                            text: parent.parent.isExpanded ? I18n.tr("Thu gọn", "Show less") : I18n.tr("Xem thêm", "Show more")
                             font.family: Theme.fontFamily
                             font.pixelSize: 12
                             font.bold: true

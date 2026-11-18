@@ -35,6 +35,13 @@ Item {
     signal trackRequested(var row)
     signal artistRequested(string name)
     signal playlistRequested(var playlist)
+    signal aboutRequested()
+
+    property string appVersion: ""
+    // Stats page over the overview; 0..1 slide in from the right
+    property bool statsOpen: false
+    property real statsShown: root.statsOpen ? 1 : 0
+    Behavior on statsShown { NumberAnimation { duration: root.liteMode ? 1 : 420; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.2, 0, 0, 1, 1, 1] } }
 
     // 0 = the card header, 1 = the profile page; the flying copies interpolate on it
     property real morph: 0
@@ -95,8 +102,9 @@ Item {
     property real expand: 0              // 0 = the header as laid out, 1 = filling the view
     property bool cardFlipped: false
     property real scan: 0
-    // which greeting the header shows; rolled once per view
-    property int greetIndex: Math.floor(Math.random() * 5)
+    // which greeting the header shows; fixed for the whole app session (I18n.seededIndex)
+    readonly property var greetLines: [I18n.tr("Chào bạn nhé, %1!", "Hey there, %1!"), I18n.tr("Ủa %1 đó hả!", "Oh, it's %1!"), I18n.tr("Lại gặp %1 rồi!", "%1, back again!"), I18n.tr("Hôm nay nghe gì, %1?", "What's playing, %1?"), I18n.tr("Bá khí quá, %1!", "Aura check, %1!")]
+    readonly property int greetIndex: I18n.seededIndex("profile.greet", greetLines.length)
     property real stamp: 0               // 0..1, the "verified" stamp landing after a good scan
     property bool scanFailed: false
     readonly property real collapsedHeaderH: headerBody.implicitHeight
@@ -342,6 +350,7 @@ Item {
         // leaving the tab mid-flight or on the page comes back to the card
         openAnim.stop(); closeAnim.stop();
         root.morph = 0; root.flying = false; root.pageOpen = false; page.landed = true;
+        root.statsOpen = false;
         if (root.stage === "story") recapStory.close();
         if (root.stage !== "collapsed") { root.collapse(); expandAnim.complete(); }
     }
@@ -355,13 +364,13 @@ Item {
         id: overviewFlick
         anchors.fill: parent
         contentWidth: width
-        contentHeight: column.implicitHeight + 64
-        enabled: !root.pageOpen && !root.flying && root.stage !== "story"
+        contentHeight: column.implicitHeight + 24 + 150   // room to scroll the last card clear of the floating player bar
+        enabled: !root.pageOpen && !root.flying && root.stage !== "story" && !root.statsOpen
         interactive: root.stage === "collapsed"
         visible: opacity > 0.001
         // the story covers it; the expanded card would otherwise show through
-        opacity: (1 - root.morph) * (1 - recapStory.shown)
-        scale: 1 + 0.04 * root.morph
+        opacity: (1 - root.morph) * (1 - recapStory.shown) * (1 - root.statsShown)
+        scale: (1 + 0.04 * root.morph) * (1 - 0.03 * root.statsShown)
         clip: true
         boundsBehavior: Flickable.StopAtBounds
 
@@ -509,7 +518,7 @@ Item {
                     Text {
                         width: parent.width
                         horizontalAlignment: Text.AlignHCenter
-                        text: scratchWords.invalid ? I18n.tr("Quay lại sau nhé", "Come back later") : I18n.tr("Cào thử đi!", "Scratch it!")
+                        text: scratchWords.invalid ? I18n.pick("scratch.wait", ["Quay lại sau nhé", "Từ từ, chưa tới giờ đâu", "Chưa mở được đâu, đừng nôn", "Hẹn bạn lần sau nha", "Kiên nhẫn là một đức tính", "Bình tĩnh, quay lại sau nhé", "Chưa tới lúc, đi nghe nhạc đã"], ["Come back later", "Easy, it's not time yet", "Can't open yet, hold your horses", "See you next time", "Patience is a virtue", "Stay calm, come back later", "Not yet, go play some music"]) : I18n.pick("scratch.go", ["Cào thử đi!", "Cào đi, đừng ngại!", "Ngứa tay thì cào!", "Cào mạnh tay vào!", "Cào đi, biết đâu trúng!", "Một, hai, ba, cào!", "Tay đâu, cào liền!"], ["Scratch it!", "Go on, don't be shy!", "Itchy fingers? Scratch!", "Scratch harder!", "Scratch it, you might win!", "One, two, three, scratch!", "Hands ready? Scratch!"])
                         opacity: scratchWords.invalid ? 1 : card.coating
                         color: Theme.textPrimary
                         font.family: Theme.fontFamily
@@ -562,7 +571,7 @@ Item {
                         Layout.topMargin: 12
                         Layout.rightMargin: header.giantBand
                         opacity: Math.max(0, 1 - root.expand * 2.5)
-                        text: [I18n.tr("Chào bạn nhé, %1!", "Hey there, %1!"), I18n.tr("Ủa %1 đó hả!", "Oh, it's %1!"), I18n.tr("Lại gặp %1 rồi!", "%1, back again!"), I18n.tr("Hôm nay nghe gì, %1?", "What's playing, %1?"), I18n.tr("Bá khí quá, %1!", "Aura check, %1!")][root.greetIndex].arg(root.displayName)
+                        text: root.greetLines[root.greetIndex % root.greetLines.length].arg(root.displayName)
                         elide: Text.ElideRight
                         color: Theme.textPrimary
                         font.family: Theme.fontFamily
@@ -762,6 +771,103 @@ Item {
                             return line;
                         }
                     }
+
+                    // into the detailed stats
+                    Rectangle {
+                        Layout.topMargin: 16
+                        implicitWidth: statsRow.implicitWidth + 28
+                        implicitHeight: 36
+                        radius: 18
+                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, statsHover.hovered ? 0.34 : 0.22)
+                        border.width: 1
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.4)
+                        Behavior on color { ColorAnimation { duration: 150 } }
+                        Row {
+                            id: statsRow
+                            anchors.centerIn: parent
+                            spacing: 6
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: I18n.tr("Xem thống kê chi tiết", "See detailed stats")
+                                color: Theme.textPrimary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 13
+                                font.weight: Font.Bold
+                            }
+                            AppIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                source: Qt.resolvedUrl("../assets/icons/go-next-symbolic.svg")
+                                iconSize: 13
+                                color: Theme.textPrimary
+                                x: statsHover.hovered ? 2 : 0
+                            }
+                        }
+                        HoverHandler { id: statsHover; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: root.openStats() }
+                    }
+                }
+            }
+
+            // ---- version and about ----
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.topMargin: 14
+                opacity: Math.max(0, 1 - root.expand * 2)
+                visible: root.appVersion !== ""
+                Layout.preferredHeight: versionBody.implicitHeight + 40
+                radius: Theme.radiusApp
+                color: root.glassFill
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.07)
+
+                RowLayout {
+                    id: versionBody
+                    anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 24; rightMargin: 20 }
+                    spacing: 16
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+                        Text {
+                            Layout.fillWidth: true
+                            text: I18n.tr("Phiên bản & thông tin ứng dụng", "Version & app info")
+                            color: root.softText
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.weight: Font.DemiBold
+                            elide: Text.ElideRight
+                        }
+                        Text {
+                            text: root.appVersion
+                            color: Theme.textPrimary
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 34
+                            font.weight: Font.Bold
+                            font.letterSpacing: -1.2
+                            font.features: { "tnum": 1 }
+                        }
+                    }
+                    Rectangle {
+                        implicitWidth: aboutText.implicitWidth + 32
+                        implicitHeight: 38
+                        radius: 19
+                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, aboutHover.hovered ? 0.34 : 0.22)
+                        border.width: 1
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.4)
+                        scale: aboutTap.pressed ? 0.95 : 1
+                        Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+                        Behavior on color { ColorAnimation { duration: 150 } }
+                        Text {
+                            id: aboutText
+                            anchors.centerIn: parent
+                            text: I18n.tr("Giới thiệu", "About")
+                            color: Theme.textPrimary
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 14
+                            font.weight: Font.Bold
+                        }
+                        HoverHandler { id: aboutHover; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { id: aboutTap; onTapped: root.aboutRequested() }
+                    }
                 }
             }
         }
@@ -784,6 +890,24 @@ Item {
         onTrackRequested: row => root.trackRequested(row)
         onArtistRequested: name => root.artistRequested(name)
         onPlaylistRequested: pl => root.playlistRequested(pl)
+    }
+
+    function openStats() { root.statsOpen = true; statsPage.forceActiveFocus(); }
+
+    StatsPage {
+        id: statsPage
+        anchors.fill: parent
+        visible: root.statsShown > 0.001
+        active: root.statsOpen
+        enabled: root.statsOpen
+        opacity: root.statsShown
+        transform: Translate { x: (1 - root.statsShown) * 60 }
+        apiUrl: root.apiUrl
+        accentColor: root.accentColor
+        liteMode: root.liteMode
+        onBackRequested: root.statsOpen = false
+        onTrackRequested: row => root.trackRequested(row)
+        onArtistRequested: name => root.artistRequested(name)
     }
 
     RecapStory {

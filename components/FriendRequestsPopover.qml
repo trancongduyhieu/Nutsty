@@ -266,7 +266,7 @@ Item {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: modelData.from_name || modelData.from_email || "User"
+                                    text: modelData.from_name || modelData.from_email || I18n.tr("Người dùng", "User")
                                     color: "#ffffff"
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 11

@@ -63,6 +63,108 @@ def handle_get_listening_recap(handler, query):
         handler._send_json({"success": False, "error": str(e)}, 500)
 
 
+def handle_get_listening_stats(handler, query):
+    """The Stats page: ?year=2026&month=11 for a month, month=0 (or none) for the whole year."""
+    try:
+        _ensure_db()
+        from datetime import datetime
+        now = datetime.now()
+        year = int(query.get("year", [now.year])[0] or now.year)
+        month = int(query.get("month", [0])[0] or 0)
+        if not 0 <= month <= 12:
+            raise ValueError("month out of range")
+        stats = database.get_period_stats(year, month)
+        _attach_artist_photos((stats.get("top_artists") or [])[:10])
+        handler._send_json({"success": True, "stats": stats}, 200)
+    except Exception as e:
+        handler._send_json({"success": False, "error": str(e)}, 500)
+
+
+# --- genres -------------------------------------------------------------------------------
+# Nothing in the library knows a song's genre. As Mochy does, each *artist* is looked up by name
+# alone on the iTunes Search API (nothing about what or how much was played is sent), answers are
+# kept on disk so an artist is asked about once, and shares are weighted here by listening time.
+_GENRE_MAX_LOOKUPS = 12          # per request; the API allows about 20 a minute
+_genre_lock = None
+
+
+def _genre_cache_path():
+    try:
+        from . import platform_compat as pc
+    except (ImportError, ValueError):
+        import platform_compat as pc
+    return os.path.join(pc.get_config_dir(), "nutsty_artist_genres.json")
+
+
+def _lookup_genre(name):
+    import json
+    import urllib.parse
+    import urllib.request
+    url = "https://itunes.apple.com/search?" + urllib.parse.urlencode(
+        {"term": name, "entity": "musicArtist", "limit": 1})
+    req = urllib.request.Request(url, headers={"User-Agent": "Nutsty"})
+    with urllib.request.urlopen(req, timeout=4) as r:
+        res = json.loads(r.read().decode("utf-8", "replace"))
+    for item in res.get("results") or []:
+        g = (item.get("primaryGenreName") or "").strip()
+        if g:
+            return g
+    return ""
+
+
+def handle_get_listening_genres(handler, query):
+    """Genre shares for a month or year, biggest first; artists not yet known are asked a few at a time."""
+    import json
+    import threading
+    global _genre_lock
+    try:
+        _ensure_db()
+        from datetime import datetime
+        now = datetime.now()
+        year = int(query.get("year", [now.year])[0] or now.year)
+        month = int(query.get("month", [0])[0] or 0)
+        if _genre_lock is None:
+            _genre_lock = threading.Lock()
+        artists = database.get_artist_minutes(year, month)
+        with _genre_lock:
+            path = _genre_cache_path()
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    known = json.load(f)
+            except Exception:
+                known = {}
+            asked = 0
+            for a in artists:
+                key = a["artist"].strip().lower()
+                if key in known or asked >= _GENRE_MAX_LOOKUPS:
+                    continue
+                asked += 1
+                try:
+                    g = _lookup_genre(a["artist"])
+                except Exception:
+                    g = ""
+                if g:
+                    known[key] = g
+            if asked:
+                try:
+                    with open(path, "w", encoding="utf-8") as f:
+                        json.dump(known, f, ensure_ascii=False)
+                except Exception:
+                    pass
+        totals = {}
+        for a in artists:
+            g = known.get(a["artist"].strip().lower())
+            if g:
+                totals[g] = totals.get(g, 0) + a["minutes"]
+        whole = sum(totals.values())
+        shares = [{"name": g, "minutes": m, "fraction": (m / whole) if whole else 0}
+                  for g, m in sorted(totals.items(), key=lambda kv: -kv[1])]
+        handler._send_json({"success": True, "genres": shares,
+                            "pending": any(a["artist"].strip().lower() not in known for a in artists)}, 200)
+    except Exception as e:
+        handler._send_json({"success": False, "error": str(e)}, 500)
+
+
 def _artist_photo(name):
     """The artist's own photo: the shared avatar cache first, then a YouTube Music artist search."""
     try:

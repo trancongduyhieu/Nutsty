@@ -12,7 +12,7 @@ Rectangle {
     property var currentTrack: null
     property bool isPlaying: false
     property bool isLoadingAudio: false
-    property string sectionTitle: "Featured & Popular"
+    property string sectionTitle: I18n.tr("Nổi bật và phổ biến", "Featured & Popular")
     property bool isLoading: false
     signal trackPlayRequested(var trk)
     signal trackDetailsRequested(var trk)
@@ -238,7 +238,7 @@ Rectangle {
                             Text {
                                 id: badgeText
                                 anchors.centerIn: parent
-                                text: (root.albumMetadata && root.albumMetadata.type ? root.albumMetadata.type : "ALBUM").toUpperCase()
+                                text: (root.albumMetadata && root.albumMetadata.type ? root.albumMetadata.type : I18n.tr("TUYỂN TẬP", "ALBUM")).toUpperCase()
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 10
                                 font.bold: true
@@ -265,7 +265,7 @@ Rectangle {
                             spacing: 8
 
                             Text {
-                                text: root.albumMetadata ? (root.albumMetadata.artist || "Unknown Artist") : ""
+                                text: root.albumMetadata ? (root.albumMetadata.artist || I18n.tr("Nghệ sĩ chưa rõ", "Unknown Artist")) : ""
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 13
                                 font.bold: true
@@ -621,7 +621,7 @@ Rectangle {
                             }
 
                             Text {
-                                text: I18n.tr("Tải Album", "Download Album")
+                                text: I18n.tr("Tải tuyển tập", "Download Album")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 13
                                 font.bold: true
@@ -693,8 +693,8 @@ Rectangle {
                                     id: pid,
                                     playlistId: pid,
                                     browseId: pid,
-                                    title: root.sectionTitle || (root.albumMetadata ? (root.albumMetadata.title || root.albumMetadata.name) : "Playlist"),
-                                    name: root.sectionTitle || (root.albumMetadata ? (root.albumMetadata.title || root.albumMetadata.name) : "Playlist"),
+                                    title: root.sectionTitle || (root.albumMetadata ? (root.albumMetadata.title || root.albumMetadata.name) : I18n.tr("Danh sách phát", "Playlist")),
+                                    name: root.sectionTitle || (root.albumMetadata ? (root.albumMetadata.title || root.albumMetadata.name) : I18n.tr("Danh sách phát", "Playlist")),
                                     subtitle: root.albumMetadata ? (root.albumMetadata.artist || "") : "",
                                     artist: root.albumMetadata ? (root.albumMetadata.artist || "") : "",
                                     image: (root.albumMetadata && root.albumMetadata.image) ? root.albumMetadata.image : (root.sortedTracks && root.sortedTracks.length > 0 ? (root.sortedTracks[0].image || "") : ""),
@@ -1045,7 +1045,7 @@ Rectangle {
 
                 Text {
                     visible: !root.isLoading && (!root.sortedTracks || root.sortedTracks.length === 0) && (!root.isDownloadsView || root.downloadsSubTab === "tracks")
-                    text: root.isPlaylistView ? I18n.tr("Danh sách phát này đang trống. Thêm bài hát bằng menu chuột phải!", "This playlist is empty. Add songs using the context menu on any song!") : I18n.tr("Không tìm thấy bài hát nào. Nhập vào thanh tìm kiếm để khám phá!", "No tracks found. Type in search bar to explore online tracks!")
+                    text: root.isPlaylistView ? I18n.pick("grid.emptyPlaylist", ["Danh sách phát này đang trống. Thêm bài hát bằng menu chuột phải!", "Danh sách này còn trống trơn. Chuột phải vào bài hát để thêm vào nhé!", "Vắng như chùa Bà Đanh. Chuột phải vào bài hát để thêm!", "Trống như ví cuối tháng. Chuột phải vào bài hát để thêm nhạc!", "Chưa có bài nào ở đây. Chuột phải vào bài hát để rủ nó vào!", "Danh sách đang chờ bài đầu tiên. Chuột phải vào bài hát để thêm!", "Ở đây hơi bị trống. Chuột phải vào bài hát là thêm được ngay!"], ["This playlist is empty. Add songs using the context menu on any song!", "This playlist is bare. Right-click any song to add it!", "Quiet as a library. Right-click a song to add it!", "Empty as a wallet at month's end. Right-click a song to add music!", "No songs here yet. Right-click a song to invite it in!", "Waiting for its first song. Right-click any song to add it!", "Pretty empty in here. Right-click a song to add it right away!"]) : I18n.pick("grid.emptySearch", ["Không tìm thấy bài hát nào. Nhập vào thanh tìm kiếm để khám phá!", "Không thấy bài nào. Gõ vào thanh tìm kiếm thử xem!", "Bài hát đi trốn hết rồi. Gõ vào thanh tìm kiếm để lùng nhé!", "Ở đây chưa có gì. Gõ tên bài vào thanh tìm kiếm nhé!", "Tìm hoài không ra. Thử một cái tên khác trên thanh tìm kiếm xem!", "Trống trơn. Gõ vào thanh tìm kiếm, nhạc sẽ tới!", "U là trời, chẳng có bài nào. Gõ vào thanh tìm kiếm đi!"], ["No tracks found. Type in search bar to explore online tracks!", "No songs here. Try the search bar!", "The songs are all hiding. Use the search bar to find them!", "Nothing here yet. Type a song name in the search bar!", "Can't find it. Try another name in the search bar!", "All empty. Type in the search bar and the music will come!", "Oh no, not a single song. Try the search bar!"])
                     font.family: Theme.fontFamily
                     font.pixelSize: 14
                     color: Theme.textSecondary
@@ -1216,7 +1216,7 @@ Rectangle {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: I18n.tr("Chuyển giao playlist", "Transfer playlist")
+                                    text: I18n.tr("Chuyển giao danh sách phát", "Transfer playlist")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 11
                                     color: Theme.textSecondary
@@ -1501,7 +1501,7 @@ Rectangle {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: modelData.title || modelData.name || "Playlist"
+                                    text: modelData.title || modelData.name || I18n.tr("Danh sách phát", "Playlist")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 13
                                     font.bold: true
@@ -1851,7 +1851,7 @@ Rectangle {
             icon: "../assets/icons/material/ms-favorite-fill.svg"
             shape: "flower"
             accentColor: root.accentColor
-            title: I18n.tr("Chưa có bài hát yêu thích", "No favorite songs yet")
+            title: I18n.pick("favorites.empty", ["Chưa có bài hát yêu thích", "Chưa thả tim bài nào", "Tim chưa rung động vì bài nào", "Chưa tìm được chân ái à?", "Thả tim đi, đừng keo thế", "Chưa có bài nào lọt vào tim", "Còn độc thân, chưa thương bài nào"], ["No favorite songs yet", "No hearts given yet", "No song has moved you yet", "Haven't found the one yet?", "Go on, don't be stingy with hearts", "No song has stolen your heart yet", "Still single, no song to love yet"])
             description: I18n.tr("Nhấn biểu tượng Trái tim trên thanh phát nhạc để lưu các bài hát bạn yêu thích vào đây.", "Click the Heart icon on the player bar to save your favorite songs here.")
         }
     }

@@ -40,7 +40,7 @@ Three things together, which neighbouring players do not offer as one package:
 - **Lite mode** turns off whole-window redraw effects on machines without a GPU. New visual effects must respect it.
 - **Status bar is out of scope.** Waybar and Noctalia status bar work belongs to the `noctalia-shell` repo, not Nutsty.
 - **Roadmap, ideas and bugs live only in GitHub Issues**, never in a TODO file.
-- **Decided:** a listener card and listening recap like Mochy (issue #5), counting a play at 30 seconds or more.
+- **Decided:** a listener card, a monthly recap and a detailed Stats page like Mochy (issue #5), counting a play at 30 seconds or more. Stats stay on the computer; only artist names go out, to iTunes Search, to name genres.
 - **Open:** whether Nutsty is ever distributed beyond the friend group.
 
 ## Brand Commitments
@@ -55,7 +55,7 @@ Three things together, which neighbouring players do not offer as one package:
 - Feature history: `CHANGELOG.md` (current release 2.2.0, 2026-11-18).
 - Domain language: `CONTEXT.md`, `GLOSSARY.md`.
 - Architecture and footguns: `AGENTS.md`, `.agents/rules/`.
-- Design reference app: `references/Mochy-Music/` (Kotlin/Compose). It is studied for patterns and never copied.
+- Design reference apps: `references/Mochy-Music/` (Kotlin/Compose) sets the motion and screen structure; `references/swiftify/` sets only the toggle icons and a few Material You motions. The Liquid Glass look is Nutsty's own; neither app has it. Both are studied and rebuilt in QML, never pasted, and their palettes give way to Nutsty's borrowed accent.
 - None exist: no public user base, testimonials, download counts or press. Do not invent them.
 
 ## Product Principles

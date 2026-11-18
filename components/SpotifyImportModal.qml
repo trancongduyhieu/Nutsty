@@ -471,7 +471,7 @@ Rectangle {
                     Layout.fillWidth: true
 
                     Text {
-                        text: I18n.tr("Chuyển Giao Playlist Spotify", "Transfer Spotify Playlists")
+                        text: I18n.tr("Chuyển giao danh sách phát Spotify", "Transfer Spotify Playlists")
                         color: "#ffffff"
                         font.family: Theme.fontFamily
                         font.pixelSize: 15
@@ -560,7 +560,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: root.importPlaylistTitle || I18n.tr("Playlist Spotify", "Spotify Playlist")
+                        text: root.importPlaylistTitle || I18n.tr("Danh sách phát Spotify", "Spotify Playlist")
                         color: "#ffffff"
                         font.family: Theme.fontFamily
                         font.pixelSize: 15
@@ -1037,7 +1037,7 @@ Rectangle {
                     }
 
                     Text {
-                        text: I18n.tr("Chuyển Giao Hoàn Tất!", "Transfer Completed!")
+                        text: I18n.pick("spotify.done", ["Chuyển Giao Hoàn Tất!", "Chuyển nhà xong rồi!", "Xong xuôi, nhẹ cả người!", "Nhạc đã dọn sang nhà mới!", "Ngon lành cành đào!", "Xong rồi nha!", "Xong! Giờ thì bật nhạc thôi!"], ["Transfer Completed!", "Moved in!", "All done, what a relief!", "Your music has a new home!", "Smooth as butter!", "Done and dusted!", "Done! Now hit play!"])
                         color: "#ffffff"
                         font.family: Theme.fontFamily
                         font.pixelSize: 15
@@ -1073,7 +1073,7 @@ Rectangle {
 
                             Text {
                                 Layout.fillWidth: true
-                                text: root.resolvedPlaylist ? (root.resolvedPlaylist.title || root.resolvedPlaylist.name || I18n.tr("Playlist của bạn", "Your Playlist")) : I18n.tr("Playlist Spotify", "Spotify Playlist")
+                                text: root.resolvedPlaylist ? (root.resolvedPlaylist.title || root.resolvedPlaylist.name || I18n.tr("Danh sách phát của bạn", "Your Playlist")) : I18n.tr("Danh sách phát Spotify", "Spotify Playlist")
                                 color: "#ffffff"
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 12
@@ -1130,7 +1130,7 @@ Rectangle {
                 visible: !root.isImporting && !root.importCompleted
 
                 Text {
-                    text: I18n.tr("Dán đường link playlist Spotify (công khai hoặc chia sẻ):", "Paste a Spotify playlist link (public or shared):")
+                    text: I18n.tr("Dán đường dẫn danh sách phát Spotify (công khai hoặc chia sẻ):", "Paste a Spotify playlist link (public or shared):")
                     color: Theme.textSecondary
                     font.family: Theme.fontFamily
                     font.pixelSize: 12

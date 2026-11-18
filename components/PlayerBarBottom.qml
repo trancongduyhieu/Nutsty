@@ -55,7 +55,8 @@ Item {
     onResolvedSquareImageChanged: root.squareFailed = false
     onCurrentTrackChanged: {
         root.squareFailed = false;
-        root.triggerBackdropUpdate();
+        // the cover aurora behind the bar crossfades for ~900ms: stay live through all of it
+        root.triggerBackdropUpdate(1200);
     }
     onWidthChanged: root.triggerBackdropUpdate()
     onIsBarHeldChanged: if (!root.isBarHeld) root.triggerBackdropUpdate()
@@ -247,10 +248,15 @@ Item {
         repeat: false
         onTriggered: {
             backdropCropSource.scheduleUpdate();
+            interval = 260;
         }
     }
 
-    function triggerBackdropUpdate() {
+    // Keeps the glass live for `ms` (260 by default), then takes one last frame and freezes
+    function triggerBackdropUpdate(ms) {
+        var want = ms > 0 ? ms : 260;
+        if (backdropLiveDebounce.running && want < backdropLiveDebounce.interval) want = backdropLiveDebounce.interval;
+        backdropLiveDebounce.interval = want;
         backdropLiveDebounce.restart();
     }
 
@@ -650,7 +656,7 @@ Item {
 
                     Text {
                         Layout.fillWidth: true
-                        text: root.currentTrack ? (root.currentTrack.title || root.currentTrack.name || "Nutsty Track") : "Nutsty Desktop"
+                        text: root.currentTrack ? (root.currentTrack.title || root.currentTrack.name || I18n.tr("Bài hát Nutsty", "Nutsty Track")) : I18n.tr("Nutsty trên máy tính", "Nutsty Desktop")
                         font.family: Theme.fontFamily
                         font.pixelSize: 12
                         font.bold: true
@@ -696,7 +702,7 @@ Item {
                 // hovering shows the normal audio specs again
                 ShimmerText {
                     anchors.centerIn: parent
-                    text: I18n.tr("Cooking", "Cooking")
+                    text: I18n.tr("Đang nấu", "Cooking")
                     pixelSize: 11
                     running: root.cookingShown
                     opacity: root.cookT

@@ -1318,7 +1318,7 @@ Item {
                 }
                 Bold {
                     width: parent.width; sz: 22
-                    text: root.pick([I18n.tr("là ngày bạn thích nghe nhạc nhất", "is your favourite day to listen to music"), I18n.tr("là ngày tai bạn tăng ca nhiều nhất", "is when your ears work overtime"), I18n.tr("là ngày bạn quẩy nhạc hết cỡ", "is your official jam day"), I18n.tr("là ngày bá khí của bạn lên đỉnh", "is your peak aura day"), I18n.tr("là ngày bạn đỉnh nóc kịch trần", "is the day you lock in")], 7)
+                    text: root.pick([I18n.tr("là ngày bạn thích nghe nhạc nhất", "is your favourite day to listen to music"), I18n.tr("là ngày tai bạn tăng ca nhiều nhất", "is when your ears work overtime"), I18n.tr("là ngày bạn quẩy nhạc hết cỡ", "is your official jam day"), I18n.tr("là ngày bá khí của bạn lên đỉnh", "is your peak aura day"), I18n.tr("là ngày bạn nghe nhạc không biết mệt", "is the day you just can't stop listening")], 7)
                     opacity: root.lmA(pWeek, 2, 5)
                     transform: Translate { x: root.lmX(pWeek, 2, 5); y: root.lmY(pWeek, 2, 5) }
                 }

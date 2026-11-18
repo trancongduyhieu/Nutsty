@@ -28,6 +28,17 @@ Item {
     readonly property real span: horizontal ? width : height
     readonly property real frac: span > 0 ? Math.min(0.45, fadeLength / span) : 0
 
+    // Whatever scrolls under the player bar changes what its frosted glass shows: wake it.
+    // (The bar freezes its glass between updates so an idle window costs nothing.)
+    Connections {
+        target: root.flickable
+        function onContentYChanged() { root.wakeGlass(); }
+        function onContentXChanged() { root.wakeGlass(); }
+    }
+    function wakeGlass() {
+        if (typeof win !== "undefined" && win && typeof win.triggerBackdropUpdate === "function") win.triggerBackdropUpdate();
+    }
+
     parent: flickable ? flickable.parent : null
     // Plain geometry, not anchors: the host is often a Layout, which warns about anchored children
     x: flickable ? flickable.x : 0

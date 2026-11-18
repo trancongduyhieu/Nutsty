@@ -495,7 +495,7 @@ Rectangle {
                         clip: true
 
                         Text {
-                            text: I18n.tr("Tìm kiếm bài hát, album, nghệ sĩ...", "Search songs, albums, artists...")
+                            text: I18n.tr("Tìm kiếm bài hát, tuyển tập, nghệ sĩ...", "Search songs, albums, artists...")
                             font.family: Theme.fontFamily
                             font.pixelSize: 13
                             color: Theme.textMuted
@@ -1078,7 +1078,7 @@ Rectangle {
                     icon: "../assets/icons/material/ms-history.svg"
                     shape: "cookie"
                     accentColor: searchRoot.accentColor
-                    title: I18n.tr("Chưa có lịch sử tìm kiếm", "No recent searches")
+                    title: I18n.pick("search.nohistory", ["Chưa có lịch sử tìm kiếm", "Sạch trơn, chưa tìm gì cả", "Trống như ví cuối tháng", "Chưa tìm gì, tò mò chút đi", "Ô tìm kiếm đang buồn vì bị bơ", "Gõ đại một cái tên xem sao", "Ở đây trong veo như nước suối"], ["No recent searches", "Spotless, nothing searched yet", "Empty as a wallet at month's end", "Nothing searched yet, get curious", "The search box feels ignored", "Type any name and see what happens", "Clear as spring water in here"])
                     description: I18n.tr("Các từ khóa bạn đã tìm kiếm sẽ xuất hiện ở đây", "Your recent search queries will appear here")
                 }
             }
@@ -1544,7 +1544,7 @@ Rectangle {
                                                             }
 
                                                             Text {
-                                                                text: topResultUnifiedCard.isArtist ? I18n.tr("Tuyển tập", "Mix") : (topResultUnifiedCard.isAlbum ? I18n.tr("Xem album", "View album") : I18n.tr("Đài phát", "Radio"))
+                                                                text: topResultUnifiedCard.isArtist ? I18n.tr("Tuyển tập", "Mix") : (topResultUnifiedCard.isAlbum ? I18n.tr("Xem tuyển tập", "View album") : I18n.tr("Đài phát", "Radio"))
                                                                 font.family: Theme.fontFamily
                                                                 font.pixelSize: 11
                                                                 font.weight: Font.Medium

@@ -16,6 +16,31 @@ QtObject {
         return locale === "vi" ? (viText !== undefined ? viText : "") : (enText !== undefined ? enText : viText);
     }
 
+    // Session seed: rolled once when the app starts, never changes afterwards.
+    readonly property int sessionSeed: Math.floor(Math.random() * 1000000000)
+
+    // Stable hash of a string mixed with the session seed (non-negative int).
+    function seededIndex(key, count, salt) {
+        if (!count || count < 1) return 0;
+        var s = String(key) + "#" + String(sessionSeed) + "#" + String(salt === undefined ? "" : salt);
+        var h = 5381;
+        for (var i = 0; i < s.length; i++)
+            h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+        return h % count;
+    }
+
+    // Rotating copy: vi and en lists are parallel (same index in both languages).
+    // The variant is fixed for the whole app session, so text never swaps on screen.
+    // Text: I18n.pick("home.quick", ["Tuyển tập nhanh", ...], ["Quick picks", ...])
+    function pick(key, viList, enList) {
+        var list = locale === "vi" ? viList : enList;
+        if (!list || list.length === 0) list = viList || [];
+        if (list.length === 0) return "";
+        var n = Math.min(viList ? viList.length : list.length, enList ? enList.length : list.length);
+        if (n < 1) n = list.length;
+        return list[seededIndex(key, n)];
+    }
+
     // Dynamic Mood / Filter Chip Title Localizer
     // Translates pills across Home mood bar and Up Next filter chips
     function formatMoodChipTitle(title) {

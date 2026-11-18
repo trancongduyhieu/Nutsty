@@ -417,7 +417,7 @@ Item {
                     anchors.top: userAvatarWrapper.bottom
                     anchors.topMargin: 2
                     anchors.horizontalCenter: userAvatarWrapper.horizontalCenter
-                    text: root.myLatestNote ? I18n.tr("Note của bạn", "Your Note") : I18n.tr("Ghi chú của bạn", "Your note")
+                    text: root.myLatestNote ? I18n.tr("Ghi chú của bạn", "Your Note") : I18n.tr("Ghi chú của bạn", "Your note")
                     color: userMouseArea.containsMouse ? "#ffffff" : Qt.rgba(1, 1, 1, 0.70)
                     font.family: Theme.fontFamily
                     font.pixelSize: 9
@@ -671,7 +671,7 @@ Item {
                         anchors.top: friendAvatarWrapper.bottom
                         anchors.topMargin: 2
                         anchors.horizontalCenter: friendAvatarWrapper.horizontalCenter
-                        text: (modelData.user_name || modelData.name || "Friend")
+                        text: (modelData.user_name || modelData.name || I18n.tr("Bạn bè", "Friend"))
                         color: friendArea.containsMouse ? "#ffffff" : Qt.rgba(1, 1, 1, 0.6)
                         font.family: Theme.fontFamily
                         font.pixelSize: 9

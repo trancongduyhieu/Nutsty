@@ -48,7 +48,7 @@ Rectangle {
 
                 Text {
                     anchors.centerIn: parent
-                    text: root.isPlaying ? "▶ PLAYING" : (!root.currentTrack ? "■ STOPPED" : "⏸ PAUSED")
+                    text: root.isPlaying ? I18n.tr("ĐANG PHÁT", "PLAYING") : (!root.currentTrack ? I18n.tr("ĐÃ DỪNG", "STOPPED") : I18n.tr("TẠM DỪNG", "PAUSED"))
                     color: root.isPlaying ? Theme.selText : Theme.accent
                     font.pixelSize: 10
                     font.bold: true
@@ -60,7 +60,7 @@ Rectangle {
                 width: 28; height: 28; radius: 14
                 color: prevHover.hovered ? Theme.glassSoft : "transparent"
                 HoverHandler { id: prevHover }
-                Text { anchors.centerIn: parent; text: "⏮"; color: Theme.subtext; font.pixelSize: 14 }
+                AppIcon { anchors.centerIn: parent; source: "../assets/icons/media-skip-backward-symbolic.svg"; color: Theme.subtext; iconSize: 14 }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.prevClicked() }
             }
 
@@ -70,11 +70,11 @@ Rectangle {
                 border.color: Theme.accent; border.width: 1
                 Behavior on color { ColorAnimation { duration: 120 } }
                 HoverHandler { id: playHover }
-                Text {
+                AppIcon {
                     anchors.centerIn: parent
-                    text: root.isPlaying ? "⏸" : "▶"
+                    source: root.isPlaying ? "../assets/icons/media-playback-pause-symbolic.svg" : "../assets/icons/media-playback-start-symbolic.svg"
                     color: playHover.hovered ? Theme.selText : Theme.text
-                    font.pixelSize: 14
+                    iconSize: 14
                     anchors.horizontalCenterOffset: root.isPlaying ? 0 : 1
                 }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.playPauseClicked() }
@@ -84,14 +84,14 @@ Rectangle {
                 width: 28; height: 28; radius: 14
                 color: nextHover.hovered ? Theme.glassSoft : "transparent"
                 HoverHandler { id: nextHover }
-                Text { anchors.centerIn: parent; text: "⏭"; color: Theme.subtext; font.pixelSize: 14 }
+                AppIcon { anchors.centerIn: parent; source: "../assets/icons/media-skip-forward-symbolic.svg"; color: Theme.subtext; iconSize: 14 }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.nextClicked() }
             }
 
             // Now playing track name
             Text {
                 Layout.fillWidth: true
-                text: root.currentTrack ? (root.currentTrack.name + " · " + root.currentTrack.artist) : "Chưa chọn bài hát"
+                text: root.currentTrack ? (root.currentTrack.name + " · " + root.currentTrack.artist) : I18n.tr("Chưa chọn bài hát", "No track selected")
                 color: root.currentTrack ? Theme.text : Theme.subtext
                 font.pixelSize: 12
                 elide: Text.ElideRight
@@ -152,7 +152,7 @@ Rectangle {
             Layout.preferredWidth: 130
             spacing: 8
 
-            Text { text: "🔊"; font.pixelSize: 13 }
+            AppIcon { source: "../assets/icons/audio-volume-high-symbolic.svg"; color: Theme.subtext; iconSize: 14 }
 
             Rectangle {
                 id: volTrack

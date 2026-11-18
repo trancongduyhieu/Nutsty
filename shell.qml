@@ -652,7 +652,7 @@ Scope {
                         win.currentView = "search";
                         win.searchViewMode = "results";
                         searchView.viewMode = "results";
-                        mainGrid.sectionTitle = 'Results for "' + (win.lastYTQuery || "Search") + '"';
+                        mainGrid.sectionTitle = I18n.tr("Kết quả cho", "Results for") + ' "' + (win.lastYTQuery || I18n.tr("Tìm kiếm", "Search")) + '"';
                     }
                 } catch(e) {
                     console.log("ytSearchProc error:", e);
@@ -680,7 +680,7 @@ Scope {
             }
             searchView.searchInputText = q;
         }
-        mainGrid.sectionTitle = 'Results for "' + win.lastYTQuery + '"';
+        mainGrid.sectionTitle = I18n.tr("Kết quả cho", "Results for") + ' "' + win.lastYTQuery + '"';
         ytSearchProc.running = false;
         ytSearchProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "categorized_search", win.lastYTQuery];
         ytSearchProc.running = true;
@@ -693,7 +693,7 @@ Scope {
             win.browsingTracks = win.allTracks;
             return;
         }
-        mainGrid.sectionTitle = 'Local Search: "' + q + '"';
+        mainGrid.sectionTitle = I18n.tr("Tìm trong máy", "Local Search") + ': "' + q + '"';
         var lower = q.toLowerCase();
         win.browsingTracks = win.allTracks.filter(t => (t.name && t.name.toLowerCase().includes(lower)) || (t.artist && t.artist.toLowerCase().includes(lower)));
     }
@@ -1022,15 +1022,15 @@ Scope {
                 try {
                     var res = JSON.parse(data);
                     if (res.success) {
-                        settingsModal.statusMessage = "Connected as " + (res.name || "Google User") + "!";
+                        settingsModal.statusMessage = I18n.tr("Đã kết nối với ", "Connected as ") + (res.name || I18n.tr("Người dùng Google", "Google User")) + "!";
                         win.checkAuthStatus();
                         win.loadHomeFeed();
                         win.fetchCurrentUserProfile();
                     } else {
-                        settingsModal.statusMessage = "Error: " + (res.error || "Failed to parse credentials");
+                        settingsModal.statusMessage = I18n.tr("Lỗi: ", "Error: ") + (res.error || I18n.tr("Không đọc được thông tin đăng nhập", "Failed to parse credentials"));
                     }
                 } catch(e) {
-                    settingsModal.statusMessage = "Error: Invalid response";
+                    settingsModal.statusMessage = I18n.tr("Lỗi: Phản hồi không hợp lệ", "Error: Invalid response");
                 } finally {
                     settingsModal.isProcessing = false;
                 }
@@ -1046,7 +1046,7 @@ Scope {
         stdout: SplitParser {
             splitMarker: "\n"
             onRead: data => {
-                settingsModal.statusMessage = "Logged out successfully.";
+                settingsModal.statusMessage = I18n.tr("Đã đăng xuất.", "Logged out successfully.");
                 settingsModal.isProcessing = false;
                 win.checkAuthStatus();
                 win.loadHomeFeed();
@@ -1078,7 +1078,7 @@ Scope {
                         if (res.email) win.authAccountEmail = res.email;
                         var t = res.thumb || res.avatar || "";
                         if (t && !t.includes("ui-avatars.com")) win.authAccountThumb = t;
-                        settingsModal.statusMessage = I18n.tr("Đã kết nối thành công: ", "Connected successfully as ") + (res.name || "Google User") + "!";
+                        settingsModal.statusMessage = I18n.tr("Đã kết nối thành công: ", "Connected successfully as ") + (res.name || I18n.tr("Người dùng Google", "Google User")) + "!";
                         settingsModal.isProcessing = false;
                         win.checkAuthStatus();
                         win.loadHomeFeed();
@@ -1088,7 +1088,7 @@ Scope {
                         settingsModal.isProcessing = false;
                     }
                 } catch(e) {
-                    settingsModal.statusMessage = "Error: " + e;
+                    settingsModal.statusMessage = I18n.tr("Lỗi: ", "Error: ") + e;
                     settingsModal.isProcessing = false;
                 }
             }
@@ -1129,7 +1129,7 @@ Scope {
                     }
                 } catch(e) {
                     settingsModal.spotifyStatusSuccess = false;
-                    settingsModal.spotifyStatusMessage = "Error: " + e;
+                    settingsModal.spotifyStatusMessage = I18n.tr("Lỗi: ", "Error: ") + e;
                     settingsModal.spotifyAutoSyncing = false;
                 }
             }
@@ -2175,6 +2175,16 @@ Scope {
             acceptedButtons: Qt.NoButton
             onPositionChanged: win.triggerUserActiveBoost()
         }
+        // Any wheel or touchpad scroll, on any page, wakes the player bar's frosted glass. It sits
+        // on top but takes no buttons or hover and passes the wheel on, so nothing under it notices.
+        MouseArea {
+            id: scrollGlassSniffer
+            anchors.fill: parent
+            z: 100000
+            acceptedButtons: Qt.NoButton
+            hoverEnabled: false
+            onWheel: wheel => { win.triggerBackdropUpdate(400); wheel.accepted = false; }
+        }
         // Lite mode on Windows: this layer re-renders the whole window on any change, and the Win32
         // window region from launcher_win.py already rounds the corners there (Linux still needs it)
         layer.enabled: !(win.maximized || win.fullscreen) && !(win.liteMode && Qt.platform.os === "windows")
@@ -2921,6 +2931,8 @@ Scope {
                             onTrackRequested: row => win.playFromHistory(row)
                             onArtistRequested: name => { if (name) win.loadArtistDetails(name); }
                             onPlaylistRequested: pl => win.openCustomPlaylistDetail(pl)
+                            appVersion: win.appVersion
+                            onAboutRequested: whatsNewModalLoader.ensure().openModal(win.updateReleaseNotes)
                         }
                     }
                 }
@@ -3644,14 +3656,14 @@ Scope {
             }
             onConnectRequested: rawAuth => {
                 settingsModal.isProcessing = true;
-                settingsModal.statusMessage = "Connecting and validating credentials...";
+                settingsModal.statusMessage = I18n.tr("Đang kết nối và kiểm tra thông tin đăng nhập...", "Connecting and validating credentials...");
                 saveAuthProc.running = false;
                 saveAuthProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "save_auth", rawAuth];
                 saveAuthProc.running = true;
             }
             onLogoutRequested: {
                 settingsModal.isProcessing = true;
-                settingsModal.statusMessage = "Logging out...";
+                settingsModal.statusMessage = I18n.tr("Đang đăng xuất...", "Logging out...");
                 logoutProc.running = false;
                 logoutProc.command = ["python3", "-u", win.appDir + "/backend/ytmusic_helper.py", "logout"];
                 logoutProc.running = true;
@@ -4303,9 +4315,9 @@ Scope {
         } catch(e) {}
     }
 
-    function triggerBackdropUpdate() {
+    function triggerBackdropUpdate(ms) {
         if (typeof bottomPlayer !== "undefined" && bottomPlayer && typeof bottomPlayer.triggerBackdropUpdate === "function") {
-            bottomPlayer.triggerBackdropUpdate();
+            bottomPlayer.triggerBackdropUpdate(ms);
         }
     }
 
@@ -4495,18 +4507,18 @@ Scope {
             mainGrid.sectionTitle = "Downloads & All Tracks";
         } else if (pid === "simp" || pid === "nutsty") {
             win.browsingTracks = win.allTracks.filter(t => t.source === "Nutsty Music" || t.source === "Nutsty" || t.source === "Nutsty");
-            mainGrid.sectionTitle = "Nutsty Tracks";
+            mainGrid.sectionTitle = I18n.tr("Bài hát Nutsty", "Nutsty Tracks");
         } else if (pid === "downloads") {
             win.browsingTracks = win.allTracks.filter(t => t.source === "Downloads");
             mainGrid.sectionTitle = "Downloads";
         } else if (pid === "ado") {
             win.browsingTracks = win.allTracks.filter(t => (t.artist && t.artist.toLowerCase().includes("ado")) || (t.name && t.name.toLowerCase().includes("ado")));
-            mainGrid.sectionTitle = "Ado Collection";
+            mainGrid.sectionTitle = I18n.tr("Bộ sưu tập Ado", "Ado Collection");
         } else if (pid && (pid.startsWith("custom_pl_") || pid.startsWith("custom_"))) {
             for (var i = 0; i < win.customPlaylists.length; i++) {
                 if (win.customPlaylists[i].id === pid) {
                     win.browsingTracks = win.customPlaylists[i].tracks || [];
-                    mainGrid.sectionTitle = win.customPlaylists[i].title || "Playlist";
+                    mainGrid.sectionTitle = win.customPlaylists[i].title || I18n.tr("Danh sách phát", "Playlist");
                     break;
                 }
             }
@@ -4535,10 +4547,10 @@ Scope {
         if (q && q.trim() !== "") {
             win.currentView = "library";
             win.showAmberolDetails = false;
-            win.mainSectionTitle = 'Search: "' + q + '"';
-            mainGrid.sectionTitle = 'Search: "' + q + '"';
+            win.mainSectionTitle = I18n.tr("Tìm kiếm", "Search") + ': "' + q + '"';
+            mainGrid.sectionTitle = I18n.tr("Tìm kiếm", "Search") + ': "' + q + '"';
         } else {
-            win.mainSectionTitle = win.currentTab === "ytmusic" ? "Cloud Stream" : "Downloads";
+            win.mainSectionTitle = win.currentTab === "ytmusic" ? I18n.tr("Phát trực tuyến", "Cloud Stream") : "Downloads";
             mainGrid.sectionTitle = win.mainSectionTitle;
         }
         if (win.currentTab === "ytmusic") {

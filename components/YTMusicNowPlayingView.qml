@@ -1315,7 +1315,7 @@ Item {
                 Text {
                     Layout.fillWidth: true
                     horizontalAlignment: Text.AlignHCenter
-                    text: root.track ? (root.track.title || root.track.name || "") : I18n.tr("Chưa chọn bài hát", "No track playing")
+                    text: root.track ? (root.track.title || root.track.name || "") : I18n.pick("track.none", ["Chưa chọn bài hát", "Im ắng quá, chọn bài đi", "Loa đang ngồi chơi xơi nước", "Bài đâu rồi ta?", "Tai đang đói, cho ăn đi", "Chọn một bài cho đời thêm vui", "Sân khấu trống, mời bài lên"], ["No track playing", "Too quiet, pick a song", "The speakers are on a break", "Where's the song?", "Your ears are hungry, feed them", "Pick a song, brighten the day", "Empty stage, bring on a song"])
                     font.family: Theme.fontFamily
                     font.pixelSize: 26
                     font.bold: true
@@ -1621,7 +1621,7 @@ Item {
                         icon: "../assets/icons/material/ms-queue_music.svg"
                         shape: "clover"
                         accentColor: root.accentColor
-                        title: I18n.tr("Hàng đợi trống", "Queue is empty")
+                        title: I18n.pick("queue.empty", ["Hàng đợi trống", "Chưa ai xếp hàng cả", "Vắng như chợ chiều", "Hàng đợi đang ngồi chơi", "Thêm bài đi, kẻo nhạc hết giữa chừng", "Trống trơn, xếp vài bài vào nhé", "Hàng đợi khum có ai"], ["Queue is empty", "Nobody's in line", "Empty as a market at closing time", "The queue is taking a break", "Add songs before the music runs out", "All empty, line up a few songs", "Not a soul in the queue"])
                         description: I18n.tr("Phát một bài hát hoặc danh sách để xem các bài tiếp theo.", "Play a song or a playlist to see what comes next.")
                     }
                 }
@@ -2034,7 +2034,7 @@ Item {
                         icon: "../assets/icons/material/ms-lyrics-fill.svg"
                         shape: "cookie"
                         accentColor: root.accentColor
-                        title: I18n.tr("Không có lời bài hát", "Lyrics unavailable")
+                        title: I18n.pick("lyrics.none", ["Không có lời bài hát", "Lời đi chơi chưa về", "Bài này chưa ai chép lời", "Không lời, cứ ngân nga theo", "Lời trốn mất rồi", "Không có lời thì tự bịa lời đi", "Chỉ có nhạc thôi, thả hồn đi"], ["Lyrics unavailable", "The lyrics went out and never came back", "Nobody wrote these lyrics down yet", "No words, just hum along", "The lyrics are hiding", "No lyrics? Make some up", "Just the music, let it carry you"])
                         description: I18n.tr("Chưa tìm thấy lời cho bài này.", "We couldn't find lyrics for this song.")
                     }
                 }

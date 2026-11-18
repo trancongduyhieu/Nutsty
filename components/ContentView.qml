@@ -35,7 +35,7 @@ Rectangle {
             }
 
             Text {
-                text: "TITLE"
+                text: I18n.tr("TIÊU ĐỀ", "TITLE")
                 color: Theme.subtext
                 font.pixelSize: 11
                 font.bold: true
@@ -44,7 +44,7 @@ Rectangle {
             }
 
             Text {
-                text: "SOURCE"
+                text: I18n.tr("NGUỒN", "SOURCE")
                 color: Theme.subtext
                 font.pixelSize: 11
                 font.bold: true
@@ -53,7 +53,7 @@ Rectangle {
             }
 
             Text {
-                text: "TIME"
+                text: I18n.tr("T.GIAN", "TIME")
                 color: Theme.subtext
                 font.pixelSize: 11
                 font.bold: true
@@ -109,9 +109,17 @@ Rectangle {
                         Layout.preferredWidth: 28
                         Layout.fillHeight: true
 
+                        AppIcon {
+                            anchors.centerIn: parent
+                            visible: row.isCurrent
+                            iconSize: 12
+                            source: root.isPlaying ? "../assets/icons/media-playback-start-symbolic.svg" : "../assets/icons/media-playback-pause-symbolic.svg"
+                            color: row.isOnCursor ? Theme.selText : Theme.accent
+                        }
                         Text {
                             anchors.centerIn: parent
-                            text: row.isCurrent ? (root.isPlaying ? "▶" : "⏸") : String(index + 1)
+                            visible: !row.isCurrent
+                            text: String(index + 1)
                             color: row.isOnCursor ? Theme.selText : (row.isCurrent ? Theme.accent : Theme.subtext)
                             font.pixelSize: 12
                             font.bold: row.isCurrent
@@ -185,7 +193,7 @@ Rectangle {
             Text {
                 anchors.centerIn: parent
                 visible: root.tracks.length === 0
-                text: "Không có bài hát nào trong mục này."
+                text: I18n.tr("Không có bài hát nào trong mục này.", "There are no tracks in this section.")
                 color: Theme.subtext
                 font.pixelSize: 13
             }

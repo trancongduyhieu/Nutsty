@@ -22,6 +22,9 @@ Rectangle {
     property string accountThumb: ""
     property string accountEmail: ""
     property string statusMessage: ""
+    // Status text is localized, so colour and diagnostics are matched in both languages
+    readonly property bool statusIsOk: /Success|Connected|thành công|Đã kết nối/.test(statusMessage)
+    readonly property bool statusIsError: /Error|Failed|timed out|Lỗi|thất bại|quá thời gian|hết thời gian/.test(statusMessage)
     property bool isProcessing: false
     property bool syncHistoryToGoogle: true
     property bool animatedCoverEnabled: true
@@ -176,7 +179,7 @@ Rectangle {
         }
         text = (text || "").trim();
         if (!text) {
-            root.statusMessage = I18n.tr("Clipboard đang rỗng. Hãy copy mã cookie rồi thử lại.", "Clipboard is empty. Please copy cookie text first.");
+            root.statusMessage = I18n.tr("Bộ nhớ tạm đang trống. Hãy sao chép mã cookie rồi thử lại.", "Clipboard is empty. Please copy cookie text first.");
             root.manualCookieExpanded = true;
             return;
         }
@@ -193,10 +196,10 @@ Rectangle {
         }
 
         if (hasAuthToken) {
-            root.statusMessage = I18n.tr("Đã nhận diện cookie từ Clipboard! Đang kết nối...", "Detected cookie from Clipboard! Connecting...");
+            root.statusMessage = I18n.tr("Đã nhận diện cookie từ bộ nhớ tạm! Đang kết nối...", "Detected cookie from Clipboard! Connecting...");
             root.connectRequested(text);
         } else {
-            root.statusMessage = I18n.tr("Dữ liệu Clipboard không chứa cookie YouTube Music hợp lệ. Hãy kiểm tra lại.", "Clipboard does not contain valid YouTube Music cookies. Please check.");
+            root.statusMessage = I18n.tr("Dữ liệu trong bộ nhớ tạm không chứa cookie YouTube Music hợp lệ. Hãy kiểm tra lại.", "Clipboard does not contain valid YouTube Music cookies. Please check.");
             root.manualCookieExpanded = true;
         }
     }
@@ -243,7 +246,7 @@ Rectangle {
         text = (text || "").trim();
         if (!text) {
             root.spotifyStatusSuccess = false;
-            root.spotifyStatusMessage = I18n.tr("Clipboard đang rỗng. Hãy sao chép chuỗi sp_dc trước.", "Clipboard is empty. Please copy sp_dc string first.");
+            root.spotifyStatusMessage = I18n.tr("Bộ nhớ tạm đang trống. Hãy sao chép chuỗi sp_dc trước.", "Clipboard is empty. Please copy sp_dc string first.");
             return;
         }
         var match = text.match(/sp_dc=([A-Za-z0-9_\-]+)/);
@@ -254,7 +257,7 @@ Rectangle {
             spotifyInput.text = text;
         }
         root.spotifyStatusSuccess = true;
-        root.spotifyStatusMessage = I18n.tr("Đã dán chuỗi từ Clipboard! Bấm Lưu để kết nối.", "Pasted from Clipboard! Click Save to connect.");
+        root.spotifyStatusMessage = I18n.tr("Đã dán chuỗi từ bộ nhớ tạm! Bấm Lưu để kết nối.", "Pasted from Clipboard! Click Save to connect.");
     }
 
     function autoSyncSpotifyFromBrowsers() {
@@ -478,7 +481,7 @@ Rectangle {
         } else if (src === "netease") {
             return I18n.tr("NetEase Cloud Music", "NetEase Cloud Music");
         } else if (src === "youtube") {
-            return I18n.tr("YouTube Subtitles", "YouTube Subtitles");
+            return I18n.tr("Phụ đề YouTube", "YouTube Subtitles");
         } else {
             return I18n.tr("Tự động (Đa nguồn song song)", "Auto (Multi-Source)");
         }
@@ -920,7 +923,7 @@ Rectangle {
                             }
 
                             Text {
-                                text: root.accountEmail ? root.accountEmail : I18n.tr("Đã kết nối Cloud", "Connected to Cloud")
+                                text: root.accountEmail ? root.accountEmail : I18n.tr("Đã kết nối đám mây", "Connected to Cloud")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 12
                                 color: Theme.textSecondary
@@ -1062,7 +1065,7 @@ Rectangle {
                             font.family: Theme.fontFamily
                             font.pixelSize: 12
                             font.bold: true
-                            color: (root.statusMessage.indexOf("Success") !== -1 || root.statusMessage.indexOf("Connected") !== -1) ? root.accentColor : "#f87171"
+                            color: root.statusIsOk ? root.accentColor : "#f87171"
                             wrapMode: Text.Wrap
                         }
 
@@ -1076,7 +1079,7 @@ Rectangle {
                             font.pixelSize: 10
                             color: Qt.rgba(255, 255, 255, 0.40)
                             wrapMode: Text.Wrap
-                            visible: root.statusMessage.indexOf("Error") !== -1 || root.statusMessage.indexOf("Failed") !== -1 || root.statusMessage.indexOf("timed out") !== -1
+                            visible: root.statusIsError
                         }
                     }
                 }
@@ -1906,7 +1909,7 @@ Rectangle {
                         spacing: 2
 
                         Text {
-                            text: I18n.tr("Đồng bộ lịch sử nghe nhạc lên Cloud (YouTube Music)", "Sync listening history to Cloud (YouTube Music)")
+                            text: I18n.tr("Đồng bộ lịch sử nghe nhạc lên đám mây (YouTube Music)", "Sync listening history to Cloud (YouTube Music)")
                             font.family: Theme.fontFamily
                             font.pixelSize: 13
                             font.bold: true
@@ -3185,7 +3188,7 @@ Rectangle {
                     font.family: Theme.fontFamily
                     font.pixelSize: 12
                     font.bold: true
-                    color: (root.statusMessage.indexOf("Success") !== -1 || root.statusMessage.indexOf("Connected") !== -1) ? root.accentColor : "#f87171"
+                    color: root.statusIsOk ? root.accentColor : "#f87171"
                     visible: root.isLoggedIn && root.statusMessage.length > 0
                     wrapMode: Text.Wrap
                 }
@@ -3934,8 +3937,8 @@ Rectangle {
                                     },
                                     {
                                         key: "youtube",
-                                        name: I18n.tr("YouTube Subtitles", "YouTube Subtitles"),
-                                        desc: I18n.tr("Phụ đề chính thức & Auto-captions trực tiếp từ YouTube", "Official subtitles & auto-captions from YouTube")
+                                        name: I18n.tr("Phụ đề YouTube", "YouTube Subtitles"),
+                                        desc: I18n.tr("Phụ đề chính thức và phụ đề tự động trực tiếp từ YouTube", "Official subtitles & auto-captions from YouTube")
                                     }
                                 ]
 
@@ -4379,7 +4382,7 @@ Rectangle {
                             anchors.right: check4.left
                             anchors.rightMargin: 16
                             anchors.verticalCenter: parent.verticalCenter
-                            text: "[ MOTION GRAPHICS ]"
+                            text: I18n.tr("[ ĐỒ HỌA CHUYỂN ĐỘNG ]", "[ MOTION GRAPHICS ]")
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             font.bold: true

@@ -390,7 +390,7 @@ PanelWindow {
 
                 Text {
                     id: titleTxt
-                    text: (root.currentTrack && root.currentTrack.title) ? root.currentTrack.title : I18n.tr("Chưa chọn bài hát", "No track playing")
+                    text: (root.currentTrack && root.currentTrack.title) ? root.currentTrack.title : I18n.pick("track.none", ["Chưa chọn bài hát", "Im ắng quá, chọn bài đi", "Loa đang ngồi chơi xơi nước", "Bài đâu rồi ta?", "Tai đang đói, cho ăn đi", "Chọn một bài cho đời thêm vui", "Sân khấu trống, mời bài lên"], ["No track playing", "Too quiet, pick a song", "The speakers are on a break", "Where's the song?", "Your ears are hungry, feed them", "Pick a song, brighten the day", "Empty stage, bring on a song"])
                     font.family: "Inter Display, Inter, sans-serif"
                     font.pixelSize: 14
                     font.weight: Font.DemiBold

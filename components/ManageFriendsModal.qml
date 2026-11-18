@@ -308,7 +308,7 @@ Item {
                                 RowLayout {
                                     spacing: 4
                                     Text {
-                                        text: root.currentUserName || "User"
+                                        text: root.currentUserName || I18n.tr("Người dùng", "User")
                                         color: "#ffffff"
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 13
@@ -840,7 +840,7 @@ Item {
                                     Text {
                                         anchors.centerIn: parent
                                         visible: !modelData.is_self && modelData.is_friend
-                                        text: I18n.tr("✓ Bạn bè", "✓ Friends")
+                                        text: I18n.tr("Bạn bè", "Friends")
                                         color: root.accentColor
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 10
@@ -999,7 +999,7 @@ Item {
                                     spacing: 4
 
                                     Text {
-                                        text: modelData.name || modelData.username || "Friend"
+                                        text: modelData.name || modelData.username || I18n.tr("Bạn bè", "Friend")
                                         color: "#ffffff"
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 12

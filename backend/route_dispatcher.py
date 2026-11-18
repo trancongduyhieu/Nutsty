@@ -112,6 +112,10 @@ def dispatch_request(method, path, query_dict, body_str):
             listening_routes.handle_get_listening_profile(handler, query_dict)
         elif clean_path == "/api/listening/recap":
             listening_routes.handle_get_listening_recap(handler, query_dict)
+        elif clean_path == "/api/listening/stats":
+            listening_routes.handle_get_listening_stats(handler, query_dict)
+        elif clean_path == "/api/listening/genres":
+            listening_routes.handle_get_listening_genres(handler, query_dict)
         elif clean_path == "/api/listening/snippet":
             listening_routes.handle_get_recap_snippet(handler, query_dict)
         elif clean_path == "/api/users/me":
