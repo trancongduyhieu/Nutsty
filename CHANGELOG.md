@@ -21,6 +21,7 @@ Số phiên bản có dạng `A.B.C`, ví dụ `1.2.0`:
 
 ### Fixed
 - **Thanh phát nhạc luôn trong như kính**: Trước đây lớp kính mờ của thanh phát nhạc chỉ cập nhật khi cuộn ở Trang chủ, ở trang khác phải chạm vào thanh mới thấy đúng nền phía sau. Giờ cuộn ở bất kỳ đâu hay chuyển bài, lớp kính đều cập nhật theo mà máy vẫn nhẹ.
+- **Tổng kết không còn lộ bài hát nghe nhiều nhất**: Khi bài nghe nhiều nhất là của nghệ sĩ nghe nhiều nhất, trang nghệ sĩ từng phát luôn bài đó, nên tới trang bài hát là đã biết trước đáp án. Giờ trang nghệ sĩ phát một bài khác của chính nghệ sĩ đó, hoặc để yên lặng nếu bạn chỉ nghe đúng một bài của họ.
 - **Cuộn được tới cuối trang hồ sơ và trang thống kê**: Phần cuối hai trang này không còn bị thanh phát nhạc che mất.
 - **Lớp cào trên thẻ không còn rơi vụn lỗi**: Vụn rơi ra khi cào giờ hiện đều và đúng chỗ.
 - **Không còn chữ lẫn tiếng Anh và tiếng Việt**: Nhiều chỗ trước đây hiện tiếng Anh khi đang dùng tiếng Việt, hoặc ngược lại. Giờ mỗi ngôn ngữ hiện đúng ngôn ngữ đó. Các biểu tượng cảm xúc còn sót cũng được thay bằng biểu tượng của Nutsty.

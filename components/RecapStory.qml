@@ -199,13 +199,21 @@ Item {
         return second;
     }
     readonly property string dayWord: root.weekdayNames[root.favouriteDay].toUpperCase()
-    // the hero artist's most played song, with its cover and plays when it is in the top ten
+    // the song behind the artist page: the hero artist's most played song, unless that is the #1
+    // song, which the next page reveals - then their next song in the top ten, or none (no chip,
+    // no music) so the reveal is not given away
     readonly property var heroArtistSong: {
         if (!root.heroArtist || !root.heroArtist.top_song) return null;
-        for (var i = 0; i < root.songs.length; i++)
-            if (root.songs[i].title === root.heroArtist.top_song && root.songs[i].artist === root.heroArtist.artist) return root.songs[i];
+        for (var i = 0; i < root.songs.length; i++) {
+            var s = root.songs[i];
+            if (s !== root.heroSong && s.artist === root.heroArtist.artist) return s;
+        }
+        var tid = root.heroArtist.top_song_track_id || "";
+        if (root.heroSong && (tid === root.heroSong.track_id
+                || (root.heroSong.title === root.heroArtist.top_song && root.heroSong.artist === root.heroArtist.artist)))
+            return null;
         return { title: root.heroArtist.top_song, cover_url: root.heroArtist.top_song_cover || "",
-                 track_id: root.heroArtist.top_song_track_id || "", plays: 0 };
+                 track_id: tid, plays: 0 };
     }
     // the artist's own photo; the cover of their top song only when no photo was found
     function photoOf(a) { return a ? (a.photo_url || a.cover_url || "") : ""; }
