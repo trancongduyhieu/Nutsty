@@ -22,7 +22,9 @@
 // Every stroke is drawn twice, the second pass a little off, after rough.js (MIT, roughjs.com).
 // In the maximal cut each pile also gets a role from the singing tempo (tempoRoles): a slow line
 // right after fast ones is a peak (solo, big, one surprise from PEAK_FX: a bulb dropping on its
-// cord and switching on, a spotlight ring, focus rays, an ink fill, a stamp); a fast line alone is
+// cord and switching on, a spotlight ring, focus rays, an ink fill, a stamp, or a prop with its own
+// motion from PROP_FX: a balloon, a sticky note, a paper plane, a tape roll, a vine, a jack-in-the-box,
+// a folding paper, a hand with a sticker, drawn by peakPieces); a fast line alone is
 // a rush (a tick or ring on every word, a doodle per word, camera jolts); the rest pile as duos and
 // stacks, tied together by one pile mark from DUO_FX / STACK_FX (pileStrokes).
 
@@ -78,7 +80,10 @@ var DOODLE_SPOTS = ["above", "above", "left", "right", "above", "below"];
 var TEMPO = { slow: 0.75, prevFast: 1.0, minLines: 4, fast: 1.35, fastPct: 0.8, peakMinDur: 1.2 };
 // What each role draws. A peak picks one big move; a duo or stack one mark that ties its lines
 // together; a rush gets everything at once. Never the same pick twice running within a role.
-var PEAK_FX = ["bulb", "spot", "rays", "ink", "stamp"];
+// Props with their own motion (peakPieces): each arrives over PROP_D seconds and lands on the hero
+var PROP_FX = ["balloon", "note", "plane", "roll", "vine", "jack", "fold", "hand"];
+var PROP_D = { balloon: 0.9, note: 1.0, plane: 0.8, roll: 0.7, vine: 0, jack: 0, fold: 0.6, hand: 0.6 };
+var PEAK_FX = ["bulb", "spot", "rays", "ink", "stamp"].concat(PROP_FX);
 var DUO_FX = ["arrow", "brace", "versus", "swoop", "pair"];
 var STACK_FX = ["notebook", "numbers", "stairs", "frame", "draft"];
 var PILE_DOODLES = 5;     // doodles a whole duo or stack may carry
@@ -1299,11 +1304,16 @@ function peakOnAt(L) {
     if (!L) return 0;
     var hw = L.words[L.heroWi >= 0 ? L.heroWi : 0];
     var land = hw.start - LEAD;
-    return L.pile && L.pile.fx === "bulb" ? Math.max(land, L.enterAt + 0.7) : land;
+    var fx = L.pile ? L.pile.fx : "";
+    var d = fx === "bulb" ? 0.7 : (PROP_D[fx] || 0);
+    return d > 0 ? Math.max(land, L.enterAt + d) : land;
 }
-//   { on, lit (0..1), dark (alpha multiplier), bulbY (hero em, 0 = rest), bulbTilt (deg), cone, heroS, restA }
+// When the balloon pops: near the end of the line, but never before it has lifted the word a while
+function balloonPop(L) { return Math.max(peakOnAt(L) + 0.8, L.end - 0.1); }
+//   { on, lit (0..1), dark (alpha multiplier), bulbY (hero em, 0 = rest), bulbTilt (deg), cone, heroS, restA,
+//     heroDy (em), heroRot (deg), heroA (alpha multiplier) }
 function peakState(L, t) {
-    var st = { on: false, lit: 1, dark: 1, bulbY: 0, bulbTilt: 0, cone: 0, heroS: 1, restA: 1 };
+    var st = { on: false, lit: 1, dark: 1, bulbY: 0, bulbTilt: 0, cone: 0, heroS: 1, restA: 1, heroDy: 0, heroRot: 0, heroA: 1 };
     if (!L || !L.pile || L.pile.role !== "peak") return st;
     var fx = L.pile.fx, on = peakOnAt(L);
     if (fx === "bulb") {
@@ -1320,8 +1330,309 @@ function peakState(L, t) {
         st.restA = M.lerp(1, 0.3, M.E.outQuad((t - close) / 0.25));
         st.heroS = 1 + 0.5 * M.E.outBack(M.clamp((t - close) / 0.3), 1.7);
         st.on = t >= on;
-    } else st.on = t >= on;
+    } else {
+        st.on = t >= on;
+        var pw = L.words[L.heroWi >= 0 ? L.heroWi : 0], tp = t - on;
+        switch (fx) {
+        case "balloon": {
+            // the balloon tugs the word up a little; when it pops the word drops back with a wobble
+            var pop = balloonPop(L);
+            if (t < pop) st.heroDy = -0.14 * M.E.outQuad(tp / 0.5);
+            else { var tq = t - pop; st.heroDy = -0.14 * Math.exp(-10 * tq) * Math.cos(14 * tq); }
+            break;
+        }
+        case "note": if (tp >= 0) st.heroS = 1 - 0.07 * Math.exp(-7 * tp) * Math.sin(16 * tp); break;
+        case "plane": if (tp >= 0) st.heroRot = 5 * Math.exp(-6 * tp) * Math.sin(28 * tp); break;
+        case "vine": {
+            var tb = tp - Math.max(0.4, pw.end - pw.start);
+            if (tb >= 0 && tb < 0.35) st.heroS = 1 + 0.12 * Math.sin(Math.PI * tb / 0.35);
+            break;
+        }
+        case "fold":
+            // the word waits faint inside the folded paper, then comes out big as it opens
+            st.heroA = tp < 0 ? 0.3 : M.lerp(0.3, 1, M.clamp(tp / 0.15));
+            if (tp >= 0) st.heroS = 1 + 0.35 * M.E.outBack(tp / 0.3, 1.8);
+            st.restA = M.lerp(1, 0.55, M.E.outQuad(tp / 0.3));
+            break;
+        case "hand": if (tp >= 0) st.heroS = 1 - 0.05 * Math.sin(Math.PI * M.clamp(tp / 0.18)); break;
+        }
+    }
     return st;
+}
+
+// How far a jack-in-the-box hero is split open (0 closed .. ~1.1 overshooting); it shuts again a
+// second after it bursts
+function jackSplit(L, t) {
+    var land = peakOnAt(L), tau = t - land;
+    if (tau < 0) return 0;
+    return M.E.outBack(tau / 0.16, 2.4) * (1 - M.E.outQuad((t - land - 1.0) / 0.22));
+}
+// The roll's place across the hero, 0 (left edge) .. 1 (right edge), as the word is sung
+function rollAt(L, t) {
+    var hw = L.words[L.heroWi >= 0 ? L.heroWi : 0];
+    return M.clamp((t - peakOnAt(L)) / Math.max(0.4, hw.end - hw.start));
+}
+
+// Shapes for the props, in units of the hero's font size (1 = px), around their own origin
+function place(S, cx, cy, rot, s) {
+    var a = rot * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a);
+    return S.map(function (st) { return st.map(function (p) { return { x: cx + s * (p.x * c - p.y * sn), y: cy + s * (p.x * sn + p.y * c) }; }); });
+}
+function ellipsePts(cx, cy, rx, ry, a0, a1, n) {
+    var pts = [];
+    for (var i = 0; i <= n; i++) { var a = a0 + (a1 - a0) * i / n; pts.push({ x: cx + rx * Math.cos(a), y: cy + ry * Math.sin(a) }); }
+    return pts;
+}
+function starPts(r, ri) {
+    var pts = [];
+    for (var i = 0; i <= 10; i++) { var a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? ri : r; pts.push({ x: rr * Math.cos(a), y: rr * Math.sin(a) }); }
+    return pts;
+}
+function cubicAt(p0, c0, c1, p1, u) {
+    var v = 1 - u;
+    return { x: v * v * v * p0.x + 3 * v * v * u * c0.x + 3 * v * u * u * c1.x + u * u * u * p1.x,
+             y: v * v * v * p0.y + 3 * v * v * u * c0.y + 3 * v * u * u * c1.y + u * u * u * p1.y,
+             dx: 3 * v * v * (c0.x - p0.x) + 6 * v * u * (c1.x - c0.x) + 3 * u * u * (p1.x - c1.x),
+             dy: 3 * v * v * (c0.y - p0.y) + 6 * v * u * (c1.y - c0.y) + 3 * u * u * (p1.y - c1.y) };
+}
+function propShape(kind) {
+    switch (kind) {
+    case "balloon":
+        return [ellipsePts(0, 0, 0.42, 0.52, -Math.PI / 2, 1.5 * Math.PI + 0.25, 40),
+                [{ x: -0.07, y: 0.62 }, { x: 0, y: 0.52 }, { x: 0.07, y: 0.62 }, { x: -0.07, y: 0.62 }],
+                ellipsePts(-0.02, -0.02, 0.26, 0.34, Math.PI * 1.08, Math.PI * 1.4, 8)];
+    case "note":
+        return [[{ x: -0.55, y: -0.5 }, { x: 0.55, y: -0.5 }, { x: 0.55, y: 0.3 }, { x: 0.35, y: 0.5 }, { x: -0.55, y: 0.5 }, { x: -0.55, y: -0.5 }],
+                [{ x: 0.55, y: 0.3 }, { x: 0.4, y: 0.34 }, { x: 0.35, y: 0.5 }]];
+    case "tape":
+        return place([[{ x: -0.2, y: -0.07 }, { x: 0.2, y: -0.07 }, { x: 0.2, y: 0.07 }, { x: -0.2, y: 0.07 }, { x: -0.2, y: -0.07 }]], -0.47, -0.5, -35, 1)
+            .concat(place([[{ x: -0.2, y: -0.07 }, { x: 0.2, y: -0.07 }, { x: 0.2, y: 0.07 }, { x: -0.2, y: 0.07 }, { x: -0.2, y: -0.07 }]], 0.47, -0.5, 35, 1));
+    case "scribble": {
+        var S = [];
+        for (var r = 0; r < 3; r++) {
+            var pts = [], x1 = r === 2 ? 0.05 : 0.38;
+            for (var i = 0; i <= 12; i++) { var u = i / 12; pts.push({ x: -0.4 + (x1 + 0.4) * u, y: -0.22 + 0.2 * r + 0.035 * Math.sin(u * 19 + r) }); }
+            S.push(pts);
+        }
+        return S;
+    }
+    case "plane":
+        // nose at the origin pointing along +x; the first point is the nose
+        return [[{ x: 0, y: 0 }, { x: -1, y: -0.38 }, { x: -0.78, y: 0 }, { x: -1, y: 0.22 }, { x: 0, y: 0 }],
+                [{ x: 0, y: 0 }, { x: -0.78, y: 0 }, { x: -0.92, y: 0.12 }]];
+    case "roll":
+        return [ellipsePts(0, 0, 1, 1, 0, 2 * Math.PI + 0.2, 28), ellipsePts(0, 0, 0.42, 0.42, 0, 2 * Math.PI + 0.3, 16),
+                [{ x: 0.5, y: 0 }, { x: 0.92, y: 0 }]];
+    case "leaf":
+        return [ellipsePts(0.5, 0, 0.5, 0.3, Math.PI, 3 * Math.PI, 16), [{ x: 0.05, y: 0 }, { x: 0.8, y: 0 }]];
+    case "flower": {
+        var F = [];
+        for (var k = 0; k < 5; k++) {
+            var a = -Math.PI / 2 + k * 2 * Math.PI / 5;
+            F.push(ellipsePts(0.42 * Math.cos(a), 0.42 * Math.sin(a), 0.26, 0.26, a + Math.PI, a + 3 * Math.PI, 12));
+        }
+        F.push(ellipsePts(0, 0, 0.16, 0.16, 0, 2 * Math.PI, 10));
+        return F;
+    }
+    case "hand":
+        // a pointing hand, fingertip at the origin pointing along -x, the wrist off to +x
+        return [[{ x: 0.6, y: -0.12 }, { x: 0.06, y: -0.1 }, { x: -0.02, y: -0.04 }, { x: 0, y: 0.04 }, { x: 0.06, y: 0.09 }, { x: 0.5, y: 0.09 }],
+                [{ x: 0.6, y: -0.12 }, { x: 0.75, y: -0.28 }, { x: 0.92, y: -0.22 }, { x: 1.02, y: -0.04 }, { x: 1.1, y: 0.2 },
+                 { x: 1.05, y: 0.45 }, { x: 0.8, y: 0.56 }, { x: 0.56, y: 0.46 }, { x: 0.5, y: 0.3 }, { x: 0.5, y: 0.09 }],
+                [{ x: 0.5, y: 0.2 }, { x: 0.64, y: 0.21 }], [{ x: 0.52, y: 0.33 }, { x: 0.66, y: 0.35 }],
+                [{ x: 1.02, y: -0.04 }, { x: 4.6, y: 1.3 }], [{ x: 1.05, y: 0.45 }, { x: 4.4, y: 1.8 }]];
+    case "sticker":
+        return [ellipsePts(0, 0, 1, 1, 0, 2 * Math.PI + 0.25, 24), starPts(0.58, 0.25)];
+    }
+    return [];
+}
+
+// The prop moves, as up to four pieces already placed in the hero word's own box (W wide, font
+// size px, baseline at bl), so they move, scale and fade with the word:
+//   [{ strokes, accent (accent ink, else text ink), a (alpha), pen (px), z, flat (flat caps) } x4]
+// Nothing shows before the prop sets off at peakOnAt - PROP_D.
+function noPiece() { return { strokes: [], accent: false, a: 0, pen: 1.5, z: 2, flat: false }; }
+function peakPieces(L, t, W, px, bl) {
+    var out = [noPiece(), noPiece(), noPiece(), noPiece()];
+    if (!L || !L.pile || L.pile.role !== "peak" || PROP_FX.indexOf(L.pile.fx) < 0 || !(W > 1) || !(px > 1)) return out;
+    var fx = L.pile.fx, hw = L.words[L.heroWi >= 0 ? L.heroWi : 0];
+    var on = peakOnAt(L), start = on - PROP_D[fx], tau = t - start, tp = t - on;
+    var sung = Math.max(0.4, hw.end - hw.start), sd = L.seed + 900;
+    if (tau < 0) return out;
+    function put(k, shape, prog, accent, a, penK, z, flat) {
+        if (prog <= 0 || a <= 0.003) return;
+        var S = drawStrokes(shape, prog, sd + k * 17, t, px, !flat, L.boil);
+        if (S.length) out[k] = { strokes: S, accent: accent, a: Math.min(1, a), pen: Math.max(1.5, px * penK), z: z, flat: !!flat };
+    }
+    function fade(x, d) { return 1 - M.clamp(x / d); }
+    switch (fx) {
+    case "balloon": {
+        // rises from below the line on a damped spring, swaying; its string ties to the word top
+        var pop = balloonPop(L);
+        var bAt = function (ta) {
+            return { x: W / 2 + 0.25 * px + 0.2 * px * Math.sin(2.1 * ta),
+                     y: bl - 2.3 * px + 4.0 * px * Math.exp(-3 * ta) * Math.cos(4 * ta), tilt: 6 * Math.sin(2.1 * ta + 0.8) };
+        };
+        if (t < pop) {
+            var b = bAt(tau);
+            put(0, place(propShape("balloon"), b.x, b.y, b.tilt, px), 1, true, 0.95, 0.05, 3);
+            var knot = place([[{ x: 0, y: 0.62 }]], b.x, b.y, b.tilt, px)[0][0];
+            var end = t >= on ? { x: W / 2, y: bl - 0.8 * px } : { x: knot.x - 0.15 * px * Math.sin(2.1 * tau), y: knot.y + 1.3 * px };
+            var mid = { x: (knot.x + end.x) / 2 + 0.22 * px * Math.sin(3 * tau + 1), y: (knot.y + end.y) / 2 };
+            put(1, [bezier(knot, mid, mid, end, 16)], 1, false, 0.7, 0.025, 2);
+        } else {
+            // pop: confetti flies out from where the balloon was and falls away
+            var c = bAt(pop - start), q = (t - pop) / 0.8;
+            if (q < 1) {
+                var C = [];
+                for (var i = 0; i < 14; i++) {
+                    var ang = i / 14 * 2 * Math.PI + 0.3 * M.rs(sd, i, 911), dist = (1.0 + 0.9 * M.r(sd, i, 912)) * px * M.E.outQuad(q * 1.6);
+                    var cx = c.x + Math.cos(ang) * dist, cy = c.y + Math.sin(ang) * dist + 1.6 * px * q * q;
+                    var spin = ang + q * 9 * M.rs(sd, i, 913), len = 0.08 * px;
+                    C.push([{ x: cx - len * Math.cos(spin), y: cy - len * Math.sin(spin) }, { x: cx + len * Math.cos(spin), y: cy + len * Math.sin(spin) }]);
+                }
+                put(2, C, 1, true, 1 - q * q, 0.05, 3);
+            }
+        }
+        break;
+    }
+    case "note": {
+        // flutters down side to side like a leaf, lands above the word, gets taped, then scribbled on
+        var rx = W / 2 + 0.1 * px, ry = bl - 1.45 * px, rr = -5 + 4 * M.rs(sd, 1, 914);
+        var u = M.clamp(tau / PROP_D.note), fall = 1 - (1 - u) * (1 - u), sw = Math.sin(u * 2.6 * Math.PI) * (1 - u);
+        var nx = rx + 1.0 * px * sw, ny = ry - 3.4 * px * (1 - fall);
+        var nr = rr + 40 * Math.sin(u * 2.6 * Math.PI + 0.4) * (1 - u) + (tp >= 0 ? 3 * Math.exp(-8 * tp) * Math.sin(20 * tp) : 0);
+        put(0, place(propShape("note"), nx, ny, nr, px), 1, false, 0.85, 0.035, 2);
+        if (tp >= 0) {
+            put(1, place(propShape("tape"), nx, ny, nr, px), M.clamp(tp / 0.25), true, 0.75, 0.03, 3);
+            put(2, place(propShape("scribble"), nx, ny, nr, px), M.clamp((tp - 0.2) / sung), true, 0.9, 0.035, 3);
+        }
+        break;
+    }
+    case "plane": {
+        // a paper plane swoops in over the word, nose first, and sticks in its top right corner
+        var p0 = { x: -2.5 * px, y: bl - 3.4 * px }, c0 = { x: W + 4.5 * px, y: bl - 4.6 * px };
+        var c1 = { x: W + 0.7 * px, y: bl - 2.4 * px }, p1 = { x: W - 0.02 * px, y: bl - 0.7 * px };
+        var fu = 1 - Math.pow(1 - M.clamp(tau / PROP_D.plane), 1.7);
+        var P = cubicAt(p0, c0, c1, p1, fu);
+        var head = Math.atan2(P.dy, P.dx) * 180 / Math.PI;
+        if (tp >= 0) head += 9 * Math.exp(-5 * tp) * Math.sin(26 * tp);
+        put(0, place(propShape("plane"), P.x, P.y, head, 0.9 * px), 1, false, 0.9, 0.035, 3);
+        // a dashed trail behind it, fading once it has landed
+        var T = [], u0 = Math.max(0, fu - 0.55);
+        for (var d = 0; d < 12; d++) {
+            var ua = u0 + (fu - u0) * d / 12, ub = u0 + (fu - u0) * (d + 0.5) / 12;
+            var qa = cubicAt(p0, c0, c1, p1, ua), qb = cubicAt(p0, c0, c1, p1, ub);
+            T.push([{ x: qa.x, y: qa.y }, { x: qb.x, y: qb.y }]);
+        }
+        if (fu - u0 > 0.02) put(1, T, 1, true, 0.55 * fade(tp, 0.5), 0.025, 1);
+        if (tp >= 0) {
+            var I = [];
+            for (var k = 0; k < 3; k++) {
+                var ia = -2.2 + k * 0.7;
+                I.push([{ x: p1.x + 0.25 * px * Math.cos(ia), y: p1.y + 0.25 * px * Math.sin(ia) },
+                        { x: p1.x + 0.5 * px * Math.cos(ia), y: p1.y + 0.5 * px * Math.sin(ia) }]);
+            }
+            put(2, I, M.clamp(tp / 0.12), true, fade(tp - 0.4, 0.3), 0.04, 3);
+        }
+        break;
+    }
+    case "roll": {
+        // a tape roll rolls in from the left, crosses under the word as it is sung, then rolls off
+        var r = 0.28 * px, yc = bl + 0.34 * px, yT = yc + r;
+        var xc = tp < 0 ? -2.6 * px * (1 - M.E.outQuad(tau / PROP_D.roll)) : W * rollAt(L, t);
+        var off = tp - sung, ra = 1;
+        if (off > 0) { xc = W + 3 * px * M.E.inCubic(off / 0.6); ra = fade(off - 0.2, 0.4); }
+        put(0, place(propShape("roll"), xc, yc, (xc + 2.6 * px) / r * 180 / Math.PI, r), 1, false, 0.85 * ra, 0.035, 3);
+        var tx = Math.min(xc, W + 0.05 * px);
+        if (tx > 0) {
+            var tape = [];
+            for (var j = 0; j <= 10; j++) tape.push({ x: -0.05 * px + (tx + 0.05 * px) * j / 10, y: yT - 0.08 * px + 0.02 * px * Math.sin(j * 1.7) });
+            put(1, [tape], 1, true, 0.5, 0.16, -1, true);
+        }
+        break;
+    }
+    case "vine": {
+        // grows from the word's bottom left, under it and up its right side; leaves on the way, and a
+        // flower that blooms as the word ends
+        var V = bezier({ x: -0.12 * px, y: bl + 0.18 * px }, { x: W * 0.35, y: bl + 0.42 * px }, { x: W * 0.65, y: bl + 0.05 * px }, { x: W + 0.2 * px, y: bl + 0.26 * px }, 24)
+            .concat(bezier({ x: W + 0.2 * px, y: bl + 0.26 * px }, { x: W + 0.42 * px, y: bl + 0.1 * px }, { x: W + 0.3 * px, y: bl - 0.9 * px }, { x: W - 0.2 * px, y: bl - 1.05 * px }, 16).slice(1));
+        var tipC = { x: W - 0.32 * px, y: bl - 1.3 * px };
+        var g = M.clamp(tp / sung);
+        put(0, [V], g, false, 0.75, 0.035, 1);
+        var Lv = [];
+        for (var lk = 0; lk < 4; lk++) {
+            var fk = 0.18 + 0.19 * lk, le = M.E.outBack((g - fk) / 0.12, 2);
+            if (g <= fk) continue;
+            var vi = Math.round(fk * (V.length - 1)), va = V[vi], vb = V[Math.min(V.length - 1, vi + 1)];
+            var tang = Math.atan2(vb.y - va.y, vb.x - va.x) * 180 / Math.PI, side = lk % 2 ? 1 : -1;
+            Lv = Lv.concat(place(propShape("leaf"), va.x, va.y, tang + side * 55, 0.38 * px * Math.max(0.01, le)));
+        }
+        if (Lv.length) put(1, Lv, 1, true, 0.7, 0.03, 1);
+        var tb = tp - sung;
+        if (tb >= 0) put(2, place(propShape("flower"), tipC.x, tipC.y, 20 * tb, 0.45 * px * Math.max(0.01, M.E.outBack(tb / 0.3, 2.2))), 1, true, 1, 0.04, 3);
+        break;
+    }
+    case "jack": {
+        // the word splits open and a spring with a star boings out of the gap, wobbles, and goes back
+        var sp = jackSplit(L, t);
+        if (sp < 0.02) break;
+        var nc = hw.chars.length, gx = W * (nc > 1 ? Math.ceil(nc / 2) / nc : 0.5), base = bl - 0.25 * px;
+        var ext = sp * Math.max(0, 1 - Math.exp(-5 * tp) * Math.cos(13 * tp)), hgt = 1.15 * px * ext;
+        var tilt = 9 * Math.exp(-3.5 * tp) * Math.sin(11 * tp);
+        var Z = [];
+        for (var z = 0; z <= 9; z++) Z.push({ x: (z === 0 || z === 9 ? 0 : (z % 2 ? -0.2 : 0.2)), y: -z / 9 * hgt / px });
+        put(0, place([Z], gx, base, tilt, px), 1, false, 0.85, 0.035, 3);
+        var top = place([[{ x: 0, y: -hgt / px - 0.42 }]], gx, base, tilt, px)[0][0];
+        put(1, place([starPts(0.42, 0.18)], top.x, top.y, tilt * 1.5, px), 1, true, 1, 0.045, 3);
+        var B = [];
+        for (var bk = 0; bk < 4; bk++) {
+            var ba = -Math.PI * (0.15 + 0.233 * bk);
+            B.push([{ x: gx + 0.45 * px * Math.cos(ba), y: base - 0.3 * px + 0.45 * px * Math.sin(ba) },
+                    { x: gx + 0.75 * px * Math.cos(ba), y: base - 0.3 * px + 0.75 * px * Math.sin(ba) }]);
+        }
+        put(2, B, M.clamp(tp / 0.1), true, fade(tp - 0.3, 0.3), 0.035, 2);
+        break;
+    }
+    case "fold": {
+        // a folded paper behind the word opens out panel by panel, an accordion pulled flat
+        var Wp = W + 0.7 * px, cxf = W / 2, topY = bl - 1.05 * px, Hp = 1.35 * px, pw = Wp / 4;
+        var widths = [pw], all = 0;
+        for (var pk = 1; pk < 4; pk++) { var e = M.E.outBack((tau - (pk - 1) * 0.2) / 0.2, 1.4); widths.push(pw * Math.max(0, e)); all += M.clamp(e) / 3; }
+        var cur = widths.reduce(function (a, b2) { return a + b2; }, 0);
+        var xs = [cxf - cur / 2];
+        for (var wk = 0; wk < 4; wk++) xs.push(xs[wk] + widths[wk]);
+        var dip = function (j) { return (j % 2 ? 1 : -1) * 0.14 * px * (1 - all); };
+        var outline = [], creases = [];
+        for (var j2 = 0; j2 <= 4; j2++) outline.push({ x: xs[j2], y: topY + dip(j2) });
+        for (var j3 = 4; j3 >= 0; j3--) outline.push({ x: xs[j3], y: topY + Hp + dip(j3) });
+        outline.push(outline[0]);
+        for (var j4 = 1; j4 < 4; j4++) if (widths[j4] > 0.02 * px) creases.push([{ x: xs[j4], y: topY + dip(j4) }, { x: xs[j4], y: topY + Hp + dip(j4) }]);
+        put(0, [outline], 1, false, 0.8, 0.035, -1);
+        if (creases.length) put(1, creases, 1, false, 0.4, 0.025, -1);
+        if (tp >= 0) put(2, [[{ x: xs[4] - 0.3 * px, y: topY }, { x: xs[4] - 0.3 * px, y: topY + 0.3 * px }, { x: xs[4], y: topY + 0.3 * px }]], M.clamp(tp / 0.2), true, 0.8, 0.035, -1);
+        break;
+    }
+    case "hand": {
+        // a drawn hand reaches in from the bottom right, presses a sticker on the word's top right
+        // corner, and pulls back; the sticker stays
+        var sx = W - 0.05 * px, sy = bl - 0.8 * px;
+        var away = tp < 0 ? 1 - M.E.outCubic(tau / PROP_D.hand) : M.E.inCubic((tp - 0.35) / 0.45);
+        var press = tp >= 0 ? 1 - 0.08 * Math.sin(Math.PI * M.clamp(tp / 0.18)) : 1;
+        if (away < 0.999) put(0, place(propShape("hand"), sx + 0.08 * px + 3.5 * px * away, sy + 0.05 * px + 3.2 * px * away, 30, px * press), 1, false, 0.9, 0.035, 4);
+        if (tp >= 0) {
+            put(1, place(propShape("sticker"), sx, sy, -14, 0.32 * px * Math.max(0.01, M.E.outBack(tp / 0.18, 2.5))), 1, true, 1, 0.04, 3);
+            var Sp = [];
+            for (var sk = 0; sk < 3; sk++) {
+                var sa = -2.4 + sk * 0.75;
+                Sp.push([{ x: sx + 0.45 * px * Math.cos(sa), y: sy + 0.45 * px * Math.sin(sa) }, { x: sx + 0.7 * px * Math.cos(sa), y: sy + 0.7 * px * Math.sin(sa) }]);
+            }
+            put(2, Sp, M.clamp((tp - 0.05) / 0.12), true, fade(tp - 0.5, 0.3), 0.035, 3);
+        }
+        break;
+    }
+    }
+    return out;
 }
 var PEAK_PARTS = { bulb: ["bulb", "cord", "glow"], spot: ["ring"], rays: ["rays"], ink: ["ink"], stamp: ["stamp"] };
 // Strokes for one part of a peak's move in a w x h box; [] when the pile's fx has no such part
@@ -1355,7 +1666,7 @@ function wordFx(L, t, wi) {
     // A peak: the line waits in the dark for the bulb, and a spotlight dims all but the hero
     var ps = peakState(L, t);
     fx.alpha *= ps.dark;
-    if (wi === L.heroWi) fx.s *= ps.heroS;
+    if (wi === L.heroWi) { fx.s *= ps.heroS; fx.dy += ps.heroDy; fx.rot += ps.heroRot; fx.alpha *= ps.heroA; }
     else fx.alpha *= ps.restA;
     return fx;
 }
@@ -1437,6 +1748,21 @@ function g0() { return { dx: 0, dy: 0, a: 0 }; }
 // One letter: { glyph ("" = real letter), alpha, dx, dy (em), rot (deg), clip, reveal (0..1 from the
 // left), tone (0.42 waiting .. 1 sung), flash }
 function letterState(L, t, wi, ci) {
+    var st = letterStateBase(L, t, wi, ci);
+    if (!L || !L.pile || L.pile.role !== "peak" || wi !== L.heroWi) return st;
+    var nc = L.words[wi].chars.length;
+    if (L.pile.fx === "jack") {
+        // the two halves of the word part for the spring
+        if (nc > 1) st.dx += (ci < nc / 2 ? -1 : 1) * 0.28 * jackSplit(L, t);
+        else st.dx -= 0.28 * jackSplit(L, t);
+    } else if (L.pile.fx === "roll") {
+        // each letter hops as the roll passes under it
+        var p = rollAt(L, t);
+        if (p > 0 && p < 1) { var d = (p - (ci + 0.5) / nc) * nc; st.dy -= 0.16 * Math.exp(-d * d * 1.5); }
+    }
+    return st;
+}
+function letterStateBase(L, t, wi, ci) {
     var st = { glyph: "", alpha: 1, dx: 0, dy: 0, rot: 0, clip: false, reveal: 1, tone: 1, flash: 0 };
     if (!L || !L.words[wi]) return st;
     var w = L.words[wi];

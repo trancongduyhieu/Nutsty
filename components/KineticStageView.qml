@@ -15,8 +15,9 @@ import "kinetic_stage.js" as Stage
 // every line gets all of it at once: double-drawn strokes, a marker swipe behind the hero, a ring
 // round the line, and doodles scattered round it. Its piles take a role from the singing tempo:
 // a peak line gets one big move on its hero (a bulb on its cord lighting the word, a spotlight ring,
-// focus rays, an ink fill or a stamp), a rush line a mark on every word, and duos and stacks a pen
-// mark that ties their lines together. Profanity goes under a glitching redaction bar, long breaks
+// focus rays, an ink fill, a stamp, or a prop that flies, rolls, grows or springs in), a rush line
+// a mark on every word, and duos and stacks a pen mark that ties their lines together. Profanity
+// goes under a glitching redaction bar, long breaks
 // show waiting dots. The whole stage runs through an old-film pass (film_tv.frag): grain and
 // scanlines inside the letters, a hair and scratches, a light smear and swell on big hits.
 Item {
@@ -609,6 +610,26 @@ Item {
                                     strokes: wordItem.peak ? Stage.peakStrokes(lineItem.line, lineItem.t, "bulb", width, height) : []
                                     ink: wordItem.peak && wordItem.peak.on ? root.colHighlight : root.withAlpha(root.colActiveText, 0.85)
                                     penW: Math.max(2, wordItem.px * 0.045)
+                                }
+                            }
+
+                            // The props with their own motion (a balloon, a sticky note, a paper plane, a
+                            // tape roll, a vine, a jack-in-the-box, a folding paper, a hand with a sticker):
+                            // Stage.peakPieces places up to four pieces in this word's own box
+                            readonly property bool propFx: peakFx !== "" && Stage.PROP_FX.indexOf(peakFx) >= 0
+                            readonly property var pieces: propFx ? Stage.peakPieces(lineItem.line, lineItem.t, wordItem.width, wordItem.px, wordItem.bl) : []
+                            Repeater {
+                                model: wordItem.propFx ? 4 : 0
+                                delegate: PenMark {
+                                    required property int index
+                                    readonly property var pc: wordItem.pieces[index] || null
+                                    width: wordItem.width
+                                    height: wordItem.height
+                                    z: pc ? pc.z : 0
+                                    strokes: pc ? pc.strokes : []
+                                    ink: root.withAlpha(pc && pc.accent ? root.colHighlight : root.colActiveText, pc ? pc.a : 0)
+                                    penW: pc ? pc.pen : 2
+                                    cap: pc && pc.flat ? ShapePath.FlatCap : ShapePath.RoundCap
                                 }
                             }
 

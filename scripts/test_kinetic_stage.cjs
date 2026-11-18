@@ -218,6 +218,7 @@ test("spot dims the rest", () => {
 test("peak parts follow the fx", () => {
     const parts = ["bulb", "cord", "glow", "rays", "ring", "stamp", "ink"];
     const uses = { bulb: ["bulb", "cord", "glow"], spot: ["ring"], rays: ["rays"], ink: ["ink"], stamp: ["stamp"] };
+    for (const fx of K.PROP_FX) uses[fx] = [];
     for (const fx of K.PEAK_FX) {
         const { L } = peakWith(fx);
         const t = L.end + 0.2;
@@ -326,6 +327,106 @@ test("solo piles carry no pile marks", () => {
         .forEach(P => assert.strictEqual(K.pileStrokes(P, P.lines[0].end, PW, PH, PA).length, 0));
 });
 
+
+// The prop moves: pieces drawn in the hero word's own box (W x px, baseline bl)
+const PW_ = 160, PX = 40, BL = 36;
+const pcs = (L, t) => K.peakPieces(L, t, PW_, PX, BL);
+const drawn = (pc) => pc.strokes.length > 0;
+const pts = (pc) => [].concat(...pc.strokes);
+const meanY = (pc) => { const p = pts(pc); return p.reduce((a, q) => a + q.y, 0) / p.length; };
+const maxX = (pc) => Math.max(...pts(pc).map(q => q.x));
+test("props join the peak pool", () => {
+    assert.strictEqual(K.PROP_FX.length, 8);
+    K.PROP_FX.forEach(fx => assert.ok(K.PEAK_FX.indexOf(fx) >= 0, fx));
+});
+test("props: nothing before start, something on cue, four finite pieces", () => {
+    for (const fx of K.PROP_FX) {
+        const { L } = peakWith(fx);
+        const on = K.peakOnAt(L), start = on - K.PROP_D[fx];
+        assert.ok(start >= L.enterAt - 1e-9, fx + " starts before its line");
+        const before = pcs(L, start - 0.05);
+        assert.strictEqual(before.length, 4);
+        assert.ok(before.every(pc => !drawn(pc)), fx + " draws before start");
+        assert.ok(pcs(L, on + 0.1).some(drawn), fx + " draws nothing on cue");
+        for (let t = L.enterAt - 0.5; t < L.pile.exitAt + 1; t += 0.03) {
+            const P = pcs(L, t);
+            assert.strictEqual(P.length, 4);
+            finiteDeep(P, fx);
+            finiteDeep(K.peakState(L, t), fx + " state");
+            L.words[L.heroWi].chars.forEach((c, ci) => finiteDeep(K.letterState(L, t, L.heroWi, ci), fx + " letter"));
+        }
+        // other peaks draw no pieces
+        assert.ok(pcs(peakWith("bulb").L, on + 0.1).every(pc => !drawn(pc)));
+    }
+});
+test("balloon rises, lifts the word, then pops", () => {
+    const { L } = peakWith("balloon");
+    const on = K.peakOnAt(L), start = on - K.PROP_D.balloon, pop = K.balloonPop(L);
+    assert.ok(meanY(pcs(L, start + 0.02)[0]) > meanY(pcs(L, on)[0]) + PX, "does not rise");
+    assert.ok(K.peakState(L, on + 0.6).heroDy < -0.1, "word not lifted");
+    assert.ok(pop >= on + 0.8 - 1e-9);
+    const after = pcs(L, pop + 0.1);
+    assert.ok(!drawn(after[0]) && drawn(after[2]), "no pop into confetti");
+    assert.ok(Math.abs(K.peakState(L, pop + 0.8).heroDy) < 0.01, "word not back down");
+});
+test("note flutters down and gets taped", () => {
+    const { L } = peakWith("note");
+    const on = K.peakOnAt(L), start = on - K.PROP_D.note;
+    assert.ok(meanY(pcs(L, start + 0.05)[0]) < meanY(pcs(L, on)[0]) - PX, "does not come down");
+    assert.ok(!drawn(pcs(L, on - 0.05)[1]), "taped in the air");
+    assert.ok(drawn(pcs(L, on + 0.4)[1]), "never taped");
+});
+test("plane sticks its nose in the hero's top right corner", () => {
+    const { L } = peakWith("plane");
+    const on = K.peakOnAt(L);
+    const nose = pcs(L, on + 0.6)[0].strokes[0][0];
+    assert.ok(Math.abs(nose.x - PW_) < PX * 0.3 && Math.abs(nose.y - (BL - 0.7 * PX)) < PX * 0.3, JSON.stringify(nose));
+    assert.ok(Math.abs(K.peakState(L, on + 0.05).heroRot) > 0.5, "word does not shake");
+    assert.ok(Math.abs(K.peakState(L, on + 1.5).heroRot) < 0.1);
+});
+test("roll lays its tape under the hero as it is sung", () => {
+    const { L } = peakWith("roll");
+    const on = K.peakOnAt(L), hw = L.words[L.heroWi], sung = Math.max(0.4, hw.end - hw.start);
+    const mid = maxX(pcs(L, on + sung / 2)[1]), end = maxX(pcs(L, on + sung + 0.05)[1]);
+    assert.ok(Math.abs(mid - PW_ / 2) < PW_ * 0.2, "mid " + mid);
+    assert.ok(Math.abs(end - PW_) < PW_ * 0.1, "end " + end);
+    assert.ok(drawn(pcs(L, on + sung + 2)[1]) && !drawn(pcs(L, on + sung + 2)[0]), "tape stays, roll leaves");
+    const nc = hw.chars.length;
+    if (nc > 1) assert.ok(K.letterState(L, on + sung * 0.5 / nc, L.heroWi, 0).dy < -0.05, "letters do not hop");
+});
+test("vine grows and blooms as the hero ends", () => {
+    const { L } = peakWith("vine");
+    const hw = L.words[L.heroWi], land = K.peakOnAt(L), bloom = land + Math.max(0.4, hw.end - hw.start);
+    assert.ok(drawn(pcs(L, land + 0.1)[0]));
+    assert.ok(!drawn(pcs(L, bloom - 0.05)[2]), "blooms early");
+    assert.ok(drawn(pcs(L, bloom + 0.2)[2]), "never blooms");
+});
+test("jack splits the word, springs out, then closes", () => {
+    const { L } = peakWith("jack");
+    const on = K.peakOnAt(L), nc = L.words[L.heroWi].chars.length;
+    const a = K.letterState(L, on + 0.3, L.heroWi, 0).dx, b = K.letterState(L, on + 0.3, L.heroWi, nc - 1).dx;
+    assert.ok(a < -0.15 && (nc < 2 || b > 0.15), a + " " + b);
+    assert.ok(drawn(pcs(L, on + 0.3)[0]) && drawn(pcs(L, on + 0.3)[1]), "no spring and star");
+    assert.ok(Math.abs(K.letterState(L, on + 1.8, L.heroWi, 0).dx) < 0.01, "never closes");
+    assert.ok(pcs(L, on + 1.8).every(pc => !drawn(pc)));
+});
+test("fold opens, then the word grows inside", () => {
+    const { L } = peakWith("fold");
+    const on = K.peakOnAt(L), start = on - K.PROP_D.fold;
+    const w0 = maxX(pcs(L, start + 0.1)[0]), w1 = maxX(pcs(L, on)[0]);
+    assert.ok(w1 > w0 + PX * 0.5, "does not open " + w0 + " " + w1);
+    assert.ok(K.peakState(L, on - 0.05).heroS === 1);
+    assert.ok(K.peakState(L, on + 0.5).heroS > 1.3);
+    assert.ok(pcs(L, on).every(pc => pc.z < 0 || !drawn(pc)), "paper not behind the word");
+});
+test("hand places a sticker and pulls back", () => {
+    const { L } = peakWith("hand");
+    const on = K.peakOnAt(L);
+    assert.ok(!drawn(pcs(L, on - 0.05)[1]), "sticker before the press");
+    const later = pcs(L, on + 1.5);
+    assert.ok(drawn(later[1]) && !drawn(later[0]), "sticker stays, hand leaves");
+});
+
 test("NaN sweep", () => {
     for (const max of [false, true]) {
         const m = K.build(longSong().concat(demo.map(e => Object.assign({}, e, { time: (e.time !== undefined ? e.time : 0) + 200 }))), { max: max });
@@ -336,6 +437,7 @@ test("NaN sweep", () => {
                 finiteDeep(K.lineState(L, t, 880), "lineState");
                 finiteDeep(K.camera(L, t, 880, 300), "camera");
                 finiteDeep(K.peakState(L, t), "peakState");
+                finiteDeep(K.peakPieces(L, t, 160, 40, 36), "peakPieces");
                 for (const part of ["bulb", "cord", "glow", "rays", "ring", "stamp", "ink"]) finiteDeep(K.peakStrokes(L, t, part, 300, 200), part);
                 for (const role of ["line", "hero", "hilite", "exit"]) finiteDeep(K.penStrokes(L, t, role, 400, 40), role);
                 L.words.forEach((w, wi) => {
