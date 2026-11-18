@@ -21,6 +21,7 @@ Số phiên bản có dạng `A.B.C`, ví dụ `1.2.0`:
 - **Lời chào và câu chữ vui hơn**: Mỗi lần mở Nutsty, lời chào trên Trang chủ, những dòng hiện khi danh sách hay hàng đợi còn trống, lúc đang tải và các câu trong trang thống kê được chọn ngẫu nhiên từ vài câu khác nhau, có câu tếu, có câu kiểu giới trẻ. Câu đã chọn giữ nguyên tới lần mở app sau. Tên các mục và các nút vẫn giữ nguyên để bạn dễ tìm. Có thêm lời chào riêng cho buổi khuya.
 - **Chọn điều xảy ra khi đóng cửa sổ**: Trong Cài đặt có mục "Khi đóng cửa sổ" với hai lựa chọn. "Trình phát nhỏ" hiện ô nhạc vuông trên màn hình nền. "Chỉ phát nhạc" không hiện gì, nhạc vẫn phát và bạn mở lại Nutsty từ thanh tác vụ hoặc khay hệ thống.
 - **Nút đóng trên trình phát nhỏ**: Góc trên bên phải trình phát nhỏ có nút X. Bấm vào để chọn ẩn trình phát nhỏ mà nhạc vẫn phát, hoặc thoát hẳn Nutsty. Không cần tìm biểu tượng ẩn trong khay hệ thống nữa.
+- **Lời bài hát trên màn hình nền đã quay lại trên Windows**: Ô lời bài hát nổi trên màn hình nền giờ hiện trở lại trên Windows, không còn che màn hình bằng một khung đen hay giành mất chuột và bàn phím. Khi bị cửa sổ khác che kín, lời bài hát tạm ngừng vẽ để máy đỡ nặng.
 
 ### Fixed
 - **Thanh phát nhạc luôn trong như kính**: Trước đây lớp kính mờ của thanh phát nhạc chỉ cập nhật khi cuộn ở Trang chủ, ở trang khác phải chạm vào thanh mới thấy đúng nền phía sau. Giờ cuộn ở bất kỳ đâu hay chuyển bài, lớp kính đều cập nhật theo mà máy vẫn nhẹ.
@@ -37,7 +38,6 @@ Số phiên bản có dạng `A.B.C`, ví dụ `1.2.0`:
 - **Không còn cửa sổ đen nháy lên khi đổi bài**: Trên Windows, mỗi lần đổi bài từng có một cửa sổ dòng lệnh màu đen hiện lên rồi tắt, trông như phần mềm lạ. Giờ không còn cửa sổ nào hiện lên nữa.
 - **Thoát là tắt nhạc**: Chọn thoát Nutsty thì nhạc dừng luôn, không còn phát tiếp sau khi ứng dụng đã tắt.
 - **Nhẹ máy hơn**: Trên Windows, Nutsty chạy gọn trong một tiến trình thay vì ba, đỡ tốn bộ nhớ.
-- **Lời bài hát trên màn hình nền chạy lại trên Windows**: Lời bài hát hiện đúng trên màn hình nền, không còn che màn hình bằng một khung đen hay giành mất chuột và bàn phím. Khi bị cửa sổ khác che kín, lời bài hát tạm ngừng vẽ để máy đỡ nặng.
 - **Lời chào hiện đúng tên ngay từ đầu**: Lời chào khi mở bản mới không còn hiện thoáng qua một tên khác trước khi đổi sang tên của bạn.
 - **Bấm và kéo trình phát nhỏ chính xác hơn**: Một cú bấm hơi rung tay không còn bị tính là kéo, nên lần bấm đầu tiên luôn có tác dụng.
 
