@@ -186,9 +186,26 @@ BACKEND_MAP = {
     "spotify_importer.py": "spotify_importer",
     "updater.py": "updater",
     "cache_manager.py": "cache_manager",
+    "stream_resolver.py": "stream_resolver",
     "nutsty-library": "library",
     "nutsty-library.exe": "library",
 }
+
+def _fills_screen(visibility):
+    """True for QWindow.Visibility Maximized (4) or FullScreen (5). PySide6 hands
+    the enum back as a plain Enum, which never equals an int, so unwrap .value."""
+    try:
+        return int(getattr(visibility, "value", visibility)) in (4, 5)
+    except (TypeError, ValueError):
+        return False
+
+def _backend_script_name(arg):
+    """BACKEND_MAP key for a script argument. Inside the PyInstaller bundle a
+    module's __file__ ends in .pyc, so a module that respawns itself passes that."""
+    base = os.path.basename(arg)
+    if base.lower().endswith(".pyc"):
+        base = base[:-1]
+    return base
 
 # Backend CLI Dispatcher: Prevents re-launching GUI when invoked as backend worker
 def check_cli_dispatch():
@@ -212,7 +229,7 @@ def check_cli_dispatch():
             sys.stderr.write(f"Error executing CLI -c: {e}\n")
             sys.exit(1)
     for i, a in enumerate(args):
-        base_a = os.path.basename(a)
+        base_a = _backend_script_name(a)
         if base_a in BACKEND_MAP:
             mod_name = BACKEND_MAP[base_a]
             sys.argv = [a] + args[i + 1:]
@@ -232,6 +249,12 @@ def check_cli_dispatch():
             except Exception as e:
                 sys.stderr.write(f"Error running {base_a}: {e}\n")
                 sys.exit(1)
+    # A script argument means a worker launch. Falling through would run main(),
+    # whose single-instance check sends SHOW and pulls the hidden window over a game.
+    for a in args:
+        if a.lower().endswith((".py", ".pyc")):
+            sys.stderr.write(f"Unknown backend script {os.path.basename(a)}; not opening the GUI.\n")
+            sys.exit(2)
 
 # Run CLI dispatch check immediately
 check_cli_dispatch()
@@ -1569,8 +1592,7 @@ def main():
 
             def _apply_rgn():
                 try:
-                    vis = win_obj.property("visibility")
-                    if vis in (3, 4):  # Maximized = 3, FullScreen = 4
+                    if _fills_screen(win_obj.property("visibility")):
                         user32.SetWindowRgn(hwnd, None, True)
                         return
                     rect = wintypes.RECT()
