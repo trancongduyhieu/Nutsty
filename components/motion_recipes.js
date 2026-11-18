@@ -30,6 +30,8 @@ var E = {
     outQuad: function (x) { x = clamp(x); return 1 - (1 - x) * (1 - x); },
     inCubic: function (x) { x = clamp(x); return x * x * x; },
     outCubic: function (x) { x = clamp(x); return 1 - Math.pow(1 - x, 3); },
+    outQuart: function (x) { x = clamp(x); return 1 - Math.pow(1 - x, 4); },
+    outQuint: function (x) { x = clamp(x); return 1 - Math.pow(1 - x, 5); },
     outExpo: function (x) { x = clamp(x); return x >= 1 ? 1 : 1 - Math.pow(2, -10 * x); },
     outBack: function (x, s) { x = clamp(x); s = s === undefined ? 1.9 : s; var c = s + 1; return 1 + c * Math.pow(x - 1, 3) + s * Math.pow(x - 1, 2); },
     outBounce: function (x) {

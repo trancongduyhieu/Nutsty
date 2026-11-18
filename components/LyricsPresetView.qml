@@ -41,7 +41,7 @@ Item {
         case 4: return motionTypography;
         case 5: return mochyExpressive;
         case 6: return motionVariations;
-        case 7: return decodeHud;
+        case 7: return kineticStage;
         }
         return appleMusic;
     }
@@ -149,9 +149,10 @@ Item {
         }
     }
 
+    // Lines pile up, each with its own type treatment; one camera move per pile (kinetic_stage.js)
     Component {
-        id: decodeHud
-        DecodeLyricsView {
+        id: kineticStage
+        KineticStageView {
             activeLyrics: root.activeLyrics
             currentTime: root.currentTime
             isPlaying: root.isPlaying

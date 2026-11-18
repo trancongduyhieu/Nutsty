@@ -29,7 +29,7 @@ FriendStoryModal 1.0 FriendStoryModal.qml
 FriendsPulseBar 1.0 FriendsPulseBar.qml
 GeneratedCover 1.0 GeneratedCover.qml
 GachaAnimeLyricsView 1.0 GachaAnimeLyricsView.qml
-DecodeLyricsView 1.0 DecodeLyricsView.qml
+KineticStageView 1.0 KineticStageView.qml
 ExpressiveLyricsView 1.0 ExpressiveLyricsView.qml
 LyricsPresetCard 1.0 LyricsPresetCard.qml
 singleton LyricsPresets 1.0 LyricsPresets.qml

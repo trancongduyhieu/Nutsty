@@ -27,9 +27,9 @@ QtObject {
         { id: 6, titleVi: "Mẫu 6: Biến hóa chuyển động", titleEn: "Preset 6: Motion Variations",
           subtitleVi: "Mỗi câu một kiểu • Theo JIZURA", subtitleEn: "A new move every line • After JIZURA",
           width: 880, widthRatio: 0.55, yRatio: 0.66, height: 220, hideWithoutLyrics: true },
-        { id: 7, titleVi: "Mẫu 7: Giải mã", titleEn: "Preset 7: Decode",
-          subtitleVi: "Chữ giải mã • Mỗi câu một góc máy", subtitleEn: "Decoding type • A new camera angle every line",
-          width: 880, widthRatio: 0.55, yRatio: 0.64, height: 260, hideWithoutLyrics: true }
+        { id: 7, titleVi: "Mẫu 7: Sân khấu chữ", titleEn: "Preset 7: Type Stage",
+          subtitleVi: "Câu chồng nhau • Mỗi câu một kiểu chữ", subtitleEn: "Stacked lines • A new type style every line",
+          width: 880, widthRatio: 0.55, yRatio: 0.60, height: 300, hideWithoutLyrics: true }
     ]
 
     readonly property int fallbackId: 2
