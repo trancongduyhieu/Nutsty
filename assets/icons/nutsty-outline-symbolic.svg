@@ -1,6 +1,9 @@
-<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect x="1.5" y="1.5" width="21" height="21" rx="6" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="7.15" y="8.7" width="2.1" height="6.6" rx="1.05" fill="currentColor"/>
-  <rect x="10.95" y="6.4" width="2.1" height="11.2" rx="1.05" fill="currentColor"/>
-  <rect x="14.75" y="8.7" width="2.1" height="6.6" rx="1.05" fill="currentColor"/>
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Nutsty mark, outline: a rounded square around three sound bars.
+     Drawn in white so AppIcon's colorization can tint it to any colour. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+    <rect x="2" y="2" width="28" height="28" rx="8" fill="none" stroke="#ffffff" stroke-width="2.6"/>
+    <rect x="9.6" y="11.5" width="3" height="9" rx="1.5" fill="#ffffff"/>
+    <rect x="14.5" y="8" width="3" height="16" rx="1.5" fill="#ffffff"/>
+    <rect x="19.4" y="11.5" width="3" height="9" rx="1.5" fill="#ffffff"/>
 </svg>
