@@ -160,7 +160,19 @@ function dressPiles(piles) {
         }
         if (P.role === "peak") dressPeak(P.lines[0]);
         else if (P.role === "rush") dressRush(P.lines[0]);
-        else capDoodles(P);
+        else { capDoodles(P); if (P.role === "duo") dressDuo(P); }
+    }
+}
+
+// A "pair" duo rings both heroes; the dashed line between them is a pile mark (pileStrokes)
+function dressDuo(P) {
+    if (P.fx !== "pair") return;
+    for (var k = 0; k < P.lines.length; k++) {
+        var L = P.lines[k];
+        if (!L.heroOk) continue;
+        L.heroMark = "ring";
+        L.ringWi = L.heroWi;
+        L.scribble = L.lineMark || L.heroMark;
     }
 }
 
@@ -620,6 +632,11 @@ function lineState(L, t, W) {
     }
     st.y = y;
     st.s = s;
+    // call and response: the two lines of a "versus" duo step apart, left and right
+    if (P.role === "duo" && P.fx === "versus" && P.lines.length > 1) {
+        var ev = M.E.outQuart((t - P.lines[1].enterAt) / 0.4);
+        st.dx = (L.slot === 0 ? -0.06 : 0.06) * W * (L.slot === 0 ? ev : 1);
+    }
     st.alpha = M.lerp(0.4, 1, M.clamp((s - 0.6) / 0.4));
     if (t >= P.exitAt) {
         var ex = t - P.exitAt - 0.04 * L.slot, dur = P.exitDur || EXIT_DUR;
@@ -633,7 +650,7 @@ function lineState(L, t, W) {
             // dragged sideways under a thumb: it stretches, slides and blurs out
             var qs = M.clamp(ex / dur);
             st.sx = 1 + 0.28 * qs * qs;
-            st.dx = (P.side || 1) * 46 * qs * qs;
+            st.dx += (P.side || 1) * 46 * qs * qs;
             st.blur = 26 * qs;
             st.alpha *= 1 - M.E.inCubic(qs);
         } else {
@@ -791,6 +808,30 @@ function markShape(kind, sd, w, h) {
         }
         break;
     }
+    case "n1":
+        S.push([{ x: w * 0.3, y: h * 0.25 }, { x: w * 0.55, y: h * 0.05 }, { x: w * 0.55, y: h * 0.95 }]);
+        break;
+    case "n2":
+        pts = [];
+        for (i = 0; i <= 10; i++) {
+            var a2 = Math.PI * (1.1 + 1.15 * i / 10);
+            pts.push({ x: w * (0.5 + 0.36 * Math.cos(a2)), y: h * (0.3 + 0.26 * Math.sin(a2)) });
+        }
+        pts.push({ x: w * 0.12, y: h * 0.95 }, { x: w * 0.9, y: h * 0.93 });
+        S.push(pts);
+        break;
+    case "n3":
+        pts = [];
+        for (i = 0; i <= 8; i++) {
+            var a3 = Math.PI * (-0.85 + 1.35 * i / 8);
+            pts.push({ x: w * (0.48 + 0.34 * Math.cos(a3)), y: h * (0.27 + 0.23 * Math.sin(a3)) });
+        }
+        for (i = 0; i <= 10; i++) {
+            var a4 = Math.PI * (-0.5 + 1.35 * i / 10);
+            pts.push({ x: w * (0.48 + 0.4 * Math.cos(a4)), y: h * (0.72 + 0.25 * Math.sin(a4)) });
+        }
+        S.push(pts);
+        break;
     case "rushline":
         // a tight zigzag with a fast under stroke below it
         n = Math.max(8, Math.round(w / (h * 0.5)));
@@ -1094,6 +1135,152 @@ function doodleStrokes(L, t, di, w, h) {
     if (prog <= 0) return [];
     var sd = L.seed + 300 + di * 17;
     return drawStrokes(markShape(d.kind, sd, w, h), prog, sd, t, h, true, L.boil);
+}
+
+// Where the lines of a pile sit, in stage px before the camera: one rect per line already in.
+// alpha follows the pile's exit.
+function pileState(P, t, W, H, anchorY) {
+    var out = { alpha: 1, rects: [] };
+    if (!P) return out;
+    if (t >= P.exitAt) out.alpha = 1 - M.clamp((t - P.exitAt) / (P.exitDur || EXIT_DUR));
+    for (var k = 0; k < P.lines.length; k++) {
+        var L = P.lines[k];
+        if (L.enterAt > t) break;
+        var ls = lineState(L, t, W);
+        var sc = ls.fit * ls.s;
+        var w = L.estW * L.base * sc * ls.sx, h = L.base * sc;
+        out.rects.push({ x: W / 2 + ls.dx - w / 2, y: anchorY + ls.y - h / 2, w: w, h: h });
+    }
+    return out;
+}
+
+function shiftShape(S, x, y) {
+    return S.map(function (st) { return st.map(function (p) { return { x: p.x + x, y: p.y + y }; }); });
+}
+function bezier(p0, c0, c1, p1, n) {
+    var pts = [];
+    for (var i = 0; i <= n; i++) {
+        var u = i / n, v = 1 - u;
+        pts.push({ x: v * v * v * p0.x + 3 * v * v * u * c0.x + 3 * v * u * u * c1.x + u * u * u * p1.x,
+                   y: v * v * v * p0.y + 3 * v * v * u * c0.y + 3 * v * u * u * c1.y + u * u * u * p1.y });
+    }
+    return pts;
+}
+function arrowHead(pts, len) {
+    var a = pts[pts.length - 1], b = pts[pts.length - 2];
+    var dx = a.x - b.x, dy = a.y - b.y, l = Math.max(0.001, Math.sqrt(dx * dx + dy * dy));
+    dx /= l; dy /= l;
+    function side(r) {
+        var c = Math.cos(r), sn = Math.sin(r);
+        return { x: a.x - len * (dx * c - dy * sn), y: a.y - len * (dx * sn + dy * c) };
+    }
+    return [side(0.5), a, side(-0.5)];
+}
+
+// The marks that tie a duo or a stack together, in stage px; [] for any other pile.
+// Each part draws on its own clock, so a mark for line k waits for line k.
+function pileStrokes(P, t, W, H, anchorY) {
+    if (!P || (P.role !== "duo" && P.role !== "stack") || !P.fx || P.lines.length < 2) return [];
+    var R = pileState(P, t, W, H, anchorY).rects;
+    if (R.length === 0) return [];
+    var b = P.lines[0].base, sd = P.seed + 600, out = [];
+    function draw(S, prog, k) {
+        if (prog <= 0) return;
+        out = out.concat(drawStrokes(S, prog, sd + 37 * k, t, b, true, 8));
+    }
+    function grow(at, dur) { return M.E.outQuad((t - at) / dur); }
+    function right(r) { return r.x + r.w; }
+    function cy(r) { return r.y + r.h / 2; }
+    var n = R.length, k, r0 = R[0], r1 = R[1];
+    var minX = Math.min.apply(null, R.map(function (r) { return r.x; }));
+    var maxX = Math.max.apply(null, R.map(right));
+    var top = r0.y, bot = R[n - 1].y + R[n - 1].h;
+    if (P.role === "duo") {
+        if (n < 2) return [];
+        var at = P.lines[1].enterAt, pd = 0.25 * b;
+        switch (P.fx) {
+        case "arrow": {
+            // from line 1's end, out round the right side, back into line 2's end
+            var a0 = { x: right(r0) + pd, y: cy(r0) }, a1 = { x: right(r1) + pd, y: cy(r1) };
+            var bx = Math.max(a0.x, a1.x) + 1.4 * b;
+            var pts = bezier(a0, { x: bx, y: a0.y - 0.3 * b }, { x: bx, y: a1.y + 0.3 * b }, a1, 22);
+            draw([pts, arrowHead(pts, 0.35 * b)], grow(at, 0.5), 0);
+            break;
+        }
+        case "brace": {
+            var x0 = maxX + pd, xm = x0 + 0.45 * b, ym = (top + bot) / 2;
+            var br = [{ x: x0, y: top }].concat(bezier({ x: x0, y: top }, { x: xm - 0.1 * b, y: top }, { x: xm - 0.25 * b, y: ym }, { x: xm, y: ym }, 8),
+                     bezier({ x: xm, y: ym }, { x: xm - 0.25 * b, y: ym }, { x: xm - 0.1 * b, y: bot }, { x: x0, y: bot }, 8));
+            draw([br], grow(at, 0.45), 0);
+            draw(shiftShape(markShape("star", sd, 0.8 * b, 0.8 * b), xm + 0.15 * b, ym - 0.4 * b), grow(at + 0.35, 0.25), 1);
+            break;
+        }
+        case "versus":
+            // a slash before the reply
+            draw([[{ x: r1.x - 0.55 * b, y: r1.y + r1.h }, { x: r1.x - 0.15 * b, y: r1.y }]], grow(at, 0.22), 0);
+            break;
+        case "swoop": {
+            var s0 = { x: r0.x + 0.05 * r0.w, y: r0.y + r0.h + 2 }, s1 = { x: right(r1), y: r1.y + r1.h + 0.15 * b };
+            draw([bezier(s0, { x: minX - 1.2 * b, y: (s0.y + s1.y) / 2 }, { x: r1.x + 0.2 * r1.w, y: s1.y + 0.45 * b }, s1, 26)],
+                 grow(at, 0.6), 0);
+            break;
+        }
+        case "pair": {
+            // a dashed line out on the right joining the two ringed heroes' lines
+            var d0 = { x: right(r0) + pd, y: cy(r0) }, d1 = { x: right(r1) + pd, y: cy(r1) };
+            var dx = Math.max(d0.x, d1.x) + 0.8 * b;
+            var path = bezier(d0, { x: dx, y: d0.y }, { x: dx, y: d1.y }, d1, 24), dash = [];
+            for (k = 0; k + 1 < path.length; k += 3) dash.push([path[k], path[k + 1]]);
+            draw(dash, grow(at, 0.45), 0);
+            break;
+        }
+        }
+    } else {
+        var pd2 = 0.25 * b;
+        switch (P.fx) {
+        case "notebook": {
+            // a margin brace down the left, and a tick at the end of each line once it is sung
+            var xl = minX - pd2, xb = xl - 0.4 * b, ymid = (top + bot) / 2;
+            var lb = bezier({ x: xl, y: top }, { x: xb + 0.1 * b, y: top }, { x: xb + 0.25 * b, y: ymid }, { x: xb, y: ymid }, 8)
+                     .concat(bezier({ x: xb, y: ymid }, { x: xb + 0.25 * b, y: ymid }, { x: xb + 0.1 * b, y: bot }, { x: xl, y: bot }, 8));
+            draw([lb], grow(P.lines[0].enterAt + 0.2, 0.4), 0);
+            for (k = 0; k < n; k++)
+                draw(shiftShape(markShape("tick", sd + k, 0.5 * b, 0.5 * b), right(R[k]) + pd2, R[k].y),
+                     grow(P.lines[k].end, 0.18), 1 + k);
+            break;
+        }
+        case "numbers":
+            for (k = 0; k < n; k++)
+                draw(shiftShape(markShape("n" + (k + 1), sd + k, 0.5 * b, 0.75 * b), R[k].x - 0.85 * b, cy(R[k]) - 0.375 * b),
+                     grow(P.lines[k].enterAt + 0.1, 0.3), k);
+            break;
+        case "stairs":
+            for (k = 1; k < n; k++) {
+                var p0 = { x: R[k - 1].x - 0.15 * b, y: cy(R[k - 1]) }, p1 = { x: R[k].x - 0.15 * b, y: cy(R[k]) };
+                var lx = Math.min(p0.x, p1.x) - 0.7 * b;
+                var sp = bezier(p0, { x: lx, y: p0.y }, { x: lx, y: p1.y }, p1, 14);
+                draw([sp, arrowHead(sp, 0.28 * b)], grow(P.lines[k].enterAt, 0.35), k);
+            }
+            break;
+        case "frame": {
+            var fx0 = minX - pd2, fx1 = maxX + pd2, fy0 = top - pd2, fy1 = bot + pd2;
+            draw([[{ x: fx0, y: fy0 }, { x: fx1, y: fy0 }, { x: fx1, y: fy1 }, { x: fx0, y: fy1 }, { x: fx0 + 0.3 * b, y: fy0 - 0.1 * b }]],
+                 grow(P.lines[0].enterAt + 0.2, 0.6), 0);
+            draw(shiftShape(markShape("star", sd, 0.9 * b, 0.9 * b), fx1 - 0.45 * b, fy0 - 0.45 * b),
+                 grow(P.lines[n - 1].enterAt + 0.2, 0.25), 1);
+            break;
+        }
+        case "draft": {
+            // the first line struck out when the last one lands (drawn at half alpha by the view)
+            var last = P.lines[P.lines.length - 1];
+            if (n < P.lines.length) break;
+            draw([[{ x: r0.x - 0.05 * b, y: cy(r0) + 0.05 * b }, { x: right(r0) + 0.05 * b, y: cy(r0) - 0.05 * b }]],
+                 grow(last.words[0].start - LEAD, 0.3), 0);
+            break;
+        }
+        }
+    }
+    return out;
 }
 
 // A peak line's big move. The bulb drops on its cord from enterAt (a damped spring, overshooting and

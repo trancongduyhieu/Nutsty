@@ -268,6 +268,56 @@ test("rush boils faster", () => {
     assert.strictEqual(JSON.stringify(K.penStrokes(N, t1, "line", 400, 40)), JSON.stringify(K.penStrokes(N, t1 + 0.05, "line", 400, 40)));
 });
 
+// A duo (2 lines) or stack (3 lines) pile from longSong with its fx forced
+function pileWith(n, fx) {
+    const m = K.build(longSong(), { max: true });
+    const P = m.piles.find(P => (P.role === "duo" || P.role === "stack") && P.lines.length === n);
+    P.fx = fx;
+    if (P.role === "duo") K.dressDuo(P);
+    return P;
+}
+const PW = 1000, PH = 300, PA = 0.64 * PH;
+function inFrame(S, where) {
+    S.forEach(st => st.forEach(p => {
+        assert.ok(p.x >= -0.1 * PW && p.x <= 1.1 * PW && p.y >= -0.1 * PH && p.y <= 1.1 * PH,
+                  where + " point out of frame: " + p.x.toFixed(1) + "," + p.y.toFixed(1));
+    }));
+}
+test("duo pile marks", () => {
+    for (const fx of K.DUO_FX) {
+        const P = pileWith(2, fx), L1 = P.lines[1];
+        assert.strictEqual(K.pileStrokes(P, L1.enterAt - 0.01, PW, PH, PA).length, 0, fx + " before line 2");
+        const t = Math.min(L1.end, P.exitAt - 0.01);
+        const S = K.pileStrokes(P, t, PW, PH, PA);
+        assert.ok(S.length > 0, fx + " after line 2");
+        inFrame(S, fx);
+        assert.strictEqual(K.pileState(P, t, PW, PH, PA).rects.length, 2);
+        assert.strictEqual(K.pileState(P, L1.enterAt - 0.01, PW, PH, PA).rects.length, 1);
+    }
+});
+test("duo versus and pair", () => {
+    let P = pileWith(2, "versus"); const t = Math.min(P.lines[1].end, P.exitAt - 0.01);
+    assert.ok(K.lineState(P.lines[0], t, PW).dx < -0.05 * PW && K.lineState(P.lines[1], t, PW).dx > 0.05 * PW);
+    P = pileWith(2, "pair");
+    P.lines.filter(L => L.heroOk).forEach(L => { assert.strictEqual(L.heroMark, "ring"); assert.strictEqual(L.ringWi, L.heroWi); });
+});
+test("stack pile marks", () => {
+    for (const fx of K.STACK_FX) {
+        const P = pileWith(3, fx), L0 = P.lines[0], L2 = P.lines[2];
+        assert.strictEqual(K.pileStrokes(P, L0.enterAt - 0.01, PW, PH, PA).length, 0, fx + " before line 1");
+        const t = Math.min(L2.end, P.exitAt - 0.01);
+        const S = K.pileStrokes(P, t, PW, PH, PA);
+        assert.ok(S.length > 0, fx + " after line 3");
+        inFrame(S, fx);
+        assert.strictEqual(K.pileState(P, t, PW, PH, PA).rects.length, 3);
+    }
+});
+test("solo piles carry no pile marks", () => {
+    const m = K.build(longSong(), { max: true });
+    m.piles.filter(P => P.role === "peak" || P.role === "rush" || P.lines.length < 2)
+        .forEach(P => assert.strictEqual(K.pileStrokes(P, P.lines[0].end, PW, PH, PA).length, 0));
+});
+
 test("NaN sweep", () => {
     for (const max of [false, true]) {
         const m = K.build(longSong().concat(demo.map(e => Object.assign({}, e, { time: (e.time !== undefined ? e.time : 0) + 200 }))), { max: max });
