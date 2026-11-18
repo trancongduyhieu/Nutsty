@@ -223,12 +223,16 @@ Item {
     }
     // then a popular song of theirs the listener has not played this month stands in, from the catalog
     property var artistPick: null
+    property bool artistPickBusy: false
     function fetchArtistPick() {
         root.artistPick = null;
-        if (!root.artistOwnsHeroSong) return;
+        if (!root.artistOwnsHeroSong || root.artistPickBusy) return;
+        root.artistPickBusy = true;
         var artist = root.heroArtist.artist, xhr = new XMLHttpRequest();
         xhr.onreadystatechange = function() {
-            if (xhr.readyState !== XMLHttpRequest.DONE || xhr.status !== 200) return;
+            if (xhr.readyState !== XMLHttpRequest.DONE) return;
+            root.artistPickBusy = false;
+            if (xhr.status !== 200) return;
             try {
                 var r = JSON.parse(xhr.responseText);
                 if (!r.success || !r.track_id || !root.heroArtist || root.heroArtist.artist !== artist) return;
@@ -512,14 +516,16 @@ Item {
         root.snippetUrls = pending;
         var xhr = new XMLHttpRequest();
         xhr.onreadystatechange = function() {
-            if (xhr.readyState !== XMLHttpRequest.DONE || xhr.status !== 200) return;
+            if (xhr.readyState !== XMLHttpRequest.DONE) return;
+            var url = "";
             try {
-                var r = JSON.parse(xhr.responseText);
-                if (!r.success || !r.url) return;
-                var urls = Object.assign({}, root.snippetUrls);
-                urls[track] = r.url;
-                root.snippetUrls = urls;
+                var r = xhr.status === 200 ? JSON.parse(xhr.responseText) : null;
+                if (r && r.success) url = r.url || "";
             } catch (e) {}
+            // a failed lookup is forgotten, so opening the story again retries it
+            var urls = Object.assign({}, root.snippetUrls);
+            if (url) urls[track] = url; else delete urls[track];
+            root.snippetUrls = urls;
         };
         xhr.open("GET", root.apiUrl + "/api/listening/snippet?track=" + encodeURIComponent(track));
         xhr.send();
@@ -530,6 +536,12 @@ Item {
     }
     onRecapChanged: { root.snippetUrls = ({}); root.prefetchSnippets(); root.fetchArtistPick(); }
     Component.onCompleted: { root.prefetchSnippets(); root.fetchArtistPick(); }
+    // a lookup that failed while the backend was still waking up gets another go on each open
+    onActiveChanged: {
+        if (!root.active) return;
+        if (root.artistOwnsHeroSong && !root.artistPick) root.fetchArtistPick();
+        root.prefetchSnippets();
+    }
     property real snippetVolume: 0
     property bool snippetSeekPending: false
     AudioOutput { id: snippetOut; volume: root.snippetVolume }
