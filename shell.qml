@@ -91,6 +91,8 @@ Scope {
             if (win.visible) {
                 unfocusedPurgeTimer.stop();
                 win.triggerUserActiveBoost();
+                // the friends feed polled slowly while hidden: show it fresh instead of up to 20 s old
+                win.fetchFriendsNotesFast();
                 if (typeof desktopMusicWidget !== "undefined" && desktopMusicWidget) {
                     desktopMusicWidget.visible = false;
                     if (typeof desktopMusicWidget.hide === "function") desktopMusicWidget.hide();
@@ -1351,9 +1353,19 @@ Scope {
     function ensureCoListenerRegistered(ev, showJoinToast) { return SocialEngine.ensureCoListenerRegistered(win, ev, showJoinToast); }
     function pollSocialEventsFast() { SocialEngine.pollSocialEventsFast(win); }
 
+    // Relay request budget (Cloudflare Workers free plan: 100k requests a day for every user
+    // together). Listen Along keeps the fast cadence; otherwise the polls slow down while the window
+    // is hidden or minimized, and further while no friend is online, since only an online friend can
+    // send an invite or a chat. Friend requests also arrive as events, so the friends list polls rarely.
+    readonly property bool anyFriendOnline: (win.friendsNotes || []).some(function(n) { return n && n.is_online === true; })
+    readonly property bool socialInBackground: !win.visible || (typeof win.minimized !== "undefined" && win.minimized === true)
+
     Timer {
         id: socialEventsFastTimer
-        interval: win.isCoListeningActive ? 800 : (win.isUserActiveBoost ? 1000 : 10000)
+        interval: win.isCoListeningActive ? 800
+                  : (win.isUserActiveBoost && !win.socialInBackground) ? 3000
+                  : !win.anyFriendOnline ? 30000
+                  : win.socialInBackground ? 20000 : 10000
         repeat: true
         running: true
         triggeredOnStart: true
@@ -1364,7 +1376,8 @@ Scope {
 
     Timer {
         id: friendsNotesTimer
-        interval: win.isCoListeningActive ? 2000 : 10000
+        // also carries the presence heartbeat: it must stay under the relay's 25 s online window
+        interval: win.isCoListeningActive ? 2000 : ((win.socialInBackground || !win.anyFriendOnline) ? 20000 : 10000)
         repeat: true
         running: true
         triggeredOnStart: true
@@ -1376,7 +1389,7 @@ Scope {
 
     Timer {
         id: friendsSyncTimer
-        interval: win.isCoListeningActive ? 4000 : 15000
+        interval: win.isCoListeningActive ? 15000 : (win.socialInBackground ? 120000 : 60000)
         repeat: true
         running: true
         triggeredOnStart: true

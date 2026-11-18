@@ -154,21 +154,8 @@ class SocialRelayCore:
                                 seen_uids.add(norm["user_id"].lower())
                             norm_notes.append(norm)
 
-                    # Augment with any accepted friends who haven't posted a note
-                    try:
-                        fr_res = self.transport.get_friends(caller_uid, caller_secret)
-                        for f in (fr_res.get("friends") or []):
-                            f_norm = self.normalize_peer(f)
-                            fid = f_norm["user_id"].lower()
-                            if fid and fid not in seen_uids:
-                                f_norm["note_text"] = ""
-                                f_norm["track"] = None
-                                f_norm["created_at"] = 0
-                                f_norm["is_friend"] = True
-                                norm_notes.append(f_norm)
-                                seen_uids.add(fid)
-                    except Exception:
-                        pass
+                    # The relay's GET /api/notes already lists every accepted friend (LEFT JOIN on
+                    # notes), so a second GET /api/friends here only doubled the request count.
 
                     my_n = res.get("my_note")
                     if isinstance(my_n, dict):

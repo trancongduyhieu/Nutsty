@@ -119,31 +119,13 @@ fn notes_feed(profile: &str, user_email: &str) -> Option<Value> {
         norm.insert("created_at".into(), item.get("created_at").cloned().unwrap_or_else(|| json!(0)));
         norm.insert("is_friend".into(), json!(true));
         let uid = norm_str(&norm, "user_id").to_lowercase();
-        if !uid.is_empty() {
-            seen.insert(uid);
+        if !uid.is_empty() && !seen.insert(uid) {
+            continue;
         }
         notes.push(Value::Object(norm));
     }
-    // Friends who have not posted a note still appear in the feed
-    if let Relay::Ok(fr) = relay_get("/api/friends", &ident) {
-        if truthy(fr.get("success")) {
-            for f in fr.get("friends").and_then(Value::as_array).into_iter().flatten() {
-                if !f.is_object() {
-                    continue;
-                }
-                let mut norm = normalize_peer(f);
-                let fid = norm_str(&norm, "user_id").to_lowercase();
-                if !fid.is_empty() && !seen.contains(&fid) {
-                    norm.insert("note_text".into(), json!(""));
-                    norm.insert("track".into(), Value::Null);
-                    norm.insert("created_at".into(), json!(0));
-                    norm.insert("is_friend".into(), json!(true));
-                    notes.push(Value::Object(norm));
-                    seen.insert(fid);
-                }
-            }
-        }
-    }
+    // The relay's GET /api/notes already lists every accepted friend (LEFT JOIN on notes), note or
+    // not, so no second GET /api/friends is needed to fill in friends without a note.
     let my_note = match res.get("my_note") {
         Some(raw @ Value::Object(_)) => {
             let mut norm = normalize_peer(raw);
@@ -257,13 +239,84 @@ fn now_playing(body: &str) -> Option<Value> {
     };
 
     let ident = fast_identity(profile, user_email, "")?;
+    if presence_unchanged(&ident.user_id, &presence) {
+        return Some(json!({"success": true, "res": {"success": true, "skipped": true}}));
+    }
     let data = json!({"user_id": ident.user_id, "secret_key": ident.secret_key, "now_playing": presence});
     let res = match relay_request("POST", "/api/users/presence", &[], Some(&data)) {
         Relay::Unauthorized => return None,
         Relay::Ok(v) if truthy(v.get("success")) => v,
         _ => json!({"success": false, "error": "Cloud relay unreachable"}),
     };
+    if truthy(res.get("success")) {
+        remember_presence(&ident.user_id, &presence);
+    }
     Some(json!({"success": true, "res": res}))
+}
+
+// ---------------------------------------------------------------------------------------------
+// Presence write skipping
+// ---------------------------------------------------------------------------------------------
+
+/// The relay counts a user as online for 25 s after their last presence write, so an unchanged
+/// presence is still re-sent once this much time has passed.
+const PRESENCE_HEARTBEAT: Duration = Duration::from_secs(15);
+/// Listeners extrapolate the host's position from `position + (now - timestamp)`, so a write is
+/// only needed when the reported position drifts from that by more than this (a seek).
+const PRESENCE_DRIFT_SECS: f64 = 2.0;
+
+struct SentPresence {
+    at: Instant,
+    value: Value,
+}
+
+/// Last presence the relay accepted, per cloud user id (several profile windows share one daemon).
+static LAST_PRESENCE: Mutex<Vec<(String, SentPresence)>> = Mutex::new(Vec::new());
+
+/// The fields a listener reacts to; position and timestamp are compared separately.
+fn presence_key(v: &Value) -> Value {
+    if !v.is_object() {
+        return v.clone();
+    }
+    let mut m = v.as_object().cloned().unwrap_or_default();
+    m.remove("position");
+    m.remove("timestamp");
+    Value::Object(m)
+}
+
+fn presence_unchanged(user_id: &str, presence: &Value) -> bool {
+    let guard = LAST_PRESENCE.lock().unwrap();
+    let Some((_, last)) = guard.iter().find(|(uid, _)| uid == user_id) else {
+        return false;
+    };
+    if last.at.elapsed() >= PRESENCE_HEARTBEAT || presence_key(&last.value) != presence_key(presence) {
+        return false;
+    }
+    let num = |v: &Value, k: &str| v.get(k).and_then(as_f64);
+    match (num(&last.value, "position"), num(presence, "position")) {
+        (None, None) => true,
+        (Some(old_pos), Some(new_pos)) => {
+            let playing = last.value.get("is_playing").and_then(Value::as_bool).unwrap_or(false);
+            let elapsed = match (num(&last.value, "timestamp"), num(presence, "timestamp")) {
+                (Some(t0), Some(t1)) if playing => {
+                    let ms = |t: f64| if t > 1e11 { t / 1000.0 } else { t };
+                    (ms(t1) - ms(t0)).max(0.0)
+                }
+                _ => 0.0,
+            };
+            (new_pos - (old_pos + elapsed)).abs() <= PRESENCE_DRIFT_SECS
+        }
+        _ => false,
+    }
+}
+
+fn remember_presence(user_id: &str, presence: &Value) {
+    let mut guard = LAST_PRESENCE.lock().unwrap();
+    let sent = SentPresence { at: Instant::now(), value: presence.clone() };
+    match guard.iter_mut().find(|(uid, _)| uid == user_id) {
+        Some(slot) => slot.1 = sent,
+        None => guard.push((user_id.to_string(), sent)),
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -569,4 +622,27 @@ fn normalize_peer(raw: &Value) -> Map<String, Value> {
     m.insert("last_active_at".into(), json!(last_active));
     m.insert("now_playing".into(), now_playing);
     m
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn np(vid: &str, pos: f64, ts: f64, playing: bool) -> Value {
+        json!({"videoId": vid, "position": pos, "timestamp": ts, "is_playing": playing, "allow_control": true})
+    }
+
+    #[test]
+    fn presence_skips_only_steady_playback() {
+        let uid = "usr_test_presence";
+        assert!(!presence_unchanged(uid, &np("a", 10.0, 1000.0, true)), "first write always goes out");
+        remember_presence(uid, &np("a", 10.0, 1000.0, true));
+        assert!(presence_unchanged(uid, &np("a", 14.0, 1004.0, true)), "position advancing with the clock");
+        assert!(!presence_unchanged(uid, &np("a", 60.0, 1004.0, true)), "a seek is sent");
+        assert!(!presence_unchanged(uid, &np("b", 0.0, 1004.0, true)), "a new track is sent");
+        assert!(!presence_unchanged(uid, &np("a", 14.0, 1004.0, false)), "pause is sent");
+        remember_presence(uid, &np("a", 14.0, 1004.0, false));
+        assert!(presence_unchanged(uid, &np("a", 14.0, 1030.0, false)), "paused position holds still");
+        assert!(!presence_unchanged(uid, &json!("")), "going idle is sent");
+    }
 }
