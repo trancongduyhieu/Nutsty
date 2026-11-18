@@ -1081,78 +1081,92 @@ Item {
         readonly property real giantPitch: 0.727 * giantPx * 1.16
         readonly property color giantColor: root.mix(Qt.rgba(0.086, 0.086, 0.086, 1), Qt.rgba(1, 1, 1, 0.06), root.mesh)
         FontMetrics { id: giantFm; font.family: Theme.fontFamily; font.pixelSize: frame.giantPx; font.weight: Font.Bold }
+        // The giant words fade out at the top and bottom of the frame too, like the pages over them
         Item {
-            id: plane
-            x: root.textCenterX * frame.width
-            y: frame.height / 2 + root.textOffsetY
-            width: 0; height: 0
-            transformOrigin: Item.TopLeft
-            rotation: root.textRotation
-            scale: root.textScale
+            id: giantLayer
+            anchors.fill: parent
             visible: root.textAlpha > 0.003
-            opacity: root.textAlpha
-            readonly property real span: Math.hypot(frame.width, frame.height) * 1.1 / Math.max(0.2, root.textScale)
-            readonly property real capCenter: giantFm.ascent - 0.727 * frame.giantPx / 2
+            layer.enabled: !root.liteMode && root.visible && visible
+            layer.effect: MultiEffect {
+                maskEnabled: true
+                maskSource: pageFadeMask
+                maskThresholdMin: 0.5
+                maskSpreadAtMin: 1.0
+                autoPaddingEnabled: false
+            }
+            Item {
+                id: plane
+                x: root.textCenterX * frame.width
+                y: frame.height / 2 + root.textOffsetY
+                width: 0; height: 0
+                transformOrigin: Item.TopLeft
+                rotation: root.textRotation
+                scale: root.textScale
+                visible: root.textAlpha > 0.003
+                opacity: root.textAlpha
+                readonly property real span: Math.hypot(frame.width, frame.height) * 1.1 / Math.max(0.2, root.textScale)
+                readonly property real capCenter: giantFm.ascent - 0.727 * frame.giantPx / 2
 
-            Repeater {
-                id: rowRepeater
-                model: 9
-                Item {
-                    id: gr
-                    readonly property int idx: index - 4
-                    property string word: "NUTSTY"
-                    property string nextWord: "NUTSTY"
-                    property real fill: idx === 0 ? 1 : 0
-                    property real side: 1
-                    function reset(w, f) { seq.stop(); gr.word = w; gr.nextWord = w; gr.fill = f; gr.side = 1; }
-                    function slideIn(w, ms, wait) {
-                        if (gr.fill > 0.999 && w === gr.word && !seq.running) return;
-                        seq.stop();
-                        var needOut = gr.fill > 0.001 && w !== gr.word;
-                        pause.duration = wait * root.speed;
-                        outA.to = needOut ? 0 : gr.fill;
-                        outA.duration = needOut ? 520 * root.speed : 0;
-                        gr.nextWord = w;
-                        inA.to = 1;
-                        inA.duration = ms * root.speed;
-                        seq.start();
-                    }
-                    function slideOut(ms, wait) {
-                        if (gr.fill <= 0.001 && !seq.running) return;
-                        seq.stop();
-                        pause.duration = wait * root.speed;
-                        outA.to = 0;
-                        outA.duration = ms * root.speed;
-                        gr.nextWord = gr.word;
-                        inA.to = 0;
-                        inA.duration = 0;
-                        seq.start();
-                    }
-                    SequentialAnimation {
-                        id: seq
-                        PauseAnimation { id: pause }
-                        ScriptAction { script: gr.side = -1 }
-                        NumberAnimation { id: outA; target: gr; property: "fill"; easing.type: Easing.BezierSpline; easing.bezierCurve: root.curveStd }
-                        ScriptAction { script: { gr.word = gr.nextWord; gr.side = 1; } }
-                        NumberAnimation { id: inA; target: gr; property: "fill"; easing.type: Easing.BezierSpline; easing.bezierCurve: root.curveStd }
-                    }
+                Repeater {
+                    id: rowRepeater
+                    model: 9
+                    Item {
+                        id: gr
+                        readonly property int idx: index - 4
+                        property string word: "NUTSTY"
+                        property string nextWord: "NUTSTY"
+                        property real fill: idx === 0 ? 1 : 0
+                        property real side: 1
+                        function reset(w, f) { seq.stop(); gr.word = w; gr.nextWord = w; gr.fill = f; gr.side = 1; }
+                        function slideIn(w, ms, wait) {
+                            if (gr.fill > 0.999 && w === gr.word && !seq.running) return;
+                            seq.stop();
+                            var needOut = gr.fill > 0.001 && w !== gr.word;
+                            pause.duration = wait * root.speed;
+                            outA.to = needOut ? 0 : gr.fill;
+                            outA.duration = needOut ? 520 * root.speed : 0;
+                            gr.nextWord = w;
+                            inA.to = 1;
+                            inA.duration = ms * root.speed;
+                            seq.start();
+                        }
+                        function slideOut(ms, wait) {
+                            if (gr.fill <= 0.001 && !seq.running) return;
+                            seq.stop();
+                            pause.duration = wait * root.speed;
+                            outA.to = 0;
+                            outA.duration = ms * root.speed;
+                            gr.nextWord = gr.word;
+                            inA.to = 0;
+                            inA.duration = 0;
+                            seq.start();
+                        }
+                        SequentialAnimation {
+                            id: seq
+                            PauseAnimation { id: pause }
+                            ScriptAction { script: gr.side = -1 }
+                            NumberAnimation { id: outA; target: gr; property: "fill"; easing.type: Easing.BezierSpline; easing.bezierCurve: root.curveStd }
+                            ScriptAction { script: { gr.word = gr.nextWord; gr.side = 1; } }
+                            NumberAnimation { id: inA; target: gr; property: "fill"; easing.type: Easing.BezierSpline; easing.bezierCurve: root.curveStd }
+                        }
 
-                    readonly property real tileW: giantFm.advanceWidth(gr.word) + frame.giantPx * 0.22
-                    readonly property real dir: idx % 2 === 0 ? -1 : 1
-                    readonly property real pace: 22 * root.u * (1 + 0.18 * ((idx + 8) % 3))
-                    readonly property real base: ((root.time * pace) % tileW) * dir + (1 - root.eoc(fill)) * plane.span * side
-                    x: base - Math.ceil((base + plane.span / 2) / tileW) * tileW
-                    y: idx * frame.giantPitch - plane.capCenter
-                    visible: fill > 0.002
-                    opacity: fill
-                    Row {
-                        Repeater {
-                            model: Math.ceil(plane.span / Math.max(1, gr.tileW)) + 2
-                            Text {
-                                width: gr.tileW
-                                text: gr.word
-                                color: frame.giantColor
-                                font: giantFm.font
+                        readonly property real tileW: giantFm.advanceWidth(gr.word) + frame.giantPx * 0.22
+                        readonly property real dir: idx % 2 === 0 ? -1 : 1
+                        readonly property real pace: 22 * root.u * (1 + 0.18 * ((idx + 8) % 3))
+                        readonly property real base: ((root.time * pace) % tileW) * dir + (1 - root.eoc(fill)) * plane.span * side
+                        x: base - Math.ceil((base + plane.span / 2) / tileW) * tileW
+                        y: idx * frame.giantPitch - plane.capCenter
+                        visible: fill > 0.002
+                        opacity: fill
+                        Row {
+                            Repeater {
+                                model: Math.ceil(plane.span / Math.max(1, gr.tileW)) + 2
+                                Text {
+                                    width: gr.tileW
+                                    text: gr.word
+                                    color: frame.giantColor
+                                    font: giantFm.font
+                                }
                             }
                         }
                     }
@@ -1928,10 +1942,11 @@ Item {
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds
                         Component.onCompleted: if ("acceptedButtons" in billFlick) billFlick.acceptedButtons = Qt.NoButton
-                        // the paper fades into the night at an edge while there is more of it past there
+                        // the paper fades into the night at both edges, from the first look on
                         ScrollEdgeFade {
                             flickable: billFlick
                             fadeLength: 72 * root.u
+                            alwaysFade: true
                             when: !root.liteMode && pBill.enter > 0.99
                         }
                         Item {

@@ -17,14 +17,17 @@ Item {
                               && flickable.contentHeight <= flickable.height + 1
     // Extra gate for lists that stay alive while hidden (closed panel, inactive tab)
     property bool when: true
+    // Fade both edges all the time, not just while there is more to scroll past them, so the look
+    // does not change between first open and scrolling back to the start
+    property bool alwaysFade: false
 
     readonly property bool overflows: flickable !== null
         && (horizontal ? flickable.contentWidth > flickable.width + 1 : flickable.contentHeight > flickable.height + 1)
     // Off in Lite mode: any change inside the list re-renders the whole layer and mask
     readonly property bool liteMode: typeof win !== "undefined" && win && Boolean(win.liteMode)
     readonly property bool active: Theme.scrollEdgeFadeEnabled && !liteMode && when && overflows && flickable.visible
-    readonly property bool fadeStart: flickable !== null && (horizontal ? !flickable.atXBeginning : !flickable.atYBeginning)
-    readonly property bool fadeEnd: flickable !== null && (horizontal ? !flickable.atXEnd : !flickable.atYEnd)
+    readonly property bool fadeStart: alwaysFade || flickable !== null && (horizontal ? !flickable.atXBeginning : !flickable.atYBeginning)
+    readonly property bool fadeEnd: alwaysFade || flickable !== null && (horizontal ? !flickable.atXEnd : !flickable.atYEnd)
     readonly property real span: horizontal ? width : height
     readonly property real frac: span > 0 ? Math.min(0.45, fadeLength / span) : 0
 
