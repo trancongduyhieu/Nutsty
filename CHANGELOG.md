@@ -7,6 +7,24 @@ Số phiên bản có dạng `A.B.C`, ví dụ `1.2.0`:
 - **B (số thứ 2)** tăng khi có tính năng mới mà mọi thứ cũ vẫn dùng bình thường. Số thứ 3 về 0, ví dụ `2.1.3` lên `2.2.0`.
 - **A (số đầu tiên)** tăng khi có thay đổi lớn buộc bạn làm lại gì đó hoặc dữ liệu, cài đặt của bản cũ không dùng được nữa. Hai số sau về 0, ví dụ `2.4.1` lên `3.0.0`.
 
+## [2.3.0] - 2026-11-19
+
+### Added
+- **Mẫu 8: Sân khấu chữ tối đa**: Mẫu lời bài hát trên màn hình nền nhiều trò nhất từ trước tới nay. Cả khung hình như một trang sổ vẽ tay: nét bút đôi, hình vẽ nguệch ngoạc quanh chữ, vệt bút dạ phía sau từ quan trọng nhất của câu. Nutsty nghe nhịp hát của bài để quyết định cách bày từng câu:
+  - **Câu cao trào**: Khi một câu chậm lại sau mấy câu hát nhanh, câu đó đứng riêng một mình và nhận một bất ngờ lớn. Có 13 kiểu khác nhau: bóng đèn rơi xuống rồi sáng lên, đèn sân khấu rọi xuống, tia truyện tranh tỏa ra, mực loang kín chữ, con dấu đóng mạnh, quả bóng bay buộc vào chữ rồi nổ thành pháo giấy, tờ giấy nhớ bay vào dán lên, máy bay giấy lượn vào cắm vào góc chữ, cuộn băng dính lăn qua dán gạch chân, dây leo mọc quanh chữ rồi nở hoa, lò xo bật ra tách đôi chữ, tờ giấy gấp mở ra từng nếp, và bàn tay vẽ thò vào dán sticker. Mỗi bài thường có vài câu như vậy, và hai câu cao trào liền nhau không bao giờ trùng kiểu.
+  - **Câu dồn dập**: Câu hát nhanh được gạch dưới từng chữ, có vệt tốc độ và khung hình giật theo nhịp.
+  - **Câu xếp chồng**: Hai hoặc ba câu liền nhau được nối với nhau bằng mũi tên, ngoặc nhọn, chữ "vs", đường lượn, khung giấy kẻ ô, số thứ tự 1 2 3, bậc thang hay nét gạch nháp.
+- **Mẫu 7: Sân khấu chữ**: Lời hiện thành từng chồng tối đa ba câu, từ quan trọng nhất to và mang màu của hình nền. Mỗi câu một kiểu chữ và một góc máy riêng, có hạt phim cũ, vết xước và sợi tóc máy chiếu, chữ viết tay và chữ bút dạ. Lời bè trong ngoặc đứng riêng một cột bên cạnh. Từ tục bị che dưới một thanh đen nhấp nháy. Khi bài nghỉ lâu có chấm chờ chạy dần. Câu rời đi bằng cách bay lên, bị gạch ngang, bị lem hoặc bị vẽ đè.
+- **Mẫu 6: Biến hóa chuyển động**: Từng chữ cái chuyển động theo tâm trạng của bài (sôi động, êm, nhiễu hay xoay vòng), mỗi câu một kiểu chuyển động mới.
+- **Mẫu 5: Biểu cảm Mochy**: Từ được hát to sẽ phóng lớn, các câu xếp chồng lên nhau. Từng chữ hiện ra lần lượt, hơi mờ rồi rõ dần, chữ cái nhấc lên khi được hát và có vệt sáng màu đuổi theo lời.
+- **Xem trước mẫu ngay trên thẻ chọn**: Mỗi thẻ trong danh sách mẫu lời bài hát giờ chạy thật theo bài đang phát. Khi chưa phát gì, thẻ chạy một bài mẫu có sẵn để bạn thấy trước mẫu trông thế nào.
+- **Mẫu Apple Music đẹp hơn**: Lời trượt mượt vào giữa, câu dài tự xuống dòng, câu xa mờ dần như ống kính máy ảnh, có bóng đổ nhẹ và lời bè nở ra ngay dưới câu chính.
+- **Vòng tua nhạc quanh ảnh bìa**: Ở bảng bên của mẫu Mochy, vòng quanh ảnh bìa cho biết bài đang ở đâu và kéo được để tua.
+
+### Fixed
+- **Mẫu Điện ảnh Serif lại mang màu hình nền**: Lời bài hát ở mẫu 1 lại đổi màu theo hình nền như trước.
+- **Mẫu 7 và 8 luôn mở được**: Có lúc đổi sang hai mẫu này khi Nutsty đang chạy thì lời không hiện. Giờ đổi lúc nào cũng hiện đúng.
+
 ## [2.2.0] - 2026-11-18
 
 ### Added
