@@ -44,6 +44,12 @@ Rectangle {
     signal homeClicked()
     signal libraryClicked()
     signal settingsClicked()
+    signal profileClicked()
+    readonly property Item profileButton: profileBtn
+    // the welcome card has just landed in the avatar
+    function pulseProfile() { landAnim.restart(); }
+    property string userAvatar: ""
+    property string userName: ""
     // Now Playing covers the feed, so the mood island has nothing to filter there
     property bool isNowPlayingOpen: false
     signal notificationsClicked(real xPos, real yPos)
@@ -54,6 +60,14 @@ Rectangle {
     property string selectedMood: "All"
     property bool isMoodIslandExpanded: false
     signal moodSelected(string title, string params)
+    // true when the open mood island's span reaches over this header item (with a small gap);
+    // positions only change with the window width, which re-runs this through the island's width
+    function moodCovers(item) {
+        if (!isMoodIslandExpanded || !dynamicMoodIsland.visible || !item) return false;
+        var left = (headerRoot.width - dynamicMoodIsland.expandedTargetWidth) / 2 - 10;
+        var right = item.mapToItem(headerRoot, item.width, 0).x;
+        return right > left;
+    }
 
     function formatMoodTitle(title) {
         return I18n.formatMoodChipTitle(title);
@@ -92,9 +106,82 @@ Rectangle {
         RowLayout {
             spacing: 14
 
+            // Profile: the user's own avatar opens the listener card page
+            Item {
+                id: profileBtn
+                // tucks under the open mood island instead of showing through its glass
+                readonly property bool underMood: headerRoot.moodCovers(profileBtn)
+                opacity: underMood ? 0 : 1
+                scale: underMood ? 0.8 : 1
+                enabled: !underMood
+                Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                Layout.preferredWidth: 32
+                Layout.preferredHeight: 32
+                readonly property bool isActive: headerRoot.currentView === "profile"
+
+                Item {
+                    id: profileAvatarBump
+                    anchors.fill: parent
+                RoundedImage {
+                    anchors.centerIn: parent
+                    width: 22; height: 22
+                    radius: 11
+                    source: headerRoot.userAvatar
+                    initialsText: headerRoot.userName
+                    fallbackIconColor: headerRoot.accentColor
+                    fallbackIconSize: 12
+                    borderWidth: 1
+                    borderColor: Qt.rgba(headerRoot.accentColor.r, headerRoot.accentColor.g, headerRoot.accentColor.b,
+                                         profileBtn.isActive ? 0.95 : (profileMouse.containsMouse ? 0.70 : 0.40))
+                    opacity: profileBtn.isActive || profileMouse.containsMouse ? 1.0 : 0.80
+                    scale: profileMouse.containsMouse ? 1.12 : (profileBtn.isActive ? 1.05 : 1.0)
+                    Behavior on scale { NumberAnimation { duration: 120 } }
+                    Behavior on opacity { NumberAnimation { duration: 120 } }
+                }
+                }
+
+                // Ring and bump when the welcome card lands in the avatar
+                Rectangle {
+                    id: landRing
+                    anchors.centerIn: parent
+                    width: 22; height: 22; radius: width / 2
+                    color: "transparent"
+                    border.width: 1.5
+                    border.color: headerRoot.accentColor
+                    opacity: 0
+                    visible: opacity > 0.001
+                }
+                ParallelAnimation {
+                    id: landAnim
+                    NumberAnimation { target: landRing; property: "width"; from: 22; to: 46; duration: 620; easing.type: Easing.OutCubic }
+                    NumberAnimation { target: landRing; property: "height"; from: 22; to: 46; duration: 620; easing.type: Easing.OutCubic }
+                    NumberAnimation { target: landRing; property: "opacity"; from: 0.9; to: 0; duration: 620; easing.type: Easing.OutQuad }
+                    SequentialAnimation {
+                        NumberAnimation { target: profileAvatarBump; property: "scale"; to: 1.28; duration: 140; easing.type: Easing.OutQuad }
+                        NumberAnimation { target: profileAvatarBump; property: "scale"; to: 1.0; duration: 420; easing.type: Easing.OutBack; easing.overshoot: 2.2 }
+                    }
+                }
+
+                MouseArea {
+                    id: profileMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: headerRoot.profileClicked()
+                }
+            }
+
             // 1. Home Button
             Item {
                 id: homeBtn
+                // tucks under the open mood island instead of showing through its glass
+                readonly property bool underMood: headerRoot.moodCovers(homeBtn)
+                opacity: underMood ? 0 : 1
+                scale: underMood ? 0.8 : 1
+                enabled: !underMood
+                Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
                 Layout.preferredWidth: 32
                 Layout.preferredHeight: 32
 
@@ -121,6 +208,13 @@ Rectangle {
             // 2. Dedicated Search Button (SimpMusic / Spotify style borderless icon)
             Item {
                 id: searchNavBtn
+                // tucks under the open mood island instead of showing through its glass
+                readonly property bool underMood: headerRoot.moodCovers(searchNavBtn)
+                opacity: underMood ? 0 : 1
+                scale: underMood ? 0.8 : 1
+                enabled: !underMood
+                Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
                 Layout.preferredWidth: 32
                 Layout.preferredHeight: 32
 
@@ -147,6 +241,13 @@ Rectangle {
             // 3. Downloads / Local Library Button
             Item {
                 id: libBtn
+                // tucks under the open mood island instead of showing through its glass
+                readonly property bool underMood: headerRoot.moodCovers(libBtn)
+                opacity: underMood ? 0 : 1
+                scale: underMood ? 0.8 : 1
+                enabled: !underMood
+                Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
                 Layout.preferredWidth: 32
                 Layout.preferredHeight: 32
 
@@ -175,6 +276,13 @@ Rectangle {
             // 4. Downloads Queue Popover Button
             Item {
                 id: downloadQueueBtn
+                // tucks under the open mood island instead of showing through its glass
+                readonly property bool underMood: headerRoot.moodCovers(downloadQueueBtn)
+                opacity: underMood ? 0 : 1
+                scale: underMood ? 0.8 : 1
+                enabled: !underMood
+                Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
                 Layout.preferredWidth: 32
                 Layout.preferredHeight: 32
                 readonly property bool hasActive: typeof downloadManager !== "undefined" && downloadManager && downloadManager.activeTasksCount > 0
@@ -215,6 +323,13 @@ Rectangle {
             // 5. Settings & Account Button
             Item {
                 id: setBtn
+                // tucks under the open mood island instead of showing through its glass
+                readonly property bool underMood: headerRoot.moodCovers(setBtn)
+                opacity: underMood ? 0 : 1
+                scale: underMood ? 0.8 : 1
+                enabled: !underMood
+                Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
                 Layout.preferredWidth: 32
                 Layout.preferredHeight: 32
 
@@ -241,6 +356,13 @@ Rectangle {
             // 6. Notification Bell Button (Flat layout, accent indicator badge)
             Item {
                 id: notificationBtn
+                // tucks under the open mood island instead of showing through its glass
+                readonly property bool underMood: headerRoot.moodCovers(notificationBtn)
+                opacity: underMood ? 0 : 1
+                scale: underMood ? 0.8 : 1
+                enabled: !underMood
+                Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
                 Layout.preferredWidth: 32
                 Layout.preferredHeight: 32
 

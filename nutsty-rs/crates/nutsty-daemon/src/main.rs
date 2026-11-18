@@ -471,8 +471,8 @@ fn handle_request(state: Arc<AppState>, mut request: tiny_http::Request) {
                     "action": "open_settings",
                     "tab": tab,
                     "mock_update": mock,
-                    "current_version": "2.1.0",
-                    "latest_version": "v2.1.0",
+                    "current_version": "2.2.0",
+                    "latest_version": "v2.2.0",
                     "release_url": "https://github.com/trancongduyhieu/Nutsty/releases"
                 });
 
@@ -504,8 +504,8 @@ fn handle_request(state: Arc<AppState>, mut request: tiny_http::Request) {
                     "action": "open_settings",
                     "tab": tab,
                     "mock_update": false,
-                    "current_version": "2.1.0",
-                    "latest_version": "v2.1.0",
+                    "current_version": "2.2.0",
+                    "latest_version": "v2.2.0",
                     "release_url": "https://github.com/trancongduyhieu/Nutsty/releases"
                 });
                 *state.pending_ui_action.lock().unwrap() = Some(action_obj);

@@ -163,8 +163,12 @@ function syncNowPlaying(win, force) {
 }
 
 function fetchCurrentUserProfile(win) {
-    var email = win.getCurrentUserEmail();
     var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
+    // Before the account is known getCurrentUserEmail() falls back to a placeholder, and the
+    // relay answers that with a different (stray) profile whose name then flashes on screen.
+    // The auth status check calls this again once the real account is in.
+    if (!win.authAccountEmail && !profile) return;
+    var email = win.getCurrentUserEmail();
     var preferredName = (!win.currentUserName && win.authAccountName) ? win.authAccountName : "";
     var apiUrl = (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/users/me?user_email=" + encodeURIComponent(email) + "&profile=" + encodeURIComponent(profile) + "&name=" + encodeURIComponent(preferredName);
     var xhr = new XMLHttpRequest();
@@ -176,7 +180,10 @@ function fetchCurrentUserProfile(win) {
                 if (res && res.success && res.profile) {
                     win.currentUserPin = res.profile.discriminator || res.profile.pin_code || "";
                     win.currentUserCloudId = res.profile.user_id || res.profile.id || "";
-                    if (res.profile.username && !res.profile.username.toLowerCase().includes("shiraori") && res.profile.username !== "Nutsty User") {
+                    var joined = Number(res.profile.created_at || 0);
+                    // Cloud stores seconds; QML dates want milliseconds
+                    if (joined > 0) win.currentUserJoinedAt = joined < 100000000000 ? joined * 1000 : joined;
+                    if (res.profile.username && res.profile.username !== "Nutsty User") {
                         win.currentUserName = res.profile.username;
                         win.currentUserTag = res.profile.tag || (res.profile.username + "#" + win.currentUserPin);
                     } else if (win.authAccountName) {

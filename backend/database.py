@@ -100,6 +100,11 @@ def init_db() -> None:
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         """)
+        # One row per play instance (QML sends the same play_id again as listening goes on)
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(playback_events);")}
+        if "play_id" not in cols:
+            conn.execute("ALTER TABLE playback_events ADD COLUMN play_id TEXT;")
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_playback_play_id ON playback_events(play_id);")
     conn.close()
 
 
@@ -200,6 +205,200 @@ def record_playback_event(track_data: Dict[str, Any], listened_seconds: float,
         """, (t_id, title, artist, album, cover, duration_ms, listened_ms,
               completion_rate, genre, is_radio, is_deep_cut))
     conn.close()
+
+
+PLAY_THRESHOLD_SECONDS = 30.0
+
+
+def upsert_play(play_id: str, track_data: Dict[str, Any], listened_seconds: float,
+                total_seconds: float) -> bool:
+    """Count a play once it reaches 30s; later calls with the same play_id only extend listened time."""
+    if not play_id or listened_seconds < PLAY_THRESHOLD_SECONDS:
+        return False
+    t_id = str(track_data.get("id") or track_data.get("videoId") or track_data.get("path") or "")
+    title = str(track_data.get("title") or "Unknown")
+    artist = str(track_data.get("artist") or track_data.get("author") or "Unknown")
+    album = str(track_data.get("album") or "")
+    cover = str(track_data.get("image") or track_data.get("cover") or "")
+    duration_ms = int(max(0.0, total_seconds) * 1000)
+    listened_ms = int(listened_seconds * 1000)
+    completion = min(1.0, listened_seconds / max(1.0, total_seconds))
+    conn = get_connection()
+    with conn:
+        conn.execute("""
+        INSERT INTO playback_events (play_id, track_id, title, artist, album, cover_url,
+                                     duration_ms, listened_ms, completion_rate)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(play_id) DO UPDATE SET
+            listened_ms = MAX(playback_events.listened_ms, excluded.listened_ms),
+            completion_rate = MAX(playback_events.completion_rate, excluded.completion_rate),
+            duration_ms = MAX(playback_events.duration_ms, excluded.duration_ms);
+        """, (play_id, t_id, title, artist, album, cover, duration_ms, listened_ms, completion))
+    conn.close()
+    return True
+
+
+def get_lifetime_totals() -> Dict[str, Any]:
+    """All-time play count, listened minutes and first play time (for the profile header)."""
+    conn = get_connection()
+    row = conn.execute("""
+        SELECT COUNT(*) AS play_count, COALESCE(SUM(listened_ms), 0) AS total_ms,
+               MIN(timestamp) AS first_play
+        FROM playback_events;
+    """).fetchone()
+    conn.close()
+    total_ms = int(row["total_ms"] or 0)
+    return {
+        "play_count": int(row["play_count"] or 0),
+        "total_minutes": total_ms // 60000,
+        "total_hours": round(total_ms / 3600000.0, 1),
+        "first_play": row["first_play"] or "",
+    }
+
+
+def get_profile_overview(recent_limit: int = 16, artist_limit: int = 10) -> Dict[str, Any]:
+    """Profile page data: totals per period, recently played tracks and most played artists."""
+    conn = get_connection()
+    periods = []
+    # timestamps are stored by SQLite in UTC, so compare against SQLite's own clock
+    for key, cutoff in (("week", "-7 days"), ("month", "-30 days"), ("all", None)):
+        where = "WHERE timestamp >= datetime('now', ?)" if cutoff else ""
+        args = (cutoff,) if cutoff else ()
+        row = conn.execute(f"""
+            SELECT COUNT(*) AS plays, COUNT(DISTINCT track_id) AS songs,
+                   COALESCE(SUM(listened_ms), 0) AS total_ms
+            FROM playback_events {where};
+        """, args).fetchone()
+        periods.append({"key": key, "plays": int(row["plays"] or 0), "songs": int(row["songs"] or 0),
+                        "total_minutes": int(row["total_ms"] or 0) // 60000})
+    recent = [dict(r) for r in conn.execute("""
+        SELECT p.track_id, p.title, p.artist, p.cover_url, p.timestamp AS last_played
+        FROM playback_events p
+        -- the same song can arrive as a stream id or as its cached file, so group by title and artist
+        JOIN (SELECT MAX(id) AS mid FROM playback_events
+              WHERE track_id != '' GROUP BY lower(title), lower(COALESCE(artist, ''))) last
+          ON p.id = last.mid
+        ORDER BY p.timestamp DESC, p.id DESC
+        LIMIT ?;
+    """, (recent_limit,)).fetchall()]
+    artists = [dict(r) for r in conn.execute("""
+        SELECT artist, COUNT(*) AS plays, COALESCE(SUM(listened_ms), 0) / 60000 AS minutes,
+               (SELECT cover_url FROM playback_events c WHERE c.artist = p.artist AND c.cover_url != ''
+                ORDER BY c.id DESC LIMIT 1) AS cover_url
+        FROM playback_events p
+        WHERE artist NOT IN ('', 'Unknown')
+        GROUP BY artist
+        ORDER BY plays DESC, minutes DESC
+        LIMIT ?;
+    """, (artist_limit,)).fetchall()]
+    conn.close()
+    return {"periods": periods, "recent": recent, "artists": artists}
+
+
+RECAP_MIN_SONGS = 10   # a month's recap opens once it has this many different songs
+RECAP_FIRST_DAY = 3    # ...and not before this day; on the 1st and 2nd the previous month shows
+
+
+def _recap_month_stats(conn, year: int, month: int) -> Dict[str, Any]:
+    """Everything the recap shows for one calendar month (local time)."""
+    ym = f"{year:04d}-{month:02d}"
+    # stored in UTC; the month, weekday and hour are the listener's own
+    where = "strftime('%Y-%m', timestamp, 'localtime') = ?"
+    song_key = "lower(title) || '|' || lower(COALESCE(artist, ''))"
+    tot = conn.execute(f"""
+        SELECT COUNT(*) AS plays, COALESCE(SUM(listened_ms), 0) AS ms,
+               COUNT(DISTINCT {song_key}) AS songs,
+               COUNT(DISTINCT CASE WHEN artist NOT IN ('', 'Unknown') THEN lower(artist) END) AS artists,
+               COUNT(DISTINCT CASE WHEN COALESCE(album, '') != '' THEN lower(album) END) AS albums
+        FROM playback_events WHERE {where};
+    """, (ym,)).fetchone()
+    songs = [dict(r) for r in conn.execute(f"""
+        SELECT MAX(title) AS title, MAX(artist) AS artist, MAX(track_id) AS track_id,
+               (SELECT cover_url FROM playback_events c WHERE {song_key.replace('title', 'c.title').replace('artist', 'c.artist')}
+                  = {song_key.replace('title', 'p.title').replace('artist', 'p.artist')} AND c.cover_url != ''
+                ORDER BY c.id DESC LIMIT 1) AS cover_url,
+               COUNT(*) AS plays, COALESCE(SUM(listened_ms), 0) / 60000 AS minutes
+        FROM playback_events p WHERE {where} AND track_id != ''
+        GROUP BY {song_key.replace('title', 'p.title').replace('artist', 'p.artist')}
+        ORDER BY plays DESC, minutes DESC LIMIT 10;
+    """, (ym,)).fetchall()]
+    # the song page's cover wall: every distinct cover played this month, most played first
+    grid = [dict(r) for r in conn.execute(f"""
+        SELECT MAX(title) AS title, MAX(artist) AS artist, MAX(cover_url) AS cover_url, COUNT(*) AS plays
+        FROM playback_events WHERE {where} AND cover_url != ''
+        GROUP BY cover_url ORDER BY plays DESC LIMIT 60;
+    """, (ym,)).fetchall()]
+    artists = [dict(r) for r in conn.execute(f"""
+        SELECT artist, COUNT(*) AS plays, COALESCE(SUM(listened_ms), 0) / 60000 AS minutes,
+               (SELECT cover_url FROM playback_events c WHERE c.artist = p.artist AND c.cover_url != ''
+                ORDER BY c.id DESC LIMIT 1) AS cover_url
+        FROM playback_events p WHERE {where} AND artist NOT IN ('', 'Unknown')
+        GROUP BY artist ORDER BY plays DESC, minutes DESC LIMIT 10;
+    """, (ym,)).fetchall()]
+    for a in artists:
+        top = next((s for s in songs if (s.get("artist") or "") == a["artist"]), None)
+        a["top_song"] = top["title"] if top else ""
+        a["top_song_track_id"] = top["track_id"] if top else ""
+        a["top_song_cover"] = top["cover_url"] if top else ""
+
+    def buckets(fmt: str, size: int, offset: int = 0) -> List[int]:
+        out = [0] * size
+        for r in conn.execute(f"""
+            SELECT CAST(strftime('{fmt}', timestamp, 'localtime') AS INTEGER) AS k,
+                   COALESCE(SUM(listened_ms), 0) / 60000 AS m
+            FROM playback_events WHERE {where} GROUP BY k;
+        """, (ym,)).fetchall():
+            i = int(r["k"]) - offset
+            if 0 <= i < size:
+                out[i] = int(r["m"] or 0)
+        return out
+
+    days_in_month = (datetime(year + (month == 12), month % 12 + 1, 1) - datetime(year, month, 1)).days
+    sun_first = buckets("%w", 7)                      # SQLite: 0 = Sunday
+    return {
+        "year": year, "month": month,
+        "plays": int(tot["plays"] or 0), "total_minutes": int(tot["ms"] or 0) // 60000,
+        "song_count": int(tot["songs"] or 0), "artist_count": int(tot["artists"] or 0),
+        "album_count": int(tot["albums"] or 0),
+        "top_songs": songs, "top_artists": artists, "grid_songs": grid,
+        "weekday_minutes": sun_first[1:] + sun_first[:1],  # Monday first
+        "hour_minutes": buckets("%H", 24),
+        "day_minutes": buckets("%d", days_in_month, offset=1),
+    }
+
+
+def get_monthly_recap(force: bool = False, today: Optional[datetime] = None) -> Dict[str, Any]:
+    """The monthly recap if one is ready, by the same rules as Mochy; force shows whatever exists."""
+    today = today or datetime.now()
+    prev_year, prev_month = (today.year - 1, 12) if today.month == 1 else (today.year, today.month - 1)
+    conn = get_connection()
+    try:
+        all_ms = conn.execute("SELECT COALESCE(SUM(listened_ms), 0) AS ms FROM playback_events;").fetchone()["ms"]
+        def ready(stats, progress):
+            return {"ready": True, "stats": stats, "month_progress": progress,
+                    "all_time_minutes": int(all_ms or 0) // 60000}
+        days_in_month = (datetime(today.year + (today.month == 12), today.month % 12 + 1, 1)
+                         - datetime(today.year, today.month, 1)).days
+        progress_now = max(1, min(100, round(today.day * 100 / days_in_month)))
+        if today.day < RECAP_FIRST_DAY:
+            prev = _recap_month_stats(conn, prev_year, prev_month)
+            if prev["song_count"] >= RECAP_MIN_SONGS or (force and prev["song_count"] > 0):
+                return ready(prev, 100)
+            missing = RECAP_MIN_SONGS
+        else:
+            cur = _recap_month_stats(conn, today.year, today.month)
+            if cur["song_count"] >= RECAP_MIN_SONGS:
+                return ready(cur, progress_now)
+            missing = RECAP_MIN_SONGS - cur["song_count"]
+        if force:
+            for y, m, p in ((today.year, today.month, progress_now), (prev_year, prev_month, 100)):
+                stats = _recap_month_stats(conn, y, m)
+                if stats["song_count"] > 0:
+                    return ready(stats, p)
+        return {"ready": False, "missing_songs": missing, "first_day": RECAP_FIRST_DAY,
+                "all_time_minutes": int(all_ms or 0) // 60000}
+    finally:
+        conn.close()
 
 
 def get_listening_summary(days: int = 30) -> Dict[str, Any]:

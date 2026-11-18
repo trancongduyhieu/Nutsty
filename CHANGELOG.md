@@ -7,6 +7,20 @@ Số phiên bản có dạng `A.B.C`, ví dụ `1.2.0`:
 - **B (số thứ 2)** tăng khi có tính năng mới mà mọi thứ cũ vẫn dùng bình thường. Số thứ 3 về 0, ví dụ `2.1.3` lên `2.2.0`.
 - **A (số đầu tiên)** tăng khi có thay đổi lớn buộc bạn làm lại gì đó hoặc dữ liệu, cài đặt của bản cũ không dùng được nữa. Hai số sau về 0, ví dụ `2.4.1` lên `3.0.0`.
 
+## [2.2.0] - 2026-11-18
+
+### Added
+- **Thẻ người nghe của riêng bạn**: Bấm ảnh đại diện ở góc trên để mở trang hồ sơ. Ở đó có một tấm thẻ vàng mang tên, ảnh, số thẻ và ngày bạn tham gia Nutsty. Thẻ nghiêng theo chuột, kéo được rồi bật về chỗ cũ, bấm vào thì lật ra mặt sau có mã vạch. Bên phải có chữ NUTSTY khổng lồ trôi chậm lên trên.
+- **Lời chào lần đầu**: Lần đầu mở bản mới, tấm thẻ bay vào giữa màn hình cùng pháo giấy và một lời chào lớn, rồi bay vào ảnh đại diện ở góc trên. Người mới cài và người dùng cũ nhận lời chào khác nhau. Bấm bất kỳ đâu để bỏ qua.
+- **Trang hồ sơ**: Bấm vào thẻ, ảnh, tên và số thẻ bay vào đúng chỗ trên trang hồ sơ. Trang này cho xem tổng thời gian nghe theo từng khoảng thời gian, những bài nghe gần đây, danh sách phát của bạn và các nghệ sĩ bạn nghe nhiều nhất. Bấm vào một bài đã nghe để phát lại ngay.
+- **Đếm thời gian nghe thật**: Nutsty ghi lại thời gian bạn thật sự nghe từng bài. Một bài được tính là một lượt khi bạn nghe đủ 30 giây, nghe lại từ đầu ở chế độ lặp một bài thì được tính thêm lượt mới.
+- **Tổng kết tháng**: Cào lớp phủ trên mã vạch ở mặt sau tấm thẻ để mở bản tổng kết tháng của bạn. Khi cào có đồng xu bạc theo tay, vụn rơi ra từ chỗ vừa cào, tiếng sột soạt to nhỏ theo tốc độ tay và thẻ rung nhẹ. Cào gần hết thì phần còn lại tự bong ra. Màn hình chớp mắt một cái rồi thẻ bay đi, bản tổng kết hiện ra với chữ NUTSTY xoay từ dọc sang ngang. Các trang lần lượt cho xem thời gian nghe, nghệ sĩ nghe nhiều nhất cùng bài hát của họ lơ lửng bên cạnh, bài hát yêu thích kèm đĩa nhạc của nghệ sĩ nằm dưới ảnh bìa, một bức tường ảnh bìa các bài bạn đã nghe trong tháng và một tờ hóa đơn. Mỗi trang phát một đoạn ngắn của bài liên quan. Nhạc đang phát nhỏ dần khi mở và to dần trở lại khi đóng. Khi kết thúc, chữ NUTSTY xoay về dọc và tấm thẻ bay về chỗ cũ trên trang hồ sơ.
+
+### Fixed
+- **Ghi chú vừa đăng không còn biến mất trên Windows**: Trên những máy Windows chỉ cài Nutsty mà không có Python, ghi chú vừa đăng không lên được và biến mất ở lần làm mới tiếp theo. Giờ ghi chú được đăng bình thường.
+- **Người dùng tên Shiraori giữ đúng tên**: Trước đây tên này bị coi như tên tạm và có thể bị thay bằng tên khác. Giờ tên của bạn được giữ nguyên.
+- **Bản Windows tự cập nhật thư viện đi kèm**: Khi bản mới cần thư viện mới hơn, lần mở đầu tiên tự cài lại cho đúng thay vì dùng bản cũ. Biểu tượng động cần thư viện mới này, nên máy dùng bản cũ sẽ thấy biểu tượng đứng yên kèm lời nhắc cập nhật.
+
 ## [2.1.0] - 2026-11-17
 
 ### Added

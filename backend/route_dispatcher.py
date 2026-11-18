@@ -25,11 +25,13 @@ try:
     from . import music_routes
     from . import social_routes
     from . import playlist_manager
+    from . import listening_routes
 except (ImportError, ValueError):
     import platform_compat as pc
     import music_routes
     import social_routes
     import playlist_manager
+    import listening_routes
 
 
 class MockResponseHandler:
@@ -104,6 +106,14 @@ def dispatch_request(method, path, query_dict, body_str):
             social_routes.handle_get_notes(handler, query_dict)
         elif clean_path == "/api/friends":
             social_routes.handle_get_friends(handler, query_dict)
+        elif clean_path == "/api/listening/totals":
+            listening_routes.handle_get_listening_totals(handler, query_dict)
+        elif clean_path == "/api/listening/profile":
+            listening_routes.handle_get_listening_profile(handler, query_dict)
+        elif clean_path == "/api/listening/recap":
+            listening_routes.handle_get_listening_recap(handler, query_dict)
+        elif clean_path == "/api/listening/snippet":
+            listening_routes.handle_get_recap_snippet(handler, query_dict)
         elif clean_path == "/api/users/me":
             social_routes.handle_get_user_me(handler, query_dict)
         elif clean_path == "/api/users/search":
@@ -176,6 +186,8 @@ def dispatch_request(method, path, query_dict, body_str):
             music_routes.handle_post_spotify_import(handler)
         elif clean_path == "/api/spotify/cancel_import":
             music_routes.handle_post_spotify_cancel_import(handler)
+        elif clean_path == "/api/listening/play":
+            listening_routes.handle_post_play_record(handler, req_json)
         elif clean_path == "/api/users/update_profile":
             social_routes.handle_post_update_profile(handler, req_json)
         elif clean_path == "/api/users/regenerate_pin":

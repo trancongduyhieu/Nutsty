@@ -1,0 +1,55 @@
+.pragma library
+
+// Code 128 set B encoder (ISO/IEC 15417). Returns an array of 0/1 modules, 1 = bar.
+// Each symbol is 11 modules wide, the stop symbol 13. Only printable ASCII 32..126 is kept.
+
+var PATTERNS = [
+    0x6CC, 0x66C, 0x666, 0x498, 0x48C, 0x44C, 0x4C8, 0x4C4, 0x464, 0x648, 0x644, 0x624,
+    0x59C, 0x4DC, 0x4CE, 0x5CC, 0x4EC, 0x4E6, 0x672, 0x65C, 0x64E, 0x6E4, 0x674, 0x76E,
+    0x74C, 0x72C, 0x726, 0x764, 0x734, 0x732, 0x6D8, 0x6C6, 0x636, 0x518, 0x458, 0x446,
+    0x588, 0x468, 0x462, 0x688, 0x628, 0x622, 0x5B8, 0x58E, 0x46E, 0x5D8, 0x5C6, 0x476,
+    0x776, 0x68E, 0x62E, 0x6E8, 0x6E2, 0x6EE, 0x758, 0x746, 0x716, 0x768, 0x762, 0x71A,
+    0x77A, 0x642, 0x78A, 0x530, 0x50C, 0x4B0, 0x486, 0x42C, 0x426, 0x590, 0x584, 0x4D0,
+    0x4C2, 0x434, 0x432, 0x612, 0x650, 0x7BA, 0x614, 0x47A, 0x53C, 0x4BC, 0x49E, 0x5E4,
+    0x4F4, 0x4F2, 0x7A4, 0x794, 0x792, 0x6DE, 0x6F6, 0x7B6, 0x578, 0x51E, 0x45E, 0x5E8,
+    0x5E2, 0x7A8, 0x7A2, 0x5DE, 0x5EE, 0x75E, 0x7AE, 0x684, 0x690, 0x69C
+];
+var START_B = 104;
+var STOP = 0x18EB; // 13 modules
+
+function encode(text) {
+    var values = [START_B];
+    var checksum = START_B;
+    var pos = 0;
+    var s = String(text || "");
+    for (var i = 0; i < s.length; i++) {
+        var code = s.charCodeAt(i);
+        if (code < 32 || code > 126) continue;
+        pos += 1;
+        values.push(code - 32);
+        checksum += pos * (code - 32);
+    }
+    values.push(checksum % 103);
+    var bits = [];
+    for (var v = 0; v < values.length; v++) {
+        var p = PATTERNS[values[v]];
+        for (var b = 10; b >= 0; b--) bits.push((p >> b) & 1);
+    }
+    for (var c = 12; c >= 0; c--) bits.push((STOP >> c) & 1);
+    return bits;
+}
+
+// Bars as [startModule, widthModules] runs, ready to draw as rectangles.
+function runs(text) {
+    var bits = encode(text);
+    var out = [];
+    var i = 0;
+    while (i < bits.length) {
+        if (!bits[i]) { i++; continue; }
+        var j = i;
+        while (j < bits.length && bits[j]) j++;
+        out.push([i, j - i]);
+        i = j;
+    }
+    return { modules: bits.length, runs: out };
+}

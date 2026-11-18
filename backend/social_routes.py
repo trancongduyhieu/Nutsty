@@ -113,7 +113,7 @@ def handle_get_user_me(handler, query):
         display_name = cur_uname
         display_tag = ident.get("tag") or f"{display_name}#{ident.get('discriminator', '0001')}"
     else:
-        display_name = preferred_name if (preferred_name and preferred_name not in ("User", "Nutsty User", "Shiraori", "Khách", "Guest")) else (cur_uname or "Nutsty User")
+        display_name = preferred_name if (preferred_name and preferred_name not in ("User", "Nutsty User", "Khách", "Guest")) else (cur_uname or "Nutsty User")
         display_tag = f"{display_name}#{ident.get('discriminator', '0001')}"
     handler._send_json({
         "success": True,
@@ -127,7 +127,8 @@ def handle_get_user_me(handler, query):
             "tag": display_tag,
             "nutsty_tag": display_tag,
             "avatar": ident.get("avatar_url", ""),
-            "avatar_url": ident.get("avatar_url", "")
+            "avatar_url": ident.get("avatar_url", ""),
+            "created_at": int(ident.get("created_at") or 0)
         }
     }, 200)
 

@@ -1,0 +1,261 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-18T03:40:52.670876+00:00",
+  "title": "Design System: Nutsty",
+  "extensions": {
+    "colorMeta": {
+      "honey-amber": {
+        "role": "primary",
+        "displayName": "Honey Amber",
+        "canonical": "#deb06c",
+        "tonalRamp": [
+          "#3a2a12",
+          "#5a4220",
+          "#7a5a2e",
+          "#9c763f",
+          "#bd9354",
+          "#deb06c",
+          "#eed08c",
+          "#f8ecd2"
+        ],
+        "note": "Fallback only; runtime accentColor comes from wallpaper or cover art."
+      },
+      "ink-app": {
+        "role": "neutral",
+        "displayName": "Ink App",
+        "canonical": "#121212",
+        "tonalRamp": [
+          "#0a0a0a",
+          "#121212",
+          "#181818",
+          "#1f1f1f",
+          "#242424",
+          "#282828",
+          "#2a2a2a",
+          "#3a3a3a"
+        ]
+      },
+      "velvet-backdrop": {
+        "role": "neutral",
+        "displayName": "Velvet Backdrop",
+        "canonical": "#0a0b0e",
+        "tonalRamp": [
+          "#0a0a0a",
+          "#121212",
+          "#181818",
+          "#1f1f1f",
+          "#242424",
+          "#282828",
+          "#2a2a2a",
+          "#3a3a3a"
+        ]
+      },
+      "muted-rose": {
+        "role": "danger",
+        "displayName": "Muted Rose",
+        "canonical": "#f43f5e",
+        "tonalRamp": [
+          "#4c0519",
+          "#881337",
+          "#be123c",
+          "#e11d48",
+          "#f43f5e",
+          "#fb7185",
+          "#fda4af",
+          "#ffe4e6"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display Serif",
+        "purpose": "Lyrics and cinematic moments; Noto Serif for Vietnamese diacritics."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Page titles and greetings."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Card titles and section headers."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Track titles, rows, settings labels."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Artists, metadata, chips, counters."
+      }
+    },
+    "shadows": [
+      {
+        "name": "legibility-soft",
+        "value": "0 2px 12px rgba(0,0,0,0.35)",
+        "purpose": "Toasts, notification centre, lyrics. Legibility, not lift."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-quick",
+        "value": "Easing.OutCubic 100-160ms",
+        "purpose": "Default hover/state transitions."
+      },
+      {
+        "name": "ease-fade",
+        "value": "Easing.InOutQuad",
+        "purpose": "Opacity and colour crossfades."
+      },
+      {
+        "name": "ease-playful",
+        "value": "Easing.OutBack",
+        "purpose": "Entrances and pops."
+      },
+      {
+        "name": "ease-emphasized",
+        "value": "cubic-bezier(0.42, 0, 0.16, 1)",
+        "purpose": "Large emphasized moves."
+      },
+      {
+        "name": "backdrop-fade",
+        "value": "400ms InOutQuad",
+        "purpose": "Velvet backdrop on play/pause."
+      },
+      {
+        "name": "cover-crossfade",
+        "value": "900ms",
+        "purpose": "Cover art aurora on play/pause."
+      }
+    ],
+    "blur": [
+      {
+        "name": "subtle",
+        "value": 16
+      },
+      {
+        "name": "medium",
+        "value": 24
+      },
+      {
+        "name": "atmosphere",
+        "value": 48
+      },
+      {
+        "name": "deep",
+        "value": 64
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Accent Button",
+      "kind": "button",
+      "refersTo": "button-accent",
+      "description": "Default interactive control tinted by the dynamic accent.",
+      "html": "<button class=\"ds-btn-accent\">Phát tất cả</button>",
+      "css": ".ds-btn-accent{background:rgba(222,176,108,0.12);color:#fff;border:1px solid rgba(222,176,108,0.25);border-radius:8px;padding:8px 16px;font:600 11px Inter,sans-serif;letter-spacing:.5px;transition:background .15s,border-color .15s}.ds-btn-accent:hover{background:rgba(222,176,108,0.22);border-color:rgba(222,176,108,0.45)}.ds-btn-accent:focus-visible{outline:2px solid #deb06c;outline-offset:2px}"
+    },
+    {
+      "name": "Destructive Button",
+      "kind": "button",
+      "refersTo": "button-destructive",
+      "description": "Delete, sign out.",
+      "html": "<button class=\"ds-btn-danger\">Xóa</button>",
+      "css": ".ds-btn-danger{background:rgba(244,63,94,0.12);color:#fda4af;border:1px solid rgba(244,63,94,0.26);border-radius:8px;padding:8px 16px;font:600 11px Inter,sans-serif;transition:background .15s,border-color .15s,color .15s}.ds-btn-danger:hover{background:rgba(239,68,68,0.24);border-color:rgba(239,68,68,0.48);color:#ffe4e6}.ds-btn-danger:focus-visible{outline:2px solid #f43f5e;outline-offset:2px}"
+    },
+    {
+      "name": "Mood Chip",
+      "kind": "chip",
+      "refersTo": "chip-mood",
+      "description": "The only capsule shape in the system.",
+      "html": "<div class=\"ds-chips\"><button class=\"ds-chip ds-chip-on\">Chill</button><button class=\"ds-chip\">Focus</button></div>",
+      "css": ".ds-chips{display:flex;gap:8px}.ds-chip{background:rgba(222,176,108,0.12);color:#fff;border:1px solid rgba(222,176,108,0.25);border-radius:16px;padding:6px 14px;font:600 11px Inter,sans-serif;transition:background .15s}.ds-chip:hover{background:rgba(222,176,108,0.22)}.ds-chip-on{background:#deb06c;color:#121212;border-color:#deb06c}"
+    },
+    {
+      "name": "Track Card",
+      "kind": "card",
+      "refersTo": "card-track",
+      "description": "Grid card with full-bleed cover and concentric radius.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-cover\"></div><div class=\"ds-card-title\">Tên bài hát</div><div class=\"ds-card-sub\">Nghệ sĩ</div></div>",
+      "css": ".ds-card{width:160px;background:#181818;border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:8px;transition:background .15s,border-color .15s}.ds-card:hover{background:#282828;border-color:rgba(255,255,255,0.18)}.ds-card-cover{aspect-ratio:1;border-radius:4px;background:linear-gradient(135deg,#7a5a2e,#2a2a2a);border:1px solid rgba(255,255,255,0.07)}.ds-card-title{margin-top:8px;color:#fff;font:700 13px Inter,sans-serif}.ds-card-sub{color:#b3b3b3;font:600 11px Inter,sans-serif}"
+    },
+    {
+      "name": "Nav Arrow",
+      "kind": "nav",
+      "refersTo": "nav-arrow",
+      "description": "Carousel paging arrow; dims at scroll limit.",
+      "html": "<div style=\"display:flex;gap:8px\"><button class=\"ds-nav\" aria-label=\"Trước\" disabled><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\"><path d=\"M15 18l-6-6 6-6\" stroke=\"#deb06c\" stroke-width=\"2\" fill=\"none\"/></svg></button><button class=\"ds-nav\" aria-label=\"Sau\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\"><path d=\"M9 6l6 6-6 6\" stroke=\"#deb06c\" stroke-width=\"2\" fill=\"none\"/></svg></button></div>",
+      "css": ".ds-nav{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:rgba(222,176,108,0.12);border:1px solid rgba(222,176,108,0.25);transition:transform .12s,background .2s,opacity .15s}.ds-nav:hover:not(:disabled){transform:scale(1.06);background:rgba(222,176,108,0.22);border-color:rgba(222,176,108,0.45)}.ds-nav:disabled{opacity:.28}"
+    },
+    {
+      "name": "Popover Menu",
+      "kind": "custom",
+      "description": "Dark organic glass menu tinted by accent.",
+      "html": "<div class=\"ds-pop\"><div class=\"ds-pop-item ds-pop-on\">Thêm vào danh sách phát</div><div class=\"ds-pop-item\">Phát tiếp theo</div></div>",
+      "css": ".ds-pop{width:220px;padding:6px;border-radius:12px;background:rgba(33,29,32,0.96);border:1px solid rgba(222,176,108,0.35)}.ds-pop-item{padding:8px 10px;border-radius:6px;color:#fff;font:500 13px Inter,sans-serif;border:1px solid transparent}.ds-pop-item:hover{background:rgba(222,176,108,0.14);border-color:rgba(222,176,108,0.25)}.ds-pop-on{background:rgba(222,176,108,0.26);border-color:rgba(222,176,108,0.45)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Glass on Your Wallpaper",
+    "overview": "Nutsty is a sheet of glass resting on the user's desktop. While nothing plays, the window is a dark acrylic pane at 58% and the wallpaper shows straight through. Once a song plays, a velvet backdrop fades in over 400ms, the album art blooms into a blurred aurora behind the content, and every interactive control takes on the song's colour. The interface never brings its own palette. It borrows one from the wallpaper and the cover art, through OKLAB chromatic salience extraction. The UI is dense and quiet, made of small type, hairline borders and concentric rounded corners; controls stay translucent and tinted and brighten on hover instead of rising off the surface.",
+    "keyCharacteristics": [
+      "The accent is dynamic: the song's colour while playing, the wallpaper's colour while paused, and Honey Amber only as a fallback.",
+      "Layered translucency (wallpaper, then cover aurora, then content) instead of opaque panels.",
+      "Hairline 1px borders on every card, row, chip and cover.",
+      "Concentric radii: inner radius = outer radius minus padding.",
+      "Icons are always SVG (AppIcon.qml, assets/icons/*.svg)."
+    ],
+    "rules": [
+      {
+        "name": "The Borrowed Colour Rule",
+        "body": "Interactive colour always comes from accentColor (or effectiveAccentColor). Never hardcode a brand hue on a control.",
+        "section": "colors"
+      },
+      {
+        "name": "The No Dead Grey Rule",
+        "body": "Buttons, pills, selectors and popovers never use flat greys such as white at 6 or 8%, #18181b or #27272a. Tint them with the accent instead.",
+        "section": "colors"
+      },
+      {
+        "name": "The Pause Shows the Wallpaper Rule",
+        "body": "Backdrop opacity is tied to win.currentTrack && win.isPlaying, never to currentTrack alone, otherwise pausing locks the window to opaque black.",
+        "section": "colors"
+      },
+      {
+        "name": "The Diacritic Fallback Rule",
+        "body": "Any serif display text must switch to Noto Serif when the string contains Vietnamese diacritics, as EnchantingSentence.qml does. Instrument Serif renders them wrong.",
+        "section": "typography"
+      },
+      {
+        "name": "The Never Fake Glass Rule",
+        "body": "Never replace Liquid Glass with a plain Rectangle of milky white at 10%. The glass backdrop source stays visible: true with opacity: 0.001. With visible: false the shader samples black.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Lite Mode Rule",
+        "body": "Every whole-window or per-frame effect must have a Lite mode path that keeps it static or switches it off.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Anti-Capsule Rule",
+        "body": "Never use radius = height / 2 on buttons, cards or badges. Mood chips are the explicit exception.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do read accentColor from win and derive every control state from it at 12, 22, 26 or 45% alpha.",
+      "Do put a 1px hairline on every card, row, chip and cover (white at 7% idle, 18% hover, accent at 45% active).",
+      "Do compute inner radii concentrically, and use RoundedImage.qml for every rounded image.",
+      "Do use SVG icons through AppIcon.qml, and pass all copy through I18n.tr().",
+      "Do provide a Lite mode path for any continuous or whole-window effect."
+    ],
+    "donts": [
+      "Don't use emoji anywhere in the interface.",
+      "Don't use dead grey buttons or popovers (white at 6 or 8%, #18181b, #27272a).",
+      "Don't make capsules (radius = height / 2) except for mood chips.",
+      "Don't nest boxes inside boxes. Separate with space and hairlines.",
+      "Don't fake glass with a milky translucent rectangle, or hide the glass source with visible: false.",
+      "Don't give lyrics a white halo. Use cinematic shadows."
+    ]
+  }
+}

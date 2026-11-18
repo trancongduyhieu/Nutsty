@@ -92,3 +92,11 @@ ShapeLoader 1.0 ShapeLoader.qml
 ShimmerText 1.0 ShimmerText.qml
 LazyModalLoader 1.0 LazyModalLoader.qml
 YourLibraryShortcuts 1.0 YourLibraryShortcuts.qml
+ListenerCard 1.0 ListenerCard.qml
+ListeningTracker 1.0 ListeningTracker.qml
+ProfileView 1.0 ProfileView.qml
+ProfilePage 1.0 ProfilePage.qml
+DotGrid 1.0 DotGrid.qml
+RecapStory 1.0 RecapStory.qml
+WelcomeCardOverlay 1.0 WelcomeCardOverlay.qml
+VerifiedStamp 1.0 VerifiedStamp.qml

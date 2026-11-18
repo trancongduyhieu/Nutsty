@@ -283,6 +283,15 @@ except ImportError:
         sys.stderr.write("Please run: pip install PySide6\n")
         sys.exit(1)
 
+# Animated icons set font.variableAxes, which needs Qt 6.7; older Qt still runs with static icons
+try:
+    from PySide6.QtCore import qVersion as _qt_version
+except ImportError:
+    from PyQt6.QtCore import qVersion as _qt_version
+if tuple(int(p) for p in _qt_version().split(".")[:2]) < (6, 7):
+    sys.stderr.write(f"Warning: Qt {_qt_version()} is older than 6.7; icons stay static. "
+                     "Run: pip install --upgrade -r requirements_win.txt\n")
+
 class NativeHitTestFilter(QAbstractNativeEventFilter):
     """
     Win32 WM_NCHITTEST filter for transparent layered windows (DesktopLyricsWidget & PanelWindow).
@@ -419,8 +428,8 @@ def request_open_settings(tab: int = 0, mock_update: bool = False):
                                     child.setProperty("visible", True)
                                     if mock_update:
                                         child.setProperty("hasAppUpdate", True)
-                                        child.setProperty("latestVersion", "v2.1.0")
-                                        child.setProperty("appVersion", "2.1.0")
+                                        child.setProperty("latestVersion", "v2.2.0")
+                                        child.setProperty("appVersion", "2.2.0")
                                         child.setProperty("updateUrl", "https://github.com/trancongduyhieu/Nutsty/releases")
                     sys.stderr.write(f"request_open_settings: found_modal={found_modal}\n")
                 except Exception as e:

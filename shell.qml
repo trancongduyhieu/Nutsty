@@ -350,9 +350,9 @@ Scope {
     property NotificationStore notificationStore: NotificationStore {}
     property string localApiUrl: "http://127.0.0.1:17890"
     property string notesApiUrl: Quickshell.env("NUTSTY_WORKER_URL") || "http://127.0.0.1:17890"
-    property string appVersion: "2.1.0"
-    property string latestVersion: "2.1.0"
-    property string lastSeenVersion: "2.1.0"
+    property string appVersion: "2.2.0"
+    property string latestVersion: "2.2.0"
+    property string lastSeenVersion: "2.2.0"
     property bool hasAppUpdate: false
     property bool isCheckingUpdate: false
     property string updateUrl: ""
@@ -1210,7 +1210,7 @@ Scope {
     }
 
     function getCurrentUserName() {
-        if (win.currentUserName && !win.currentUserName.toLowerCase().includes("shiraori")) return win.currentUserName;
+        if (win.currentUserName) return win.currentUserName;
         if (win.authAccountName) return win.authAccountName;
         var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
         if (profile === "user2") return "Hiếu Trần";
@@ -1237,6 +1237,89 @@ Scope {
     property string currentUserPin: ""
     property string currentUserTag: ""
     property string currentUserCloudId: ""
+    property double currentUserJoinedAt: 0          // cloud account creation (epoch ms), 0 until known
+
+    // Listener card: stamped once in the welcome overlay, then lives on the profile page
+    property double listenerCardStampedAt: 0
+    property bool settingsEverParsed: false
+    property bool welcomeDecided: false
+    property bool pendingWhatsNew: false
+    // Before the stamp lands (welcome overlay) the card is issued today
+    readonly property double listenerCardJoinedAt: win.currentUserJoinedAt > 0 ? win.currentUserJoinedAt : (win.listenerCardStampedAt > 0 ? win.listenerCardStampedAt : Date.now())
+    readonly property string listenerCardNumber: {
+        var hex = String(win.currentUserCloudId || "").replace(/^usr_/, "").replace(/[^0-9a-fA-F]/g, "").toUpperCase();
+        if (hex.length < 8) {
+            // No cloud id yet: derive a stable number from the name instead
+            var seed = String(win.currentUserTag || win.currentUserName || "nutsty");
+            var h = 2166136261;
+            for (var i = 0; i < seed.length; i++) { h ^= seed.charCodeAt(i); h = (h * 16777619) >>> 0; }
+            hex = ("00000000" + h.toString(16).toUpperCase()).slice(-8);
+        }
+        hex = hex.slice(-8);
+        return "NTY-" + hex.slice(0, 4) + "-" + hex.slice(4);
+    }
+
+    function requestWhatsNew() {
+        if (!win.welcomeDecided || (welcomeOverlayLoader.item && welcomeOverlayLoader.item.visible)) {
+            win.pendingWhatsNew = true;
+            return;
+        }
+        whatsNewModalLoader.ensure().openModal(win.updateReleaseNotes);
+        win.lastSeenVersion = win.appVersion;
+        win.saveSettings();
+    }
+
+    function finishWelcome() {
+        win.homeRevealed = true;
+        win.listenerCardStampedAt = Date.now();
+        win.saveSettings();
+        welcomeOverlayLoader.active = false;
+        if (win.pendingWhatsNew) {
+            win.pendingWhatsNew = false;
+            Qt.callLater(win.requestWhatsNew);
+        }
+    }
+
+    // The home stays hidden until this is decided, so a welcome card never lands on top of an app
+    // the user has already seen: either the card comes first and the home appears as it flies off,
+    // or (already stamped) the home fades straight in. Decided as soon as settings have been read,
+    // or are known to be missing; the timer is only a safety net for a slow disk.
+    property bool homeRevealed: false
+    property bool settingsMissing: false
+    property bool legacySettingsMissing: false
+    function settingsSettled() {
+        if (win.settingsMissing && (win.legacySettingsMissing || legacySettingsFileView.loaded)) Qt.callLater(win.decideWelcome);
+    }
+    Timer {
+        id: welcomeDecisionTimer
+        interval: 2500
+        running: true
+        onTriggered: win.decideWelcome()
+    }
+    function decideWelcome() {
+        if (win.welcomeDecided) return;
+        welcomeDecisionTimer.stop();
+        win.welcomeDecided = true;
+        // with a card to hand out, the home stays hidden under it until the card leaves
+        if (win.listenerCardStampedAt > 0) {
+            win.homeRevealed = true;
+            if (win.pendingWhatsNew) { win.pendingWhatsNew = false; win.requestWhatsNew(); }
+            return;
+        }
+        welcomeOverlayLoader.active = true;
+        welcomeOverlayLoader.item.open(win.settingsEverParsed);
+    }
+
+    ListeningTracker {
+        id: listeningTracker
+        track: win.currentTrack
+        trackKey: PlaybackEngine.trackKeyOf(win.currentTrack)
+        playing: win.isPlaying
+        buffering: win.isLoadingAudio
+        position: win.currentTime
+        duration: win.totalDuration
+        onPlayCounted: if (profileView.visible) profileView.refresh()
+    }
 
     property bool isPollingSocialEventsFast: false
     property double lastJoinHeartbeatTimestamp: 0
@@ -1832,6 +1915,61 @@ Scope {
         win.syncNowPlaying(true);
     }
     property bool isPlaying: false
+    // The recap plays its own snippets: the player pauses while it is open and resumes after
+    // Recap: the playing track fades out over ~0.9s and pauses on entry,
+    // then resumes at volume 0 and fades back to the user's level on exit.
+    property bool resumeAfterRecap: false
+    property real recapSavedVolume: 100
+    property real recapFadeVol: 0
+    property bool recapFadingOut: false
+    onRecapFadeVolChanged: {
+        if (!recapFadeAnim.running) return;
+        var v = Math.round(win.recapFadeVol);
+        if (v !== Math.round(win.volume)) win.setVolume(v);
+    }
+    NumberAnimation {
+        id: recapFadeAnim
+        target: win
+        property: "recapFadeVol"
+        easing.type: Easing.InOutQuad
+        onFinished: {
+            if (!win.recapFadingOut) return;
+            win.recapFadingOut = false;
+            if (win.isPlaying) win.togglePlay();
+            win.setVolume(win.recapSavedVolume);
+        }
+    }
+    function recapFadeTo(to, ms) {
+        recapFadeAnim.stop();
+        recapFadeAnim.from = win.recapFadeVol;
+        recapFadeAnim.to = to;
+        recapFadeAnim.duration = ms;
+        recapFadeAnim.start();
+    }
+    Connections {
+        target: profileView
+        function onStoryActiveChanged() {
+            if (profileView.storyActive) {
+                if (!win.isPlaying || win.recapFadingOut) return;
+                win.resumeAfterRecap = true;
+                win.recapSavedVolume = win.volume;
+                win.recapFadeVol = win.volume;
+                win.recapFadingOut = true;
+                win.recapFadeTo(0, 900);
+            } else if (win.resumeAfterRecap) {
+                win.resumeAfterRecap = false;
+                if (win.recapFadingOut) {
+                    // Left before the fade finished: still playing, just fade back up.
+                    win.recapFadingOut = false;
+                } else {
+                    win.recapFadeVol = 0;
+                    win.setVolume(0);
+                    if (!win.isPlaying) win.togglePlay();
+                }
+                win.recapFadeTo(win.recapSavedVolume, 1200);
+            }
+        }
+    }
     onIsPlayingChanged: {
         win.triggerUserActiveBoost();
         if (win.isPlaying && win.currentTrack) {
@@ -2232,6 +2370,23 @@ Scope {
             }
         }
 
+        // Profile page backdrop: the whole window goes near black under a dot grid while the
+        // profile page is open, fading in with the card's morph
+        Item {
+            id: profileBackdrop
+            anchors.fill: parent
+            z: 0
+            opacity: profileView.visible ? profileView.morph : 0
+            visible: opacity > 0.001
+            Rectangle {
+                anchors.fill: parent
+                color: Qt.rgba(win.accentColor.r * 0.05, win.accentColor.g * 0.05, win.accentColor.b * 0.06, 0.58)
+            }
+            DotGrid {
+                anchors.fill: parent
+            }
+        }
+
         // Note: masterBackdropStack serves as the Single Source of Truth (SSOT) backdrop
         // for all Liquid Glass components (PlayerBarBottom, Modals, Popovers, and ShinyCardContainer).
         // This eliminates nested ShaderEffectSources, prevents infinite FBO dirty-render loops,
@@ -2242,6 +2397,11 @@ Scope {
         Item {
             id: mainContentBackdrop
             anchors.fill: parent
+            // hidden (not just transparent) while the welcome card covers it, so it costs no frames
+            opacity: win.homeRevealed ? 1 : 0
+            // visible as soon as it is revealed, so the departing card can find the avatar to fly to
+            visible: win.homeRevealed || opacity > 0.001
+            Behavior on opacity { NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
 
             ColumnLayout {
                 anchors.fill: parent
@@ -2261,7 +2421,14 @@ Scope {
                 isMaximized: Boolean(win.visibility === 4 || win.maximized)
                 accentColor: win.accentColor
                 backgroundSourceItem: masterBackdropStack
+                userAvatar: win.currentUserAvatar
+                userName: win.currentUserName
 
+                onProfileClicked: {
+                    win.isNowPlayingOpen = false;
+                    if (win.currentView !== "profile") win.previousView = win.currentView;
+                    win.currentView = "profile";
+                }
                 onHomeClicked: {
                     win.isNowPlayingOpen = false;
                     if (win.currentView !== "home") win.previousView = win.currentView;
@@ -2429,7 +2596,7 @@ Scope {
                     StackLayout {
                         id: centerStack
                         anchors.fill: parent
-                        currentIndex: win.currentView === "home" ? 0 : (win.currentView === "artist" ? 2 : (win.currentView === "search" ? 3 : (win.currentView === "custom_playlist_detail" ? 4 : 1)))
+                        currentIndex: win.currentView === "home" ? 0 : (win.currentView === "artist" ? 2 : (win.currentView === "search" ? 3 : (win.currentView === "custom_playlist_detail" ? 4 : (win.currentView === "profile" ? 5 : 1))))
 
                         HomeFeedView {
                             id: homeView
@@ -2734,6 +2901,27 @@ Scope {
                             onReorderTrackRequested: (plId, fromIdx, toIdx) => win.reorderTrackInCustomPlaylist(plId, fromIdx, toIdx)
                             onTrackContextMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false)
                         }
+
+                        ProfileView {
+                            id: profileView
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            // the recap story covers the whole window, not just the page
+                            storyHost: masterContainer
+                            storyRadius: masterContainer.radius
+                            userName: win.currentUserName
+                            userTag: win.currentUserTag
+                            avatarUrl: win.currentUserAvatar
+                            joinedAt: win.listenerCardJoinedAt
+                            cardNumber: win.listenerCardNumber
+                            liteMode: win.liteMode
+                            accentColor: win.accentColor
+                            playlists: win.customPlaylists
+                            forceRecap: Quickshell.env("NUTSTY_FORCE_RECAP") === "1"
+                            onTrackRequested: row => win.playFromHistory(row)
+                            onArtistRequested: name => { if (name) win.loadArtistDetails(name); }
+                            onPlaylistRequested: pl => win.openCustomPlaylistDetail(pl)
+                        }
                     }
                 }
 
@@ -3011,6 +3199,8 @@ Scope {
         // 2. Floating Liquid Glass Player Bar (Centered Glass Capsule Dock)
         PlayerBarBottom {
             id: bottomPlayer
+            opacity: win.homeRevealed ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 16
             anchors.horizontalCenter: parent.horizontalCenter
@@ -3028,7 +3218,7 @@ Scope {
             height: 60
             z: 50
             // Now Playing carries its own transport controls: unrender the bar (and its glass layer) while open
-            visible: !win.isNowPlayingOpen
+            visible: !win.isNowPlayingOpen && !profileView.storyActive
             backgroundSourceItem: masterAppSurface
             mixing: ytNowPlayingView.autoMixing
 
@@ -3688,6 +3878,25 @@ Scope {
             }
         }
 
+        Loader {
+            id: welcomeOverlayLoader
+            anchors.fill: parent
+            z: 9999
+            active: false
+            sourceComponent: WelcomeCardOverlay {
+                userName: win.getCurrentUserName()
+                userTag: win.currentUserTag
+                avatarUrl: win.currentUserAvatar
+                joinedAt: win.listenerCardJoinedAt
+                cardNumber: win.listenerCardNumber
+                liteMode: win.liteMode
+                flyTarget: topHeader.profileButton
+                onDeparting: win.homeRevealed = true
+                onLanding: topHeader.pulseProfile()
+                onFinished: win.finishWelcome()
+            }
+        }
+
         LazyModalLoader {
             id: whatsNewModalLoader
             anchors.fill: parent
@@ -3805,7 +4014,7 @@ Scope {
                 currentUserName: win.getCurrentUserName()
                 currentUserAvatar: win.getCurrentUserAvatar()
                 currentUserPin: win.currentUserPin
-                currentUserTag: (win.currentUserTag && !win.currentUserTag.toLowerCase().includes("shiraori"))
+                currentUserTag: win.currentUserTag
                     ? win.currentUserTag
                     : (win.getCurrentUserName() + (win.currentUserPin ? ("#" + win.currentUserPin) : ""))
                 friends: win.friendsDetails
@@ -3897,6 +4106,7 @@ Scope {
         onLoadedChanged: {
             if (loaded) win.loadSettings();
         }
+        onLoadFailed: { win.settingsMissing = true; win.settingsSettled(); }
         Component.onCompleted: {
             if (loaded) win.loadSettings();
         }
@@ -3910,6 +4120,7 @@ Scope {
                 win.loadSettings();
             }
         }
+        onLoadFailed: { win.legacySettingsMissing = true; win.settingsSettled(); }
     }
 
     FileView {
@@ -4003,9 +4214,16 @@ Scope {
         if (!raw || raw.trim() === "") {
             raw = legacySettingsFileView.text();
         }
-        if (!raw || raw.trim() === "") return;
+        if (!raw || raw.trim() === "") {
+            // the compat FileView (Windows) reads synchronously and reports a missing file as empty
+            if (settingsFileView.loaded) { win.settingsMissing = true; win.settingsSettled(); }
+            return;
+        }
         try {
             var obj = JSON.parse(raw);
+            win.settingsEverParsed = true;
+            Qt.callLater(win.decideWelcome);
+            if (obj.listenerCardStampedAt !== undefined) win.listenerCardStampedAt = Number(obj.listenerCardStampedAt) || 0;
             if (obj.isShuffle !== undefined) win.isShuffle = !!obj.isShuffle;
             if (obj.repeatMode === "off" || obj.repeatMode === "all" || obj.repeatMode === "one") win.repeatMode = obj.repeatMode;
             else if (obj.isRepeat !== undefined) win.repeatMode = obj.isRepeat ? "one" : "off";
@@ -4079,11 +4297,7 @@ Scope {
                 win.lastSeenVersion = "";
             }
             if (win.lastSeenVersion !== win.appVersion) {
-                Qt.callLater(function() {
-                    whatsNewModalLoader.ensure().openModal(win.updateReleaseNotes);
-                    win.lastSeenVersion = win.appVersion;
-                    win.saveSettings();
-                });
+                Qt.callLater(win.requestWhatsNew);
             }
             console.log("DEBUG Nutsty settings loaded: isShuffle=" + win.isShuffle + ", repeatMode=" + win.repeatMode + ", lyricsPreset=" + win.desktopLyricsPreset + ", language=" + win.currentLanguage + ", streamingQuality=" + win.streamingQuality + ", downloadQuality=" + win.downloadQuality + ", lyricsSource=" + win.lyricsSource + ", canvasPreference=" + win.canvasPreference);
         } catch(e) {}
@@ -4100,6 +4314,7 @@ Scope {
             isShuffle: win.isShuffle,
             repeatMode: win.repeatMode,
             lastSeenVersion: win.lastSeenVersion,
+            listenerCardStampedAt: win.listenerCardStampedAt,
             syncHistoryToGoogle: win.syncHistoryToGoogle,
             followedArtists: win.followedArtists,
             widgetX: win.widgetX,
@@ -4341,6 +4556,23 @@ Scope {
 
     function playTrack(trk) {
         return PlaybackEngine.playTrack(win, trk, pollTimer);
+    }
+
+    // Replay a row from the listening history: a stream id or a cached stream file plays online,
+    // anything else is a local file looked up in the library
+    function playFromHistory(row) {
+        if (!row) return;
+        var key = String(row.track_id || "");
+        var cached = key.match(/audio_cache[\\\/]([A-Za-z0-9_-]{11})\.[A-Za-z0-9]+$/);
+        var videoId = cached ? cached[1] : (/^[A-Za-z0-9_-]{11}$/.test(key) ? key : "");
+        var title = row.title || "";
+        if (videoId) {
+            win.playOnlineTrack({ id: videoId, videoId: videoId, title: title, name: title, artist: row.artist || "",
+                                  image: row.cover_url || "", path: "ytdl://" + videoId }, false);
+            return;
+        }
+        var local = (win.allTracks || []).find(t => t.path === key);
+        win.playTrack(local || { path: key, title: title, name: title, artist: row.artist || "", image: row.cover_url || "" });
     }
 
     function togglePlay() {

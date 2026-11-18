@@ -161,7 +161,7 @@ export default {
               .run();
 
             const refreshed = await db
-              .prepare("SELECT id, username, discriminator, tag, avatar_url, now_playing FROM nutsty_users WHERE id = ?")
+              .prepare("SELECT id, username, discriminator, tag, avatar_url, now_playing, created_at FROM nutsty_users WHERE id = ?")
               .bind(user_id)
               .first();
 
@@ -206,6 +206,7 @@ export default {
             tag: tag,
             avatar_url: avatar_url || "",
             now_playing: "",
+            created_at: now,
           },
           secret_key: newSecret,
           restored: false,
@@ -264,7 +265,7 @@ export default {
         await consolidateDuplicateUserAccounts(db, user_id, targetUsername, targetAvatar);
 
         const updated = await db
-          .prepare("SELECT id, username, discriminator, tag, avatar_url, now_playing FROM nutsty_users WHERE id = ?")
+          .prepare("SELECT id, username, discriminator, tag, avatar_url, now_playing, created_at FROM nutsty_users WHERE id = ?")
           .bind(user_id)
           .first();
 

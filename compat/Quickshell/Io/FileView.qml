@@ -8,6 +8,9 @@ Item {
     property string _content: ""
 
     signal fileChanged()
+    // Mirrors Quickshell FileView; this reader is synchronous and reports a missing file as empty
+    // text instead, so it never fires (shell.qml checks for empty settings itself).
+    signal loadFailed(var error)
     // Mirrors Quickshell FileView: text() is a function, textChanged fires when the content changes.
     signal textChanged()
     on_ContentChanged: root.textChanged()

@@ -45,11 +45,15 @@ if not exist "venv" (
 
 :: Activate venv and install dependencies
 call venv\Scripts\activate.bat
-if not exist "venv\.installed" (
+:: The marker holds a copy of requirements_win.txt, so a release that raises a version reinstalls
+set "NEED_INSTALL=0"
+if not exist "venv\.installed" set "NEED_INSTALL=1"
+if exist "venv\.installed" fc /b requirements_win.txt venv\.installed >nul 2>nul || set "NEED_INSTALL=1"
+if "%NEED_INSTALL%"=="1" (
     echo [2/3] Installing required packages from requirements_win.txt...
-    pip install -r requirements_win.txt
-    if %errorlevel% equ 0 (
-        type nul > venv\.installed
+    pip install --upgrade -r requirements_win.txt
+    if not errorlevel 1 (
+        copy /y requirements_win.txt venv\.installed >nul
     )
 )
 

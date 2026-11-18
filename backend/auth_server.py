@@ -56,6 +56,7 @@ try:
     )
     from . import music_routes
     from . import social_routes
+    from . import listening_routes
 except (ImportError, ValueError):
     import platform_compat as pc
     import ytmusic_helper
@@ -98,6 +99,7 @@ except (ImportError, ValueError):
     )
     import music_routes
     import social_routes
+    import listening_routes
 
 try:
     from . import playlist_manager
@@ -237,6 +239,12 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             social_routes.handle_get_notes(self, query)
         elif path == "/api/friends":
             social_routes.handle_get_friends(self, query)
+        elif path == "/api/listening/totals":
+            listening_routes.handle_get_listening_totals(self, query)
+        elif path == "/api/listening/recap":
+            listening_routes.handle_get_listening_recap(self, query)
+        elif path == "/api/listening/snippet":
+            listening_routes.handle_get_recap_snippet(self, query)
         elif path == "/api/users/me":
             social_routes.handle_get_user_me(self, query)
         elif path == "/api/users/search":
@@ -277,8 +285,8 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                 "action": "open_settings",
                 "tab": tab,
                 "mock_update": mock_upd,
-                "current_version": "2.1.0",
-                "latest_version": "v2.1.0",
+                "current_version": "2.2.0",
+                "latest_version": "v2.2.0",
                 "release_url": "https://github.com/trancongduyhieu/Nutsty/releases"
             }
             try:
@@ -385,6 +393,8 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             music_routes.handle_post_spotify_import(self)
         elif self.path == "/api/spotify/cancel_import":
             music_routes.handle_post_spotify_cancel_import(self)
+        elif self.path == "/api/listening/play":
+            listening_routes.handle_post_play_record(self, self._read_post_json())
         elif self.path == "/api/users/update_profile":
             social_routes.handle_post_update_profile(self, self._read_post_json())
         elif self.path == "/api/users/regenerate_pin":

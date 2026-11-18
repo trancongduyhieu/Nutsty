@@ -129,7 +129,7 @@ class CloudRelayEngine:
                         conn.execute("UPDATE nutsty_users SET avatar_url = ?, last_active_at = ? WHERE id = ?", (new_avatar, now, user_id))
                     else:
                         conn.execute("UPDATE nutsty_users SET last_active_at = ? WHERE id = ?", (now, user_id))
-                    refreshed = conn.execute("SELECT id, username, discriminator, tag, avatar_url, now_playing FROM nutsty_users WHERE id = ?", (user_id,)).fetchone()
+                    refreshed = conn.execute("SELECT id, username, discriminator, tag, avatar_url, now_playing, created_at FROM nutsty_users WHERE id = ?", (user_id,)).fetchone()
                     return {"success": True, "user": dict(refreshed), "secret_key": client_secret, "restored": True}
 
             new_user_id = f"usr_{uuid.uuid4().hex[:16]}"
@@ -148,7 +148,8 @@ class CloudRelayEngine:
                     "discriminator": disc,
                     "tag": tag,
                     "avatar_url": avatar_url or "",
-                    "now_playing": ""
+                    "now_playing": "",
+                    "created_at": now
                 },
                 "secret_key": new_secret,
                 "restored": False
@@ -183,7 +184,7 @@ class CloudRelayEngine:
                 "UPDATE nutsty_users SET username = ?, discriminator = ?, tag = ?, avatar_url = ?, updated_at = ?, last_active_at = ? WHERE id = ?",
                 (target_username, target_disc, target_tag, target_avatar, now, now, user_id)
             )
-            updated = conn.execute("SELECT id, username, discriminator, tag, avatar_url, now_playing FROM nutsty_users WHERE id = ?", (user_id,)).fetchone()
+            updated = conn.execute("SELECT id, username, discriminator, tag, avatar_url, now_playing, created_at FROM nutsty_users WHERE id = ?", (user_id,)).fetchone()
             return {"success": True, "user": dict(updated)}
 
     def search(self, q, caller_user_id=None):
@@ -745,6 +746,29 @@ def save_cloud_identity(data, profile_suffix=""):
         pass
 
 
+_created_at_backfill_tried = set()
+
+
+def _backfill_created_at(ident, profile_suffix=""):
+    """Identities saved before 2.2 lack the cloud join date; a restore call returns it. One try per run."""
+    key = (ident.get("user_id"), profile_suffix)
+    if key in _created_at_backfill_tried:
+        return
+    _created_at_backfill_tried.add(key)
+    try:
+        res = GLOBAL_RELAY_CLIENT.register(
+            username=ident.get("username") or "User",
+            client_secret=ident.get("secret_key"),
+            user_id=ident.get("user_id"),
+        )
+        created = (res or {}).get("user", {}).get("created_at") if (res or {}).get("restored") else None
+        if created:
+            ident["created_at"] = int(created)
+            save_cloud_identity(ident, profile_suffix)
+    except Exception as e:
+        sys.stderr.write(f"[CloudRelay] created_at backfill error: {e}\n")
+
+
 def ensure_cloud_identity(profile_suffix="", fallback_name=None, fallback_avatar=None, force_recreate=False):
     if force_recreate:
         p = get_cloud_identity_path(profile_suffix)
@@ -778,7 +802,7 @@ def ensure_cloud_identity(profile_suffix="", fallback_name=None, fallback_avatar
         cur_uname = (ident.get("username") or "").strip()
         is_placeholder = cur_uname in ("", "User", "Nutsty User", "Khách", "Guest")
         target_name = None
-        if not ident.get("custom_username") and is_placeholder and user_name and user_name not in ("User", "Nutsty User", "Shiraori", "Khách", "Guest"):
+        if not ident.get("custom_username") and is_placeholder and user_name and user_name not in ("User", "Nutsty User", "Khách", "Guest"):
             target_name = user_name
 
         current_avatar = (ident.get("avatar_url") or "").strip()
@@ -807,6 +831,8 @@ def ensure_cloud_identity(profile_suffix="", fallback_name=None, fallback_avatar
                     sys.stderr.write(f"[CloudRelay] Cloud identity unauthorized for {ident.get('user_id')}. Re-registering as {user_name}...\n")
             except Exception as e:
                 sys.stderr.write(f"[CloudRelay] Sync profile error: {e}\n")
+        if not ident.get("created_at"):
+            _backfill_created_at(ident, profile_suffix)
         return ident
 
     if not user_name:
@@ -827,7 +853,8 @@ def ensure_cloud_identity(profile_suffix="", fallback_name=None, fallback_avatar
             "username": u["username"],
             "discriminator": u["discriminator"],
             "tag": u["tag"],
-            "avatar_url": u.get("avatar_url", "")
+            "avatar_url": u.get("avatar_url", ""),
+            "created_at": int(u.get("created_at") or time.time() * 1000)
         }
         save_cloud_identity(ident, profile_suffix)
         return ident
