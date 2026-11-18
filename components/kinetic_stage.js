@@ -67,6 +67,10 @@ var LINE_MARKS_MAX = ["coil", "under", "double", "zigzag", "wave", "wrap"];
 var EXIT_ORDER_MAX = ["scrawl", "strike", "smudge", "strike", "scrawl"];
 var DOODLES = ["star", "sparkle", "burst", "speed", "spiral", "bang", "heart", "cross"];
 var DOODLE_SPOTS = ["above", "above", "left", "right", "above", "below"];
+// Pile roles in the maximal cut, from how fast each line is sung (letters per second against the
+// song's median): a slow line straight after fast ones is a peak, a very fast line is a rush; both
+// stand alone. Every other pile is a duo (two lines) or a stack.
+var TEMPO = { slow: 0.75, prevFast: 1.0, minLines: 4, fast: 1.35, fastPct: 0.8, peakMinDur: 1.2 };
 // How the words of a line sit: level, a zigzag (one up, one down), stairs climbing, or an arc
 var STAGGER_ORDER = ["zig", "stairs", "arc", "zig"];
 
@@ -91,6 +95,46 @@ function isProfane(text) {
 function cased(text, up) { return Array.from(up ? text.toUpperCase() : text.toLowerCase()); }
 function unbracket(text) { return String(text).replace(/[()\[\]]/g, ""); }
 
+// Letters per second of a line (backing vocals left out); 0 for a line with no letters ("♪", "...")
+function isLetter(c) {
+    return c.toLowerCase() !== c.toUpperCase() || /[0-9\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(c);
+}
+function rateOf(L) {
+    if (!L || !L.words) return 0;
+    var n = 0;
+    for (var w = 0; w < L.words.length; w++) {
+        if (L.words[w].paren) continue;
+        var cs = Array.from(String(L.words[w].text));
+        for (var c = 0; c < cs.length; c++) if (isLetter(cs[c])) n++;
+    }
+    return n / Math.max(0.1, L.end - L.start);
+}
+function quantile(sorted, q) {
+    if (sorted.length === 0) return 0;
+    var x = (sorted.length - 1) * q, i = Math.floor(x), f = x - i;
+    return i + 1 < sorted.length ? sorted[i] + (sorted[i + 1] - sorted[i]) * f : sorted[i];
+}
+// "peak" | "rush" | "" for each line
+function tempoRoles(lines) {
+    var rates = lines.map(rateOf);
+    var sorted = rates.filter(function (r) { return r > 0; }).sort(function (a, b) { return a - b; });
+    var med = quantile(sorted, 0.5), hi = Math.max(TEMPO.fast * med, quantile(sorted, TEMPO.fastPct));
+    var roles = [];
+    for (var i = 0; i < lines.length; i++) {
+        var r = rates[i], role = "";
+        if (r > 0 && med > 0 && sorted.length >= TEMPO.minLines) {
+            var prev = [];
+            for (var k = i - 1; k >= 0 && prev.length < 2; k--) if (rates[k] > 0) prev.push(rates[k]);
+            var prevMean = prev.length ? prev.reduce(function (a, b) { return a + b; }, 0) / prev.length : 0;
+            if (!lines[i].guessEnd && r <= TEMPO.slow * med && lines[i].end - lines[i].start >= TEMPO.peakMinDur && prev.length > 0 && prevMean >= TEMPO.prevFast * med)
+                role = "peak";
+            else if (r >= hi && r > med && roles[i - 1] !== "rush") role = "rush";
+        }
+        roles.push(role);
+    }
+    return roles;
+}
+
 function build(lyrics, opts) {
     lyrics = lyrics || [];
     var maxi = !!(opts && opts.max);
@@ -109,6 +153,8 @@ function build(lyrics, opts) {
         if (words.length === 0) continue;
         var seed = (Math.imul(songSeed, 31) + i * 0x9e3779b1) | 0;
         var L = { start: start, end: words[words.length - 1].end, words: words, seed: seed, n: 0 };
+        // line-synced lyrics spread words up to the next line; the last line's length is only a guess
+        L.guessEnd = i + 1 >= lyrics.length && !(lyrics[i].words && lyrics[i].words.length > 0);
 
         // Treatment: tender, slow lines go soft; otherwise never the same as the line before
         var avg = 0;
@@ -301,20 +347,25 @@ function build(lyrics, opts) {
     // Piles
     var piles = [];
     var pile = null;
+    var roles = maxi ? tempoRoles(lines) : [];
     for (var p = 0; p < lines.length; p++) {
         var cur = lines[p];
         var prev = p > 0 ? lines[p - 1] : null;
-        if (!pile || pile.lines.length >= pile.max || (prev && cur.start - prev.end > PILE_GAP)) {
-            // A pile is either a stack of up to three lines or a single line on its own, set bigger
-            var solo = M.r(cur.seed, 20, 420) < 0.35;
+        var tr = maxi ? roles[p] : "";
+        if (!pile || pile.lines.length >= pile.max || (prev && cur.start - prev.end > PILE_GAP) || tr) {
+            // A pile is either a stack of up to three lines or a single line on its own, set bigger.
+            // In the maximal cut a line stands alone only when the tempo says so (a peak or a rush).
+            var solo = maxi ? tr !== "" : M.r(cur.seed, 20, 420) < 0.35;
             pile = { lines: [], seed: cur.seed, max: solo ? 1 : PILE_MAX, solo: solo };
+            if (maxi) pile.role = tr;
             piles.push(pile);
         }
-        if (pile.solo) cur.base = Math.round(cur.base * 1.22);
+        if (pile.solo) cur.base = Math.round(cur.base * (pile.role === "peak" ? 1.4 : 1.22));
         cur.pile = pile;
         cur.slot = pile.lines.length;
         pile.lines.push(cur);
     }
+    if (maxi) piles.forEach(function (P) { if (!P.role) P.role = P.lines.length === 2 ? "duo" : "stack"; });
     var prevShot = "", prevExit = "";
     for (var q = 0; q < piles.length; q++) {
         var P = piles[q];
