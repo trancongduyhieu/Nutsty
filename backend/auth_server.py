@@ -249,6 +249,8 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
             listening_routes.handle_get_listening_genres(self, query)
         elif path == "/api/listening/snippet":
             listening_routes.handle_get_recap_snippet(self, query)
+        elif path == "/api/listening/artist_song":
+            listening_routes.handle_get_recap_artist_song(self, query)
         elif path == "/api/users/me":
             social_routes.handle_get_user_me(self, query)
         elif path == "/api/users/search":

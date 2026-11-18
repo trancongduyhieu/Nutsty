@@ -209,11 +209,37 @@ Item {
             if (s !== root.heroSong && s.artist === root.heroArtist.artist) return s;
         }
         var tid = root.heroArtist.top_song_track_id || "";
-        if (root.heroSong && (tid === root.heroSong.track_id
-                || (root.heroSong.title === root.heroArtist.top_song && root.heroSong.artist === root.heroArtist.artist)))
-            return null;
+        if (root.artistOwnsHeroSong) return root.artistPick;
         return { title: root.heroArtist.top_song, cover_url: root.heroArtist.top_song_cover || "",
                  track_id: tid, plays: 0 };
+    }
+    // the hero artist's only song in the top ten is the #1 song itself
+    readonly property bool artistOwnsHeroSong: {
+        if (!root.heroArtist || !root.heroSong) return false;
+        for (var i = 1; i < root.songs.length; i++)
+            if (root.songs[i].artist === root.heroArtist.artist) return false;
+        return root.heroSong.artist === root.heroArtist.artist
+            || (root.heroArtist.top_song_track_id || "") === root.heroSong.track_id;
+    }
+    // then a popular song of theirs the listener has not played this month stands in, from the catalog
+    property var artistPick: null
+    function fetchArtistPick() {
+        root.artistPick = null;
+        if (!root.artistOwnsHeroSong) return;
+        var artist = root.heroArtist.artist, xhr = new XMLHttpRequest();
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE || xhr.status !== 200) return;
+            try {
+                var r = JSON.parse(xhr.responseText);
+                if (!r.success || !r.track_id || !root.heroArtist || root.heroArtist.artist !== artist) return;
+                root.artistPick = { title: r.title, cover_url: r.cover_url || "", track_id: r.track_id, plays: 0, fresh: true };
+                root.resolveSnippet(r.track_id);
+            } catch (e) {}
+        };
+        xhr.open("GET", root.apiUrl + "/api/listening/artist_song?artist=" + encodeURIComponent(artist)
+                 + "&exclude=" + encodeURIComponent(root.heroSong.title || "")
+                 + "&exclude_id=" + encodeURIComponent(root.heroSong.track_id || ""));
+        xhr.send();
     }
     // the artist's own photo; the cover of their top song only when no photo was found
     function photoOf(a) { return a ? (a.photo_url || a.cover_url || "") : ""; }
@@ -502,8 +528,8 @@ Item {
         if (root.heroArtistSong) root.resolveSnippet(root.heroArtistSong.track_id);
         if (root.heroSong) root.resolveSnippet(root.heroSong.track_id);
     }
-    onRecapChanged: { root.snippetUrls = ({}); root.prefetchSnippets(); }
-    Component.onCompleted: root.prefetchSnippets()
+    onRecapChanged: { root.snippetUrls = ({}); root.prefetchSnippets(); root.fetchArtistPick(); }
+    Component.onCompleted: { root.prefetchSnippets(); root.fetchArtistPick(); }
     property real snippetVolume: 0
     property bool snippetSeekPending: false
     AudioOutput { id: snippetOut; volume: root.snippetVolume }
@@ -1533,8 +1559,10 @@ Item {
                     Bold {
                         width: parent.labelW; sz: root.wide ? 13 : 13; wrapMode: Text.NoWrap; elide: Text.ElideRight
                         color: Qt.rgba(1, 1, 1, 0.72)
-                        visible: root.heroArtistSong && root.heroArtistSong.plays > 0
-                        text: I18n.tr("%1 lượt phát", "%1 plays").arg(root.heroArtistSong ? root.heroArtistSong.plays : 0)
+                        visible: root.heroArtistSong !== null && (root.heroArtistSong.fresh || root.heroArtistSong.plays > 0)
+                        text: root.heroArtistSong && root.heroArtistSong.fresh
+                              ? I18n.tr("Thử nghe xem", "Give it a listen")
+                              : I18n.tr("%1 lượt phát", "%1 plays").arg(root.heroArtistSong ? root.heroArtistSong.plays : 0)
                     }
                 }
             }

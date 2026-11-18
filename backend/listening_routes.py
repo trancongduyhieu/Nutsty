@@ -200,6 +200,42 @@ def _attach_artist_photos(artists):
     pool.shutdown(wait=False)
 
 
+def _video_id(track: str) -> str:
+    """The YouTube id behind a stored track: a cached file named after it, ytdl://ID or yt_ID."""
+    t = (track or "").strip().replace("ytdl://", "")
+    if "/" in t or "\\" in t:
+        t = pathlib.PureWindowsPath(t).stem if "\\" in t else pathlib.PurePosixPath(t).stem
+    return t[3:] if t.startswith("yt_") else t
+
+
+def handle_get_recap_artist_song(handler, query):
+    """A popular song by the recap's top artist other than the month's #1 song, so the artist page
+    has music of its own when the listener only played that one song of theirs."""
+    artist = (query.get("artist", [""])[0] or "").strip()
+    exclude = (query.get("exclude", [""])[0] or "").strip().lower()
+    exclude_id = _video_id(query.get("exclude_id", [""])[0] or "")
+    try:
+        if not artist:
+            raise ValueError("no artist")
+        try:
+            from . import catalog_engine
+        except (ImportError, ValueError):
+            import catalog_engine
+        for t in (catalog_engine.get_artist(artist) or {}).get("popular", []) or []:
+            vid = t.get("videoId") or ""
+            title = (t.get("title") or "").strip()
+            if not vid or not title or vid == exclude_id:
+                continue
+            if exclude and title.lower().startswith(exclude):
+                continue
+            handler._send_json({"success": True, "title": title, "track_id": vid,
+                                "cover_url": t.get("image") or ""}, 200)
+            return
+        handler._send_json({"success": False}, 200)
+    except Exception as e:
+        handler._send_json({"success": False, "error": str(e)}, 500)
+
+
 def handle_get_recap_snippet(handler, query):
     """A playable URL for one recap song: the file itself when it is on disk, otherwise its audio stream."""
     track = (query.get("track", [""])[0] or "").strip()

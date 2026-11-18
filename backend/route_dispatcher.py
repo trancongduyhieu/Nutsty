@@ -118,6 +118,8 @@ def dispatch_request(method, path, query_dict, body_str):
             listening_routes.handle_get_listening_genres(handler, query_dict)
         elif clean_path == "/api/listening/snippet":
             listening_routes.handle_get_recap_snippet(handler, query_dict)
+        elif clean_path == "/api/listening/artist_song":
+            listening_routes.handle_get_recap_artist_song(handler, query_dict)
         elif clean_path == "/api/users/me":
             social_routes.handle_get_user_me(handler, query_dict)
         elif clean_path == "/api/users/search":
