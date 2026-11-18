@@ -1,11 +1,11 @@
 {
-  "wallpaper": "/home/apple/Pictures/Wallpapers/wallhaven_e8v198.jpg",
-  "meanLuminance": 0.035,
+  "wallpaper": "/home/apple/Pictures/Wallpapers/Mac_OS_paint_stains_blue.jpg",
+  "meanLuminance": 0.167,
   "brightRatio": 0.0,
   "isLightArea": false,
-  "theme": "crimson",
+  "theme": "sapphire",
   "baseTextColor": "#f8fafc",
-  "highlightColor": "#ffa697",
+  "highlightColor": "#90c7ff",
   "deadTextColor": "#f1f5f9",
   "shadowDirectional": "#a6020305",
   "shadowAmbient": "#66000000"
