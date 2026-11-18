@@ -2111,9 +2111,12 @@ Scope {
                     }
                 }
 
+                // width/height, not anchors.fill: an anchored blur keeps its old texture size after
+                // maximize -> restore and part of the backdrop goes black
                 MultiEffect {
                     id: wallpaperAtmosphereEffect
-                    anchors.fill: parent
+                    width: masterBackdropStack.width
+                    height: masterBackdropStack.height
                     source: wallpaperAtmosphereWrapper
                     visible: wallpaperAtmosphereImg.status === Image.Ready && opacity > 0.02 && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive))
                     blurEnabled: opacity > 0.02 && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive))

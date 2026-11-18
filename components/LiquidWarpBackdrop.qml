@@ -129,10 +129,13 @@ Item {
         fragmentShader: Qt.resolvedUrl("../assets/shaders/liquid_warp.frag.qsb")
     }
 
-    // MultiEffect: true hardware 2-pass Gaussian blur (blurMax: 64) dissolves edges and text into haze
+    // MultiEffect: true hardware 2-pass Gaussian blur (blurMax: 64) dissolves edges and text into haze.
+    // Sized with width/height, not anchors.fill: an anchored blur keeps its old texture size after
+    // the window is maximized and restored, leaving part of the backdrop black
     MultiEffect {
         id: finalAtmosphere
-        anchors.fill: parent
+        width: root.width
+        height: root.height
         source: warpEffect
         visible: root.frontImg.status === Image.Ready
         blurEnabled: true
