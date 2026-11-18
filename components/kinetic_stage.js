@@ -81,6 +81,7 @@ function build(lyrics) {
     var prevTreat = "";
     var prevCase = "";
     var prevParen = "";
+    var prevScribble = "";
     for (var i = 0; i < lyrics.length; i++) {
         var start = M.toSec(lyrics[i].time !== undefined ? lyrics[i].time : lyrics[i].startTime);
         var nextStart = i + 1 < lyrics.length ? M.toSec(lyrics[i + 1].time !== undefined ? lyrics[i + 1].time : lyrics[i + 1].startTime) : start + 4;
@@ -202,6 +203,19 @@ function build(lyrics) {
             n += nc;
         }
         for (var hp = 0; hp < words.length; hp++) if (words[hp].paren) { prevParen = parenLook; break; }
+
+        // Pen scribbles, as if someone drew on the frame: a looping coil under the line, or a ring
+        // round the hero word. Never on decode lines (they are the machine look) or under echoes.
+        var hasEcho = words.some(function (x) { return x.echo; });
+        L.scribble = "";
+        L.ringWi = -1;
+        if (treat !== "decode" && prevScribble === "" && M.r(seed, 23, 423) < 0.55) {
+            var heroWi = scores[0].wi;
+            var canRing = heroes[heroWi] === true && !words[heroWi].censor;
+            if (canRing && (hasEcho || M.r(seed, 24, 424) < 0.45)) { L.scribble = "ring"; L.ringWi = heroWi; }
+            else if (!hasEcho) L.scribble = "coil";
+        }
+        prevScribble = L.scribble;
         L.n = n;
         L.mainIdx = mainIdx;
         L.sideIdx = sideIdx;
@@ -424,6 +438,64 @@ function camera(L, t, W, H) {
 }
 
 function inOutSine(x) { x = M.clamp(x); return -(Math.cos(Math.PI * x) - 1) / 2; }
+
+// Pen scribbles. Points are in px for a box of w x h; prog 0..1 is how much of the stroke is drawn.
+// The stroke "boils" (redraws with fresh wobble eight times a second) like hand-drawn animation.
+//   coil  a run of loose loops, like a pen testing itself in a margin
+//   ring  a pen ring round a word that overshoots where it started
+function scribbleProg(L, t) {
+    if (!L || !L.scribble) return 0;
+    if (L.scribble === "ring") {
+        var w = L.words[L.ringWi];
+        return M.E.outQuad((t - (w.start - LEAD + 0.12)) / 0.42);
+    }
+    return inOutSine((t - (L.start + 0.15)) / 0.8);
+}
+function scribblePts(L, t, w, h, prog) {
+    var out = [];
+    if (!L || !L.scribble || prog <= 0 || w < 2 || h < 2) return out;
+    var boil = Math.floor(t * 8);
+    var sd = L.seed + 77;
+    var pts = [];
+    if (L.scribble === "coil") {
+        var loops = Math.max(3, Math.round(w / (h * 1.7)));
+        var a = w / (loops * 2 * Math.PI);
+        var steps = loops * 20;
+        for (var i = 0; i <= steps; i++) {
+            var th = i / steps * loops * 2 * Math.PI;
+            var li = Math.floor(th / (2 * Math.PI));
+            // every loop its own size and lean, the way a hand never repeats itself
+            var hk = 0.6 + 0.5 * M.r(sd, li, 801);
+            var b = a * (1.6 + 1.1 * M.r(sd, li, 807));           // b > a draws the loops
+            var lean = 0.25 * M.rs(sd, li, 808);
+            var cy0 = Math.cos(th);
+            var x = a * th - b * Math.sin(th) + b + lean * h * (1 - cy0) * 0.5;
+            var y = h / 2 - h / 2 * hk * cy0 + h * 0.15 * M.rs(sd, li, 802);
+            pts.push({ x: x * (w / (w + 2 * a * 2.7)), y: y });
+        }
+    } else {
+        var cx = w / 2, cy = h / 2, rx = w / 2, ry = h / 2;
+        var th0 = -2.2 + 0.6 * M.rs(sd, 1, 803);
+        var turns = 1.18;
+        var n = 64;
+        for (var j = 0; j <= n; j++) {
+            var u = j / n;
+            var ang = th0 + u * turns * 2 * Math.PI;
+            var grow = 1 + 0.1 * u + 0.05 * Math.sin(3 * ang + M.r(sd, 2, 804) * 6);
+            pts.push({ x: cx + rx * grow * Math.cos(ang), y: cy + ry * grow * Math.sin(ang) });
+        }
+    }
+    var amp = Math.max(0.8, h * 0.03);
+    var last = (pts.length - 1) * M.clamp(prog);
+    var full = Math.floor(last);
+    for (var k = 0; k <= full; k++)
+        out.push({ x: pts[k].x + amp * M.rs(sd + boil, k, 805), y: pts[k].y + amp * M.rs(sd + boil, k, 806) });
+    if (full < pts.length - 1 && last > full) {
+        var f = last - full, p0 = pts[full], p1 = pts[full + 1];
+        out.push({ x: p0.x + (p1.x - p0.x) * f, y: p0.y + (p1.y - p0.y) * f });
+    }
+    return out;
+}
 
 // One word: { s, alpha, rot (deg), dx, dy (em), ghosts: [{ dx, dy (em), a } x4], bar, barDx [3] (em), under }
 //   bar      0..1 how far the redaction bar has slid across a profane word

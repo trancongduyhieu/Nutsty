@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import QtQuick.Shapes
 import "."
 import "kinetic_stage.js" as Stage
 
@@ -8,7 +9,8 @@ import "kinetic_stage.js" as Stage
 // treatment, case and font, and its hero words are set heavy, wide or condensed in the accent
 // colour; most lines sit off the level (zigzag, stairs or arc) and tilted. Some piles are a single
 // big line set off-centre. Backing vocals in ( ) drop their brackets and stack in a small column
-// to the left or right of the line. Profanity goes under a glitching redaction bar, long breaks
+// to the left or right of the line. Some lines get a pen scribble: a loose coil under them or a
+// ring round the hero word. Profanity goes under a glitching redaction bar, long breaks
 // show waiting dots. The whole stage runs through an old-film pass (film_tv.frag): grain and
 // scanlines inside the letters, a hair and scratches, a light smear and swell on big hits.
 Item {
@@ -275,6 +277,28 @@ Item {
                             }
                         }
 
+                        // Pen coil under the line: loose loops drawn left to right as the line is sung
+                        Shape {
+                            id: coil
+                            readonly property real prog: lineItem.line && lineItem.line.scribble === "coil" ? Stage.scribbleProg(lineItem.line, lineItem.t) : 0
+                            readonly property var pts: prog > 0 ? Stage.scribblePts(lineItem.line, lineItem.t, width, height, prog) : []
+                            visible: pts.length > 1
+                            x: wordsRow.x + Math.round(wordsRow.width * 0.08)
+                            y: lineItem.lineH - Math.round(lineItem.base * 0.06)
+                            width: Math.round(wordsRow.width * 0.62)
+                            height: Math.round(lineItem.base * 0.4)
+                            rotation: -1.5
+                            preferredRendererType: Shape.CurveRenderer
+                            ShapePath {
+                                strokeColor: root.withAlpha(root.colActiveText, 0.72)
+                                strokeWidth: Math.max(2, lineItem.base * 0.04)
+                                fillColor: "transparent"
+                                capStyle: ShapePath.RoundCap
+                                joinStyle: ShapePath.RoundJoin
+                                PathPolyline { path: coil.pts.map(function (p) { return Qt.point(p.x, p.y); }) }
+                            }
+                        }
+
                         // Backing vocals, brackets dropped: a small stacked column beside the line,
                         // set off by a thin accent rule on the side that faces the line
                         Item {
@@ -350,6 +374,30 @@ Item {
                                 transformOrigin: Item.Left
                                 color: wordItem.ink
                                 z: 2
+                            }
+
+                            // Pen ring round the hero word, drawn just after it lands, overshooting its start
+                            Shape {
+                                id: ring
+                                readonly property bool on: lineItem.line.ringWi === wordItem.wi
+                                readonly property real prog: on ? Stage.scribbleProg(lineItem.line, lineItem.t) : 0
+                                readonly property var pts: prog > 0 ? Stage.scribblePts(lineItem.line, lineItem.t, width, height, prog) : []
+                                visible: pts.length > 1
+                                x: -Math.round(wordItem.px * 0.28)
+                                y: wordItem.bl - Math.round(wordItem.px * 0.98)
+                                width: wordItem.width + Math.round(wordItem.px * 0.56)
+                                height: Math.round(wordItem.px * 1.3)
+                                rotation: -3
+                                z: 2
+                                preferredRendererType: Shape.CurveRenderer
+                                ShapePath {
+                                    strokeColor: root.withAlpha(root.colHighlight, 0.85)
+                                    strokeWidth: Math.max(2, wordItem.px * 0.045)
+                                    fillColor: "transparent"
+                                    capStyle: ShapePath.RoundCap
+                                    joinStyle: ShapePath.RoundJoin
+                                    PathPolyline { path: ring.pts.map(function (p) { return Qt.point(p.x, p.y); }) }
+                                }
                             }
 
                             // Redaction bar over a profane word: three strips that glitch sideways now and then
