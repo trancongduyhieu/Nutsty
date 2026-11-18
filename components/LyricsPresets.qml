@@ -28,8 +28,8 @@ QtObject {
           subtitleVi: "Mỗi câu một kiểu • Theo JIZURA", subtitleEn: "A new move every line • After JIZURA",
           width: 880, widthRatio: 0.55, yRatio: 0.66, height: 220, hideWithoutLyrics: true },
         { id: 7, titleVi: "Mẫu 7: Giải mã", titleEn: "Preset 7: Decode",
-          subtitleVi: "Chữ mã hóa • Khung ngắm", subtitleEn: "Scrambled type • Lock-on frame",
-          width: 880, widthRatio: 0.55, yRatio: 0.66, height: 200, hideWithoutLyrics: true }
+          subtitleVi: "Chữ giải mã • Mỗi câu một góc máy", subtitleEn: "Decoding type • A new camera angle every line",
+          width: 880, widthRatio: 0.55, yRatio: 0.64, height: 260, hideWithoutLyrics: true }
     ]
 
     readonly property int fallbackId: 2

@@ -22,7 +22,7 @@ Item {
     readonly property string monoFamily: Qt.platform.os === "windows" ? "Consolas" : "monospace"
 
     implicitWidth: 880
-    implicitHeight: 200
+    implicitHeight: 260
 
     readonly property bool renderable: root.visible && root.width > 0
 
@@ -121,7 +121,7 @@ Item {
                 readonly property int fontPx: {
                     if (!line) return 34;
                     var cells = line.n + Math.max(0, line.words.length - 1);
-                    return Math.max(20, Math.min(40, Math.floor(root.width * 0.86 / (cells * 0.64))));
+                    return Math.max(20, Math.min(40, Math.floor(root.width * 0.74 / (cells * 0.64))));
                 }
 
                 TextMetrics { id: cell; font.family: root.monoFamily; font.pixelSize: lineItem.fontPx; font.weight: Font.Bold; text: "M" }
@@ -130,9 +130,31 @@ Item {
 
                 width: root.width
                 height: root.height
-                // The leaving line lifts a little so the next one scans in clear of it
-                transform: Translate {
-                    y: lineItem.leaving ? -0.9 * lineItem.cellH * Math.min(1, (lineItem.t - lineItem.line.exitAt) / 0.3) : 0
+                // Each line is its own camera shot (decode_motion.js): perspective tilt, roll, push,
+                // skew and lens blur, all around the middle of the box
+                readonly property var cam: Decode.camera(line, t, root.width, root.height)
+                readonly property real cx: width / 2
+                readonly property real cy: height / 2
+                transform: [
+                    Matrix4x4 {
+                        // horizontal skew around the centre (whips and warps)
+                        readonly property real k: Math.tan((lineItem.cam.skx || 0) * Math.PI / 180)
+                        matrix: Qt.matrix4x4(1, k, 0, -k * lineItem.cy, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)
+                    },
+                    Rotation { origin.x: lineItem.cx; origin.y: lineItem.cy; axis { x: 1; y: 0; z: 0 } angle: lineItem.cam.rx || 0 },
+                    Rotation { origin.x: lineItem.cx; origin.y: lineItem.cy; axis { x: 0; y: 1; z: 0 } angle: lineItem.cam.ry || 0 },
+                    Rotation { origin.x: lineItem.cx; origin.y: lineItem.cy; angle: lineItem.cam.rot || 0 },
+                    Scale { origin.x: lineItem.cx; origin.y: lineItem.cy; xScale: lineItem.cam.s; yScale: lineItem.cam.s },
+                    Translate { x: lineItem.cam.x || 0; y: lineItem.cam.y || 0 }
+                ]
+
+                // One lens-blur layer per line, kept on for the line's life so it never rebuilds mid-shot
+                layer.enabled: root.renderable
+                layer.effect: MultiEffect {
+                    blurEnabled: true
+                    blur: Math.min(1, (lineItem.cam.blur || 0) / 28)
+                    blurMax: 28
+                    autoPaddingEnabled: true
                 }
 
                 Item {
