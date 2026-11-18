@@ -3606,6 +3606,12 @@ Scope {
             downloadQuality: win.downloadQuality
             spotifySpdc: win.spotifySpdc
             lyricsSource: win.lyricsSource
+            previewLyrics: win.activeLyrics
+            previewTime: win.currentTime
+            previewIsPlaying: win.isPlaying
+            previewTrack: win.currentTrack
+            previewWallpaper: win.formatFileUrl(win.currentWallpaperPath)
+            lyricsHost: desktopLyrics
             appVersion: win.appVersion
             latestVersion: win.latestVersion
             hasAppUpdate: win.hasAppUpdate

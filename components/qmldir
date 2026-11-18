@@ -29,6 +29,9 @@ FriendStoryModal 1.0 FriendStoryModal.qml
 FriendsPulseBar 1.0 FriendsPulseBar.qml
 GeneratedCover 1.0 GeneratedCover.qml
 GachaAnimeLyricsView 1.0 GachaAnimeLyricsView.qml
+LyricsPresetCard 1.0 LyricsPresetCard.qml
+singleton LyricsPresets 1.0 LyricsPresets.qml
+LyricsPresetView 1.0 LyricsPresetView.qml
 HomeFeedView 1.0 HomeFeedView.qml
 singleton I18n 1.0 I18n.qml
 singleton LibraryData 1.0 LibraryData.qml
@@ -49,6 +52,7 @@ CommentRow 1.0 CommentRow.qml
 PanelRimBorder 1.0 PanelRimBorder.qml
 NowPlayingControls 1.0 NowPlayingControls.qml
 NowPlayingActionRow 1.0 NowPlayingActionRow.qml
+CoverSeekRing 1.0 CoverSeekRing.qml
 NotificationCenter 1.0 NotificationCenter.qml
 NotificationStore 1.0 NotificationStore.qml
 NavArrowButton 1.0 NavArrowButton.qml

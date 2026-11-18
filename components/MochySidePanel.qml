@@ -103,7 +103,81 @@ Item {
     property int currentLyricIndex: -1
     property bool isInterlude: false
 
-    // Mochy Authentic Color & Typography Tokens (StyleKit.kt & ExpressiveText.kt)
+    // -------------------------------------------------------------------------
+    // POSTER TITLE (Mochy PosterText + ExpressiveTitle)
+    // A new song opens on its title set big, words rising in one after another.
+    // When its lyrics are found, the big title slides down and shrinks into the
+    // small title under the artist while the lyrics take the space it leaves,
+    // and slides back up if they go away. titleFound: 0 big title, 1 lyrics.
+    // -------------------------------------------------------------------------
+    readonly property bool hasSyncedLyrics: !!(root.activeLyrics && root.activeLyrics.length > 0)
+    readonly property string trackTitle: root.currentTrack ? String(root.currentTrack.title || root.currentTrack.name || "") : ""
+    readonly property string trackArtist: root.currentTrack ? String(root.currentTrack.artist || root.currentTrack.author || "") : ""
+    readonly property string trackKey: root.currentTrack ? String(root.currentTrack.videoId || root.currentTrack.path || root.trackTitle) : ""
+    property real titleFound: hasSyncedLyrics ? 1.0 : 0.0
+    // Seconds since the title began coming in; it runs the same entrance clock as a lyric line
+    property real titleClock: 99.0
+    // What the poster shows: held on the old song until it has faded out, so text never swaps in view
+    property string shownTitle: trackTitle
+    property string shownArtist: trackArtist
+    // 1: poster and credits shown, 0: faded out between two songs
+    property real swapFade: 1.0
+    // Desktop addition: the title holds this long on a new song before it gives way to the lyrics,
+    // so it is seen even when the lyrics come from cache in the same instant
+    readonly property int kTitleHoldMs: 1600
+
+    NumberAnimation {
+        id: titleFoundAnim
+        target: root; property: "titleFound"; duration: 820
+        easing.type: Easing.BezierSpline; easing.bezierCurve: [0.3, 0.0, 0.1, 1.0, 1.0, 1.0]
+    }
+    // A song change never cuts: the old poster and credits fade out, the new title is put in
+    // place unseen, then its words rise in one after another as the credits fade back
+    SequentialAnimation {
+        id: trackSwapAnim
+        NumberAnimation { target: root; property: "swapFade"; to: 0.0; duration: 260; easing.type: Easing.InOutQuad }
+        ScriptAction { script: root.commitNewTrack() }
+        ScriptAction { script: titleClockAnim.restart() }
+        NumberAnimation { target: root; property: "swapFade"; to: 1.0; duration: 520; easing.type: Easing.OutCubic }
+    }
+    NumberAnimation { id: titleClockAnim; target: root; property: "titleClock"; from: 0.0; to: 6.0; duration: 6000 }
+    Timer {
+        id: titleHold
+        interval: root.kTitleHoldMs
+        onTriggered: root.settleTitle()
+    }
+    function settleTitle() {
+        if (titleHold.running || trackSwapAnim.running) return;
+        var target = root.hasSyncedLyrics ? 1.0 : 0.0;
+        if (Math.abs(root.titleFound - target) < 0.001) return;
+        titleFoundAnim.stop();
+        titleFoundAnim.to = target;
+        titleFoundAnim.start();
+    }
+    function commitNewTrack() {
+        titleFoundAnim.stop();
+        root.titleFound = 0.0;
+        titleClockAnim.stop();
+        root.titleClock = 0.0;
+        root.shownTitle = root.trackTitle;
+        root.shownArtist = root.trackArtist;
+        root.shownKey = root.trackKey;
+        titleHold.restart();
+    }
+    onTrackKeyChanged: {
+        trackSwapAnim.stop();
+        // the old lyrics clear a moment before the key turns: don't let the old title rise while it fades
+        titleFoundAnim.stop();
+        if (root.trackTitle === "") { root.shownTitle = ""; root.shownArtist = ""; root.shownKey = root.trackKey; root.swapFade = 1.0; return; }
+        trackSwapAnim.start();
+    }
+    // same song, details filled in later (artist arriving after the title): follow quietly
+    // (title and key change together on a new song, in no set order: only follow when the key held)
+    property string shownKey: trackKey
+    onTrackTitleChanged: if (!trackSwapAnim.running && root.trackKey === root.shownKey) root.shownTitle = root.trackTitle
+    onTrackArtistChanged: if (!trackSwapAnim.running && root.trackKey === root.shownKey) root.shownArtist = root.trackArtist
+    onHasSyncedLyricsChanged: settleTitle()
+
     readonly property color mochyInk: "#F1ECEC"
     readonly property color mochyInkSoft: Qt.rgba(0.945, 0.925, 0.925, 0.62)
     readonly property color mochyInkDim: Qt.rgba(0.945, 0.925, 0.925, 0.40)
@@ -131,6 +205,9 @@ Item {
     ListModel { id: visibleLinesModel }
 
     // Resolved cover image URL
+    // Animated covers follow the app's setting (Settings > animated cover / canvas source)
+    property bool animatedCoverEnabled: (typeof win !== "undefined" && win) ? win.animatedCoverEnabled : true
+    property string canvasPreference: (typeof win !== "undefined" && win) ? win.canvasPreference : "apple_first"
     readonly property string coverImageUrl: {
         if (root.resolvedSquareImage !== "") {
             var r = root.resolvedSquareImage;
@@ -411,16 +488,20 @@ Item {
     Rectangle {
         id: bentoShadowLayer
         visible: root.isPanelRenderable && root.panelStyle === 2
+        // Soft, low, offset downward: sits the island on the window instead of outlining it
         anchors.fill: parent
-        anchors.margins: -4
-        radius: root.panelRadius + 4
-        color: Qt.rgba(0, 0, 0, 0.48)
+        anchors.topMargin: 10
+        anchors.bottomMargin: -6
+        anchors.leftMargin: 6
+        anchors.rightMargin: 6
+        radius: root.panelRadius
+        color: Qt.rgba(0, 0, 0, 0.22)
         z: -1
         layer.enabled: root.isPanelRenderable && root.panelStyle === 2
         layer.effect: MultiEffect {
             blurEnabled: true
-            blur: 0.7
-            blurMax: 20
+            blur: 1.0
+            blurMax: 32
         }
     }
 
@@ -520,11 +601,15 @@ Item {
 
                     PathLine { x: circleCover.cw; y: 0 }
                     PathLine { x: circleCover.cw; y: circleCover.cw * 0.4567 }
-                    PathQuad {
+                    // A true circle (Mochy's CircleCover): centre (0.13 W, -0.28 W), radius 1.14 W.
+                    // It meets the right edge at 0.4567 W and the left at 0.8526 W, and the seek
+                    // ring below runs on exactly this circle.
+                    PathArc {
                         x: 0
                         y: circleCover.cw * 0.8526
-                        controlX: circleCover.cw * 0.50
-                        controlY: circleCover.cw * 0.9150
+                        radiusX: circleCover.cw * 1.14
+                        radiusY: circleCover.cw * 1.14
+                        direction: PathArc.Clockwise
                     }
                     PathLine { x: 0; y: 0 }
                 }
@@ -599,15 +684,20 @@ Item {
                     autoPaddingEnabled: false
                 }
 
-                // 1. Crystal Sharp Album Artwork
-                Image {
+                // 1. Album artwork: the shared cover surface, so a song with an Apple Music animated
+                // cover or a Spotify Canvas plays it here (looped, muted, paused with the music);
+                // without one it is the still cover. The arc mask above cuts it like the still did.
+                MediaCoverSurface {
                     id: topSharpCover
-                    sourceSize: Qt.size(800, 800)
                     anchors.fill: parent
-                    source: root.coverImageUrl
-                    fillMode: Image.PreserveAspectCrop
-                    asynchronous: true
-                    cache: true
+                    track: root.currentTrack
+                    radius: 0
+                    showShadow: false
+                    borderWidth: 0
+                    overrideImage: root.coverImageUrl
+                    isPlaying: root.isPlaying
+                    animatedCoverEnabled: root.animatedCoverEnabled
+                    canvasPreference: root.canvasPreference
                 }
 
                 // 2. Mochy Soft Vignette along the lower rim
@@ -622,62 +712,8 @@ Item {
                 }
             }
 
-            // Light rim: a soft accent-coloured bloom along the arc, so the curve reads as a lit edge
-            Item {
-                anchors.fill: parent
-                visible: root.isPanelRenderable
-                layer.enabled: visible
-                layer.effect: MultiEffect {
-                    blurEnabled: true
-                    blur: 1.0
-                    blurMax: 40
-                    autoPaddingEnabled: true
-                }
-                Shape {
-                    anchors.fill: parent
-                    preferredRendererType: Shape.CurveRenderer
-                    ShapePath {
-                        fillColor: "transparent"
-                        strokeColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.95)
-                        strokeWidth: 9
-                        capStyle: ShapePath.RoundCap
-                        startX: circleCover.cw
-                        startY: circleCover.cw * 0.4567 + 3
-                        PathQuad {
-                            x: 0
-                            y: circleCover.cw * 0.8526 + 3
-                            controlX: circleCover.cw * 0.50
-                            controlY: circleCover.cw * 0.9150 + 3
-                        }
-                    }
-                }
-            }
-
-            // Mochy Hairline Edge Stroke along the Arc (Parabolic Curve)
-            Shape {
-                anchors.fill: parent
-                layer.enabled: root.isPanelRenderable
-                layer.samples: 8
-                layer.smooth: true
-                preferredRendererType: Shape.CurveRenderer
-
-                ShapePath {
-                    fillColor: "transparent"
-                    strokeColor: Qt.rgba(Math.min(1, root.accentColor.r * 0.5 + 0.5), Math.min(1, root.accentColor.g * 0.5 + 0.5), Math.min(1, root.accentColor.b * 0.5 + 0.5), 0.75)
-                    strokeWidth: 1.2
-                    capStyle: ShapePath.RoundCap
-                    joinStyle: ShapePath.RoundJoin
-                    startX: circleCover.cw
-                    startY: circleCover.cw * 0.4567
-
-                    PathQuad {
-                        x: 0
-                        y: circleCover.cw * 0.8526
-                        controlX: circleCover.cw * 0.50
-                        controlY: circleCover.cw * 0.9150
-                    }
-                }
-            }
+            // No lit stroke or bloom on the arc: the curve is drawn by the artwork edge alone,
+            // with the cover glow below carrying the light (a glowing line read as a sticker cut-out)
 
             // Click artwork to expand full-screen Now Playing
             MouseArea {
@@ -685,6 +721,26 @@ Item {
                 cursorShape: Qt.PointingHandCursor
                 onClicked: root.openDetailsRequested()
             }
+        }
+
+        // Seek bar on the cover's rim (Mochy CoverRing): thin on the edge, springs out on hover,
+        // press or song start; drag along the curve to scrub
+        CoverSeekRing {
+            id: seekRing
+            anchors.fill: parent
+            z: 6
+            cx: circleCover.cw * 0.13
+            cy: -circleCover.cw * 0.28
+            r: circleCover.cw * 1.14
+            live: root.isPanelRenderable && root.activeTab === "lyrics"
+            visible: root.isPanelRenderable
+            position: root.currentTime
+            duration: root.totalDuration
+            syncTime: root.syncTime
+            syncStamp: root.syncStamp
+            isPlaying: root.isPlaying
+            trackKey: root.currentTrack ? String(root.currentTrack.videoId || root.currentTrack.path || root.currentTrack.title || "") : ""
+            onSeekRequested: seconds => root.seekRequested(seconds)
         }
 
         // Top-Right Close Button (Glass Capsule Circle)
@@ -741,6 +797,57 @@ Item {
         }
 
         // =====================================================================
+        // POSTER CREDITS (Mochy PosterText): the artist, then the title set small.
+        // The small title shows only once the big one has slid down into it.
+        // =====================================================================
+        Column {
+            id: posterCredits
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: bottomDock.top
+            anchors.leftMargin: 24
+            anchors.rightMargin: 24
+            anchors.bottomMargin: 16
+            spacing: 3
+            z: 5
+            visible: root.currentTrack !== null
+            opacity: root.swapFade
+
+            MarqueeText {
+                width: parent.width
+                height: 18
+                visible: root.shownArtist !== ""
+                text: root.shownArtist
+                color: root.mochyInkSoft
+                font.family: Theme.fontFamily
+                font.pixelSize: 13
+                font.weight: Font.DemiBold
+                active: root.isPanelRenderable
+            }
+            MarqueeText {
+                id: posterSmallTitleBox
+                width: parent.width
+                height: 24
+                text: root.shownTitle
+                color: root.mochyInkSoft
+                font.family: Theme.fontFamily
+                font.pixelSize: 19
+                font.weight: Font.Bold
+                font.letterSpacing: -0.035 * 19
+                active: root.isPanelRenderable && opacity > 0.99
+                opacity: Math.max(0, Math.min(1, (root.titleFound - 0.6) / 0.4))
+            }
+        }
+        // Landing point for the big title: where the small title's first glyph line starts
+        Item {
+            id: posterSmallTitle
+            parent: posterSmallTitleBox
+            readonly property real pixelSize: 19
+            x: 0; y: Math.round((posterSmallTitleBox.height - pixelSize * 1.2) / 2)
+            width: 1; height: 1
+        }
+
+        // =====================================================================
         // LAYER E: EXPANDED EXPRESSIVE POSTER CANVAS (CENTRAL REGION)
         // Sits directly below the elevated arc cut (top = 0.88 * W + 8px).
         // Uses FULL width (redundant right controls pill removed as requested).
@@ -752,10 +859,12 @@ Item {
         // =====================================================================
         Item {
             id: expressiveCanvas
+            // The bar coming out past the rim moves the words down with it (Mochy RingPush 34)
+            transform: Translate { y: seekRing.expand * 34 }
             anchors.top: parent.top
             anchors.topMargin: Math.round(circleCover.cw * 0.88 + 10)
-            anchors.bottom: bottomDock.top
-            anchors.bottomMargin: 14
+            anchors.bottom: posterCredits.top
+            anchors.bottomMargin: 12
             anchors.left: parent.left
             anchors.leftMargin: 24
             anchors.right: parent.right
@@ -770,7 +879,7 @@ Item {
             Item {
                 id: interludeDotsBox
                 anchors.fill: parent
-                readonly property bool shouldShow: root.activeLyrics && root.activeLyrics.length > 0 && visibleLinesModel.count === 0
+                readonly property bool shouldShow: root.activeLyrics && root.activeLyrics.length > 0 && visibleLinesModel.count === 0 && root.titleFound > 0.999
                 opacity: shouldShow ? 1.0 : 0.0
                 visible: opacity > 0.01
                 Behavior on opacity { NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
@@ -813,7 +922,9 @@ Item {
             Item {
                 id: expressiveLyricsBox
                 anchors.fill: parent
-                visible: root.activeLyrics && root.activeLyrics.length > 0
+                visible: root.hasSyncedLyrics && opacity > 0.001
+                // PosterText: the lyrics come up as the big title leaves
+                opacity: root.swapFade * Math.max(0.0, Math.min(1.0, (root.titleFound - 0.25) / 0.75))
 
                 Item {
                     id: linesStackContainer
@@ -1118,63 +1229,204 @@ Item {
             }
 
             // -----------------------------------------------------------------
-            // STATE 3: POSTER EXPRESSIVE TITLE FALLBACK (WHEN NO SYNCED LYRICS)
+            // STATE 3: POSTER TITLE (Mochy ExpressiveTitle)
+            // The song's title as a poster: one short word shouted at 1.55x, long words
+            // stepped down, tight lines, words rising in one after another. It is the
+            // big words while there are no lyrics; once they are found it slides into
+            // the small title in the credits below.
             // -----------------------------------------------------------------
             Item {
                 id: expressiveTitleBox
                 anchors.fill: parent
-                visible: !interludeDotsBox.visible && !expressiveLyricsBox.visible
+                visible: root.titleFound < 0.999 && root.shownTitle !== ""
+                opacity: root.swapFade
 
-                Column {
-                    anchors.verticalCenter: parent.verticalCenter
+                readonly property var words: root.shownTitle.split(" ").filter(w => w.length > 0)
+                readonly property var scales: {
+                    var ws = words, emph = -1, minLen = 999;
+                    for (var i = 0; i < ws.length; ++i)
+                        if (ws[i].length >= 3 && ws[i].length < minLen) { minLen = ws[i].length; emph = i; }
+                    var out = [];
+                    for (var j = 0; j < ws.length; ++j) {
+                        var n = ws[j].length;
+                        out.push(j === emph && ws.length > 1 ? 1.55 : (n >= 11 ? 0.74 : (n >= 9 ? 0.86 : 1.0)));
+                    }
+                    return out;
+                }
+                readonly property real baseSize: 40
+                readonly property real spacingRatio: 0.24
+                // Space it may fill: above the "finding lyrics" note
+                readonly property real fitHeight: Math.max(60, height - (statusRow.visible ? statusRow.height + 14 : 0))
+
+                // Measured once at 100 px and scaled: a side-effect-free width for any size
+                FontMetrics { id: boldMetrics; font.family: Theme.fontFamily; font.pixelSize: 100; font.weight: Font.Bold }
+                FontMetrics { id: blackMetrics; font.family: Theme.fontFamily; font.pixelSize: 100; font.weight: Font.Black }
+                function wordWidth(word, px, scale) {
+                    var m = scale > 1 ? blackMetrics : boldMetrics;
+                    var size = px * scale;
+                    // letterSpacing -0.035em per glyph, as drawn
+                    return (m.advanceWidth(word) / 100 - 0.035 * word.length) * size;
+                }
+                // fitTitle: long titles start smaller, then step down until no word runs past the
+                // width and the wrapped rows fit the height
+                function fits(px) {
+                    var gap = px * spacingRatio, rowW = 0, rowH = 0, total = 0;
+                    for (var i = 0; i < words.length; ++i) {
+                        var w = wordWidth(words[i], px, scales[i]);
+                        if (w > width) return false;
+                        if (rowW > 0 && rowW + gap + w > width) { total += rowH; rowW = 0; rowH = 0; }
+                        rowW += (rowW > 0 ? gap : 0) + w;
+                        rowH = Math.max(rowH, px * scales[i] * 0.96);
+                    }
+                    return total + rowH <= fitHeight;
+                }
+                readonly property real fitted: {
+                    if (width <= 0 || words.length === 0) return baseSize;
+                    var len = Math.max(1, root.shownTitle.length);
+                    var px = baseSize * Math.sqrt(Math.max(0.52, Math.min(1.0, 14 / len)));
+                    for (var k = 0; k < 8 && !fits(px); ++k) px *= 0.9;
+                    return px;
+                }
+
+                Item {
+                    id: bigTitle
                     width: parent.width
-                    spacing: 12
+                    height: titleFlow.implicitHeight
+                    // Slide from here to the small title's place, shrinking from the top-left corner
+                    readonly property point dest: {
+                        root.titleFound; posterSmallTitle.y; expressiveCanvas.height;
+                        return posterSmallTitle.mapToItem(expressiveTitleBox, 0, 0);
+                    }
+                    readonly property real f: root.titleFound
+                    transform: [
+                        Scale { xScale: 1 + (posterSmallTitle.pixelSize / expressiveTitleBox.fitted - 1) * bigTitle.f; yScale: xScale }
+                    ]
+                    x: bigTitle.dest.x * f
+                    y: bigTitle.dest.y * f
+                    // it becomes the small title in the last part of the slide
+                    opacity: 1 - Math.max(0, Math.min(1, (f - 0.6) / 0.35))
 
-                    Text {
+                    // The whole title softens in and out of focus as a lyric line does (one layer)
+                    readonly property real blurPx: {
+                        var mid = Math.floor(Math.max(0, expressiveTitleBox.words.length - 1) / 2);
+                        return (1.0 - root.easeOutCubic((root.titleClock - mid * root.kEnterStagger) / root.kEnterDur)) * 10.0;
+                    }
+                    layer.enabled: root.isPanelRenderable
+                    layer.effect: MultiEffect {
+                        blurEnabled: true
+                        blur: Math.min(1.0, bigTitle.blurPx / 16.0)
+                        blurMax: 16
+                        autoPaddingEnabled: true
+                    }
+
+                    Flow {
+                        id: titleFlow
                         width: parent.width
-                        text: root.currentTrack ? (root.currentTrack.title || root.currentTrack.name || I18n.tr("Bài hát Nutsty", "Nutsty Track")) : I18n.tr("Nhạc Nutsty", "Nutsty Music")
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 26
-                        font.bold: true
-                        color: "#ffffff"
-                        wrapMode: Text.WordWrap
-                        lineHeight: 1.15
-                    }
+                        spacing: expressiveTitleBox.fitted * expressiveTitleBox.spacingRatio
 
-                    // While lyrics are being fetched: spinning, morphing shape instead of "no lyrics"
-                    Row {
+                        Repeater {
+                            model: expressiveTitleBox.words
+                            // Each word comes in exactly like a lyric word: rises, fades and zooms
+                            // from 0.94 with the same stagger and curve. The shout word arrives at
+                            // normal size and only swells to its full size once the title has landed.
+                            delegate: Item {
+                                id: titleWord
+                                required property string modelData
+                                required property int index
+                                readonly property real peak: expressiveTitleBox.scales[index] || 1.0
+                                readonly property bool isShout: peak > 1.15
+                                property real shoutProgress: 0.0
+                                // set at peak size, drawn scaled down: crisp at every step of the swell
+                                readonly property real drawScale: isShout ? (1.0 + (peak - 1.0) * shoutProgress) / peak : 1.0
+
+                                readonly property real enterE: root.easeOutCubic((root.titleClock - index * root.kEnterStagger) / root.kEnterDur)
+                                readonly property real motionZoom: 0.94 + 0.06 * enterE
+
+                                // rows align on the bottom like FlowRow(itemVerticalAlignment = Bottom)
+                                width: Math.round(wordText.implicitWidth * drawScale)
+                                height: expressiveTitleBox.fitted * 1.55 * 0.96
+                                opacity: Math.max(0.0, Math.min(1.0, enterE))
+                                transform: [
+                                    Scale {
+                                        xScale: titleWord.motionZoom
+                                        yScale: titleWord.motionZoom
+                                        origin.x: -titleWord.x
+                                        origin.y: titleFlow.height / 2 - titleWord.y
+                                    },
+                                    Translate { y: (1.0 - titleWord.enterE) * expressiveTitleBox.fitted * 0.55 }
+                                ]
+
+                                // the swell starts when the last word has come in, on the lyric shout curve
+                                readonly property bool shoutDue: isShout
+                                    && root.titleClock >= (expressiveTitleBox.words.length - 1) * root.kEnterStagger + root.kEnterDur * 0.85
+                                onShoutDueChanged: {
+                                    if (shoutDue) {
+                                        if (shoutProgress < 0.99) shoutAnim.restart();
+                                    } else {
+                                        shoutAnim.stop();
+                                        shoutProgress = 0.0;
+                                    }
+                                }
+                                Component.onCompleted: if (shoutDue) shoutProgress = 1.0
+                                NumberAnimation {
+                                    id: shoutAnim
+                                    target: titleWord; property: "shoutProgress"; to: 1.0; duration: 650
+                                    easing.type: Easing.BezierSpline
+                                    easing.bezierCurve: [0.12, 0.88, 0.24, 1.0, 1.0, 1.0]
+                                }
+
+                                Text {
+                                    id: wordText
+                                    anchors.left: parent.left
+                                    anchors.bottom: parent.bottom
+                                    text: titleWord.modelData
+                                    color: root.mochyInk
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Math.round(expressiveTitleBox.fitted * titleWord.peak)
+                                    font.weight: titleWord.isShout ? Font.Black : Font.Bold
+                                    font.letterSpacing: -0.035 * Math.round(expressiveTitleBox.fitted * titleWord.peak)
+                                    transform: Scale {
+                                        xScale: titleWord.drawScale
+                                        yScale: titleWord.drawScale
+                                        origin.x: 0
+                                        origin.y: wordText.height
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // While lyrics are being fetched: spinning, morphing shape instead of "no lyrics"
+                Row {
+                    id: statusRow
+                    anchors.left: parent.left
+                    // right under the title as first set, so the seek ring's push never lands it on the credits
+                    y: titleFlow.implicitHeight + 16
+                    spacing: 10
+                    opacity: Math.max(0, 1 - root.titleFound * 3)
+                    visible: opacity > 0.01
+
+                    ShapeLoader {
+                        anchors.verticalCenter: parent.verticalCenter
                         visible: root.isLoadingLyrics
-                        spacing: 12
-                        ShapeLoader {
-                            anchors.verticalCenter: parent.verticalCenter
-                            size: 30
-                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.9)
-                        }
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: I18n.tr("Đang tìm lời bài hát...", "Finding lyrics...")
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 12
-                            color: Qt.rgba(1, 1, 1, 0.55)
-                        }
+                        size: 22
+                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.9)
                     }
-
-                    Row {
+                    AppIcon {
+                        anchors.verticalCenter: parent.verticalCenter
                         visible: !root.isLoadingLyrics
-                        spacing: 8
-                        AppIcon {
-                            anchors.verticalCenter: parent.verticalCenter
-                            source: "../assets/icons/view-lyrics-symbolic.svg"
-                            iconSize: 14
-                            color: Qt.rgba(1, 1, 1, 0.35)
-                        }
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: I18n.tr("Chưa có lời đồng bộ", "No synchronized lyrics")
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 12
-                            color: Qt.rgba(1, 1, 1, 0.45)
-                        }
+                        source: "../assets/icons/view-lyrics-symbolic.svg"
+                        iconSize: 14
+                        color: root.mochyInkDim
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.isLoadingLyrics ? I18n.tr("Đang tìm lời bài hát...", "Finding lyrics...")
+                                                   : I18n.tr("Chưa có lời đồng bộ", "No synchronized lyrics")
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                        color: root.mochyInkSoft
                     }
                 }
             }
@@ -1660,16 +1912,20 @@ Item {
     // -------------------------------------------------------------------------
     // Single shared rim for BOTH tabs (lyrics + queue). Lives OUTSIDE the masked panelContainer layer so its
     // own antialiased edge covers the mask edge (inside the mask the two AA edges clashed into black jaggies).
-    PanelRimBorder {
+    // A quiet 1px hairline (white 8%), like every other card in the window; the accent sheen rim
+    // made the island read as a sticker pasted on top
+    Rectangle {
         id: panelRim
         visible: root.isPanelRenderable
         anchors.fill: parent
         z: 100
-        accentColor: root.accentColor
+        color: "transparent"
+        antialiasing: true
+        border.width: 1
+        border.color: Qt.rgba(1, 1, 1, 0.08)
         topLeftRadius: root.panelStyle === 1 ? 0 : root.panelRadius
         bottomLeftRadius: root.panelStyle === 1 ? 0 : root.panelRadius
         topRightRadius: root.panelRadius
         bottomRightRadius: root.panelRadius
-        borderWidth: root.panelStyle === 1 ? 1 : 1.2
     }
 }

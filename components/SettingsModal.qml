@@ -5,6 +5,7 @@ import QtQuick.Effects
 import QtQuick.Dialogs
 import QtCore
 import "."
+import "lyrics_demo.js" as LyricsDemo
 
 Rectangle {
     id: root
@@ -68,6 +69,36 @@ Rectangle {
     property string downloadQuality: "high_opus"
     property string spotifySpdc: ""
     property string lyricsSource: "auto"
+    // Desktop lyrics preset previews: fed the song that is playing, else the demo song
+    property var previewLyrics: []
+    property real previewTime: 0.0
+    property bool previewIsPlaying: false
+    property var previewTrack: null
+    property string previewWallpaper: ""
+    // DesktopLyricsWidget, for the wallpaper palette the previews are drawn in
+    property var lyricsHost: null
+    readonly property bool lyricsPreviewsLive: root.visible && root.currentTab === 1
+    readonly property bool lyricsPreviewUsesSong: root.previewIsPlaying && !!root.previewLyrics && root.previewLyrics.length > 0
+    readonly property var demoLyrics: LyricsDemo.build()
+    property real demoTime: 0.0
+    property real demoLastTick: 0
+    onLyricsPreviewsLiveChanged: {
+        root.demoTime = 0.0;
+        root.demoLastTick = Date.now();
+    }
+    // Demo clock: runs only while the lyrics tab is open and no song feeds the previews
+    Timer {
+        interval: 33
+        repeat: true
+        running: root.lyricsPreviewsLive && !root.lyricsPreviewUsesSong
+        onRunningChanged: root.demoLastTick = Date.now()
+        onTriggered: {
+            var now = Date.now();
+            var dt = Math.min(0.25, Math.max(0, (now - root.demoLastTick) / 1000.0));
+            root.demoLastTick = now;
+            root.demoTime = (root.demoTime + dt) % LyricsDemo.DURATION;
+        }
+    }
     property string spotifyStatusMessage: ""
     property bool spotifyStatusSuccess: false
     property bool spotifyMasked: true
@@ -4147,389 +4178,42 @@ Rectangle {
                     Layout.topMargin: 2
                 }
 
-                // -------------------------------------------------------------
-                // PRESET 1: Gacha / Anime Pop (100% Frameless Row)
-                // -------------------------------------------------------------
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 52
-                    radius: 8
-                    color: p1Hover.hovered ? Qt.rgba(255, 255, 255, 0.05) : "transparent"
-                    Behavior on color { ColorAnimation { duration: 120 } }
+                // Live previews: the song playing now, or the built-in demo song
+                Repeater {
+                    model: LyricsPresets.list
 
-                    HoverHandler { id: p1Hover }
+                    delegate: LyricsPresetCard {
+                        id: presetCard
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: implicitHeight
 
-                    Item {
-                        anchors.fill: parent
-                        anchors.leftMargin: 8
-                        anchors.rightMargin: 8
-
-                        // Left: Title & Subtitle
-                        Column {
-                            anchors.left: parent.left
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 2
-                            width: 195
-
-                            Text {
-                                text: I18n.tr("Mẫu 1: Điện ảnh Serif", "Preset 1: Cinematic Serif")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 13
-                                font.bold: true
-                                color: root.lyricsPreset === 1 ? "#ffffff" : (p1Hover.hovered ? "#ffffff" : Theme.textPrimary)
-                            }
-
-                            Text {
-                                text: I18n.tr("1 dòng • Instrument Serif", "1 line • Instrument Serif")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 11
-                                color: Theme.textSecondary
-                            }
+                        // Only cards inside the scrolled viewport load their preview
+                        readonly property bool inView: {
+                            settingsFlickable.contentY; settingsFlickable.height; presetCard.y; presetCard.height;
+                            if (!root.lyricsPreviewsLive) return false;
+                            var p = presetCard.mapToItem(settingsFlickable, 0, 0);
+                            return p.y + presetCard.height > 0 && p.y < settingsFlickable.height;
                         }
 
-                        // Center: Live Lyric Typography Preview (Floating naturally on glass)
-                        Text {
-                            anchors.left: parent.left
-                            anchors.leftMargin: 205
-                            anchors.right: check1.left
-                            anchors.rightMargin: 16
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: "君の笑顔が 眩しくて..."
-                            font.family: root.magicFontFamily
-                            font.italic: true
-                            font.pixelSize: 15
-                            color: "#ffffff"
-                            elide: Text.ElideRight
-                        }
-
-                        // Right: Circular Radio Checkmark Badge (Pinned to Right)
-                        Rectangle {
-                            id: check1
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 20
-                            height: 20
-                            radius: 10
-                            color: root.lyricsPreset === 1 ? "#ffffff" : "transparent"
-                            border.color: root.lyricsPreset === 1 ? "#ffffff" : (p1Hover.hovered ? Qt.rgba(255, 255, 255, 0.40) : Qt.rgba(255, 255, 255, 0.20))
-                            border.width: root.lyricsPreset === 1 ? 0 : 1.5
-                            Behavior on color { ColorAnimation { duration: 120 } }
-                            Behavior on border.color { ColorAnimation { duration: 120 } }
-
-                            AppIcon {
-                                anchors.centerIn: parent
-                                source: "../assets/icons/emblem-ok-symbolic.svg"
-                                iconSize: 12
-                                color: "#000000"
-                                visible: root.lyricsPreset === 1
-                            }
-                        }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        preventStealing: false
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.selectLyricsPresetRequested(1)
-                    }
-                }
-
-                // -------------------------------------------------------------
-                // PRESET 2: Apple Music 5-Line Fluid Sync (100% Frameless Row)
-                // -------------------------------------------------------------
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 52
-                    radius: 8
-                    color: p2Hover.hovered ? Qt.rgba(255, 255, 255, 0.05) : "transparent"
-                    Behavior on color { ColorAnimation { duration: 120 } }
-
-                    HoverHandler { id: p2Hover }
-
-                    Item {
-                        anchors.fill: parent
-                        anchors.leftMargin: 8
-                        anchors.rightMargin: 8
-
-                        // Left: Title & Subtitle
-                        Column {
-                            anchors.left: parent.left
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 2
-                            width: 195
-
-                            Text {
-                                text: I18n.tr("Mẫu 2: Apple Music", "Preset 2: Apple Music")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 13
-                                font.bold: true
-                                color: root.lyricsPreset === 2 ? "#ffffff" : (p2Hover.hovered ? "#ffffff" : Theme.textPrimary)
-                            }
-
-                            Text {
-                                text: I18n.tr("5 dòng • DoF quang học", "5 lines • Optical DoF")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 11
-                                color: Theme.textSecondary
-                            }
-                        }
-
-                        // Center: Live Lyric Typography Preview (Floating naturally on glass)
-                        Column {
-                            anchors.left: parent.left
-                            anchors.leftMargin: 205
-                            anchors.right: check2.left
-                            anchors.rightMargin: 16
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 1
-
-                            Text {
-                                text: "Soft memories remain..."
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 8
-                                color: "#ffffff"
-                                opacity: 0.35
-                                elide: Text.ElideRight
-                                width: parent.width
-                            }
-                            Text {
-                                text: "And every melody feels alive"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 11
-                                font.bold: true
-                                color: "#ffffff"
-                                elide: Text.ElideRight
-                                width: parent.width
-                            }
-                            Text {
-                                text: "Until the morning light..."
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 8
-                                color: "#ffffff"
-                                opacity: 0.35
-                                elide: Text.ElideRight
-                                width: parent.width
-                            }
-                        }
-
-                        // Right: Circular Radio Checkmark Badge (Pinned to Right)
-                        Rectangle {
-                            id: check2
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 20
-                            height: 20
-                            radius: 10
-                            color: root.lyricsPreset === 2 ? "#ffffff" : "transparent"
-                            border.color: root.lyricsPreset === 2 ? "#ffffff" : (p2Hover.hovered ? Qt.rgba(255, 255, 255, 0.40) : Qt.rgba(255, 255, 255, 0.20))
-                            border.width: root.lyricsPreset === 2 ? 0 : 1.5
-                            Behavior on color { ColorAnimation { duration: 120 } }
-                            Behavior on border.color { ColorAnimation { duration: 120 } }
-
-                            AppIcon {
-                                anchors.centerIn: parent
-                                source: "../assets/icons/emblem-ok-symbolic.svg"
-                                iconSize: 12
-                                color: "#000000"
-                                visible: root.lyricsPreset === 2
-                            }
-                        }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        preventStealing: false
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.selectLyricsPresetRequested(2)
-                    }
-                }
-
-                // -------------------------------------------------------------
-                // PRESET 3: Tối giản lướt (100% Frameless Row)
-                // -------------------------------------------------------------
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 52
-                    radius: 8
-                    color: p3Hover.hovered ? Qt.rgba(255, 255, 255, 0.05) : "transparent"
-                    Behavior on color { ColorAnimation { duration: 120 } }
-
-                    HoverHandler { id: p3Hover }
-
-                    Item {
-                        anchors.fill: parent
-                        anchors.leftMargin: 8
-                        anchors.rightMargin: 8
-
-                        // Left: Title & Subtitle
-                        Column {
-                            anchors.left: parent.left
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 2
-                            width: 195
-
-                            Text {
-                                text: I18n.tr("Mẫu 3: Tối giản lướt", "Preset 3: Minimal Glide")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 13
-                                font.bold: true
-                                color: root.lyricsPreset === 3 ? "#ffffff" : (p3Hover.hovered ? "#ffffff" : Theme.textPrimary)
-                            }
-
-                            Text {
-                                text: I18n.tr("2 dòng • Motion Blur", "2 lines • Motion Blur")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 11
-                                color: Theme.textSecondary
-                            }
-                        }
-
-                        // Center: Live Lyric Typography Preview (Floating naturally on glass)
-                        Column {
-                            anchors.left: parent.left
-                            anchors.leftMargin: 205
-                            anchors.right: check3.left
-                            anchors.rightMargin: 16
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 2
-
-                            Text {
-                                text: "Yesterday is fading away"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 9
-                                color: Theme.textSecondary
-                                opacity: 0.50
-                                elide: Text.ElideRight
-                                width: parent.width
-                            }
-                            Text {
-                                text: "Now tomorrow is singing"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 11
-                                font.bold: true
-                                color: Theme.textPrimary
-                                elide: Text.ElideRight
-                                width: parent.width
-                            }
-                        }
-
-                        // Right: Circular Radio Checkmark Badge (Pinned to Right)
-                        Rectangle {
-                            id: check3
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 20
-                            height: 20
-                            radius: 10
-                            color: root.lyricsPreset === 3 ? "#ffffff" : "transparent"
-                            border.color: root.lyricsPreset === 3 ? "#ffffff" : (p3Hover.hovered ? Qt.rgba(255, 255, 255, 0.40) : Qt.rgba(255, 255, 255, 0.20))
-                            border.width: root.lyricsPreset === 3 ? 0 : 1.5
-                            Behavior on color { ColorAnimation { duration: 120 } }
-                            Behavior on border.color { ColorAnimation { duration: 120 } }
-
-                            AppIcon {
-                                anchors.centerIn: parent
-                                source: "../assets/icons/emblem-ok-symbolic.svg"
-                                iconSize: 12
-                                color: "#000000"
-                                visible: root.lyricsPreset === 3
-                            }
-                        }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        preventStealing: false
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.selectLyricsPresetRequested(3)
-                    }
-                }
-
-                // -------------------------------------------------------------
-                // PRESET 4: Anime MV Kinetic Typography (100% Frameless Row)
-                // -------------------------------------------------------------
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 52
-                    radius: 8
-                    color: p4Hover.hovered ? Qt.rgba(255, 255, 255, 0.05) : "transparent"
-                    Behavior on color { ColorAnimation { duration: 120 } }
-
-                    HoverHandler { id: p4Hover }
-
-                    Item {
-                        anchors.fill: parent
-                        anchors.leftMargin: 8
-                        anchors.rightMargin: 8
-
-                        // Left: Title & Subtitle
-                        Column {
-                            anchors.left: parent.left
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 2
-                            width: 195
-
-                            Text {
-                                text: I18n.tr("Mẫu 4: Đồ họa Chuyển động", "Preset 4: Motion Typography")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 13
-                                font.bold: true
-                                color: root.lyricsPreset === 4 ? "#ffffff" : (p4Hover.hovered ? "#ffffff" : Theme.textPrimary)
-                            }
-
-                            Text {
-                                text: I18n.tr("Chữ khối • Bento Frame", "Block text • Bento Frame")
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 11
-                                color: Theme.textSecondary
-                            }
-                        }
-
-                        // Center: Live Lyric Typography Preview (Floating naturally on glass)
-                        Text {
-                            anchors.left: parent.left
-                            anchors.leftMargin: 205
-                            anchors.right: check4.left
-                            anchors.rightMargin: 16
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: I18n.tr("[ ĐỒ HỌA CHUYỂN ĐỘNG ]", "[ MOTION GRAPHICS ]")
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 11
-                            font.bold: true
-                            font.letterSpacing: 2.0
-                            color: "#ffffff"
-                            elide: Text.ElideRight
-                        }
-
-                        // Right: Circular Radio Checkmark Badge (Pinned to Right)
-                        Rectangle {
-                            id: check4
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 20
-                            height: 20
-                            radius: 10
-                            color: root.lyricsPreset === 4 ? "#ffffff" : "transparent"
-                            border.color: root.lyricsPreset === 4 ? "#ffffff" : (p4Hover.hovered ? Qt.rgba(255, 255, 255, 0.40) : Qt.rgba(255, 255, 255, 0.20))
-                            border.width: root.lyricsPreset === 4 ? 0 : 1.5
-                            Behavior on color { ColorAnimation { duration: 120 } }
-                            Behavior on border.color { ColorAnimation { duration: 120 } }
-
-                            AppIcon {
-                                anchors.centerIn: parent
-                                source: "../assets/icons/emblem-ok-symbolic.svg"
-                                iconSize: 12
-                                color: "#000000"
-                                visible: root.lyricsPreset === 4
-                            }
-                        }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        preventStealing: false
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.selectLyricsPresetRequested(4)
+                        meta: modelData
+                        selected: root.lyricsPreset === modelData.id
+                        running: inView
+                        isDemo: !root.lyricsPreviewUsesSong
+                        accentColor: root.accentColor
+                        wallpaperSource: root.previewWallpaper
+                        magicFontFamily: root.magicFontFamily
+                        activeLyrics: root.lyricsPreviewUsesSong ? root.previewLyrics : root.demoLyrics
+                        currentTime: root.lyricsPreviewUsesSong ? root.previewTime : root.demoTime
+                        isPlaying: true
+                        currentTrack: root.lyricsPreviewUsesSong ? root.previewTrack : null
+                        lyricsRomanizationEnabled: root.lyricsRomanizationEnabled
+                        colHighlight: root.lyricsHost ? root.lyricsHost.colHighlight : "#deb06c"
+                        colActiveText: root.lyricsHost ? root.lyricsHost.colActiveText : "#f8fafc"
+                        colDeadText: root.lyricsHost ? root.lyricsHost.colDeadText : "#f1f5f9"
+                        colShadowDir: root.lyricsHost ? root.lyricsHost.colShadowDir : "#a6020305"
+                        colShadowAmb: root.lyricsHost ? root.lyricsHost.colShadowAmb : "#66000000"
+                        isLightArea: root.lyricsHost ? root.lyricsHost.isLightArea : false
+                        onPicked: root.selectLyricsPresetRequested(modelData.id)
                     }
                 }
 

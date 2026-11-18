@@ -113,7 +113,8 @@ Item {
             fontSize: 35
             colHighlight: root.colHighlight
             colActiveText: root.colActiveText
-            colDeadText: root.colDeadText
+            // The line was sung in the accent, so it keeps that colour while it sinks away
+            colDeadText: root.colHighlight
             colShadowDirectional: root.colShadowDir
             colShadowAmbient: root.colShadowAmb
             isLightArea: root.isLightArea
@@ -186,7 +187,8 @@ Item {
             isDead: false
             fontFamily: root.magicFontFamily
             fontSize: activeContainer.isCurrentInterlude ? 42 : 35
-            colHighlight: root.colActiveText
+            // Sung words settle into the wallpaper palette's accent; the interlude dots stay white
+            colHighlight: activeContainer.isCurrentInterlude ? root.colActiveText : root.colHighlight
             colActiveText: root.colActiveText
             colDeadText: root.colDeadText
             colShadowDirectional: root.colShadowDir

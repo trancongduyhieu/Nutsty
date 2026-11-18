@@ -139,22 +139,10 @@ PanelWindow {
     // =========================================================================
     // Universal Positioning & Dynamic Sizing Engine
     // =========================================================================
+    readonly property var presetMeta: LyricsPresets.get(root.lyricsPreset)
     readonly property int defaultX: Math.round(root.width * 0.14)
-    readonly property int defaultY: (root.lyricsPreset === 1)
-        ? Math.round(root.height * 0.725)
-        : ((root.lyricsPreset === 3)
-            ? Math.round(root.height * 0.70)
-            : ((root.lyricsPreset === 4)
-                ? Math.round(root.height * 0.68)
-                : Math.round(root.height * 0.62)))
-
-    readonly property int currentPresetMaxWidth: (root.lyricsPreset === 1)
-        ? Math.min(740, Math.round(root.width * 0.45))
-        : ((root.lyricsPreset === 3)
-            ? Math.min(760, Math.round(root.width * 0.50))
-            : ((root.lyricsPreset === 4)
-                ? Math.min(960, Math.round(root.width * 0.65))
-                : Math.min(880, Math.round(root.width * 0.55))))
+    readonly property int defaultY: Math.round(root.height * root.presetMeta.yRatio)
+    readonly property int currentPresetMaxWidth: Math.min(root.presetMeta.width, Math.round(root.width * root.presetMeta.widthRatio))
 
     onCustomXChanged: {
         containerBox.x = (customX >= 0) ? customX : defaultX;
@@ -182,13 +170,7 @@ PanelWindow {
         y: (root.customY >= 0) ? root.customY : root.defaultY
         width: Math.min(root.currentPresetMaxWidth, Math.max(120, root.width - containerBox.x))
         onHeightChanged: if (!root.occluded) root.lastViewHeight = height
-        height: root.occluded ? root.lastViewHeight : (root.lyricsPreset === 1)
-            ? 120
-            : ((root.lyricsPreset === 3)
-                ? (minimalistViewLoader.item && minimalistViewLoader.item.implicitHeight > 0 ? minimalistViewLoader.item.implicitHeight : 140)
-                : ((root.lyricsPreset === 4)
-                    ? (animeMVViewLoader.item && animeMVViewLoader.item.implicitHeight > 0 ? animeMVViewLoader.item.implicitHeight : 260)
-                    : (appleMusicViewLoader.item && appleMusicViewLoader.item.implicitHeight > 0 ? appleMusicViewLoader.item.implicitHeight : 300)))
+        height: root.occluded ? root.lastViewHeight : presetView.implicitHeight
         readonly property bool hasSyncedLyrics: root.activeLyrics && root.activeLyrics.length > 0
         visible: root.enabled && (hasSyncedLyrics || (root.currentTrack !== null && root.isPlaying))
 
@@ -243,9 +225,6 @@ PanelWindow {
             }
         }
 
-        // =====================================================================
-        // Preset 1: Cinematic Serif View Plugin
-        // =====================================================================
         // Graceful Ambient Track Title Banner (Shown when music is playing but lyrics are loading/instrumental)
         Item {
             id: fallbackBanner
@@ -275,89 +254,25 @@ PanelWindow {
             }
         }
 
-        Loader {
-            id: gachaViewLoader
+        // The active preset (see LyricsPresets.qml); unloaded while the box is fully covered
+        LyricsPresetView {
+            id: presetView
             anchors.fill: parent
-            active: root.lyricsPreset === 1 && !root.occluded
-            visible: containerBox.hasSyncedLyrics
-            sourceComponent: GachaAnimeLyricsView {
-                activeLyrics: root.activeLyrics
-                currentTime: root.currentTime
-                isPlaying: root.isPlaying
-                lyricsRomanizationEnabled: root.lyricsRomanizationEnabled
-                magicFontFamily: root.magicFontFamily
-                colHighlight: root.colHighlight
-                colActiveText: root.colActiveText
-                colDeadText: root.colDeadText
-                colShadowDir: root.colShadowDir
-                colShadowAmb: root.colShadowAmb
-                isLightArea: root.isLightArea
-            }
-        }
-
-        // =====================================================================
-        // Preset 2: Apple Music Parametric Multi-Line Fluid Sync View Plugin
-        // =====================================================================
-        Loader {
-            id: appleMusicViewLoader
-            anchors.fill: parent
-            active: root.lyricsPreset === 2 && !root.occluded
-            visible: containerBox.hasSyncedLyrics
-            sourceComponent: AppleMusicDesktopLyrics {
-                activeLyrics: root.activeLyrics
-                currentTime: root.currentTime
-                isPlaying: root.isPlaying
-                currentTrack: root.currentTrack
-                lyricsRomanizationEnabled: root.lyricsRomanizationEnabled
-                colHighlight: root.colHighlight
-                colActiveText: root.colActiveText
-                colPendingText: "#a0a5b5"
-                colShadowDir: root.colShadowDir
-                colShadowAmb: root.colShadowAmb
-                visibleLinesCount: 5
-            }
-        }
-
-        // =====================================================================
-        // Preset 3: Minimalist Slide-Up Motion Blur View Plugin
-        // =====================================================================
-        Loader {
-            id: minimalistViewLoader
-            anchors.fill: parent
-            active: root.lyricsPreset === 3 && !root.occluded
-            sourceComponent: MinimalistLyricsView {
-                activeLyrics: root.activeLyrics
-                currentTime: root.currentTime
-                isPlaying: root.isPlaying
-                magicFontFamily: root.magicFontFamily
-                colHighlight: root.colHighlight
-                colActiveText: root.colActiveText
-                colDeadText: root.colDeadText
-                colShadowDir: root.colShadowDir
-                colShadowAmb: root.colShadowAmb
-                isLightArea: root.isLightArea
-            }
-        }
-
-        // =====================================================================
-        // Preset 4: Motion Typography View Plugin
-        // =====================================================================
-        Loader {
-            id: animeMVViewLoader
-            anchors.fill: parent
-            active: root.lyricsPreset === 4 && !root.occluded
-            sourceComponent: AnimeMVKineticLyrics {
-                activeLyrics: root.activeLyrics
-                currentTime: root.currentTime
-                isPlaying: root.isPlaying
-                magicFontFamily: root.magicFontFamily
-                colHighlight: root.colHighlight
-                colActiveText: root.colActiveText
-                colDeadText: root.colDeadText
-                colShadowDir: root.colShadowDir
-                colShadowAmb: root.colShadowAmb
-                isLightArea: root.isLightArea
-            }
+            preset: root.lyricsPreset
+            active: !root.occluded
+            visible: containerBox.hasSyncedLyrics || !presetView.meta.hideWithoutLyrics
+            activeLyrics: root.activeLyrics
+            currentTime: root.currentTime
+            isPlaying: root.isPlaying
+            currentTrack: root.currentTrack
+            lyricsRomanizationEnabled: root.lyricsRomanizationEnabled
+            magicFontFamily: root.magicFontFamily
+            colHighlight: root.colHighlight
+            colActiveText: root.colActiveText
+            colDeadText: root.colDeadText
+            colShadowDir: root.colShadowDir
+            colShadowAmb: root.colShadowAmb
+            isLightArea: root.isLightArea
         }
     }
 }
