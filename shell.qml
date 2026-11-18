@@ -264,7 +264,7 @@ Scope {
             win.mixBackdropP = Math.max(0, Math.min(1, (t - m.blendAtMs) / Math.max(500, m.durMs)));
         }
     }
-    property int desktopLyricsPreset: 2 // 1: Cinematic Serif, 2: Apple Music 5-Line Parametric, 3: Minimal Glide, 4: Motion Typography
+    property int desktopLyricsPreset: 2 // id from components/LyricsPresets.qml (1-5)
     property int desktopLyricsCustomX: -1
     property int desktopLyricsCustomY: -1
     property var desktopLyricsWallpaperPositions: ({})

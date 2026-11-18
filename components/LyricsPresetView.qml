@@ -39,6 +39,7 @@ Item {
         case 2: return appleMusic;
         case 3: return minimalGlide;
         case 4: return motionTypography;
+        case 5: return mochyExpressive;
         }
         return appleMusic;
     }
@@ -110,6 +111,20 @@ Item {
             colHighlight: root.colHighlight
             colActiveText: root.colActiveText
             colDeadText: root.colDeadText
+            colShadowDir: root.colShadowDir
+            colShadowAmb: root.colShadowAmb
+            isLightArea: root.isLightArea
+        }
+    }
+
+    Component {
+        id: mochyExpressive
+        ExpressiveLyricsView {
+            activeLyrics: root.activeLyrics
+            currentTime: root.currentTime
+            isPlaying: root.isPlaying
+            colHighlight: root.colHighlight
+            colActiveText: root.colActiveText
             colShadowDir: root.colShadowDir
             colShadowAmb: root.colShadowAmb
             isLightArea: root.isLightArea

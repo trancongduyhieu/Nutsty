@@ -61,7 +61,7 @@ Rectangle {
     property string taskbarLyricsPlacement: "taskbar"
     property string taskbarLyricsAlign: "center"
     property bool lyricsRomanizationEnabled: true
-    property int lyricsPreset: 2 // 1: Gacha, 2: Apple Music 5-Line, 3: Minimalist Blur, 4: Anime MV Kinetic
+    property int lyricsPreset: 2 // id from LyricsPresets.qml (1-5)
     property int customX: -1
     property int customY: -1
     property string currentLanguage: I18n.locale
