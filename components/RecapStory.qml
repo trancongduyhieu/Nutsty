@@ -1177,934 +1177,955 @@ Item {
             }
         }
 
-        // ===== 0. Hello =====
-        Bold {
-            visible: root.shows(pHey)
-            x: root.inset; width: root.width - 2 * root.inset
-            y: root.avatarSlot(0)[1] + root.avatarSlot(0)[2] / 2 + 34 * root.u
-            horizontalAlignment: Text.AlignHCenter
-            maximumLineCount: 2
-            sz: 26
-            text: root.pick([I18n.tr("Chao xìn, %1!", "Hey, %1!"), I18n.tr("Oi oi oi, %1!", "Oi oi oi, %1!"), I18n.tr("Ủa alo, %1!", "Yo, %1!"), I18n.tr("%1 tới, bá khí ngút trời!", "%1 walked in, aura maxed!"), I18n.tr("Gét gô, %1!", "Lock in, %1!")], 1).arg(root.userName)
-            opacity: root.eoc(pHey.enter) * (1 - root.eic(pHey.exit))
-            transform: Translate { y: (1 - root.eoc(pHey.enter)) * 22 * root.u - root.eic(pHey.exit) * 36 * root.u }
-        }
-
-        // ===== 1. The journey so far =====
+        // Every page's content fades out at the top and bottom of the frame instead of being cut
+        // there (the artist reel, the cover wall, the receipt); the backdrop and chrome stay whole
         Item {
+            id: pageLayer
             anchors.fill: parent
-            visible: root.shows(pJourney)
-            Column {
-                x: root.inset
-                y: root.avatarSlot(1)[1] + root.avatarSlot(1)[2] / 2 + 44 * root.u
-                width: root.column
-                Bold {
-                    width: parent.width; sz: 22
-                    text: root.pick([I18n.tr("%1 đã bắt đầu hành trình cùng Nutsty vào ngày", "%1, you started your journey in Nutsty on"), I18n.tr("ngày định mệnh %1 gặp Nutsty là", "the fateful day %1 met Nutsty was"), I18n.tr("cột mốc trùng sinh của %1 là ngày", "the canon event of %1 happened on"), I18n.tr("%1 chính thức nhập hội Nutsty từ", "the lore of %1 begins on")], 2).arg(root.userName)
-                    opacity: root.lmA(pJourney, 0, 5)
-                    transform: Translate { x: root.lmX(pJourney, 0, 5); y: root.lmY(pJourney, 0, 5) }
-                }
-                Item { width: 1; height: 4 * root.u }
-                Odo {
-                    sz: 44
-                    text: {
-                        var d = root.joinedAt > 0 ? new Date(root.joinedAt) : new Date();
-                        return I18n.locale === "vi" ? d.getDate() + " Tháng " + (d.getMonth() + 1) + ", " + d.getFullYear()
-                                                    : d.toLocaleDateString(Qt.locale("en_US"), "MMM d, yyyy");
-                    }
-                    progress: root.stagger(pJourney.enter, 1, 5)
-                    opacity: root.lmA(pJourney, 1, 5)
-                    transform: Translate { x: root.lmX(pJourney, 1, 5); y: root.lmY(pJourney, 1, 5) }
-                }
-                Item { width: 1; height: 20 * root.u }
-                Bold {
-                    width: parent.width; sz: 22
-                    text: root.pick([I18n.tr("và bạn đã nghe nhạc với tổng thời gian là", "and you have been listening to music in total time of"), I18n.tr("từ đó tới giờ tai bạn đã gánh", "since then your ears have endured"), I18n.tr("và bạn đã cày nhạc tổng cộng", "and you have been grinding music for"), I18n.tr("tổng thời gian bạn tu luyện bá khí là", "your total aura farming time is")], 3)
-                    opacity: root.lmA(pJourney, 2, 5)
-                    transform: Translate { x: root.lmX(pJourney, 2, 5); y: root.lmY(pJourney, 2, 5) }
-                }
-                Item { width: 1; height: 4 * root.u }
-                Odo {
-                    sz: 44
-                    text: root.hoursMinutes(root.recap ? root.recap.all_time_minutes : 0)
-                    progress: root.stagger(pJourney.enter, 3, 5)
-                    opacity: root.lmA(pJourney, 3, 5)
-                    transform: Translate { x: root.lmX(pJourney, 3, 5); y: root.lmY(pJourney, 3, 5) }
-                }
-                Item { width: 1; height: 22 * root.u }
-                Bold {
-                    width: parent.width; sz: 22
-                    text: root.pick([I18n.tr("hẹn gặp lại nhé!", "so long, partners!"), I18n.tr("chưa hết đâu nha!", "but wait, there's more!"), I18n.tr("đi tiếp thôi, gét gô!", "onwards we go!"), I18n.tr("căng đét luôn á!", "that's tuff, ngl!"), I18n.tr("khum dừng được đâu!", "no cap, keep going!")], 4)
-                    opacity: root.lmA(pJourney, 4, 5)
-                    transform: Translate { x: root.lmX(pJourney, 4, 5); y: root.lmY(pJourney, 4, 5) }
-                }
+            layer.enabled: !root.liteMode && root.visible
+            layer.effect: MultiEffect {
+                maskEnabled: true
+                maskSource: pageFadeMask
+                maskThresholdMin: 0.5
+                maskSpreadAtMin: 1.0
+                autoPaddingEnabled: false
             }
-            Mono {
-                x: 52 * root.u
-                y: root.height - 157 * root.u
-                text: I18n.tr("BẤM !", "CLICK!")
-                opacity: root.clamp01((pJourney.enter - 0.6) / 0.4) * (1 - pJourney.exit)
-            }
-        }
 
-        // ===== 2. How far the month is =====
-        Column {
-            visible: root.shows(pMonth)
-            x: root.inset
-            width: Math.min(root.width - 2 * root.inset, 900 * root.u)
-            y: root.fy(702) - height
+            // ===== 0. Hello =====
             Bold {
-                width: parent.width; rightPadding: 6 * root.u
-                sz: 44
-                horizontalAlignment: Text.AlignRight
-                text: root.pick([I18n.tr("%1 đã đi được", "%1 is"), I18n.tr("%1 đã trôi mất", "%1 is already"), I18n.tr("%1 đã tiêu hết", "%1 has used up"), I18n.tr("%1 đã bay màu", "%1 is already cooked")], 5).arg(root.monthName)
-                opacity: root.lmA(pMonth, 0, 4)
-                transform: Translate { x: root.lmX(pMonth, 0, 4, 70); y: root.lmY(pMonth, 0, 4) }
+                visible: root.shows(pHey)
+                x: root.inset; width: root.width - 2 * root.inset
+                y: root.avatarSlot(0)[1] + root.avatarSlot(0)[2] / 2 + 34 * root.u
+                horizontalAlignment: Text.AlignHCenter
+                maximumLineCount: 2
+                sz: 26
+                text: root.pick([I18n.tr("Chao xìn, %1!", "Hey, %1!"), I18n.tr("Oi oi oi, %1!", "Oi oi oi, %1!"), I18n.tr("Ủa alo, %1!", "Yo, %1!"), I18n.tr("%1 tới, bá khí ngút trời!", "%1 walked in, aura maxed!"), I18n.tr("Gét gô, %1!", "Lock in, %1!")], 1).arg(root.userName)
+                opacity: root.eoc(pHey.enter) * (1 - root.eic(pHey.exit))
+                transform: Translate { y: (1 - root.eoc(pHey.enter)) * 22 * root.u - root.eic(pHey.exit) * 36 * root.u }
             }
+
+            // ===== 1. The journey so far =====
             Item {
-                width: parent.width
-                height: pctOdo.implicitHeight
-                Odo {
-                    id: pctOdo
-                    anchors.right: parent.right
-                    sz: 104; weight: Font.ExtraBold; tracking: -4
-                    text: Math.round(root.recap ? root.recap.month_progress : 0) + "%"
-                    progress: root.stagger(pMonth.enter, 1, 4)
-                    opacity: root.lmA(pMonth, 1, 4)
-                    transform: Translate { x: root.lmX(pMonth, 1, 4, 70); y: root.lmY(pMonth, 1, 4) }
+                anchors.fill: parent
+                visible: root.shows(pJourney)
+                Column {
+                    x: root.inset
+                    y: root.avatarSlot(1)[1] + root.avatarSlot(1)[2] / 2 + 44 * root.u
+                    width: root.column
+                    Bold {
+                        width: parent.width; sz: 22
+                        text: root.pick([I18n.tr("%1 đã bắt đầu hành trình cùng Nutsty vào ngày", "%1, you started your journey in Nutsty on"), I18n.tr("ngày định mệnh %1 gặp Nutsty là", "the fateful day %1 met Nutsty was"), I18n.tr("cột mốc trùng sinh của %1 là ngày", "the canon event of %1 happened on"), I18n.tr("%1 chính thức nhập hội Nutsty từ", "the lore of %1 begins on")], 2).arg(root.userName)
+                        opacity: root.lmA(pJourney, 0, 5)
+                        transform: Translate { x: root.lmX(pJourney, 0, 5); y: root.lmY(pJourney, 0, 5) }
+                    }
+                    Item { width: 1; height: 4 * root.u }
+                    Odo {
+                        sz: 44
+                        text: {
+                            var d = root.joinedAt > 0 ? new Date(root.joinedAt) : new Date();
+                            return I18n.locale === "vi" ? d.getDate() + " Tháng " + (d.getMonth() + 1) + ", " + d.getFullYear()
+                                                        : d.toLocaleDateString(Qt.locale("en_US"), "MMM d, yyyy");
+                        }
+                        progress: root.stagger(pJourney.enter, 1, 5)
+                        opacity: root.lmA(pJourney, 1, 5)
+                        transform: Translate { x: root.lmX(pJourney, 1, 5); y: root.lmY(pJourney, 1, 5) }
+                    }
+                    Item { width: 1; height: 20 * root.u }
+                    Bold {
+                        width: parent.width; sz: 22
+                        text: root.pick([I18n.tr("và bạn đã nghe nhạc với tổng thời gian là", "and you have been listening to music in total time of"), I18n.tr("từ đó tới giờ tai bạn đã gánh", "since then your ears have endured"), I18n.tr("và bạn đã cày nhạc tổng cộng", "and you have been grinding music for"), I18n.tr("tổng thời gian bạn tu luyện bá khí là", "your total aura farming time is")], 3)
+                        opacity: root.lmA(pJourney, 2, 5)
+                        transform: Translate { x: root.lmX(pJourney, 2, 5); y: root.lmY(pJourney, 2, 5) }
+                    }
+                    Item { width: 1; height: 4 * root.u }
+                    Odo {
+                        sz: 44
+                        text: root.hoursMinutes(root.recap ? root.recap.all_time_minutes : 0)
+                        progress: root.stagger(pJourney.enter, 3, 5)
+                        opacity: root.lmA(pJourney, 3, 5)
+                        transform: Translate { x: root.lmX(pJourney, 3, 5); y: root.lmY(pJourney, 3, 5) }
+                    }
+                    Item { width: 1; height: 22 * root.u }
+                    Bold {
+                        width: parent.width; sz: 22
+                        text: root.pick([I18n.tr("hẹn gặp lại nhé!", "so long, partners!"), I18n.tr("chưa hết đâu nha!", "but wait, there's more!"), I18n.tr("đi tiếp thôi, gét gô!", "onwards we go!"), I18n.tr("căng đét luôn á!", "that's tuff, ngl!"), I18n.tr("khum dừng được đâu!", "no cap, keep going!")], 4)
+                        opacity: root.lmA(pJourney, 4, 5)
+                        transform: Translate { x: root.lmX(pJourney, 4, 5); y: root.lmY(pJourney, 4, 5) }
+                    }
+                }
+                Mono {
+                    x: 52 * root.u
+                    y: root.height - 157 * root.u
+                    text: I18n.tr("BẤM !", "CLICK!")
+                    opacity: root.clamp01((pJourney.enter - 0.6) / 0.4) * (1 - pJourney.exit)
                 }
             }
-            Bold {
-                leftPadding: 6 * root.u
-                sz: 15
-                text: I18n.tr("trên 100%", "out of 100%")
-                opacity: root.lmA(pMonth, 2, 4)
-                transform: Translate { x: root.lmX(pMonth, 2, 4); y: root.lmY(pMonth, 2, 4) }
-            }
-            Item { width: 1; height: 12 * root.u }
-            // The month bar: a white track and a green fill that grows in, with a sheen that never stops
-            Item {
-                id: monthBar
-                width: parent.width
-                height: 46 * root.u
-                opacity: root.lmA(pMonth, 3, 4)
-                transform: Translate { x: root.lmX(pMonth, 3, 4); y: root.lmY(pMonth, 3, 4) }
-                readonly property real grow: root.eioc((pMonth.enter - 0.4) / 0.6)
-                readonly property real f: (root.recap ? root.recap.month_progress : 0) / 100 * grow
-                readonly property real w: Math.max(height, width * f)
-                Rectangle { anchors.fill: parent; radius: height / 2; color: "#FFFFFF" }
-                Rectangle {
-                    id: barFill
-                    visible: monthBar.f > 0.001
-                    width: monthBar.w; height: parent.height
-                    radius: height / 2
-                    clip: true
-                    gradient: Gradient {
-                        orientation: Gradient.Horizontal
-                        GradientStop { position: 0; color: "#46E68F" }
-                        GradientStop { position: 0.5; color: "#88FF76" }
-                        GradientStop { position: 1; color: "#D4FF73" }
+
+            // ===== 2. How far the month is =====
+            Column {
+                visible: root.shows(pMonth)
+                x: root.inset
+                width: Math.min(root.width - 2 * root.inset, 900 * root.u)
+                y: root.fy(702) - height
+                Bold {
+                    width: parent.width; rightPadding: 6 * root.u
+                    sz: 44
+                    horizontalAlignment: Text.AlignRight
+                    text: root.pick([I18n.tr("%1 đã đi được", "%1 is"), I18n.tr("%1 đã trôi mất", "%1 is already"), I18n.tr("%1 đã tiêu hết", "%1 has used up"), I18n.tr("%1 đã bay màu", "%1 is already cooked")], 5).arg(root.monthName)
+                    opacity: root.lmA(pMonth, 0, 4)
+                    transform: Translate { x: root.lmX(pMonth, 0, 4, 70); y: root.lmY(pMonth, 0, 4) }
+                }
+                Item {
+                    width: parent.width
+                    height: pctOdo.implicitHeight
+                    Odo {
+                        id: pctOdo
+                        anchors.right: parent.right
+                        sz: 104; weight: Font.ExtraBold; tracking: -4
+                        text: Math.round(root.recap ? root.recap.month_progress : 0) + "%"
+                        progress: root.stagger(pMonth.enter, 1, 4)
+                        opacity: root.lmA(pMonth, 1, 4)
+                        transform: Translate { x: root.lmX(pMonth, 1, 4, 70); y: root.lmY(pMonth, 1, 4) }
                     }
+                }
+                Bold {
+                    leftPadding: 6 * root.u
+                    sz: 15
+                    text: I18n.tr("trên 100%", "out of 100%")
+                    opacity: root.lmA(pMonth, 2, 4)
+                    transform: Translate { x: root.lmX(pMonth, 2, 4); y: root.lmY(pMonth, 2, 4) }
+                }
+                Item { width: 1; height: 12 * root.u }
+                // The month bar: a white track and a green fill that grows in, with a sheen that never stops
+                Item {
+                    id: monthBar
+                    width: parent.width
+                    height: 46 * root.u
+                    opacity: root.lmA(pMonth, 3, 4)
+                    transform: Translate { x: root.lmX(pMonth, 3, 4); y: root.lmY(pMonth, 3, 4) }
+                    readonly property real grow: root.eioc((pMonth.enter - 0.4) / 0.6)
+                    readonly property real f: (root.recap ? root.recap.month_progress : 0) / 100 * grow
+                    readonly property real w: Math.max(height, width * f)
+                    Rectangle { anchors.fill: parent; radius: height / 2; color: "#FFFFFF" }
                     Rectangle {
-                        readonly property real sweep: ((root.time * 0.55) % 1.5 - 0.25) * barFill.width
-                        width: Math.min(barFill.width, barFill.height * 2)
-                        height: barFill.height
+                        id: barFill
+                        visible: monthBar.f > 0.001
+                        width: monthBar.w; height: parent.height
                         radius: height / 2
-                        x: Math.max(0, Math.min(barFill.width - width, sweep - width * 0.8))
+                        clip: true
                         gradient: Gradient {
                             orientation: Gradient.Horizontal
-                            GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0) }
-                            GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0.55) }
-                            GradientStop { position: 1; color: Qt.rgba(1, 1, 1, 0) }
+                            GradientStop { position: 0; color: "#46E68F" }
+                            GradientStop { position: 0.5; color: "#88FF76" }
+                            GradientStop { position: 1; color: "#D4FF73" }
+                        }
+                        Rectangle {
+                            readonly property real sweep: ((root.time * 0.55) % 1.5 - 0.25) * barFill.width
+                            width: Math.min(barFill.width, barFill.height * 2)
+                            height: barFill.height
+                            radius: height / 2
+                            x: Math.max(0, Math.min(barFill.width - width, sweep - width * 0.8))
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0) }
+                                GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0.55) }
+                                GradientStop { position: 1; color: Qt.rgba(1, 1, 1, 0) }
+                            }
+                        }
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: height / 2
+                            gradient: Gradient {
+                                GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.35) }
+                                GradientStop { position: 0.6; color: Qt.rgba(1, 1, 1, 0) }
+                            }
+                        }
+                        // a soft glow at the leading edge while it is still growing
+                        Rectangle {
+                            width: barFill.height * 0.64; height: width; radius: width / 2
+                            x: barFill.width - barFill.height / 2 - width / 2
+                            y: (barFill.height - height) / 2
+                            color: "#FFFFFF"
+                            opacity: 0.5 * (1 - monthBar.grow)
                         }
                     }
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: height / 2
-                        gradient: Gradient {
-                            GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.35) }
-                            GradientStop { position: 0.6; color: Qt.rgba(1, 1, 1, 0) }
+                }
+            }
+
+            // ===== 3. The favourite weekday =====
+            Item {
+                anchors.fill: parent
+                visible: root.shows(pWeek)
+                readonly property int favMin: root.weekdays[root.favouriteDay]
+                readonly property int more: root.runnerUpMinutes > 0 ? Math.round((favMin - root.runnerUpMinutes) * 100 / root.runnerUpMinutes) : -1
+                Column {
+                    x: root.inset
+                    y: root.avatarSlot(3)[1] + root.avatarSlot(3)[2] / 2 + 22 * root.u
+                    width: root.column
+                    Bold {
+                        width: parent.width; sz: 34
+                        text: root.pick([I18n.tr("và vào lúc này,", "and at this time,"), I18n.tr("tin nóng hổi đây,", "breaking news,"), I18n.tr("nói nhỏ nghe nè,", "psst, guess what,"), I18n.tr("không phải dạng vừa đâu,", "not to glaze, but,")], 6)
+                        opacity: root.lmA(pWeek, 0, 5)
+                        transform: Translate { x: root.lmX(pWeek, 0, 5); y: root.lmY(pWeek, 0, 5) }
+                    }
+                    Bold {
+                        width: parent.width
+                        sz: 62; lh: 66; tracking: -2.4
+                        font.weight: Font.ExtraBold
+                        wrapMode: Text.NoWrap
+                        fontSizeMode: Text.HorizontalFit
+                        minimumPixelSize: 30 * root.u
+                        text: root.dayWord
+                        opacity: root.lmA(pWeek, 1, 5)
+                        transform: Translate { x: root.lmX(pWeek, 1, 5); y: root.lmY(pWeek, 1, 5) }
+                    }
+                    Bold {
+                        width: parent.width; sz: 22
+                        text: root.pick([I18n.tr("là ngày bạn thích nghe nhạc nhất", "is your favourite day to listen to music"), I18n.tr("là ngày tai bạn tăng ca nhiều nhất", "is when your ears work overtime"), I18n.tr("là ngày bạn quẩy nhạc hết cỡ", "is your official jam day"), I18n.tr("là ngày bá khí của bạn lên đỉnh", "is your peak aura day"), I18n.tr("là ngày bạn nghe nhạc không biết mệt", "is the day you just can't stop listening")], 7)
+                        opacity: root.lmA(pWeek, 2, 5)
+                        transform: Translate { x: root.lmX(pWeek, 2, 5); y: root.lmY(pWeek, 2, 5) }
+                    }
+                }
+                Column {
+                    id: weekNumbers
+                    x: root.inset
+                    y: root.fy(546)
+                    width: root.column
+                    readonly property bool hours: parent.favMin >= 60
+                    readonly property string amount: hours ? String(Math.floor(parent.favMin / 60)) : String(Math.max(1, parent.favMin))
+                    readonly property string unit: hours ? I18n.tr(" giờ", Math.floor(parent.favMin / 60) === 1 ? " hour" : " hours") : I18n.tr(" phút", " minutes")
+                    Row {
+                        opacity: root.lmA(pWeek, 3, 5)
+                        transform: Translate { x: root.lmX(pWeek, 3, 5); y: root.lmY(pWeek, 3, 5) }
+                        Odo { sz: 36; text: weekNumbers.amount; progress: root.stagger(pWeek.enter, 3, 5) }
+                        Bold { sz: 36; wrapMode: Text.NoWrap; text: weekNumbers.unit + (weekNumbers.parent.more >= 0 ? "," : "") }
+                        Item { width: 10 * root.u; height: 1; visible: weekNumbers.parent.more >= 0 }
+                        Odo {
+                            visible: weekNumbers.parent.more >= 0
+                            sz: 36
+                            text: weekNumbers.parent.more + "%"
+                            progress: root.stagger(pWeek.enter, 4, 5)
                         }
                     }
-                    // a soft glow at the leading edge while it is still growing
+                    Bold {
+                        width: parent.width; sz: 36
+                        text: weekNumbers.parent.more >= 0 ? root.pick([I18n.tr("nhiều hơn ngày xếp thứ hai của bạn!", "more than your 2nd!"), I18n.tr("bỏ xa ngày về nhì!", "ahead of the runner-up!"), I18n.tr("ngày về nhì chỉ biết hít khói!", "the runner-up is cooked!"), I18n.tr("hơn ngày về nhì, hết nước chấm!", "more than your 2nd, huge W!")], 8)
+                                                           : root.pick([I18n.tr("không ngày nào sánh bằng!", "nothing else comes close!"), I18n.tr("các ngày khác chỉ là phụ!", "the other days are just extras!"), I18n.tr("không ai có cửa!", "no contest at all!"), I18n.tr("các ngày khác xỉu ngang!", "every other day is an NPC!")], 8)
+                        opacity: root.lmA(pWeek, 4, 5)
+                        transform: Translate { x: root.lmX(pWeek, 4, 5); y: root.lmY(pWeek, 4, 5) }
+                    }
+                }
+            }
+
+            // ===== 4. The top artist: the slot machine, then the reveal =====
+            Item {
+                id: artistSeqView
+                anchors.fill: parent
+                visible: root.hasArtist && (root.shows(pSpin) || root.shows(pArtist) || (pSpin.enter > 0 && pArtist.exit < 1))
+                // the artist page leaves sliding left, every piece of it
+                readonly property real away: pArtist.exit
+                opacity: 1 - root.eic(root.clamp01((away - 0.1) / 0.9))
+                transform: Translate { x: -root.eic(artistSeqView.away) * artistSeqView.width * 0.6 }
+
+                readonly property int n: Math.max(1, root.artists.length)
+                readonly property int heroIndex: 3 * n
+                readonly property real d: 229 * root.u
+                readonly property real pitch: 254 * root.u
+                readonly property real colCx: root.wide ? root.groupX + root.groupW * 0.72
+                                                        : Math.min(width - root.inset - d / 2, Math.max(width / 2 + d / 2, width * 0.62 + d / 2))
+                // where the photo settles: the left of the group on a wide window, under the words on a tall one
+                readonly property real heroEndD: root.wide ? root.heroSize : 132 * root.u
+                readonly property real heroEndCx: root.wide ? root.aHeroCx : root.inset + 4 * root.u + heroEndD / 2
+                readonly property real heroEndCy: root.wide ? root.heroCy : revealCol.y + revealCol.height + 24 * root.u + heroEndD / 2
+                readonly property real heroCx: root.lerp(colCx, heroEndCx, root.heroMove)
+                readonly property real heroCy: root.lerp(height / 2 + (heroIndex - root.spin) * pitch, heroEndCy, root.heroMove)
+                readonly property real heroD: root.lerp(d, heroEndD, root.heroMove)
+
+                Bold {
+                    x: root.wide ? root.groupX : root.inset; y: root.topPad + 118 * root.u
+                    sz: 48; lh: 46
+                    text: root.pick([I18n.tr("Lặp đi\nlặp lại\nmãi", "Again\nand\nagain"), I18n.tr("Nghe hoài\nnghe mãi\nkhông chán", "On\nrepeat\nforever"), I18n.tr("Một lần\nchưa đủ\nđâu", "Once\nis never\nenough"), I18n.tr("Mê mẩn\nkhông\nlối thoát", "Glazing\nnonstop\nfor")], 9)
+                    opacity: root.lmA(pSpin, 0, 2)
+                    transform: Translate { x: root.lmX(pSpin, 0, 2, 0, -140); y: root.lmY(pSpin, 0, 2) }
+                }
+                Bold {
+                    x: root.wide ? root.groupX : root.inset; y: root.fy(578)
+                    sz: 62; lh: 58
+                    text: I18n.tr("nghệ sĩ\nnày..", "this\nartist..")
+                    opacity: root.lmA(pSpin, 1, 2)
+                    transform: Translate { x: root.lmX(pSpin, 1, 2, 0, -140); y: root.lmY(pSpin, 1, 2) }
+                }
+                // the column, endlessly climbing; the hero slot is drawn on its own below
+                Repeater {
+                    model: 7
+                    RoundedImage {
+                        // each slot keeps its own row and only takes a new photo when it wraps off the edge,
+                        // so a step of the reel never swaps all seven pictures at once
+                        readonly property int base: Math.floor(root.spin) - 3
+                        readonly property int j: base + (((index - base) % 7) + 7) % 7
+                        readonly property var artist: root.artists.length ? root.artists[((j % artistSeqView.n) + artistSeqView.n) % artistSeqView.n] : null
+                        visible: j !== artistSeqView.heroIndex && root.shows(pSpin)
+                        width: artistSeqView.d; height: width; radius: width / 2
+                        sourceSize: Qt.size(400, 400)
+                        source: root.photoOf(artist)
+                        initialsText: artist ? artist.artist : ""
+                        placeholderColor: Qt.rgba(1, 1, 1, 0.2)
+                        x: artistSeqView.colCx - width / 2 + (1 - root.eoc(pSpin.enter)) * 120 * root.u + root.eic(pSpin.exit) * artistSeqView.width * 0.6
+                        y: artistSeqView.height / 2 + (j - root.spin) * artistSeqView.pitch - width / 2
+                        opacity: root.eoc(pSpin.enter) * (1 - root.eic(pSpin.exit))
+                    }
+                }
+                // the highlight: rings breaking out of the chosen circle
+                Repeater {
+                    model: 3
                     Rectangle {
-                        width: barFill.height * 0.64; height: width; radius: width / 2
-                        x: barFill.width - barFill.height / 2 - width / 2
-                        y: (barFill.height - height) / 2
-                        color: "#FFFFFF"
-                        opacity: 0.5 * (1 - monthBar.grow)
+                        readonly property real t: root.clamp01((root.spinGlow - index * 0.16) / 0.68)
+                        visible: t > 0 && t < 1 && root.heroMove < 0.6
+                        width: artistSeqView.heroD * (1 + 0.9 * root.eoc(t)); height: width; radius: width / 2
+                        x: artistSeqView.heroCx - width / 2
+                        y: artistSeqView.heroCy - height / 2
+                        color: "transparent"
+                        border.color: "#FFFFFF"
+                        border.width: 5 * root.u * (1 - t) + 1
+                        opacity: 0.7 * (1 - t)
                     }
                 }
-            }
-        }
 
-        // ===== 3. The favourite weekday =====
-        Item {
-            anchors.fill: parent
-            visible: root.shows(pWeek)
-            readonly property int favMin: root.weekdays[root.favouriteDay]
-            readonly property int more: root.runnerUpMinutes > 0 ? Math.round((favMin - root.runnerUpMinutes) * 100 / root.runnerUpMinutes) : -1
-            Column {
-                x: root.inset
-                y: root.avatarSlot(3)[1] + root.avatarSlot(3)[2] / 2 + 22 * root.u
-                width: root.column
-                Bold {
-                    width: parent.width; sz: 34
-                    text: root.pick([I18n.tr("và vào lúc này,", "and at this time,"), I18n.tr("tin nóng hổi đây,", "breaking news,"), I18n.tr("nói nhỏ nghe nè,", "psst, guess what,"), I18n.tr("không phải dạng vừa đâu,", "not to glaze, but,")], 6)
-                    opacity: root.lmA(pWeek, 0, 5)
-                    transform: Translate { x: root.lmX(pWeek, 0, 5); y: root.lmY(pWeek, 0, 5) }
-                }
-                Bold {
-                    width: parent.width
-                    sz: 62; lh: 66; tracking: -2.4
-                    font.weight: Font.ExtraBold
-                    wrapMode: Text.NoWrap
-                    fontSizeMode: Text.HorizontalFit
-                    minimumPixelSize: 30 * root.u
-                    text: root.dayWord
-                    opacity: root.lmA(pWeek, 1, 5)
-                    transform: Translate { x: root.lmX(pWeek, 1, 5); y: root.lmY(pWeek, 1, 5) }
-                }
-                Bold {
-                    width: parent.width; sz: 22
-                    text: root.pick([I18n.tr("là ngày bạn thích nghe nhạc nhất", "is your favourite day to listen to music"), I18n.tr("là ngày tai bạn tăng ca nhiều nhất", "is when your ears work overtime"), I18n.tr("là ngày bạn quẩy nhạc hết cỡ", "is your official jam day"), I18n.tr("là ngày bá khí của bạn lên đỉnh", "is your peak aura day"), I18n.tr("là ngày bạn nghe nhạc không biết mệt", "is the day you just can't stop listening")], 7)
-                    opacity: root.lmA(pWeek, 2, 5)
-                    transform: Translate { x: root.lmX(pWeek, 2, 5); y: root.lmY(pWeek, 2, 5) }
-                }
-            }
-            Column {
-                id: weekNumbers
-                x: root.inset
-                y: root.fy(546)
-                width: root.column
-                readonly property bool hours: parent.favMin >= 60
-                readonly property string amount: hours ? String(Math.floor(parent.favMin / 60)) : String(Math.max(1, parent.favMin))
-                readonly property string unit: hours ? I18n.tr(" giờ", Math.floor(parent.favMin / 60) === 1 ? " hour" : " hours") : I18n.tr(" phút", " minutes")
-                Row {
-                    opacity: root.lmA(pWeek, 3, 5)
-                    transform: Translate { x: root.lmX(pWeek, 3, 5); y: root.lmY(pWeek, 3, 5) }
-                    Odo { sz: 36; text: weekNumbers.amount; progress: root.stagger(pWeek.enter, 3, 5) }
-                    Bold { sz: 36; wrapMode: Text.NoWrap; text: weekNumbers.unit + (weekNumbers.parent.more >= 0 ? "," : "") }
-                    Item { width: 10 * root.u; height: 1; visible: weekNumbers.parent.more >= 0 }
-                    Odo {
-                        visible: weekNumbers.parent.more >= 0
-                        sz: 36
-                        text: weekNumbers.parent.more + "%"
-                        progress: root.stagger(pWeek.enter, 4, 5)
+                // the reveal: the words beside the photo
+                Column {
+                    id: revealCol
+                    visible: pArtist.enter > 0
+                    x: root.wide ? root.aTextX : root.inset
+                    y: root.wide ? root.heroCy - height / 2 : root.topPad + 92 * root.u
+                    width: root.wide ? root.aTextW : root.column
+                    Bold {
+                        id: revealTitle
+                        width: parent.width
+                        sz: 34; lh: 37
+                        text: (function (t) { return root.wide ? t.replace("\n", " ") : t; })(root.pick([I18n.tr("Nhận ra\nnghệ sĩ này?", "Recognize\nthis artist?"), I18n.tr("Thấy quen\nquen không?", "Ring\na bell?"), I18n.tr("Đoán xem\nai đây?", "Guess\nwho?"), I18n.tr("Bá khí\nnày của ai?", "Whose aura\nis this?")], 10))
+                        opacity: root.lmA(pArtist, 0, 5)
+                        transform: Translate { x: root.lmX(pArtist, 0, 5, 90); y: root.lmY(pArtist, 0, 5) }
+                    }
+                    Bold {
+                        width: parent.width; topPadding: 4 * root.u
+                        sz: 24; lh: 28
+                        color: Qt.rgba(1, 1, 1, 0.72)
+                        text: root.pick([I18n.tr("là nghệ sĩ bạn yêu thích nhất tháng này!", "that's your favorite this month!"), I18n.tr("là chân ái của bạn tháng này!", "your top crush this month!"), I18n.tr("đã chiếm trọn tai bạn tháng này!", "owned your ears this month!"), I18n.tr("bá khí áp đảo cả tháng này!", "+1000 aura this month!")], 11)
+                        opacity: root.lmA(pArtist, 1, 5)
+                        transform: Translate { x: root.lmX(pArtist, 1, 5, 90); y: root.lmY(pArtist, 1, 5) }
+                    }
+                    Item { width: 1; height: (root.wide ? 28 : 8) * root.u }
+                    Bold {
+                        width: parent.width
+                        sz: 64; lh: 66; tracking: -2.6
+                        maximumLineCount: 2
+                        fontSizeMode: Text.HorizontalFit
+                        minimumPixelSize: 30 * root.u
+                        elide: Text.ElideRight
+                        text: root.heroArtist ? root.heroArtist.artist : ""
+                        // tinted with the cover's colours, easing to white
+                        readonly property real whiteness: root.clamp01((pArtist.enter - 0.62) / 0.38)
+                        readonly property real cyc: (root.time * 0.35) % 1
+                        color: root.mix(root.mix(root.textTone(root.artistPalette[1]), root.textTone(root.artistPalette[3]), 0.5 + 0.5 * Math.sin(cyc * Math.PI * 2)), Qt.rgba(1, 1, 1, 1), whiteness)
+                        opacity: root.lmA(pArtist, 3, 5)
+                        transform: Translate { x: root.lmX(pArtist, 3, 5, 90); y: root.lmY(pArtist, 3, 5) }
+                    }
+                    Row {
+                        opacity: root.lmA(pArtist, 4, 5)
+                        transform: Translate { x: root.lmX(pArtist, 4, 5, 90); y: root.lmY(pArtist, 4, 5) }
+                        Odo { sz: 26; text: String(root.heroArtist ? root.heroArtist.plays : 0); progress: root.stagger(pArtist.enter, 4, 5) }
+                        Bold { sz: 26; wrapMode: Text.NoWrap; text: I18n.tr("x lượt phát", "x Plays") }
                     }
                 }
-                Bold {
-                    width: parent.width; sz: 36
-                    text: weekNumbers.parent.more >= 0 ? root.pick([I18n.tr("nhiều hơn ngày xếp thứ hai của bạn!", "more than your 2nd!"), I18n.tr("bỏ xa ngày về nhì!", "ahead of the runner-up!"), I18n.tr("ngày về nhì chỉ biết hít khói!", "the runner-up is cooked!"), I18n.tr("hơn ngày về nhì, hết nước chấm!", "more than your 2nd, huge W!")], 8)
-                                                       : root.pick([I18n.tr("không ngày nào sánh bằng!", "nothing else comes close!"), I18n.tr("các ngày khác chỉ là phụ!", "the other days are just extras!"), I18n.tr("không ai có cửa!", "no contest at all!"), I18n.tr("các ngày khác xỉu ngang!", "every other day is an NPC!")], 8)
-                    opacity: root.lmA(pWeek, 4, 5)
-                    transform: Translate { x: root.lmX(pWeek, 4, 5); y: root.lmY(pWeek, 4, 5) }
+
+                // the most played song slides out from behind the photo, tilted, its title and count
+                // printed along the same slant. Wide: in the gap between the photo and the words, level
+                // with the question; tall: off the photo's upper right.
+                Item {
+                    id: songChip
+                    visible: root.heroArtistSong !== null && pArtist.enter > 0
+                    readonly property real coverD: root.wide ? root.chipD : Math.max(80 * root.u, artistSeqView.heroEndD * 0.34)
+                    readonly property real tilt: root.wide ? -14 : -30
+                    readonly property real endCx: root.wide ? root.aGroupX + root.heroSize + root.aGap / 2 - 8 * root.u
+                                                            : artistSeqView.heroEndCx + artistSeqView.heroEndD * 0.48 + coverD * 0.25
+                    readonly property real endCy: root.wide ? revealCol.y + revealTitle.height - 8 * root.u
+                                                            : artistSeqView.heroEndCy - artistSeqView.heroEndD * 0.42
+                    readonly property real t: root.stagger(pArtist.enter, 2, 5)
+                    readonly property real e: root.eoc(t)
+                    // once out, it hangs in the air: a slow bob and a little sway, the label riding along
+                    transform: [
+                        Rotation { origin.x: songChip.endCx; origin.y: songChip.endCy; angle: Math.sin(root.time * 1.15) * 2.2 * songChip.e },
+                        Translate { y: Math.sin(root.time * 1.6) * 7 * root.u * songChip.e }
+                    ]
+                    RoundedImage {
+                        width: songChip.coverD; height: width; radius: 16 * root.u
+                        sourceSize: Qt.size(320, 320)
+                        source: root.heroArtistSong ? root.heroArtistSong.cover_url || "" : ""
+                        initialsText: root.heroArtistSong ? root.heroArtistSong.title : ""
+                        x: root.lerp(artistSeqView.heroEndCx, songChip.endCx, songChip.e) - width / 2
+                        y: root.lerp(artistSeqView.heroEndCy, songChip.endCy, songChip.e) - height / 2
+                        rotation: songChip.tilt * songChip.e
+                        scale: 0.85 + 0.15 * songChip.e
+                        opacity: Math.min(1, songChip.t * 2.5)
+                    }
+                    // wide: under the cover along its bottom edge; tall: off its top right
+                    Column {
+                        readonly property real turn: songChip.tilt * Math.PI / 180
+                        readonly property real ax: root.wide ? -songChip.coverD / 2 : songChip.coverD / 2 + 10 * root.u
+                        readonly property real ay: root.wide ? songChip.coverD / 2 + 8 * root.u : -songChip.coverD / 2 + 2 * root.u
+                        readonly property real e: root.eoc(root.stagger(pArtist.enter, 3, 5))
+                        readonly property real back: (1 - e) * 24 * root.u
+                        x: songChip.endCx + ax * Math.cos(turn) - ay * Math.sin(turn) - back * Math.cos(turn)
+                        y: songChip.endCy + ax * Math.sin(turn) + ay * Math.cos(turn) - back * Math.sin(turn)
+                        transformOrigin: Item.TopLeft
+                        rotation: songChip.tilt
+                        opacity: e
+                        readonly property real labelW: root.wide ? songChip.coverD + 18 * root.u : 150 * root.u
+                        Bold {
+                            width: parent.labelW; sz: root.wide ? 15 : 13; wrapMode: Text.NoWrap; elide: Text.ElideRight
+                            text: root.heroArtistSong ? root.heroArtistSong.title : ""
+                        }
+                        Bold {
+                            width: parent.labelW; sz: root.wide ? 13 : 13; wrapMode: Text.NoWrap; elide: Text.ElideRight
+                            color: Qt.rgba(1, 1, 1, 0.72)
+                            visible: root.heroArtistSong !== null && (root.heroArtistSong.fresh || root.heroArtistSong.plays > 0)
+                            text: root.heroArtistSong && root.heroArtistSong.fresh
+                                  ? I18n.tr("Thử nghe xem", "Give it a listen")
+                                  : I18n.tr("%1 lượt phát", "%1 plays").arg(root.heroArtistSong ? root.heroArtistSong.plays : 0)
+                        }
+                    }
                 }
-            }
-        }
 
-        // ===== 4. The top artist: the slot machine, then the reveal =====
-        Item {
-            id: artistSeqView
-            anchors.fill: parent
-            visible: root.hasArtist && (root.shows(pSpin) || root.shows(pArtist) || (pSpin.enter > 0 && pArtist.exit < 1))
-            // the artist page leaves sliding left, every piece of it
-            readonly property real away: pArtist.exit
-            opacity: 1 - root.eic(root.clamp01((away - 0.1) / 0.9))
-            transform: Translate { x: -root.eic(artistSeqView.away) * artistSeqView.width * 0.6 }
-
-            readonly property int n: Math.max(1, root.artists.length)
-            readonly property int heroIndex: 3 * n
-            readonly property real d: 229 * root.u
-            readonly property real pitch: 254 * root.u
-            readonly property real colCx: root.wide ? root.groupX + root.groupW * 0.72
-                                                    : Math.min(width - root.inset - d / 2, Math.max(width / 2 + d / 2, width * 0.62 + d / 2))
-            // where the photo settles: the left of the group on a wide window, under the words on a tall one
-            readonly property real heroEndD: root.wide ? root.heroSize : 132 * root.u
-            readonly property real heroEndCx: root.wide ? root.aHeroCx : root.inset + 4 * root.u + heroEndD / 2
-            readonly property real heroEndCy: root.wide ? root.heroCy : revealCol.y + revealCol.height + 24 * root.u + heroEndD / 2
-            readonly property real heroCx: root.lerp(colCx, heroEndCx, root.heroMove)
-            readonly property real heroCy: root.lerp(height / 2 + (heroIndex - root.spin) * pitch, heroEndCy, root.heroMove)
-            readonly property real heroD: root.lerp(d, heroEndD, root.heroMove)
-
-            Bold {
-                x: root.wide ? root.groupX : root.inset; y: root.topPad + 118 * root.u
-                sz: 48; lh: 46
-                text: root.pick([I18n.tr("Lặp đi\nlặp lại\nmãi", "Again\nand\nagain"), I18n.tr("Nghe hoài\nnghe mãi\nkhông chán", "On\nrepeat\nforever"), I18n.tr("Một lần\nchưa đủ\nđâu", "Once\nis never\nenough"), I18n.tr("Mê mẩn\nkhông\nlối thoát", "Glazing\nnonstop\nfor")], 9)
-                opacity: root.lmA(pSpin, 0, 2)
-                transform: Translate { x: root.lmX(pSpin, 0, 2, 0, -140); y: root.lmY(pSpin, 0, 2) }
-            }
-            Bold {
-                x: root.wide ? root.groupX : root.inset; y: root.fy(578)
-                sz: 62; lh: 58
-                text: I18n.tr("nghệ sĩ\nnày..", "this\nartist..")
-                opacity: root.lmA(pSpin, 1, 2)
-                transform: Translate { x: root.lmX(pSpin, 1, 2, 0, -140); y: root.lmY(pSpin, 1, 2) }
-            }
-            // the column, endlessly climbing; the hero slot is drawn on its own below
-            Repeater {
-                model: 7
+                // the hero itself, over its song once the song is out
                 RoundedImage {
-                    // each slot keeps its own row and only takes a new photo when it wraps off the edge,
-                    // so a step of the reel never swaps all seven pictures at once
-                    readonly property int base: Math.floor(root.spin) - 3
-                    readonly property int j: base + (((index - base) % 7) + 7) % 7
-                    readonly property var artist: root.artists.length ? root.artists[((j % artistSeqView.n) + artistSeqView.n) % artistSeqView.n] : null
-                    visible: j !== artistSeqView.heroIndex && root.shows(pSpin)
+                    readonly property real pulse: 1 + 0.07 * Math.sin(Math.PI * Math.min(0.5, root.spinGlow) * 2)
                     width: artistSeqView.d; height: width; radius: width / 2
                     sourceSize: Qt.size(400, 400)
-                    source: root.photoOf(artist)
-                    initialsText: artist ? artist.artist : ""
+                    source: root.photoOf(root.heroArtist)
+                    initialsText: root.heroArtist ? root.heroArtist.artist : ""
                     placeholderColor: Qt.rgba(1, 1, 1, 0.2)
-                    x: artistSeqView.colCx - width / 2 + (1 - root.eoc(pSpin.enter)) * 120 * root.u + root.eic(pSpin.exit) * artistSeqView.width * 0.6
-                    y: artistSeqView.height / 2 + (j - root.spin) * artistSeqView.pitch - width / 2
-                    opacity: root.eoc(pSpin.enter) * (1 - root.eic(pSpin.exit))
-                }
-            }
-            // the highlight: rings breaking out of the chosen circle
-            Repeater {
-                model: 3
-                Rectangle {
-                    readonly property real t: root.clamp01((root.spinGlow - index * 0.16) / 0.68)
-                    visible: t > 0 && t < 1 && root.heroMove < 0.6
-                    width: artistSeqView.heroD * (1 + 0.9 * root.eoc(t)); height: width; radius: width / 2
-                    x: artistSeqView.heroCx - width / 2
+                    x: artistSeqView.heroCx - width / 2 + (1 - root.eoc(pSpin.enter)) * 120 * root.u
                     y: artistSeqView.heroCy - height / 2
-                    color: "transparent"
-                    border.color: "#FFFFFF"
-                    border.width: 5 * root.u * (1 - t) + 1
-                    opacity: 0.7 * (1 - t)
+                    scale: artistSeqView.heroD / artistSeqView.d * pulse
+                    opacity: root.eoc(pSpin.enter)
                 }
             }
 
-            // the reveal: the words beside the photo
-            Column {
-                id: revealCol
-                visible: pArtist.enter > 0
-                x: root.wide ? root.aTextX : root.inset
-                y: root.wide ? root.heroCy - height / 2 : root.topPad + 92 * root.u
-                width: root.wide ? root.aTextW : root.column
-                Bold {
-                    id: revealTitle
-                    width: parent.width
-                    sz: 34; lh: 37
-                    text: (function (t) { return root.wide ? t.replace("\n", " ") : t; })(root.pick([I18n.tr("Nhận ra\nnghệ sĩ này?", "Recognize\nthis artist?"), I18n.tr("Thấy quen\nquen không?", "Ring\na bell?"), I18n.tr("Đoán xem\nai đây?", "Guess\nwho?"), I18n.tr("Bá khí\nnày của ai?", "Whose aura\nis this?")], 10))
-                    opacity: root.lmA(pArtist, 0, 5)
-                    transform: Translate { x: root.lmX(pArtist, 0, 5, 90); y: root.lmY(pArtist, 0, 5) }
-                }
-                Bold {
-                    width: parent.width; topPadding: 4 * root.u
-                    sz: 24; lh: 28
-                    color: Qt.rgba(1, 1, 1, 0.72)
-                    text: root.pick([I18n.tr("là nghệ sĩ bạn yêu thích nhất tháng này!", "that's your favorite this month!"), I18n.tr("là chân ái của bạn tháng này!", "your top crush this month!"), I18n.tr("đã chiếm trọn tai bạn tháng này!", "owned your ears this month!"), I18n.tr("bá khí áp đảo cả tháng này!", "+1000 aura this month!")], 11)
-                    opacity: root.lmA(pArtist, 1, 5)
-                    transform: Translate { x: root.lmX(pArtist, 1, 5, 90); y: root.lmY(pArtist, 1, 5) }
-                }
-                Item { width: 1; height: (root.wide ? 28 : 8) * root.u }
-                Bold {
-                    width: parent.width
-                    sz: 64; lh: 66; tracking: -2.6
-                    maximumLineCount: 2
-                    fontSizeMode: Text.HorizontalFit
-                    minimumPixelSize: 30 * root.u
-                    elide: Text.ElideRight
-                    text: root.heroArtist ? root.heroArtist.artist : ""
-                    // tinted with the cover's colours, easing to white
-                    readonly property real whiteness: root.clamp01((pArtist.enter - 0.62) / 0.38)
-                    readonly property real cyc: (root.time * 0.35) % 1
-                    color: root.mix(root.mix(root.textTone(root.artistPalette[1]), root.textTone(root.artistPalette[3]), 0.5 + 0.5 * Math.sin(cyc * Math.PI * 2)), Qt.rgba(1, 1, 1, 1), whiteness)
-                    opacity: root.lmA(pArtist, 3, 5)
-                    transform: Translate { x: root.lmX(pArtist, 3, 5, 90); y: root.lmY(pArtist, 3, 5) }
-                }
-                Row {
-                    opacity: root.lmA(pArtist, 4, 5)
-                    transform: Translate { x: root.lmX(pArtist, 4, 5, 90); y: root.lmY(pArtist, 4, 5) }
-                    Odo { sz: 26; text: String(root.heroArtist ? root.heroArtist.plays : 0); progress: root.stagger(pArtist.enter, 4, 5) }
-                    Bold { sz: 26; wrapMode: Text.NoWrap; text: I18n.tr("x lượt phát", "x Plays") }
-                }
-            }
-
-            // the most played song slides out from behind the photo, tilted, its title and count
-            // printed along the same slant. Wide: in the gap between the photo and the words, level
-            // with the question; tall: off the photo's upper right.
+            // ===== 5. The top song: the tilted grid, "Hear the melody..", then the song =====
             Item {
-                id: songChip
-                visible: root.heroArtistSong !== null && pArtist.enter > 0
-                readonly property real coverD: root.wide ? root.chipD : Math.max(80 * root.u, artistSeqView.heroEndD * 0.34)
-                readonly property real tilt: root.wide ? -14 : -30
-                readonly property real endCx: root.wide ? root.aGroupX + root.heroSize + root.aGap / 2 - 8 * root.u
-                                                        : artistSeqView.heroEndCx + artistSeqView.heroEndD * 0.48 + coverD * 0.25
-                readonly property real endCy: root.wide ? revealCol.y + revealTitle.height - 8 * root.u
-                                                        : artistSeqView.heroEndCy - artistSeqView.heroEndD * 0.42
-                readonly property real t: root.stagger(pArtist.enter, 2, 5)
-                readonly property real e: root.eoc(t)
-                // once out, it hangs in the air: a slow bob and a little sway, the label riding along
-                transform: [
-                    Rotation { origin.x: songChip.endCx; origin.y: songChip.endCy; angle: Math.sin(root.time * 1.15) * 2.2 * songChip.e },
-                    Translate { y: Math.sin(root.time * 1.6) * 7 * root.u * songChip.e }
-                ]
-                RoundedImage {
-                    width: songChip.coverD; height: width; radius: 16 * root.u
-                    sourceSize: Qt.size(320, 320)
-                    source: root.heroArtistSong ? root.heroArtistSong.cover_url || "" : ""
-                    initialsText: root.heroArtistSong ? root.heroArtistSong.title : ""
-                    x: root.lerp(artistSeqView.heroEndCx, songChip.endCx, songChip.e) - width / 2
-                    y: root.lerp(artistSeqView.heroEndCy, songChip.endCy, songChip.e) - height / 2
-                    rotation: songChip.tilt * songChip.e
-                    scale: 0.85 + 0.15 * songChip.e
-                    opacity: Math.min(1, songChip.t * 2.5)
+                id: songView
+                anchors.fill: parent
+                visible: root.hasSong && pGrid.enter > 0 && pSong.exit < 1
+                // zooms out and fades as it leaves
+                readonly property real away: root.eioc(pSong.exit)
+                scale: 1 - 0.2 * away
+                opacity: 1 - away
+
+                readonly property int cols: Math.max(2, Math.ceil(width / (184 * root.u) / 2) + 1)
+                readonly property int rows: 4
+                readonly property int n: Math.max(1, root.gridSongs.length)
+                readonly property real cover: 163 * root.u
+                readonly property real colPitch: 184 * root.u
+                readonly property real rowPitch: 184 * root.u
+                readonly property real driftPx: 150 * root.u
+                readonly property real cx: width / 2
+                readonly property real cy: height / 2
+                readonly property real cosT: Math.cos(-30 * Math.PI / 180)
+                readonly property real sinT: Math.sin(-30 * Math.PI / 180)
+                function columnEnter(c) { return root.eoc(root.stagger(pGrid.enter, c + cols, 2 * cols + 1, 0.7)); }
+                function column(c) {
+                    var dir = c % 2 === 0 ? -1 : 1;
+                    return dir * driftPx * (root.gridDrift - 1) + (1 - columnEnter(c)) * dir * height * 1.3;
                 }
-                // wide: under the cover along its bottom edge; tall: off its top right
-                Column {
-                    readonly property real turn: songChip.tilt * Math.PI / 180
-                    readonly property real ax: root.wide ? -songChip.coverD / 2 : songChip.coverD / 2 + 10 * root.u
-                    readonly property real ay: root.wide ? songChip.coverD / 2 + 8 * root.u : -songChip.coverD / 2 + 2 * root.u
-                    readonly property real e: root.eoc(root.stagger(pArtist.enter, 3, 5))
-                    readonly property real back: (1 - e) * 24 * root.u
-                    x: songChip.endCx + ax * Math.cos(turn) - ay * Math.sin(turn) - back * Math.cos(turn)
-                    y: songChip.endCy + ax * Math.sin(turn) + ay * Math.cos(turn) - back * Math.sin(turn)
-                    transformOrigin: Item.TopLeft
-                    rotation: songChip.tilt
-                    opacity: e
-                    readonly property real labelW: root.wide ? songChip.coverD + 18 * root.u : 150 * root.u
-                    Bold {
-                        width: parent.labelW; sz: root.wide ? 15 : 13; wrapMode: Text.NoWrap; elide: Text.ElideRight
-                        text: root.heroArtistSong ? root.heroArtistSong.title : ""
+                function enterX(c) { return (1 - columnEnter(c)) * width * 0.9; }
+                // the picked cover: beside the words on a wide window (it stays put there), at the right on a tall one
+                readonly property real melodySize: root.wide ? root.heroSize : 212 * root.u
+                readonly property real melodyCx: root.wide ? root.heroCx : width - 42 * root.u - melodySize / 2
+                readonly property real melodyCy: root.wide ? root.heroCy : root.fy(229) + melodySize / 2
+                readonly property real songCy: root.wide ? root.heroCy : root.fy(151) + melodySize / 2
+                // the song page: the artist, pressed as an old CD, slides out from behind the cover's left
+                readonly property real cdD: melodySize * 0.86
+                readonly property real cdOut: melodySize * 0.34
+                readonly property real songIn: root.eoc(root.stagger(pSong.enter, 0, 4, 0.6))
+                // wide: the cover and its words step right so the disc has room on the left
+                readonly property real songShift: root.wide ? Math.max(0, cdOut + cdD / 2 - melodySize / 2 + 24 * root.u - root.groupX) : 0
+                readonly property string songLine: root.heroSong ? I18n.tr("%1 của %2", "%1 by %2").arg(root.heroSong.title).arg(root.heroSong.artist) : ""
+
+                Repeater {
+                    // built when the story opens, not when the page starts: making ~100 covers in one frame
+                    // was the stall before the grid began to drift
+                    model: root.active ? (2 * songView.cols + 1) * (2 * songView.rows + 1) : 0
+                    RoundedImage {
+                        readonly property int c: Math.floor(index / (2 * songView.rows + 1)) - songView.cols
+                        readonly property int r: index % (2 * songView.rows + 1) - songView.rows
+                        // neighbours step by 1 down a column and by 4 across, so a cover never sits beside itself
+                        readonly property var song: root.gridSongs.length ? root.gridSongs[(((c * 4 + r) % songView.n) + songView.n) % songView.n] : null
+                        readonly property real gx: c * songView.colPitch
+                        readonly property real gy: (r + (c % 2 !== 0 ? 0.5 : 0)) * songView.rowPitch + songView.column(c)
+                        readonly property real dist: Math.hypot(c, r) / 5
+                        readonly property real p: root.clamp01((root.gridPick - (1 - dist) * 0.35) / 0.65)
+                        visible: !(c === 0 && r === 0)
+                        width: songView.cover; height: width; radius: 26 * root.u
+                        sourceSize: Qt.size(320, 320)
+                        source: song ? song.cover_url || "" : ""
+                        initialsText: song ? song.title : ""
+                        placeholderColor: Qt.rgba(1, 1, 1, 0.2)
+                        x: songView.cx + gx * songView.cosT - gy * songView.sinT - width / 2 + songView.enterX(c)
+                        y: songView.cy + gx * songView.sinT + gy * songView.cosT - height / 2
+                        rotation: -30
+                        scale: 1 - 0.35 * root.eic(p)
+                        opacity: 1 - p
                     }
-                    Bold {
-                        width: parent.labelW; sz: root.wide ? 13 : 13; wrapMode: Text.NoWrap; elide: Text.ElideRight
-                        color: Qt.rgba(1, 1, 1, 0.72)
-                        visible: root.heroArtistSong !== null && (root.heroArtistSong.fresh || root.heroArtistSong.plays > 0)
-                        text: root.heroArtistSong && root.heroArtistSong.fresh
-                              ? I18n.tr("Thử nghe xem", "Give it a listen")
-                              : I18n.tr("%1 lượt phát", "%1 plays").arg(root.heroArtistSong ? root.heroArtistSong.plays : 0)
-                    }
                 }
-            }
-
-            // the hero itself, over its song once the song is out
-            RoundedImage {
-                readonly property real pulse: 1 + 0.07 * Math.sin(Math.PI * Math.min(0.5, root.spinGlow) * 2)
-                width: artistSeqView.d; height: width; radius: width / 2
-                sourceSize: Qt.size(400, 400)
-                source: root.photoOf(root.heroArtist)
-                initialsText: root.heroArtist ? root.heroArtist.artist : ""
-                placeholderColor: Qt.rgba(1, 1, 1, 0.2)
-                x: artistSeqView.heroCx - width / 2 + (1 - root.eoc(pSpin.enter)) * 120 * root.u
-                y: artistSeqView.heroCy - height / 2
-                scale: artistSeqView.heroD / artistSeqView.d * pulse
-                opacity: root.eoc(pSpin.enter)
-            }
-        }
-
-        // ===== 5. The top song: the tilted grid, "Hear the melody..", then the song =====
-        Item {
-            id: songView
-            anchors.fill: parent
-            visible: root.hasSong && pGrid.enter > 0 && pSong.exit < 1
-            // zooms out and fades as it leaves
-            readonly property real away: root.eioc(pSong.exit)
-            scale: 1 - 0.2 * away
-            opacity: 1 - away
-
-            readonly property int cols: Math.max(2, Math.ceil(width / (184 * root.u) / 2) + 1)
-            readonly property int rows: 4
-            readonly property int n: Math.max(1, root.gridSongs.length)
-            readonly property real cover: 163 * root.u
-            readonly property real colPitch: 184 * root.u
-            readonly property real rowPitch: 184 * root.u
-            readonly property real driftPx: 150 * root.u
-            readonly property real cx: width / 2
-            readonly property real cy: height / 2
-            readonly property real cosT: Math.cos(-30 * Math.PI / 180)
-            readonly property real sinT: Math.sin(-30 * Math.PI / 180)
-            function columnEnter(c) { return root.eoc(root.stagger(pGrid.enter, c + cols, 2 * cols + 1, 0.7)); }
-            function column(c) {
-                var dir = c % 2 === 0 ? -1 : 1;
-                return dir * driftPx * (root.gridDrift - 1) + (1 - columnEnter(c)) * dir * height * 1.3;
-            }
-            function enterX(c) { return (1 - columnEnter(c)) * width * 0.9; }
-            // the picked cover: beside the words on a wide window (it stays put there), at the right on a tall one
-            readonly property real melodySize: root.wide ? root.heroSize : 212 * root.u
-            readonly property real melodyCx: root.wide ? root.heroCx : width - 42 * root.u - melodySize / 2
-            readonly property real melodyCy: root.wide ? root.heroCy : root.fy(229) + melodySize / 2
-            readonly property real songCy: root.wide ? root.heroCy : root.fy(151) + melodySize / 2
-            // the song page: the artist, pressed as an old CD, slides out from behind the cover's left
-            readonly property real cdD: melodySize * 0.86
-            readonly property real cdOut: melodySize * 0.34
-            readonly property real songIn: root.eoc(root.stagger(pSong.enter, 0, 4, 0.6))
-            // wide: the cover and its words step right so the disc has room on the left
-            readonly property real songShift: root.wide ? Math.max(0, cdOut + cdD / 2 - melodySize / 2 + 24 * root.u - root.groupX) : 0
-            readonly property string songLine: root.heroSong ? I18n.tr("%1 của %2", "%1 by %2").arg(root.heroSong.title).arg(root.heroSong.artist) : ""
-
-            Repeater {
-                // built when the story opens, not when the page starts: making ~100 covers in one frame
-                // was the stall before the grid began to drift
-                model: root.active ? (2 * songView.cols + 1) * (2 * songView.rows + 1) : 0
-                RoundedImage {
-                    readonly property int c: Math.floor(index / (2 * songView.rows + 1)) - songView.cols
-                    readonly property int r: index % (2 * songView.rows + 1) - songView.rows
-                    // neighbours step by 1 down a column and by 4 across, so a cover never sits beside itself
-                    readonly property var song: root.gridSongs.length ? root.gridSongs[(((c * 4 + r) % songView.n) + songView.n) % songView.n] : null
-                    readonly property real gx: c * songView.colPitch
-                    readonly property real gy: (r + (c % 2 !== 0 ? 0.5 : 0)) * songView.rowPitch + songView.column(c)
-                    readonly property real dist: Math.hypot(c, r) / 5
-                    readonly property real p: root.clamp01((root.gridPick - (1 - dist) * 0.35) / 0.65)
-                    visible: !(c === 0 && r === 0)
-                    width: songView.cover; height: width; radius: 26 * root.u
-                    sourceSize: Qt.size(320, 320)
-                    source: song ? song.cover_url || "" : ""
-                    initialsText: song ? song.title : ""
-                    placeholderColor: Qt.rgba(1, 1, 1, 0.2)
-                    x: songView.cx + gx * songView.cosT - gy * songView.sinT - width / 2 + songView.enterX(c)
-                    y: songView.cy + gx * songView.sinT + gy * songView.cosT - height / 2
-                    rotation: -30
-                    scale: 1 - 0.35 * root.eic(p)
-                    opacity: 1 - p
-                }
-            }
-            // the question sits on a soft shade so it reads over the covers
-            Rectangle {
-                visible: root.shows(pGrid)
-                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-                height: parent.height * 0.45
-                opacity: root.lmA(pGrid, 0, 2)
-                gradient: Gradient {
-                    GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0) }
-                    GradientStop { position: 1; color: Qt.rgba(root.m2.r * 0.6, root.m2.g * 0.6, root.m2.b * 0.6, 0.85) }
-                }
-            }
-            Column {
-                visible: root.shows(pGrid)
-                x: root.wide ? root.groupX : root.inset
-                y: root.fy(628)
-                width: root.column
-                Bold {
-                    width: parent.width
-                    sz: 40; lh: 42
-                    text: root.pick([I18n.tr("Có thể bạn\nnhận ra bài này!", "You might\nrecognize this!"), I18n.tr("Bài này\nquen lắm nè!", "This one\nsounds familiar!"), I18n.tr("Tai bạn\nnhớ bài này!", "Your ears\nremember this!"), I18n.tr("Bài này\nkhét lẹt!", "This one\nis tuff!")], 12)
+                // the question sits on a soft shade so it reads over the covers
+                Rectangle {
+                    visible: root.shows(pGrid)
+                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                    height: parent.height * 0.45
                     opacity: root.lmA(pGrid, 0, 2)
-                    transform: Translate { x: root.lmX(pGrid, 0, 2, 120); y: root.lmY(pGrid, 0, 2) }
+                    gradient: Gradient {
+                        GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0) }
+                        GradientStop { position: 1; color: Qt.rgba(root.m2.r * 0.6, root.m2.g * 0.6, root.m2.b * 0.6, 0.85) }
+                    }
                 }
-                Item { width: 1; height: 14 * root.u }
-                Bold {
-                    width: parent.width; sz: 24
-                    text: root.pick([I18n.tr("hmm, là bài nào nhỉ...", "hmm, which one..."), I18n.tr("ủa, bài gì ta...", "wait, what is this..."), I18n.tr("khoan, để nhớ coi...", "hold on, let me think..."), I18n.tr("đoán sai là quê xệ á...", "guess wrong, lose aura...")], 13)
-                    opacity: root.lmA(pGrid, 1, 2)
-                    transform: Translate { x: root.lmX(pGrid, 1, 2, 120); y: root.lmY(pGrid, 1, 2) }
+                Column {
+                    visible: root.shows(pGrid)
+                    x: root.wide ? root.groupX : root.inset
+                    y: root.fy(628)
+                    width: root.column
+                    Bold {
+                        width: parent.width
+                        sz: 40; lh: 42
+                        text: root.pick([I18n.tr("Có thể bạn\nnhận ra bài này!", "You might\nrecognize this!"), I18n.tr("Bài này\nquen lắm nè!", "This one\nsounds familiar!"), I18n.tr("Tai bạn\nnhớ bài này!", "Your ears\nremember this!"), I18n.tr("Bài này\nkhét lẹt!", "This one\nis tuff!")], 12)
+                        opacity: root.lmA(pGrid, 0, 2)
+                        transform: Translate { x: root.lmX(pGrid, 0, 2, 120); y: root.lmY(pGrid, 0, 2) }
+                    }
+                    Item { width: 1; height: 14 * root.u }
+                    Bold {
+                        width: parent.width; sz: 24
+                        text: root.pick([I18n.tr("hmm, là bài nào nhỉ...", "hmm, which one..."), I18n.tr("ủa, bài gì ta...", "wait, what is this..."), I18n.tr("khoan, để nhớ coi...", "hold on, let me think..."), I18n.tr("đoán sai là quê xệ á...", "guess wrong, lose aura...")], 13)
+                        opacity: root.lmA(pGrid, 1, 2)
+                        transform: Translate { x: root.lmX(pGrid, 1, 2, 120); y: root.lmY(pGrid, 1, 2) }
+                    }
                 }
-            }
 
-            // "Hear the melody..": the words beside the cover
-            Column {
-                visible: root.shows(pMelody)
-                x: root.wide ? root.textX : root.inset
-                y: root.wide ? songView.melodyCy - height / 2 : root.topPad + 80 * root.u
-                width: root.wide ? root.textW : root.width - root.inset - 42 * root.u
-                spacing: 18 * root.u
-                Bold {
-                    width: parent.width
-                    horizontalAlignment: root.wide ? Text.AlignLeft : Text.AlignRight
-                    sz: root.wide ? 48 : 34; lh: root.wide ? 50 : 37
-                    text: root.pick([I18n.tr("Nghe giai\nđiệu..", "Hear the\nmelody.."), I18n.tr("Lắng tai\nnghe nè..", "Listen\nclosely.."), I18n.tr("Vặn to\nlên nào..", "Turn it\nup.."), I18n.tr("Khét\nlẹt luôn..", "Lock\nin..")], 14)
-                    opacity: root.lmA(pMelody, 0, 2)
-                    transform: Translate { x: root.lmX(pMelody, 0, 2, 90, 60); y: root.lmY(pMelody, 0, 2) }
+                // "Hear the melody..": the words beside the cover
+                Column {
+                    visible: root.shows(pMelody)
+                    x: root.wide ? root.textX : root.inset
+                    y: root.wide ? songView.melodyCy - height / 2 : root.topPad + 80 * root.u
+                    width: root.wide ? root.textW : root.width - root.inset - 42 * root.u
+                    spacing: 18 * root.u
+                    Bold {
+                        width: parent.width
+                        horizontalAlignment: root.wide ? Text.AlignLeft : Text.AlignRight
+                        sz: root.wide ? 48 : 34; lh: root.wide ? 50 : 37
+                        text: root.pick([I18n.tr("Nghe giai\nđiệu..", "Hear the\nmelody.."), I18n.tr("Lắng tai\nnghe nè..", "Listen\nclosely.."), I18n.tr("Vặn to\nlên nào..", "Turn it\nup.."), I18n.tr("Khét\nlẹt luôn..", "Lock\nin..")], 14)
+                        opacity: root.lmA(pMelody, 0, 2)
+                        transform: Translate { x: root.lmX(pMelody, 0, 2, 90, 60); y: root.lmY(pMelody, 0, 2) }
+                    }
+                    Bold {
+                        visible: root.wide
+                        width: parent.width
+                        sz: 26; lh: 30
+                        color: Qt.rgba(1, 1, 1, 0.78)
+                        maximumLineCount: 3; elide: Text.ElideRight
+                        text: songView.songLine
+                        opacity: root.lmA(pMelody, 1, 2)
+                        transform: Translate { x: root.lmX(pMelody, 1, 2, 90, 60); y: root.lmY(pMelody, 1, 2) }
+                    }
                 }
                 Bold {
-                    visible: root.wide
-                    width: parent.width
-                    sz: 26; lh: 30
-                    color: Qt.rgba(1, 1, 1, 0.78)
-                    maximumLineCount: 3; elide: Text.ElideRight
+                    visible: !root.wide && root.shows(pMelody)
+                    x: 60 * root.u; width: root.width - 102 * root.u
+                    y: songView.melodyCy + songView.melodySize / 2 + 18 * root.u
+                    horizontalAlignment: Text.AlignRight
+                    sz: 30; lh: 34
+                    maximumLineCount: 4; elide: Text.ElideRight
                     text: songView.songLine
                     opacity: root.lmA(pMelody, 1, 2)
                     transform: Translate { x: root.lmX(pMelody, 1, 2, 90, 60); y: root.lmY(pMelody, 1, 2) }
                 }
-            }
-            Bold {
-                visible: !root.wide && root.shows(pMelody)
-                x: 60 * root.u; width: root.width - 102 * root.u
-                y: songView.melodyCy + songView.melodySize / 2 + 18 * root.u
-                horizontalAlignment: Text.AlignRight
-                sz: 30; lh: 34
-                maximumLineCount: 4; elide: Text.ElideRight
-                text: songView.songLine
-                opacity: root.lmA(pMelody, 1, 2)
-                transform: Translate { x: root.lmX(pMelody, 1, 2, 90, 60); y: root.lmY(pMelody, 1, 2) }
-            }
 
-            // the song's page: the artist's disc behind the cover, the count beside it
-            Item {
-                anchors.fill: parent
-                visible: pSong.enter > 0
+                // the song's page: the artist's disc behind the cover, the count beside it
                 Item {
-                    id: cd
-                    width: songView.cdD; height: width
-                    x: songView.melodyCx + (songView.songShift - songView.cdOut) * songView.songIn - width / 2
-                    y: songView.songCy - height / 2
-                    scale: 0.8 + 0.2 * songView.songIn
-                    opacity: Math.min(1, songView.songIn * 3)
-                    // the pressed side turns; the light on it stays put
+                    anchors.fill: parent
+                    visible: pSong.enter > 0
                     Item {
-                        anchors.fill: parent
-                        rotation: root.time * 22
-                        RoundedImage {
+                        id: cd
+                        width: songView.cdD; height: width
+                        x: songView.melodyCx + (songView.songShift - songView.cdOut) * songView.songIn - width / 2
+                        y: songView.songCy - height / 2
+                        scale: 0.8 + 0.2 * songView.songIn
+                        opacity: Math.min(1, songView.songIn * 3)
+                        // the pressed side turns; the light on it stays put
+                        Item {
                             anchors.fill: parent
-                            radius: width / 2
-                            sourceSize: Qt.size(400, 400)
-                            source: root.heroSongArtistCover
-                            initialsText: root.heroSong ? root.heroSong.artist : ""
-                            placeholderColor: Qt.rgba(1, 1, 1, 0.2)
-                        }
-                    }
-                    // the rainbow sheen of an old disc under a lamp
-                    Shape {
-                        anchors.fill: parent
-                        opacity: 0.3
-                        layer.enabled: true
-                        layer.samples: 4
-                        ShapePath {
-                            strokeWidth: -1
-                            fillGradient: ConicalGradient {
-                                centerX: cd.width / 2; centerY: cd.height / 2; angle: 35
-                                GradientStop { position: 0.00; color: Qt.rgba(1, 1, 1, 0) }
-                                GradientStop { position: 0.08; color: Qt.rgba(1, 0.55, 0.8, 0.9) }
-                                GradientStop { position: 0.14; color: Qt.rgba(0.5, 0.9, 1, 0.9) }
-                                GradientStop { position: 0.22; color: Qt.rgba(1, 1, 1, 0) }
-                                GradientStop { position: 0.50; color: Qt.rgba(1, 1, 1, 0) }
-                                GradientStop { position: 0.58; color: Qt.rgba(1, 0.9, 0.5, 0.9) }
-                                GradientStop { position: 0.64; color: Qt.rgba(0.6, 0.8, 1, 0.9) }
-                                GradientStop { position: 0.72; color: Qt.rgba(1, 1, 1, 0) }
-                                GradientStop { position: 1.00; color: Qt.rgba(1, 1, 1, 0) }
-                            }
-                            startX: cd.width; startY: cd.height / 2
-                            PathAngleArc {
-                                centerX: cd.width / 2; centerY: cd.height / 2
-                                radiusX: cd.width / 2; radiusY: cd.height / 2
-                                startAngle: 0; sweepAngle: 360
+                            rotation: root.time * 22
+                            RoundedImage {
+                                anchors.fill: parent
+                                radius: width / 2
+                                sourceSize: Qt.size(400, 400)
+                                source: root.heroSongArtistCover
+                                initialsText: root.heroSong ? root.heroSong.artist : ""
+                                placeholderColor: Qt.rgba(1, 1, 1, 0.2)
                             }
                         }
+                        // the rainbow sheen of an old disc under a lamp
+                        Shape {
+                            anchors.fill: parent
+                            opacity: 0.3
+                            layer.enabled: true
+                            layer.samples: 4
+                            ShapePath {
+                                strokeWidth: -1
+                                fillGradient: ConicalGradient {
+                                    centerX: cd.width / 2; centerY: cd.height / 2; angle: 35
+                                    GradientStop { position: 0.00; color: Qt.rgba(1, 1, 1, 0) }
+                                    GradientStop { position: 0.08; color: Qt.rgba(1, 0.55, 0.8, 0.9) }
+                                    GradientStop { position: 0.14; color: Qt.rgba(0.5, 0.9, 1, 0.9) }
+                                    GradientStop { position: 0.22; color: Qt.rgba(1, 1, 1, 0) }
+                                    GradientStop { position: 0.50; color: Qt.rgba(1, 1, 1, 0) }
+                                    GradientStop { position: 0.58; color: Qt.rgba(1, 0.9, 0.5, 0.9) }
+                                    GradientStop { position: 0.64; color: Qt.rgba(0.6, 0.8, 1, 0.9) }
+                                    GradientStop { position: 0.72; color: Qt.rgba(1, 1, 1, 0) }
+                                    GradientStop { position: 1.00; color: Qt.rgba(1, 1, 1, 0) }
+                                }
+                                startX: cd.width; startY: cd.height / 2
+                                PathAngleArc {
+                                    centerX: cd.width / 2; centerY: cd.height / 2
+                                    radiusX: cd.width / 2; radiusY: cd.height / 2
+                                    startAngle: 0; sweepAngle: 360
+                                }
+                            }
+                        }
                     }
-                }
-                Column {
-                    x: root.wide ? root.textX + songView.songShift : root.inset - 3 * root.u
-                    y: root.wide ? songView.songCy - height / 2 : root.fy(456)
-                    width: root.wide ? root.textW - songView.songShift : root.column
+                    Column {
+                        x: root.wide ? root.textX + songView.songShift : root.inset - 3 * root.u
+                        y: root.wide ? songView.songCy - height / 2 : root.fy(456)
+                        width: root.wide ? root.textW - songView.songShift : root.column
+                        Bold {
+                            width: parent.width
+                            sz: 22; lh: 26
+                            color: Qt.rgba(1, 1, 1, 0.72)
+                            maximumLineCount: 2; elide: Text.ElideRight
+                            visible: root.wide
+                            text: songView.songLine
+                            opacity: root.lmA(pSong, 1, 4)
+                            transform: Translate { x: root.lmX(pSong, 1, 4, 60); y: root.lmY(pSong, 1, 4) }
+                        }
+                        Item { width: 1; height: 10 * root.u; visible: root.wide }
+                        Row {
+                            opacity: root.lmA(pSong, 2, 4)
+                            transform: Translate { x: root.lmX(pSong, 2, 4, root.wide ? 60 : 0); y: root.lmY(pSong, 2, 4) }
+                            Odo { sz: root.wide ? 60 : 46; text: String(root.heroSong ? root.heroSong.plays : 0); progress: root.stagger(pSong.enter, 2, 4) }
+                            Bold { sz: root.wide ? 60 : 46; wrapMode: Text.NoWrap; text: I18n.tr(" lượt phát!", " Plays!") }
+                        }
+                        Bold {
+                            width: parent.width; topPadding: 4 * root.u
+                            sz: 26; lh: 30
+                            color: Qt.rgba(1, 1, 1, 0.72)
+                            text: root.pick([I18n.tr("Bài hát yêu thích\ncủa bạn tháng này!!!", "Your favourite song\nthis month!!!"), I18n.tr("Bài ruột\ncủa bạn tháng này!!!", "Your ride-or-die song\nthis month!!!"), I18n.tr("Bài bạn nghe\nđến mòn tai!!!", "The song you\nwore out!!!"), I18n.tr("Bài hát\nđỉnh nóc kịch trần!!!", "Your main character\nsong this month!!!")], 15)
+                            opacity: root.lmA(pSong, 3, 4)
+                            transform: Translate { x: root.lmX(pSong, 3, 4, root.wide ? 60 : 0); y: root.lmY(pSong, 3, 4) }
+                        }
+                    }
                     Bold {
-                        width: parent.width
+                        visible: !root.wide
+                        x: 80 * root.u; width: root.width - 122 * root.u
+                        y: songView.songCy + songView.melodySize / 2 + 14 * root.u
+                        horizontalAlignment: Text.AlignRight
                         sz: 22; lh: 26
-                        color: Qt.rgba(1, 1, 1, 0.72)
-                        maximumLineCount: 2; elide: Text.ElideRight
-                        visible: root.wide
+                        maximumLineCount: 3; elide: Text.ElideRight
                         text: songView.songLine
                         opacity: root.lmA(pSong, 1, 4)
-                        transform: Translate { x: root.lmX(pSong, 1, 4, 60); y: root.lmY(pSong, 1, 4) }
+                        transform: Translate { x: root.lmX(pSong, 1, 4, -60); y: root.lmY(pSong, 1, 4) }
                     }
-                    Item { width: 1; height: 10 * root.u; visible: root.wide }
-                    Row {
-                        opacity: root.lmA(pSong, 2, 4)
-                        transform: Translate { x: root.lmX(pSong, 2, 4, root.wide ? 60 : 0); y: root.lmY(pSong, 2, 4) }
-                        Odo { sz: root.wide ? 60 : 46; text: String(root.heroSong ? root.heroSong.plays : 0); progress: root.stagger(pSong.enter, 2, 4) }
-                        Bold { sz: root.wide ? 60 : 46; wrapMode: Text.NoWrap; text: I18n.tr(" lượt phát!", " Plays!") }
+                }
+
+                // the hero cover: picked from the grid, then the melody cover, then the song page's
+                RoundedImage {
+                    id: heroCoverImg
+                    readonly property real m: root.heroCover
+                    readonly property real gy: songView.column(0)
+                    readonly property real pulse: 1 + 0.1 * Math.sin(Math.PI * root.gridPick)
+                    readonly property real sz: root.lerp(songView.cover * pulse, songView.melodySize, m)
+                    width: songView.melodySize; height: width
+                    radius: 30 * root.u * songView.melodySize / (212 * root.u)
+                    sourceSize: Qt.size(460, 460)
+                    source: root.heroSong ? root.heroSong.cover_url || "" : ""
+                    initialsText: root.heroSong ? root.heroSong.title : ""
+                    x: root.lerp(songView.cx - gy * songView.sinT, songView.melodyCx, m) - width / 2 + songView.enterX(0) * (1 - m)
+                       + songView.songShift * songView.songIn
+                    y: root.lerp(root.lerp(songView.cy + gy * songView.cosT, songView.melodyCy, m), songView.songCy, root.heroCoverUp) - height / 2
+                    scale: sz / songView.melodySize
+                    rotation: -30 * (1 - m)
+                    opacity: root.eoc(root.stagger(pGrid.enter, songView.cols, 2 * songView.cols + 1, 0.7))
+                }
+            }
+
+            // ===== 6. The bill =====
+            Item {
+                id: billView
+                anchors.fill: parent
+                visible: root.shows(pBill)
+                // wide: the totals on the left, the receipt beside them; tall: the title over the receipt
+                readonly property real leftW: Math.min(420 * root.u, root.stageW * 0.42)
+                readonly property real paperW: root.wide ? Math.min(480 * root.u, root.stageW - leftW - 64 * root.u) : Math.min(root.width - 2 * root.inset + 18 * root.u, 560 * root.u)
+                readonly property real groupX: (root.width - leftW - 64 * root.u - paperW) / 2
+                Column {
+                    x: root.wide ? billView.groupX : root.inset
+                    y: root.wide ? (root.height - height) / 2 : root.topPad + 82 * root.u
+                    width: root.wide ? billView.leftW : root.column
+                    Bold {
+                        width: parent.width
+                        sz: root.wide ? 44 : 30; lh: root.wide ? 46 : 33
+                        text: root.pick([I18n.tr("Xem hóa đơn\ncủa bạn nào", "Let's see\nyour bill"), I18n.tr("Tới giờ\ntính tiền rồi", "Time to\npay up"), I18n.tr("Bình tĩnh,\nhóa đơn nè", "Don't panic,\nit's the bill"), I18n.tr("Ét ô ét,\nhóa đơn tới", "Bill time,\nwe're cooked")], 16)
+                        opacity: root.lmA(pBill, 0, 4)
+                        transform: Translate { x: root.lmX(pBill, 0, 4, 0, 0); y: root.lmY(pBill, 0, 4, 20) }
+                    }
+                    Item { width: 1; height: 36 * root.u; visible: root.wide }
+                    Odo {
+                        visible: root.wide
+                        sz: 64; weight: Font.ExtraBold; tracking: -2.4
+                        text: root.hoursMinutes(root.stats ? root.stats.total_minutes : 0)
+                        progress: root.stagger(pBill.enter, 1, 4)
+                        opacity: root.lmA(pBill, 1, 4)
+                        transform: Translate { x: root.lmX(pBill, 1, 4, 0, 0); y: root.lmY(pBill, 1, 4) }
                     }
                     Bold {
-                        width: parent.width; topPadding: 4 * root.u
-                        sz: 26; lh: 30
+                        visible: root.wide
+                        width: parent.width; sz: 22
                         color: Qt.rgba(1, 1, 1, 0.72)
-                        text: root.pick([I18n.tr("Bài hát yêu thích\ncủa bạn tháng này!!!", "Your favourite song\nthis month!!!"), I18n.tr("Bài ruột\ncủa bạn tháng này!!!", "Your ride-or-die song\nthis month!!!"), I18n.tr("Bài bạn nghe\nđến mòn tai!!!", "The song you\nwore out!!!"), I18n.tr("Bài hát\nđỉnh nóc kịch trần!!!", "Your main character\nsong this month!!!")], 15)
-                        opacity: root.lmA(pSong, 3, 4)
-                        transform: Translate { x: root.lmX(pSong, 3, 4, root.wide ? 60 : 0); y: root.lmY(pSong, 3, 4) }
+                        text: I18n.tr("nghe nhạc trong %1", "of music in %1").arg(root.monthName)
+                        opacity: root.lmA(pBill, 2, 4)
+                        transform: Translate { x: root.lmX(pBill, 2, 4, 0, 0); y: root.lmY(pBill, 2, 4) }
+                    }
+                    Item { width: 1; height: 22 * root.u; visible: root.wide }
+                    Bold {
+                        visible: root.wide && root.stats !== null
+                        width: parent.width; sz: 22; lh: 30
+                        text: root.stats ? I18n.tr("%1 lượt phát\n%2 bài hát\n%3 nghệ sĩ", "%1 plays\n%2 songs\n%3 artists")
+                                              .arg(root.stats.plays).arg(root.stats.song_count).arg(root.stats.artist_count) : ""
+                        opacity: root.lmA(pBill, 3, 4)
+                        transform: Translate { x: root.lmX(pBill, 3, 4, 0, 0); y: root.lmY(pBill, 3, 4) }
                     }
                 }
-                Bold {
-                    visible: !root.wide
-                    x: 80 * root.u; width: root.width - 122 * root.u
-                    y: songView.songCy + songView.melodySize / 2 + 14 * root.u
-                    horizontalAlignment: Text.AlignRight
-                    sz: 22; lh: 26
-                    maximumLineCount: 3; elide: Text.ElideRight
-                    text: songView.songLine
-                    opacity: root.lmA(pSong, 1, 4)
-                    transform: Translate { x: root.lmX(pSong, 1, 4, -60); y: root.lmY(pSong, 1, 4) }
-                }
-            }
-
-            // the hero cover: picked from the grid, then the melody cover, then the song page's
-            RoundedImage {
-                id: heroCoverImg
-                readonly property real m: root.heroCover
-                readonly property real gy: songView.column(0)
-                readonly property real pulse: 1 + 0.1 * Math.sin(Math.PI * root.gridPick)
-                readonly property real sz: root.lerp(songView.cover * pulse, songView.melodySize, m)
-                width: songView.melodySize; height: width
-                radius: 30 * root.u * songView.melodySize / (212 * root.u)
-                sourceSize: Qt.size(460, 460)
-                source: root.heroSong ? root.heroSong.cover_url || "" : ""
-                initialsText: root.heroSong ? root.heroSong.title : ""
-                x: root.lerp(songView.cx - gy * songView.sinT, songView.melodyCx, m) - width / 2 + songView.enterX(0) * (1 - m)
-                   + songView.songShift * songView.songIn
-                y: root.lerp(root.lerp(songView.cy + gy * songView.cosT, songView.melodyCy, m), songView.songCy, root.heroCoverUp) - height / 2
-                scale: sz / songView.melodySize
-                rotation: -30 * (1 - m)
-                opacity: root.eoc(root.stagger(pGrid.enter, songView.cols, 2 * songView.cols + 1, 0.7))
-            }
-        }
-
-        // ===== 6. The bill =====
-        Item {
-            id: billView
-            anchors.fill: parent
-            visible: root.shows(pBill)
-            // wide: the totals on the left, the receipt beside them; tall: the title over the receipt
-            readonly property real leftW: Math.min(420 * root.u, root.stageW * 0.42)
-            readonly property real paperW: root.wide ? Math.min(480 * root.u, root.stageW - leftW - 64 * root.u) : Math.min(root.width - 2 * root.inset + 18 * root.u, 560 * root.u)
-            readonly property real groupX: (root.width - leftW - 64 * root.u - paperW) / 2
-            Column {
-                x: root.wide ? billView.groupX : root.inset
-                y: root.wide ? (root.height - height) / 2 : root.topPad + 82 * root.u
-                width: root.wide ? billView.leftW : root.column
-                Bold {
-                    width: parent.width
-                    sz: root.wide ? 44 : 30; lh: root.wide ? 46 : 33
-                    text: root.pick([I18n.tr("Xem hóa đơn\ncủa bạn nào", "Let's see\nyour bill"), I18n.tr("Tới giờ\ntính tiền rồi", "Time to\npay up"), I18n.tr("Bình tĩnh,\nhóa đơn nè", "Don't panic,\nit's the bill"), I18n.tr("Ét ô ét,\nhóa đơn tới", "Bill time,\nwe're cooked")], 16)
-                    opacity: root.lmA(pBill, 0, 4)
-                    transform: Translate { x: root.lmX(pBill, 0, 4, 0, 0); y: root.lmY(pBill, 0, 4, 20) }
-                }
-                Item { width: 1; height: 36 * root.u; visible: root.wide }
-                Odo {
-                    visible: root.wide
-                    sz: 64; weight: Font.ExtraBold; tracking: -2.4
-                    text: root.hoursMinutes(root.stats ? root.stats.total_minutes : 0)
-                    progress: root.stagger(pBill.enter, 1, 4)
-                    opacity: root.lmA(pBill, 1, 4)
-                    transform: Translate { x: root.lmX(pBill, 1, 4, 0, 0); y: root.lmY(pBill, 1, 4) }
-                }
-                Bold {
-                    visible: root.wide
-                    width: parent.width; sz: 22
-                    color: Qt.rgba(1, 1, 1, 0.72)
-                    text: I18n.tr("nghe nhạc trong %1", "of music in %1").arg(root.monthName)
-                    opacity: root.lmA(pBill, 2, 4)
-                    transform: Translate { x: root.lmX(pBill, 2, 4, 0, 0); y: root.lmY(pBill, 2, 4) }
-                }
-                Item { width: 1; height: 22 * root.u; visible: root.wide }
-                Bold {
-                    visible: root.wide && root.stats !== null
-                    width: parent.width; sz: 22; lh: 30
-                    text: root.stats ? I18n.tr("%1 lượt phát\n%2 bài hát\n%3 nghệ sĩ", "%1 plays\n%2 songs\n%3 artists")
-                                          .arg(root.stats.plays).arg(root.stats.song_count).arg(root.stats.artist_count) : ""
-                    opacity: root.lmA(pBill, 3, 4)
-                    transform: Translate { x: root.lmX(pBill, 3, 4, 0, 0); y: root.lmY(pBill, 3, 4) }
-                }
-            }
-            Item {
-                id: billBox
-                x: root.wide ? billView.groupX + billView.leftW + 64 * root.u : root.inset - 9 * root.u
-                y: root.wide ? root.topPad + 70 * root.u : root.fy(240)
-                width: billView.paperW
-                height: root.height - y
-                transform: Translate {
-                    y: (1 - root.eob(pBill.enter, 0.9)) * billBox.height + root.eic(pBill.exit) * billBox.height * 1.1
-                }
-                Flickable {
-                    id: billFlick
-                    anchors.fill: parent
-                    contentWidth: width
-                    contentHeight: receipt.height + 120 * root.u
-                    clip: true
-                    boundsBehavior: Flickable.StopAtBounds
-                    Component.onCompleted: if ("acceptedButtons" in billFlick) billFlick.acceptedButtons = Qt.NoButton
-                    Item {
-                        id: receipt
-                        width: parent.width
-                        y: 6 * root.u
-                        height: receiptBody.implicitHeight + 80 * root.u
-                        // paper torn in a zigzag at the top and the bottom
-                        Canvas {
-                            anchors.fill: parent
-                            onWidthChanged: requestPaint()
-                            onHeightChanged: requestPaint()
-                            onPaint: {
-                                var ctx = getContext("2d");
-                                ctx.reset();
-                                var tooth = 44 * root.u, depth = 18 * root.u, w = width, h = height;
-                                var teeth = Math.max(3, Math.round(w / tooth)), step = w / teeth;
-                                ctx.fillStyle = "#EEECE6";
-                                ctx.beginPath();
-                                ctx.moveTo(0, depth);
-                                for (var i = 0; i < teeth; i++) { ctx.lineTo(i * step + step / 2, 0); ctx.lineTo((i + 1) * step, depth); }
-                                ctx.lineTo(w, h - depth);
-                                for (var j = teeth; j > 0; j--) { ctx.lineTo(j * step - step / 2, h); ctx.lineTo((j - 1) * step, h - depth); }
-                                ctx.closePath();
-                                ctx.fill();
-                            }
+                Item {
+                    id: billBox
+                    x: root.wide ? billView.groupX + billView.leftW + 64 * root.u : root.inset - 9 * root.u
+                    y: root.wide ? root.topPad + 70 * root.u : root.fy(240)
+                    width: billView.paperW
+                    height: root.height - y
+                    transform: Translate {
+                        y: (1 - root.eob(pBill.enter, 0.9)) * billBox.height + root.eic(pBill.exit) * billBox.height * 1.1
+                    }
+                    Flickable {
+                        id: billFlick
+                        anchors.fill: parent
+                        contentWidth: width
+                        contentHeight: receipt.height + 120 * root.u
+                        clip: true
+                        boundsBehavior: Flickable.StopAtBounds
+                        Component.onCompleted: if ("acceptedButtons" in billFlick) billFlick.acceptedButtons = Qt.NoButton
+                        // the paper fades into the night at an edge while there is more of it past there
+                        ScrollEdgeFade {
+                            flickable: billFlick
+                            fadeLength: 72 * root.u
+                            when: !root.liteMode && pBill.enter > 0.99
                         }
-                        Column {
-                            id: receiptBody
-                            anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 26 * root.u; rightMargin: 26 * root.u; topMargin: 40 * root.u }
-                            readonly property color ink: "#1B1B1B"
-                            component Line: Text {
-                                width: receiptBody.width
-                                horizontalAlignment: Text.AlignHCenter
-                                color: receiptBody.ink
-                                font.family: "monospace"
-                                font.pixelSize: 13 * root.u
-                                lineHeightMode: Text.FixedHeight
-                                lineHeight: 17 * root.u
-                                elide: Text.ElideRight
-                            }
-                            component Dashes: Line { text: "-".repeat(90); elide: Text.ElideNone; clip: true }
-                            component Heading: Text {
-                                bottomPadding: 10 * root.u
-                                color: receiptBody.ink
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 18 * root.u
-                                font.weight: Font.Bold
-                                font.letterSpacing: -0.6 * root.u
-                            }
-                            component ItemRow: RowLayout {
-                                property string image: ""
-                                property bool round: false
-                                property string label: ""
-                                property string value: ""
-                                width: receiptBody.width
-                                height: 28 * root.u
-                                spacing: 8 * root.u
-                                RoundedImage {
-                                    Layout.preferredWidth: 18 * root.u; Layout.preferredHeight: 18 * root.u
-                                    radius: parent.round ? 9 * root.u : 5 * root.u
-                                    sourceSize: Qt.size(48, 48)
-                                    source: parent.image
-                                    initialsText: parent.label
-                                    placeholderColor: "#E53935"
+                        Item {
+                            id: receipt
+                            width: parent.width
+                            y: 6 * root.u
+                            height: receiptBody.implicitHeight + 80 * root.u
+                            // paper torn in a zigzag at the top and the bottom
+                            Canvas {
+                                anchors.fill: parent
+                                onWidthChanged: requestPaint()
+                                onHeightChanged: requestPaint()
+                                onPaint: {
+                                    var ctx = getContext("2d");
+                                    ctx.reset();
+                                    var tooth = 44 * root.u, depth = 18 * root.u, w = width, h = height;
+                                    var teeth = Math.max(3, Math.round(w / tooth)), step = w / teeth;
+                                    ctx.fillStyle = "#EEECE6";
+                                    ctx.beginPath();
+                                    ctx.moveTo(0, depth);
+                                    for (var i = 0; i < teeth; i++) { ctx.lineTo(i * step + step / 2, 0); ctx.lineTo((i + 1) * step, depth); }
+                                    ctx.lineTo(w, h - depth);
+                                    for (var j = teeth; j > 0; j--) { ctx.lineTo(j * step - step / 2, h); ctx.lineTo((j - 1) * step, h - depth); }
+                                    ctx.closePath();
+                                    ctx.fill();
                                 }
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: parent.label
+                            }
+                            Column {
+                                id: receiptBody
+                                anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 26 * root.u; rightMargin: 26 * root.u; topMargin: 40 * root.u }
+                                readonly property color ink: "#1B1B1B"
+                                component Line: Text {
+                                    width: receiptBody.width
+                                    horizontalAlignment: Text.AlignHCenter
+                                    color: receiptBody.ink
+                                    font.family: "monospace"
+                                    font.pixelSize: 13 * root.u
+                                    lineHeightMode: Text.FixedHeight
+                                    lineHeight: 17 * root.u
                                     elide: Text.ElideRight
-                                    color: "#3A3A3A"
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 13.5 * root.u
-                                    font.weight: Font.Bold
-                                    font.letterSpacing: -0.2 * root.u
                                 }
-                                Text {
-                                    text: "- " + parent.value
-                                    color: "#3A3A3A"
+                                component Dashes: Line { text: "-".repeat(90); elide: Text.ElideNone; clip: true }
+                                component Heading: Text {
+                                    bottomPadding: 10 * root.u
+                                    color: receiptBody.ink
                                     font.family: Theme.fontFamily
-                                    font.pixelSize: 13.5 * root.u
+                                    font.pixelSize: 18 * root.u
                                     font.weight: Font.Bold
-                                    font.letterSpacing: -0.2 * root.u
+                                    font.letterSpacing: -0.6 * root.u
                                 }
-                            }
+                                component ItemRow: RowLayout {
+                                    property string image: ""
+                                    property bool round: false
+                                    property string label: ""
+                                    property string value: ""
+                                    width: receiptBody.width
+                                    height: 28 * root.u
+                                    spacing: 8 * root.u
+                                    RoundedImage {
+                                        Layout.preferredWidth: 18 * root.u; Layout.preferredHeight: 18 * root.u
+                                        radius: parent.round ? 9 * root.u : 5 * root.u
+                                        sourceSize: Qt.size(48, 48)
+                                        source: parent.image
+                                        initialsText: parent.label
+                                        placeholderColor: "#E53935"
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: parent.label
+                                        elide: Text.ElideRight
+                                        color: "#3A3A3A"
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 13.5 * root.u
+                                        font.weight: Font.Bold
+                                        font.letterSpacing: -0.2 * root.u
+                                    }
+                                    Text {
+                                        text: "- " + parent.value
+                                        color: "#3A3A3A"
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 13.5 * root.u
+                                        font.weight: Font.Bold
+                                        font.letterSpacing: -0.2 * root.u
+                                    }
+                                }
 
-                            Dashes {}
-                            Line { text: "NUTSTY" }
-                            Line { text: I18n.tr("Tổng kết %1", "%1 recap").arg(root.monthName) }
-                            Line {
-                                text: I18n.tr("in lúc %1", "printed at %1").arg(Qt.formatDateTime(new Date(), "dd/MM/yyyy/HH:mm"))
-                            }
-                            Dashes {}
-                            Item { width: 1; height: 18 * root.u }
-                            Heading { text: I18n.tr("Nghệ sĩ hàng đầu", "Top Artist") }
-                            Repeater {
-                                model: root.artists
-                                ItemRow {
-                                    image: root.photoOf(modelData)
-                                    round: true
-                                    label: (index + 1) + "x " + modelData.artist
-                                    value: root.hoursDecimal(modelData.minutes)
+                                Dashes {}
+                                Line { text: "NUTSTY" }
+                                Line { text: I18n.tr("Tổng kết %1", "%1 recap").arg(root.monthName) }
+                                Line {
+                                    text: I18n.tr("in lúc %1", "printed at %1").arg(Qt.formatDateTime(new Date(), "dd/MM/yyyy/HH:mm"))
                                 }
-                            }
-                            Item { width: 1; height: 18 * root.u }
-                            Heading { text: I18n.tr("Bài hát hàng đầu", "Top Music") }
-                            Repeater {
-                                model: root.songs
-                                ItemRow {
-                                    image: modelData.cover_url || ""
-                                    label: (index + 1) + "x " + modelData.title
-                                    value: root.hoursDecimal(modelData.minutes)
+                                Dashes {}
+                                Item { width: 1; height: 18 * root.u }
+                                Heading { text: I18n.tr("Nghệ sĩ hàng đầu", "Top Artist") }
+                                Repeater {
+                                    model: root.artists
+                                    ItemRow {
+                                        image: root.photoOf(modelData)
+                                        round: true
+                                        label: (index + 1) + "x " + modelData.artist
+                                        value: root.hoursDecimal(modelData.minutes)
+                                    }
                                 }
+                                Item { width: 1; height: 18 * root.u }
+                                Heading { text: I18n.tr("Bài hát hàng đầu", "Top Music") }
+                                Repeater {
+                                    model: root.songs
+                                    ItemRow {
+                                        image: modelData.cover_url || ""
+                                        label: (index + 1) + "x " + modelData.title
+                                        value: root.hoursDecimal(modelData.minutes)
+                                    }
+                                }
+                                Item { width: 1; height: 36 * root.u }
+                                Line {
+                                    horizontalAlignment: Text.AlignLeft
+                                    text: I18n.tr("Tổng : %1 nghe nhạc", "Total : %1 playtime").arg(root.hoursMinutes(root.stats ? root.stats.total_minutes : 0))
+                                }
+                                Line {
+                                    horizontalAlignment: Text.AlignLeft
+                                    color: Qt.rgba(0.106, 0.106, 0.106, 0.6)
+                                    text: root.stats
+                                          ? I18n.tr("%1 lượt · %2 bài · %3 nghệ sĩ", "%1 plays · %2 songs · %3 artists")
+                                                .arg(root.stats.plays).arg(root.stats.song_count).arg(root.stats.artist_count)
+                                          : ""
+                                }
+                                Item { width: 1; height: 10 * root.u }
+                                Dashes {}
+                                Line { text: I18n.tr("HẾT HÓA ĐƠN", "END OF LINE") }
+                                Dashes {}
                             }
-                            Item { width: 1; height: 36 * root.u }
-                            Line {
-                                horizontalAlignment: Text.AlignLeft
-                                text: I18n.tr("Tổng : %1 nghe nhạc", "Total : %1 playtime").arg(root.hoursMinutes(root.stats ? root.stats.total_minutes : 0))
-                            }
-                            Line {
-                                horizontalAlignment: Text.AlignLeft
-                                color: Qt.rgba(0.106, 0.106, 0.106, 0.6)
-                                text: root.stats
-                                      ? I18n.tr("%1 lượt · %2 bài · %3 nghệ sĩ", "%1 plays · %2 songs · %3 artists")
-                                            .arg(root.stats.plays).arg(root.stats.song_count).arg(root.stats.artist_count)
-                                      : ""
-                            }
-                            Item { width: 1; height: 10 * root.u }
-                            Dashes {}
-                            Line { text: I18n.tr("HẾT HÓA ĐƠN", "END OF LINE") }
-                            Dashes {}
                         }
                     }
                 }
             }
-        }
 
-        // ===== 7. The ending: the card and the words, one group in the middle =====
-        Item {
-            id: endView
-            anchors.fill: parent
-            visible: root.shows(pEnd)
-            readonly property real cardW: root.wide ? Math.min(460 * root.u, root.stageW * 0.44) : Math.min(root.width - 2 * root.inset, 420 * root.u)
-            readonly property real textW: root.wide ? Math.min(460 * root.u, root.stageW - cardW - 64 * root.u) : root.column
-            readonly property real groupX: root.wide ? (root.width - cardW - 64 * root.u - textW) / 2 : root.inset
-            ListenerCard {
-                id: endCard
-                x: endView.groupX
-                y: root.wide ? (root.height - height) / 2 : root.topPad + 175 * root.u
-                width: endView.cardW
-                height: width / 1.89
-                interactive: false
-                userName: root.userName
-                avatarUrl: root.avatarUrl
-                cardNumber: root.cardNumber
-                joinedAt: root.joinedAt
-                liteMode: root.liteMode
-                swayAmount: 1
-                readonly property real e: root.eoc(root.stagger(pEnd.enter, 0, 4, 0.7))
-                opacity: root.homing ? 0 : e
-                transform: [
-                    Translate { y: (1 - endCard.e) * 60 * root.u },
-                    Rotation { origin.x: endCard.width / 2; origin.y: endCard.height / 2; angle: -8 * (1 - endCard.e) }
-                ]
-            }
-            Column {
-                x: root.wide ? endView.groupX + endView.cardW + 64 * root.u : root.inset
-                y: root.wide ? (root.height - height) / 2 : root.topPad + 112 * root.u
-                width: endView.textW
-                Bold {
-                    width: parent.width
-                    sz: root.wide ? 30 : 34
-                    color: Qt.rgba(1, 1, 1, 0.72)
-                    text: root.pick([I18n.tr("Đây rồi", "There you go"), I18n.tr("Xong rồi nè", "Ta-da"), I18n.tr("Tèn tén ten", "Behold"), I18n.tr("Hết nước chấm", "Ate, no crumbs")], 17)
-                    opacity: root.lmA(pEnd, 0, 4)
-                    transform: Translate { x: root.lmX(pEnd, 0, 4, 0, 0); y: root.lmY(pEnd, 0, 4) }
+            // ===== 7. The ending: the card and the words, one group in the middle =====
+            Item {
+                id: endView
+                anchors.fill: parent
+                visible: root.shows(pEnd)
+                readonly property real cardW: root.wide ? Math.min(460 * root.u, root.stageW * 0.44) : Math.min(root.width - 2 * root.inset, 420 * root.u)
+                readonly property real textW: root.wide ? Math.min(460 * root.u, root.stageW - cardW - 64 * root.u) : root.column
+                readonly property real groupX: root.wide ? (root.width - cardW - 64 * root.u - textW) / 2 : root.inset
+                ListenerCard {
+                    id: endCard
+                    x: endView.groupX
+                    y: root.wide ? (root.height - height) / 2 : root.topPad + 175 * root.u
+                    width: endView.cardW
+                    height: width / 1.89
+                    interactive: false
+                    userName: root.userName
+                    avatarUrl: root.avatarUrl
+                    cardNumber: root.cardNumber
+                    joinedAt: root.joinedAt
+                    liteMode: root.liteMode
+                    swayAmount: 1
+                    readonly property real e: root.eoc(root.stagger(pEnd.enter, 0, 4, 0.7))
+                    opacity: root.homing ? 0 : e
+                    transform: [
+                        Translate { y: (1 - endCard.e) * 60 * root.u },
+                        Rotation { origin.x: endCard.width / 2; origin.y: endCard.height / 2; angle: -8 * (1 - endCard.e) }
+                    ]
                 }
-                // on a tall window the card sits between the two lines
-                Item { width: 1; height: root.wide ? 10 * root.u : endCard.height + 63 * root.u }
-                Bold {
-                    width: parent.width
-                    sz: 44; lh: 46
-                    text: root.pick([I18n.tr("Đây là tổng kết\n%1 của bạn!", "That's your\n%1 recap!"), I18n.tr("Gói gọn\n%1 của bạn!", "Your %1\nin a nutshell!"), I18n.tr("%1 của bạn\nlà vậy đó!", "So that was\nyour %1!"), I18n.tr("%1 của bạn\nbá khí thật sự!", "Your %1\nhad real aura!")], 18).arg(root.monthName)
-                    opacity: root.lmA(pEnd, 1, 4)
-                    transform: Translate { x: root.lmX(pEnd, 1, 4, 0, 0); y: root.lmY(pEnd, 1, 4) }
-                }
-                Item { width: 1; height: 28 * root.u }
-                Mono {
-                    font.pixelSize: 16 * root.u
-                    color: Qt.rgba(1, 1, 1, 0.8)
-                    text: I18n.tr("BẤM ĐỂ KẾT THÚC", "CLICK TO FINISH")
-                    opacity: root.lmA(pEnd, 3, 4)
-                    transform: Translate { y: root.lmY(pEnd, 3, 4) }
+                Column {
+                    x: root.wide ? endView.groupX + endView.cardW + 64 * root.u : root.inset
+                    y: root.wide ? (root.height - height) / 2 : root.topPad + 112 * root.u
+                    width: endView.textW
+                    Bold {
+                        width: parent.width
+                        sz: root.wide ? 30 : 34
+                        color: Qt.rgba(1, 1, 1, 0.72)
+                        text: root.pick([I18n.tr("Đây rồi", "There you go"), I18n.tr("Xong rồi nè", "Ta-da"), I18n.tr("Tèn tén ten", "Behold"), I18n.tr("Hết nước chấm", "Ate, no crumbs")], 17)
+                        opacity: root.lmA(pEnd, 0, 4)
+                        transform: Translate { x: root.lmX(pEnd, 0, 4, 0, 0); y: root.lmY(pEnd, 0, 4) }
+                    }
+                    // on a tall window the card sits between the two lines
+                    Item { width: 1; height: root.wide ? 10 * root.u : endCard.height + 63 * root.u }
+                    Bold {
+                        width: parent.width
+                        sz: 44; lh: 46
+                        text: root.pick([I18n.tr("Đây là tổng kết\n%1 của bạn!", "That's your\n%1 recap!"), I18n.tr("Gói gọn\n%1 của bạn!", "Your %1\nin a nutshell!"), I18n.tr("%1 của bạn\nlà vậy đó!", "So that was\nyour %1!"), I18n.tr("%1 của bạn\nbá khí thật sự!", "Your %1\nhad real aura!")], 18).arg(root.monthName)
+                        opacity: root.lmA(pEnd, 1, 4)
+                        transform: Translate { x: root.lmX(pEnd, 1, 4, 0, 0); y: root.lmY(pEnd, 1, 4) }
+                    }
+                    Item { width: 1; height: 28 * root.u }
+                    Mono {
+                        font.pixelSize: 16 * root.u
+                        color: Qt.rgba(1, 1, 1, 0.8)
+                        text: I18n.tr("BẤM ĐỂ KẾT THÚC", "CLICK TO FINISH")
+                        opacity: root.lmA(pEnd, 3, 4)
+                        transform: Translate { y: root.lmY(pEnd, 3, 4) }
+                    }
                 }
             }
         }
@@ -2250,6 +2271,24 @@ Item {
         }
     }
 
+    // the page fade's mask: opaque, ramping to clear over the last stretch at the top and bottom
+    Item {
+        id: pageFadeMask
+        width: root.width
+        height: root.height
+        visible: false
+        layer.enabled: true
+        readonly property real frac: height > 0 ? Math.min(0.2, 72 * root.u / height) : 0
+        Rectangle {
+            anchors.fill: parent
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: "transparent" }
+                GradientStop { position: pageFadeMask.frac; color: "#ffffff" }
+                GradientStop { position: 1.0 - pageFadeMask.frac; color: "#ffffff" }
+                GradientStop { position: 1.0; color: "transparent" }
+            }
+        }
+    }
     Item {
         id: frameMask
         anchors.fill: parent
