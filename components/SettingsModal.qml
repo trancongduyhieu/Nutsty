@@ -61,7 +61,7 @@ Rectangle {
     property string taskbarLyricsPlacement: "taskbar"
     property string taskbarLyricsAlign: "center"
     property bool lyricsRomanizationEnabled: true
-    property int lyricsPreset: 2 // id from LyricsPresets.qml (1-6)
+    property int lyricsPreset: 2 // id from LyricsPresets.qml (1-7)
     property int customX: -1
     property int customY: -1
     property string currentLanguage: I18n.locale

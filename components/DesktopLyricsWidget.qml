@@ -16,7 +16,7 @@ PanelWindow {
     property var currentTrack: null
     property bool enabled: true
     property bool lyricsRomanizationEnabled: true
-    property int lyricsPreset: 2 // id from LyricsPresets.qml (1-6)
+    property int lyricsPreset: 2 // id from LyricsPresets.qml (1-7)
     property int customX: -1
     property int customY: -1
     // Windows: the bridge sets this while other apps fully cover the lyrics box, and the

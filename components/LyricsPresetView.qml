@@ -41,6 +41,7 @@ Item {
         case 4: return motionTypography;
         case 5: return mochyExpressive;
         case 6: return motionVariations;
+        case 7: return decodeHud;
         }
         return appleMusic;
     }
@@ -137,6 +138,20 @@ Item {
     Component {
         id: motionVariations
         MotionLyricsView {
+            activeLyrics: root.activeLyrics
+            currentTime: root.currentTime
+            isPlaying: root.isPlaying
+            colHighlight: root.colHighlight
+            colActiveText: root.colActiveText
+            colShadowDir: root.colShadowDir
+            colShadowAmb: root.colShadowAmb
+            isLightArea: root.isLightArea
+        }
+    }
+
+    Component {
+        id: decodeHud
+        DecodeLyricsView {
             activeLyrics: root.activeLyrics
             currentTime: root.currentTime
             isPlaying: root.isPlaying
