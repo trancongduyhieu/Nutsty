@@ -471,6 +471,15 @@ test("NaN sweep", () => {
     }
 });
 
+test("maximal cut never decodes, preset 7 still does", () => {
+    const rows = [];
+    for (let i = 0; i < 60; i++) rows.push([i * 2.5, FAST[i % 4]]);
+    const ly = song(rows);
+    assert.ok(!K.build(ly, { max: true }).lines.some(L => L.treat === "decode"));
+    assert.ok(K.build(ly).lines.some(L => L.treat === "decode"));
+    assert.ok(!K.build(demo, { max: true }).lines.some(L => L.treat === "decode"));
+});
+
 let failed = 0;
 for (const [name, fn] of tests) {
     try { fn(); console.log("ok " + name); }

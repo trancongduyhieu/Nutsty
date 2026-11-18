@@ -50,6 +50,8 @@ var TREAT = {
     marker:  { hero: "marker", minor: "marker", minorSize: 0.58, base: 64, byWord: true,  cases: ["upper"],                   jitter: 2.8 }
 };
 var TREAT_ORDER = ["slam", "rise", "decode", "karaoke", "hand", "marker"];
+// The maximal cut drops decode: its scrambling glyphs fight the pen marks
+var TREAT_ORDER_MAX = ["slam", "rise", "karaoke", "hand", "marker"];
 var SHOT_ORDER = ["push", "dutch", "orbit", "tiltUp", "drift", "dolly", "low", "roll", "crane"];
 // Words in ( ) or [ ] are backing vocals and ad-libs; each line picks one look for them
 // They leave the line: brackets dropped, stacked in a small column to its left or right, behind a
@@ -265,10 +267,11 @@ function build(lyrics, opts) {
         var treat;
         if (avg > 0.55 && prevTreat !== "soft" && M.r(seed, 1, 401) < 0.5) treat = "soft";
         else {
-            var k = Math.floor(M.r(seed, 2, 402) * TREAT_ORDER.length);
-            for (var tries = 0; tries < TREAT_ORDER.length && TREAT_ORDER[k] === prevTreat; tries++)
-                k = (k + 1) % TREAT_ORDER.length;
-            treat = TREAT_ORDER[k];
+            var order = maxi ? TREAT_ORDER_MAX : TREAT_ORDER;
+            var k = Math.floor(M.r(seed, 2, 402) * order.length);
+            for (var tries = 0; tries < order.length && order[k] === prevTreat; tries++)
+                k = (k + 1) % order.length;
+            treat = order[k];
         }
         prevTreat = treat;
         var T = TREAT[treat];
