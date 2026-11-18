@@ -312,6 +312,14 @@ test("stack pile marks", () => {
         assert.strictEqual(K.pileState(P, t, PW, PH, PA).rects.length, 3);
     }
 });
+test("pile rects use measured widths", () => {
+    const P = pileWith(2, "brace"), t = Math.min(P.lines[1].end, P.exitAt - 0.01);
+    const est = K.pileState(P, t, PW, PH, PA).rects, got = K.pileState(P, t, PW, PH, PA, [200, 300]).rects;
+    const s1 = K.lineState(P.lines[1], t, PW);
+    assert.ok(Math.abs(got[1].w - 300 * s1.s * Math.min(s1.fit, PW * K.roomOf(P.lines[1]) / 300)) < 0.01);
+    assert.ok(Math.abs(got[0].w - est[0].w) > 1);
+    assert.strictEqual(K.pileState(P, t, PW, PH, PA, [0, 0]).rects[1].w, est[1].w);
+});
 test("solo piles carry no pile marks", () => {
     const m = K.build(longSong(), { max: true });
     m.piles.filter(P => P.role === "peak" || P.role === "rush" || P.lines.length < 2)

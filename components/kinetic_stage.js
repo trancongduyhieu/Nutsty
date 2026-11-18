@@ -20,6 +20,11 @@
 // one on its hero, a marker swipe behind the hero, a ring round the whole line now and then, and
 // doodles (stars, bursts, spirals, hearts...) scattered round it, more of them on the loud lines.
 // Every stroke is drawn twice, the second pass a little off, after rough.js (MIT, roughjs.com).
+// In the maximal cut each pile also gets a role from the singing tempo (tempoRoles): a slow line
+// right after fast ones is a peak (solo, big, one surprise from PEAK_FX: a bulb dropping on its
+// cord and switching on, a spotlight ring, focus rays, an ink fill, a stamp); a fast line alone is
+// a rush (a tick or ring on every word, a doodle per word, camera jolts); the rest pile as duos and
+// stacks, tied together by one pile mark from DUO_FX / STACK_FX (pileStrokes).
 
 var LEAD = 0.05;          // visual hits land a touch before the sung onset
 var PILE_MAX = 3;
@@ -1138,8 +1143,9 @@ function doodleStrokes(L, t, di, w, h) {
 }
 
 // Where the lines of a pile sit, in stage px before the camera: one rect per line already in.
-// alpha follows the pile's exit.
-function pileState(P, t, W, H, anchorY) {
+// alpha follows the pile's exit. bodyW (optional, per slot) is each line's measured width in px
+// before scaling; the view passes it, since the script's width estimate is rough.
+function pileState(P, t, W, H, anchorY, bodyW) {
     var out = { alpha: 1, rects: [] };
     if (!P) return out;
     if (t >= P.exitAt) out.alpha = 1 - M.clamp((t - P.exitAt) / (P.exitDur || EXIT_DUR));
@@ -1147,8 +1153,11 @@ function pileState(P, t, W, H, anchorY) {
         var L = P.lines[k];
         if (L.enterAt > t) break;
         var ls = lineState(L, t, W);
-        var sc = ls.fit * ls.s;
-        var w = L.estW * L.base * sc * ls.sx, h = L.base * sc;
+        var sc = ls.fit * ls.s, w;
+        var bw = bodyW && bodyW[k] > 0 ? bodyW[k] : 0;
+        if (bw > 0) w = bw * ls.s * Math.min(ls.fit, W * roomOf(L) / bw) * ls.sx;
+        else w = L.estW * L.base * sc * ls.sx;
+        var h = L.base * sc;
         out.rects.push({ x: W / 2 + ls.dx - w / 2, y: anchorY + ls.y - h / 2, w: w, h: h });
     }
     return out;
@@ -1179,9 +1188,9 @@ function arrowHead(pts, len) {
 
 // The marks that tie a duo or a stack together, in stage px; [] for any other pile.
 // Each part draws on its own clock, so a mark for line k waits for line k.
-function pileStrokes(P, t, W, H, anchorY) {
+function pileStrokes(P, t, W, H, anchorY, bodyW) {
     if (!P || (P.role !== "duo" && P.role !== "stack") || !P.fx || P.lines.length < 2) return [];
-    var R = pileState(P, t, W, H, anchorY).rects;
+    var R = pileState(P, t, W, H, anchorY, bodyW).rects;
     if (R.length === 0) return [];
     var b = P.lines[0].base, sd = P.seed + 600, out = [];
     function draw(S, prog, k) {

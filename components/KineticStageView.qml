@@ -13,7 +13,10 @@ import "kinetic_stage.js" as Stage
 // zigzag or wave under them, or a ring, box, ticks or arrow on the hero word. A pile leaves by
 // lifting away, being struck through, smudged sideways or scribbled out. With `maximal` (preset 8)
 // every line gets all of it at once: double-drawn strokes, a marker swipe behind the hero, a ring
-// round the line, and doodles scattered round it. Profanity goes under a glitching redaction bar, long breaks
+// round the line, and doodles scattered round it. Its piles take a role from the singing tempo:
+// a peak line gets one big move on its hero (a bulb on its cord lighting the word, a spotlight ring,
+// focus rays, an ink fill or a stamp), a rush line a mark on every word, and duos and stacks a pen
+// mark that ties their lines together. Profanity goes under a glitching redaction bar, long breaks
 // show waiting dots. The whole stage runs through an old-film pass (film_tv.frag): grain and
 // scanlines inside the letters, a hair and scratches, a light smear and swell on big hits.
 Item {
@@ -63,6 +66,8 @@ Item {
     readonly property bool renderable: root.visible && root.width > 0
     // Centre of the newest line; older lines stack upward from here
     readonly property real anchorY: root.height * 0.64
+    // measured width of each line's body (before scaling), by line index, for the pile marks
+    property var bodyW: ({})
 
     property var motion: ({ lines: [] })
 
@@ -75,6 +80,7 @@ Item {
     ListModel { id: visibleLines }
 
     function rebuild() {
+        root.bodyW = {};
         root.motion = Stage.build(root.activeLyrics, { max: root.maximal });
         visibleLines.clear();
         syncVisible();
@@ -212,6 +218,40 @@ Item {
                 }
             }
 
+            // Marks that tie a duo or a stack together (Stage.pileStrokes), drawn once per pile from
+            // its first line, under that pile's camera
+            Repeater {
+                model: visibleLines
+
+                delegate: Item {
+                    id: pileItem
+                    required property int lineIdx
+                    readonly property var line: root.motion.lines[lineIdx] || null
+                    readonly property bool on: line !== null && line.slot === 0 && (line.pile.role === "duo" || line.pile.role === "stack")
+                    readonly property var cam: on ? Stage.camera(line, root.t, root.width, root.height) : null
+                    // the measured widths of this pile's lines (its lines follow one another in motion.lines)
+                    readonly property var bodyW: on && root.t > -1 ? line.pile.lines.map(function (L, k) { return root.bodyW[pileItem.lineIdx + k] || 0; }) : []
+                    readonly property var ps: on ? Stage.pileState(line.pile, root.t, root.width, root.height, root.anchorY, bodyW) : null
+                    width: root.width
+                    height: root.height
+                    visible: on && ps.alpha > 0.003
+                    opacity: on ? ps.alpha * (line.pile.fx === "draft" ? 0.5 : 1) : 0
+                    transform: [
+                        Rotation { origin.x: pileItem.width / 2; origin.y: pileItem.height / 2; axis { x: 1; y: 0; z: 0 } angle: pileItem.cam ? pileItem.cam.rx : 0 },
+                        Rotation { origin.x: pileItem.width / 2; origin.y: pileItem.height / 2; axis { x: 0; y: 1; z: 0 } angle: pileItem.cam ? pileItem.cam.ry : 0 },
+                        Rotation { origin.x: pileItem.width / 2; origin.y: pileItem.height / 2; angle: pileItem.cam ? pileItem.cam.rot : 0 },
+                        Scale { origin.x: pileItem.width / 2; origin.y: pileItem.height / 2; xScale: pileItem.cam ? pileItem.cam.s : 1; yScale: pileItem.cam ? pileItem.cam.s : 1 },
+                        Translate { x: pileItem.cam ? pileItem.cam.x : 0; y: pileItem.cam ? pileItem.cam.y : 0 }
+                    ]
+                    PenMark {
+                        anchors.fill: parent
+                        strokes: pileItem.visible ? Stage.pileStrokes(pileItem.line.pile, root.t, root.width, root.height, root.anchorY, pileItem.bodyW) : []
+                        ink: root.withAlpha(root.colHighlight, 0.85)
+                        penW: Math.max(2, pileItem.line ? pileItem.line.base * 0.04 : 2)
+                    }
+                }
+            }
+
             Repeater {
                 model: visibleLines
 
@@ -260,6 +300,7 @@ Item {
                         id: lineBody
                         readonly property real gapX: lineItem.hasSide ? Math.round(lineItem.base * 0.42) : 0
                         width: wordsRow.width + (lineItem.hasSide ? sideBox.width + gapX : 0)
+                        onWidthChanged: root.bodyW[lineItem.lineIdx] = width
                         height: lineItem.lineH
                         x: Math.round((root.width - width) / 2)
                         y: Math.round(root.anchorY + lineItem.ls.y - lineItem.lineH / 2)
@@ -301,6 +342,21 @@ Item {
                             strokes: kind ? Stage.penStrokes(lineItem.line, lineItem.t, "line", width, height) : []
                             ink: root.withAlpha(root.colActiveText, 0.72)
                             penW: Math.max(2, lineItem.base * 0.04)
+                        }
+
+                        // A peak's ink: a dense marker fill sweeping behind the whole line as it is sung
+                        PenMark {
+                            readonly property bool on: lineItem.line !== null && lineItem.line.pile.role === "peak" && lineItem.line.pile.fx === "ink"
+                            visible: on && strokes.length > 0
+                            x: wordsRow.x - Math.round(lineItem.base * 0.15)
+                            y: Math.round(lineItem.base * 0.12)
+                            width: wordsRow.width + Math.round(lineItem.base * 0.3)
+                            height: Math.round(lineItem.base * 0.95)
+                            z: -1
+                            strokes: on ? Stage.peakStrokes(lineItem.line, lineItem.t, "ink", width, height) : []
+                            ink: root.withAlpha(root.colHighlight, 0.22)
+                            penW: Math.round(lineItem.base * 0.5)
+                            cap: ShapePath.FlatCap
                         }
 
                         // Doodles scattered round the line in the maximal cut: stars, bursts, spirals, hearts...
@@ -435,22 +491,125 @@ Item {
                             }
 
                             // Pen mark on the hero word, drawn just after it lands: a ring or a rough box
-                            // round it, three shout ticks off a corner, or an arrow swooping in
+                            // round it, three shout ticks off a corner, or an arrow swooping in.
+                            // A rush line puts a small tick or ring on every word as it lands.
                             PenMark {
-                                readonly property bool on: lineItem.line.ringWi === wordItem.wi
-                                readonly property string kind: on ? Stage.markKind(lineItem.line, "hero") : ""
+                                readonly property string kind: Stage.wordMarkKind(lineItem.line, wordItem.wi)
+                                readonly property bool tick: kind === "tick"
                                 readonly property bool round: kind === "ring" || kind === "box"
                                 readonly property real pad: kind === "ring" ? 0.28 : (kind === "box" ? 0.16 : 0)
-                                x: -Math.round(wordItem.px * pad)
                                 readonly property real boxH: kind === "ring" ? 1.3 : (kind === "box" ? 1.06 : (kind === "ticks" ? 1.3 : 0.95))
-                                y: wordItem.bl - Math.round(wordItem.px * (kind === "ring" ? 0.98 : (kind === "box" ? 0.86 : 0.78)))
-                                width: wordItem.width + Math.round(wordItem.px * pad * 2)
-                                height: Math.round(wordItem.px * boxH)
+                                // a tick sits small off the word's top right corner, clear of the letters
+                                x: tick ? wordItem.width - Math.round(wordItem.px * 0.05) : -Math.round(wordItem.px * pad)
+                                y: tick ? wordItem.bl - Math.round(wordItem.px * 1.15) : wordItem.bl - Math.round(wordItem.px * (kind === "ring" ? 0.98 : (kind === "box" ? 0.86 : 0.78)))
+                                width: tick ? Math.round(wordItem.px * 0.42) : wordItem.width + Math.round(wordItem.px * pad * 2)
+                                height: tick ? Math.round(wordItem.px * 0.42) : Math.round(wordItem.px * boxH)
                                 rotation: kind === "box" ? -1.5 : (round ? -3 : 0)
                                 z: 2
-                                strokes: kind ? Stage.penStrokes(lineItem.line, lineItem.t, "hero", width, height) : []
+                                strokes: kind ? Stage.wordStrokes(lineItem.line, lineItem.t, wordItem.wi, width, height) : []
                                 ink: root.withAlpha(root.colHighlight, 0.85)
                                 penW: Math.max(2, wordItem.px * 0.045)
+                            }
+
+                            // A peak's hero carries the line's one big move (pile.fx): a spotlight ring,
+                            // a stamp, manga focus lines, or a bulb dropping on its cord and switching on
+                            readonly property string peakFx: lineItem.line.pile.role === "peak" && lineItem.line.heroWi === wordItem.wi ? lineItem.line.pile.fx : ""
+                            readonly property var peak: peakFx === "bulb" ? Stage.peakState(lineItem.line, lineItem.t) : null
+
+                            PenMark {
+                                readonly property bool on: wordItem.peakFx === "spot" || wordItem.peakFx === "stamp"
+                                readonly property real k: wordItem.peakFx === "spot" ? 1.8 : 1.25
+                                visible: on && strokes.length > 0
+                                width: Math.round((wordItem.width + wordItem.px * 0.3) * k)
+                                height: Math.round(wordItem.px * 1.15 * k)
+                                x: Math.round((wordItem.width - width) / 2)
+                                y: Math.round(wordItem.bl - wordItem.px * 0.36 - height / 2)
+                                rotation: wordItem.peakFx === "stamp" ? -7 : -3
+                                z: 2
+                                strokes: on ? Stage.peakStrokes(lineItem.line, lineItem.t, wordItem.peakFx === "spot" ? "ring" : "stamp", width, height) : []
+                                ink: root.withAlpha(root.colHighlight, 0.9)
+                                penW: Math.max(2.5, wordItem.px * (wordItem.peakFx === "stamp" ? 0.09 : 0.05))
+                            }
+
+                            PenMark {
+                                readonly property bool on: wordItem.peakFx === "rays"
+                                visible: on && strokes.length > 0
+                                width: Math.round(wordItem.px * 6)
+                                height: Math.round(wordItem.px * 3)
+                                x: Math.round((wordItem.width - width) / 2)
+                                y: Math.round(wordItem.bl - wordItem.px * 0.36 - height / 2)
+                                z: -1
+                                strokes: on ? Stage.peakStrokes(lineItem.line, lineItem.t, "rays", width, height) : []
+                                ink: root.withAlpha(root.colActiveText, 0.5)
+                                penW: Math.max(1.5, wordItem.px * 0.03)
+                            }
+
+                            // The bulb's light: a soft accent cone from the glass down onto the word
+                            Shape {
+                                readonly property real topW: wordItem.px * 0.4
+                                readonly property real botW: wordItem.width + wordItem.px * 0.5
+                                visible: wordItem.peak !== null && wordItem.peak.cone > 0.01
+                                opacity: wordItem.peak ? wordItem.peak.cone : 0
+                                width: botW
+                                height: Math.round(wordItem.px * 1.25)
+                                x: Math.round((wordItem.width - width) / 2)
+                                y: Math.round(wordItem.bl - wordItem.px * 1.08)
+                                z: -1
+                                preferredRendererType: Shape.CurveRenderer
+                                ShapePath {
+                                    strokeColor: "transparent"
+                                    fillGradient: LinearGradient {
+                                        x1: 0; y1: 0; x2: 0; y2: wordItem.px * 1.25
+                                        GradientStop { position: 0; color: root.withAlpha(root.colHighlight, 0.28) }
+                                        GradientStop { position: 1; color: root.withAlpha(root.colHighlight, 0) }
+                                    }
+                                    startX: (wordItem.width + wordItem.px * 0.5 - wordItem.px * 0.4) / 2; startY: 0
+                                    PathLine { x: (wordItem.width + wordItem.px * 0.5 + wordItem.px * 0.4) / 2; y: 0 }
+                                    PathLine { x: wordItem.width + wordItem.px * 0.5; y: wordItem.px * 1.25 }
+                                    PathLine { x: 0; y: wordItem.px * 1.25 }
+                                    PathLine { x: (wordItem.width + wordItem.px * 0.5 - wordItem.px * 0.4) / 2; y: 0 }
+                                }
+                            }
+
+                            // The bulb on its cord: drops in with a springy bounce, swings round the top of
+                            // its cord as it settles, then lights up with a burst of short rays
+                            Item {
+                                id: bulbRig
+                                readonly property real cordH: wordItem.px * 3
+                                readonly property real glassH: wordItem.px * 0.9
+                                visible: wordItem.peak !== null
+                                width: Math.round(wordItem.px * 0.8)
+                                height: cordH + glassH
+                                x: Math.round((wordItem.width - width) / 2)
+                                y: wordItem.bl - wordItem.px * 1.9 - cordH + (wordItem.peak ? wordItem.peak.bulbY * wordItem.px : 0)
+                                transformOrigin: Item.Top
+                                rotation: wordItem.peak ? wordItem.peak.bulbTilt : 0
+                                z: 3
+
+                                PenMark {
+                                    width: parent.width
+                                    height: bulbRig.cordH
+                                    strokes: wordItem.peak ? Stage.peakStrokes(lineItem.line, lineItem.t, "cord", width, height) : []
+                                    ink: root.withAlpha(root.colActiveText, 0.75)
+                                    penW: Math.max(1.5, wordItem.px * 0.03)
+                                }
+                                PenMark {
+                                    width: Math.round(wordItem.px * 2.6)
+                                    height: width
+                                    x: Math.round((parent.width - width) / 2)
+                                    y: Math.round(bulbRig.cordH + bulbRig.glassH * 0.6 - height / 2)
+                                    strokes: wordItem.peak ? Stage.peakStrokes(lineItem.line, lineItem.t, "glow", width, height) : []
+                                    ink: root.withAlpha(root.colHighlight, 0.85)
+                                    penW: Math.max(1.5, wordItem.px * 0.035)
+                                }
+                                PenMark {
+                                    y: bulbRig.cordH
+                                    width: parent.width
+                                    height: bulbRig.glassH
+                                    strokes: wordItem.peak ? Stage.peakStrokes(lineItem.line, lineItem.t, "bulb", width, height) : []
+                                    ink: wordItem.peak && wordItem.peak.on ? root.colHighlight : root.withAlpha(root.colActiveText, 0.85)
+                                    penW: Math.max(2, wordItem.px * 0.045)
+                                }
                             }
 
                             // Redaction bar over a profane word: three strips that glitch sideways now and then
