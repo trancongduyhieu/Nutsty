@@ -5,8 +5,10 @@ import "kinetic_stage.js" as Stage
 
 // Desktop lyrics preset 7: a kinetic type stage (kinetic_stage.js). Up to three lines pile up,
 // the newest big and the older ones shrunk and dimmed above it; each line gets its own type
-// treatment and its hero words are set heavy, wide or condensed in the accent colour. A held
-// hero word throws echo copies that slide away from it. One gentle camera move per pile.
+// treatment, case and font, and its hero words are set heavy, wide or condensed in the accent
+// colour. Backing vocals in ( ) get their own look, profanity goes under a glitching redaction
+// bar, long breaks show waiting dots. The whole stage runs through an old-film pass
+// (film_tv.frag): grain and scanlines inside the letters, a hair and scratches now and then.
 Item {
     id: root
 
@@ -22,12 +24,26 @@ Item {
 
     FontLoader { id: heavyFont; source: "../assets/fonts/Montserrat-Black.ttf" }
     FontLoader { id: softFont; source: "../assets/fonts/InstrumentSerif-Italic.ttf" }
-    readonly property string heavyFamily: (heavyFont.status === FontLoader.Ready && heavyFont.name !== "") ? heavyFont.name : "Montserrat"
-    readonly property string softFamily: (softFont.status === FontLoader.Ready && softFont.name !== "") ? softFont.name : "Instrument Serif"
+    // Bangers (graffiti caps) and Patrick Hand (handwriting): Google Fonts, OFL, both cover Vietnamese
+    FontLoader { id: markerFont; source: "../assets/fonts/Bangers-Regular.ttf" }
+    FontLoader { id: handFont; source: "../assets/fonts/PatrickHand-Regular.ttf" }
+    function loaded(f, fallback) { return (f.status === FontLoader.Ready && f.name !== "") ? f.name : fallback; }
+    readonly property string heavyFamily: loaded(heavyFont, "Montserrat")
+    readonly property string softFamily: loaded(softFont, "Instrument Serif")
+    readonly property string markerFamily: loaded(markerFont, "Bangers")
+    readonly property string handFamily: loaded(handFont, "Patrick Hand")
     readonly property string monoFamily: Qt.platform.os === "windows" ? "Consolas" : "monospace"
 
-    function familyFor(key) { return key === "heavy" ? root.heavyFamily : (key === "soft" ? root.softFamily : root.monoFamily); }
-    function weightFor(key) { return key === "heavy" ? Font.Black : (key === "soft" ? Font.Normal : Font.Bold); }
+    function familyFor(key) {
+        switch (key) {
+        case "heavy": return root.heavyFamily;
+        case "soft": return root.softFamily;
+        case "marker": return root.markerFamily;
+        case "hand": return root.handFamily;
+        }
+        return root.monoFamily;
+    }
+    function weightFor(key) { return key === "heavy" ? Font.Black : (key === "mono" ? Font.Bold : Font.Normal); }
     function withAlpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a); }
     function mix(a, b, k) { return Qt.rgba(a.r + (b.r - a.r) * k, a.g + (b.g - a.g) * k, a.b + (b.b - a.b) * k, 1); }
 
@@ -94,9 +110,12 @@ Item {
     onRenderableChanged: if (renderable) { root.animClock = root.currentTime; advanceClock(); }
     Component.onCompleted: { root.animClock = root.currentTime; rebuild(); }
 
+    readonly property var filmFx: Stage.film(root.motion, root.t)
+    readonly property var gap: Stage.gapAt(root.motion, root.t)
+
     // One soft shadow under everything so it reads on any wallpaper; no outline, no halo
     Item {
-        id: stage
+        id: shadowed
         anchors.fill: parent
         layer.enabled: root.renderable
         layer.effect: MultiEffect {
@@ -108,142 +127,264 @@ Item {
             autoPaddingEnabled: true
         }
 
-        Repeater {
-            model: visibleLines
+        Item {
+            id: stage
+            anchors.fill: parent
+            layer.enabled: root.renderable
+            layer.effect: ShaderEffect {
+                readonly property var f: root.filmFx
+                property size u_size: Qt.size(stage.width, stage.height)
+                property real u_frame: f.frame % 997
+                property real u_grain: f.grain
+                property real u_scan: f.scan
+                property real u_flicker: f.flicker
+                property real u_chroma: f.chroma
+                property real u_tear: f.tear
+                property real u_hair: f.hair
+                property real u_hairX: f.hairX
+                property real u_hairAmp: f.hairAmp
+                property real u_hairPhase: f.hairPhase
+                property real u_scratchX: f.scratchX
+                property real u_scratchA: f.scratchA
+                property color u_ink: root.colActiveText
+                property color u_accent: root.colHighlight
+                fragmentShader: Qt.resolvedUrl("../assets/shaders/film_tv.frag.qsb")
+            }
 
-            delegate: Item {
-                id: lineItem
-                required property int lineIdx
-                readonly property var line: root.motion.lines[lineIdx] || null
-                readonly property real t: root.t
-                readonly property var ls: Stage.lineState(line, t, root.width)
-                readonly property var cam: Stage.camera(line, t, root.width, root.height)
-                readonly property real base: line ? line.base : 48
-                readonly property real lineH: Math.round(base * 1.3)
-                readonly property real baselineY: Math.round(base * 1.0)
-                // The script's width estimate sets the pile spacing; the measured row makes sure it fits
-                readonly property real fit: Math.min(ls.fit, wordsRow.width > 0 ? root.width * 0.84 / wordsRow.width : 1)
-
-                width: root.width
-                height: root.height
-                opacity: ls.alpha
-                visible: ls.alpha > 0.003
-
-                // The pile's camera: one move around the middle of the box
-                readonly property real cx: width / 2
-                readonly property real cy: height / 2
-                transform: [
-                    Rotation { origin.x: lineItem.cx; origin.y: lineItem.cy; axis { x: 1; y: 0; z: 0 } angle: lineItem.cam.rx },
-                    Rotation { origin.x: lineItem.cx; origin.y: lineItem.cy; axis { x: 0; y: 1; z: 0 } angle: lineItem.cam.ry },
-                    Rotation { origin.x: lineItem.cx; origin.y: lineItem.cy; angle: lineItem.cam.rot },
-                    Scale { origin.x: lineItem.cx; origin.y: lineItem.cy; xScale: lineItem.cam.s; yScale: lineItem.cam.s },
-                    Translate { x: lineItem.cam.x; y: lineItem.cam.y }
-                ]
-
-                // Kept on for the line's life so the blur never rebuilds mid-shot
-                layer.enabled: root.renderable
-                layer.effect: MultiEffect {
-                    blurEnabled: true
-                    blur: Math.min(1, lineItem.ls.blur / 24)
-                    blurMax: 24
-                    autoPaddingEnabled: true
-                }
+            // Waiting for the singer: three hand-drawn dots in brackets fill up towards the next line
+            Item {
+                id: waiting
+                visible: root.gap.alpha > 0.003
+                opacity: root.gap.alpha
+                width: waitRow.width
+                height: waitRow.height
+                x: Math.round((root.width - width) / 2)
+                y: Math.round(root.anchorY - height / 2)
+                rotation: -3
 
                 Row {
-                    id: wordsRow
-                    x: Math.round((root.width - width) / 2)
-                    y: Math.round(root.anchorY + lineItem.ls.y - lineItem.lineH / 2)
-                    height: lineItem.lineH
-                    spacing: Math.round(lineItem.base * 0.24)
-                    transform: Scale {
-                        origin.x: wordsRow.width / 2
-                        origin.y: lineItem.lineH / 2
-                        xScale: lineItem.ls.s * lineItem.fit
-                        yScale: lineItem.ls.s * lineItem.fit
+                    id: waitRow
+                    spacing: 14
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "("
+                        font.family: root.handFamily
+                        font.pixelSize: 54
+                        color: root.withAlpha(root.colActiveText, 0.7)
+                    }
+                    Repeater {
+                        model: 3
+                        delegate: Rectangle {
+                            id: dot
+                            required property int index
+                            readonly property real lit: Math.max(0, Math.min(1, root.gap.prog * 3.2 - index))
+                            // breathing, each dot a little behind the one before
+                            readonly property real breath: 0.5 + 0.5 * Math.sin((root.t - root.gap.t0) * 3.2 - index * 0.9)
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 13 + 3 * dot.breath
+                            height: width
+                            radius: width / 2
+                            color: root.mix(root.withAlpha(root.colActiveText, 1), root.colHighlight, dot.lit)
+                            opacity: 0.35 + 0.65 * dot.lit
+                        }
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: ")"
+                        font.family: root.handFamily
+                        font.pixelSize: 54
+                        color: root.withAlpha(root.colActiveText, 0.7)
+                    }
+                }
+            }
+
+            Repeater {
+                model: visibleLines
+
+                delegate: Item {
+                    id: lineItem
+                    required property int lineIdx
+                    readonly property var line: root.motion.lines[lineIdx] || null
+                    readonly property real t: root.t
+                    readonly property var ls: Stage.lineState(line, t, root.width)
+                    readonly property var cam: Stage.camera(line, t, root.width, root.height)
+                    readonly property real base: line ? line.base : 48
+                    readonly property real lineH: Math.round(base * 1.3)
+                    readonly property real baselineY: Math.round(base * 1.0)
+                    // The script's width estimate sets the pile spacing; the measured row makes sure it fits
+                    readonly property real fit: Math.min(ls.fit, wordsRow.width > 0 ? root.width * 0.84 / wordsRow.width : 1)
+
+                    width: root.width
+                    height: root.height
+                    opacity: ls.alpha
+                    visible: ls.alpha > 0.003
+
+                    // The pile's camera: one move around the middle of the box
+                    readonly property real cx: width / 2
+                    readonly property real cy: height / 2
+                    transform: [
+                        Rotation { origin.x: lineItem.cx; origin.y: lineItem.cy; axis { x: 1; y: 0; z: 0 } angle: lineItem.cam.rx },
+                        Rotation { origin.x: lineItem.cx; origin.y: lineItem.cy; axis { x: 0; y: 1; z: 0 } angle: lineItem.cam.ry },
+                        Rotation { origin.x: lineItem.cx; origin.y: lineItem.cy; angle: lineItem.cam.rot },
+                        Scale { origin.x: lineItem.cx; origin.y: lineItem.cy; xScale: lineItem.cam.s; yScale: lineItem.cam.s },
+                        Translate { x: lineItem.cam.x; y: lineItem.cam.y }
+                    ]
+
+                    // Kept on for the line's life so the blur never rebuilds mid-shot
+                    layer.enabled: root.renderable
+                    layer.effect: MultiEffect {
+                        blurEnabled: true
+                        blur: Math.min(1, lineItem.ls.blur / 24)
+                        blurMax: 24
+                        autoPaddingEnabled: true
                     }
 
-                    Repeater {
-                        model: lineItem.line ? lineItem.line.words : []
+                    Row {
+                        id: wordsRow
+                        x: Math.round((root.width - width) / 2)
+                        y: Math.round(root.anchorY + lineItem.ls.y - lineItem.lineH / 2)
+                        height: lineItem.lineH
+                        spacing: Math.round(lineItem.base * 0.24)
+                        transform: Scale {
+                            origin.x: wordsRow.width / 2
+                            origin.y: lineItem.lineH / 2
+                            xScale: lineItem.ls.s * lineItem.fit
+                            yScale: lineItem.ls.s * lineItem.fit
+                        }
 
-                        delegate: Item {
-                            id: wordItem
-                            required property int index
-                            required property var modelData
-                            readonly property var word: modelData
-                            readonly property var fx: Stage.wordFx(lineItem.line, lineItem.t, index)
-                            readonly property real px: Math.round(lineItem.base * word.size)
-                            readonly property color ink: word.hero ? root.colHighlight : root.colActiveText
+                        Repeater {
+                            model: lineItem.line ? lineItem.line.words : []
 
-                            width: Math.ceil(letters.width * word.sx)
-                            height: lineItem.lineH
-                            // Opacity only, never visible: a hidden word would drop out of the Row and reflow the line
-                            opacity: fx.alpha
+                            delegate: Item {
+                                id: wordItem
+                                required property int index
+                                required property var modelData
+                                readonly property var word: modelData
+                                readonly property var fx: Stage.wordFx(lineItem.line, lineItem.t, index)
+                                readonly property real px: Math.round(lineItem.base * word.size)
+                                readonly property color ink: (word.hero || word.look === "shout") ? root.colHighlight : root.colActiveText
+                                readonly property bool slant: word.italic === true
 
-                            transform: [
-                                Scale { origin.x: wordItem.width / 2; origin.y: lineItem.baselineY; xScale: wordItem.fx.s; yScale: wordItem.fx.s },
-                                Translate { x: wordItem.fx.dx * wordItem.px; y: wordItem.fx.dy * wordItem.px }
-                            ]
+                                width: Math.ceil(letters.width * word.sx)
+                                height: lineItem.lineH
+                                // Opacity only, never visible: a hidden word would drop out of the Row and reflow the line
+                                opacity: fx.alpha
 
-                            // Letters and their echo copies share the wide / condensed stretch
-                            Item {
-                                id: body
-                                width: letters.width
-                                height: parent.height
-                                transform: Scale { xScale: wordItem.word.sx }
+                                // Every word sits a little off-axis (word.rot, word.jy) so the line reads hand-set
+                                transform: [
+                                    Scale { origin.x: wordItem.width / 2; origin.y: lineItem.baselineY; xScale: wordItem.fx.s; yScale: wordItem.fx.s },
+                                    Rotation { origin.x: wordItem.width / 2; origin.y: lineItem.baselineY - wordItem.px * 0.35; angle: wordItem.word.rot + wordItem.fx.rot },
+                                    Translate { x: wordItem.fx.dx * wordItem.px; y: (wordItem.fx.dy + wordItem.word.jy) * wordItem.px }
+                                ]
 
-                                Repeater {
-                                    model: 4
-                                    delegate: Text {
-                                        id: ghost
-                                        required property int index
-                                        readonly property var g: wordItem.fx.ghosts[index]
-                                        visible: g.a > 0.004
-                                        x: g.dx * wordItem.px
-                                        y: lineItem.baselineY - baselineOffset + g.dy * wordItem.px
-                                        opacity: g.a
-                                        text: wordItem.word.chars.join("")
-                                        font.family: root.familyFor(wordItem.word.font)
-                                        font.weight: root.weightFor(wordItem.word.font)
-                                        font.pixelSize: wordItem.px
-                                        color: wordItem.ink
+                                // Hand-drawn underline under a hand-lettered hero, drawn once the word is sung
+                                Rectangle {
+                                    visible: wordItem.fx.under > 0.01
+                                    x: -wordItem.px * 0.05
+                                    y: lineItem.baselineY + Math.round(wordItem.px * 0.12)
+                                    width: (wordItem.width + wordItem.px * 0.1) * wordItem.fx.under
+                                    height: Math.max(2, Math.round(wordItem.px * 0.07))
+                                    radius: height / 2
+                                    rotation: -2.5
+                                    transformOrigin: Item.Left
+                                    color: wordItem.ink
+                                    z: 2
+                                }
+
+                                // Redaction bar over a profane word: three strips that glitch sideways now and then
+                                Item {
+                                    visible: wordItem.word.censor === true && wordItem.fx.bar > 0.01
+                                    x: -wordItem.px * 0.08
+                                    y: lineItem.baselineY - Math.round(wordItem.px * 0.78)
+                                    width: (wordItem.width + wordItem.px * 0.16) * wordItem.fx.bar
+                                    height: Math.round(wordItem.px * 0.9)
+                                    rotation: -1.5
+                                    z: 3
+                                    Repeater {
+                                        model: 3
+                                        delegate: Rectangle {
+                                            required property int index
+                                            x: wordItem.fx.barDx[index] * wordItem.px
+                                            y: Math.round(index * parent.height / 3)
+                                            width: parent.width
+                                            height: Math.ceil(parent.height / 3) + 1
+                                            color: Qt.rgba(0.03, 0.03, 0.045, 0.94)
+                                            // hairline edge so the bar still reads on a dark wallpaper
+                                            border.width: 1
+                                            border.color: Qt.rgba(root.colHighlight.r, root.colHighlight.g, root.colHighlight.b, 0.28)
+                                        }
                                     }
                                 }
 
-                                Row {
-                                    id: letters
+                                // Letters and their echo copies share the wide / condensed stretch
+                                Item {
+                                    id: body
+                                    width: letters.width
+                                    height: parent.height
+                                    transform: Scale { xScale: wordItem.word.sx }
 
                                     Repeater {
-                                        model: wordItem.word.chars
-
-                                        delegate: Item {
-                                            id: letter
+                                        model: 4
+                                        delegate: Text {
+                                            id: ghost
                                             required property int index
-                                            required property string modelData
-                                            readonly property var st: Stage.letterState(lineItem.line, lineItem.t, wordItem.index, index)
+                                            readonly property var g: wordItem.fx.ghosts[index]
+                                            visible: g.a > 0.004
+                                            x: g.dx * wordItem.px
+                                            y: lineItem.baselineY - baselineOffset + g.dy * wordItem.px
+                                            opacity: g.a
+                                            text: wordItem.word.chars.join("")
+                                            font.family: root.familyFor(wordItem.word.font)
+                                            font.weight: root.weightFor(wordItem.word.font)
+                                            font.italic: wordItem.slant
+                                            font.pixelSize: wordItem.px
+                                            color: wordItem.ink
+                                        }
+                                    }
 
-                                            width: Math.ceil(glyph.implicitWidth)
-                                            height: lineItem.lineH
-                                            opacity: st.alpha
+                                    Row {
+                                        id: letters
 
-                                            // The rise treatment masks letters at the baseline as they come up
-                                            Item {
-                                                width: parent.width
-                                                height: lineItem.baselineY + Math.round(wordItem.px * 0.08)
-                                                clip: letter.st.clip
+                                        Repeater {
+                                            model: wordItem.word.chars
 
-                                                Text {
-                                                    id: glyph
-                                                    x: letter.st.dx * wordItem.px
-                                                    y: lineItem.baselineY - baselineOffset + letter.st.dy * wordItem.px
-                                                    text: letter.st.glyph !== "" ? letter.st.glyph : letter.modelData
-                                                    font.family: root.familyFor(wordItem.word.font)
-                                                    font.weight: root.weightFor(wordItem.word.font)
-                                                    font.pixelSize: wordItem.px
-                                                    // Waiting letters sit dim; sung ones fill, a decode lock flashes the accent
-                                                    color: {
-                                                        var s = letter.st;
-                                                        var c = s.flash > 0 ? root.mix(wordItem.ink, root.colHighlight, s.flash) : wordItem.ink;
-                                                        return root.withAlpha(c, s.tone);
+                                            delegate: Item {
+                                                id: letter
+                                                required property int index
+                                                required property string modelData
+                                                readonly property var st: Stage.letterState(lineItem.line, lineItem.t, wordItem.index, index)
+
+                                                width: Math.ceil(glyph.implicitWidth)
+                                                height: lineItem.lineH
+                                                opacity: st.alpha
+                                                transform: Rotation {
+                                                    origin.x: letter.width / 2
+                                                    origin.y: lineItem.baselineY - wordItem.px * 0.35
+                                                    angle: letter.st.rot
+                                                }
+
+                                                // The rise treatment masks letters at the baseline as they come up
+                                                // Handwriting reveals each letter from the left like a pen stroke
+                                                Item {
+                                                    width: Math.ceil(parent.width * letter.st.reveal) + (letter.st.reveal < 1 ? 0 : 4)
+                                                    height: letter.st.clip ? lineItem.baselineY + Math.round(wordItem.px * 0.08) : lineItem.lineH
+                                                    clip: letter.st.clip || letter.st.reveal < 1
+
+                                                    Text {
+                                                        id: glyph
+                                                        x: letter.st.dx * wordItem.px
+                                                        y: lineItem.baselineY - baselineOffset + letter.st.dy * wordItem.px
+                                                        text: letter.st.glyph !== "" ? letter.st.glyph : letter.modelData
+                                                        font.family: root.familyFor(wordItem.word.font)
+                                                        font.weight: root.weightFor(wordItem.word.font)
+                                                        font.italic: wordItem.slant
+                                                        font.pixelSize: wordItem.px
+                                                        // Waiting letters sit dim; sung ones fill, a decode lock flashes the accent
+                                                        color: {
+                                                            var s = letter.st;
+                                                            var c = s.flash > 0 ? root.mix(wordItem.ink, root.colHighlight, s.flash) : wordItem.ink;
+                                                            return root.withAlpha(c, s.tone);
+                                                        }
                                                     }
                                                 }
                                             }
