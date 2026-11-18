@@ -83,6 +83,8 @@ var TEMPO = { slow: 0.75, prevFast: 1.0, minLines: 4, fast: 1.35, fastPct: 0.8, 
 // Props with their own motion (peakPieces): each arrives over PROP_D seconds and lands on the hero
 var PROP_FX = ["balloon", "note", "plane", "roll", "vine", "jack", "fold", "hand"];
 var PROP_D = { balloon: 0.9, note: 1.0, plane: 0.8, roll: 0.7, vine: 0, jack: 0, fold: 0.6, hand: 0.6 };
+// a prop lands no sooner than this after its line starts coming in, so the line is whole by then
+var PROP_SETTLE = 0.6;
 var PEAK_FX = ["bulb", "spot", "rays", "ink", "stamp"].concat(PROP_FX);
 var DUO_FX = ["arrow", "brace", "versus", "swoop", "pair"];
 var STACK_FX = ["notebook", "numbers", "stairs", "frame", "draft"];
@@ -1305,7 +1307,7 @@ function peakOnAt(L) {
     var hw = L.words[L.heroWi >= 0 ? L.heroWi : 0];
     var land = hw.start - LEAD;
     var fx = L.pile ? L.pile.fx : "";
-    var d = fx === "bulb" ? 0.7 : (PROP_D[fx] || 0);
+    var d = fx === "bulb" ? 0.7 : (fx in PROP_D ? Math.max(PROP_D[fx], PROP_SETTLE) : 0);
     return d > 0 ? Math.max(land, L.enterAt + d) : land;
 }
 // When the balloon pops: near the end of the line, but never before it has lifted the word a while
@@ -1470,13 +1472,14 @@ function peakPieces(L, t, W, px, bl) {
         // rises from below the line on a damped spring, swaying; its string ties to the word top
         var pop = balloonPop(L);
         var bAt = function (ta) {
-            return { x: W / 2 + 0.25 * px + 0.2 * px * Math.sin(2.1 * ta),
-                     y: bl - 2.3 * px + 4.0 * px * Math.exp(-3 * ta) * Math.cos(4 * ta), tilt: 6 * Math.sin(2.1 * ta + 0.8) };
+            // it floats off to the word's upper right, no higher than the bulb hangs
+            return { x: W / 2 + 0.9 * px + 0.2 * px * Math.sin(2.1 * ta),
+                     y: bl - 1.6 * px + 3.5 * px * Math.exp(-5 * ta) * Math.cos(4 * ta), tilt: 6 * Math.sin(2.1 * ta + 0.8) };
         };
         if (t < pop) {
             var b = bAt(tau);
-            put(0, place(propShape("balloon"), b.x, b.y, b.tilt, px), 1, true, 0.95, 0.05, 3);
-            var knot = place([[{ x: 0, y: 0.62 }]], b.x, b.y, b.tilt, px)[0][0];
+            put(0, place(propShape("balloon"), b.x, b.y, b.tilt, 0.8 * px), 1, true, 0.95, 0.05, 3);
+            var knot = place([[{ x: 0, y: 0.62 }]], b.x, b.y, b.tilt, 0.8 * px)[0][0];
             var end = t >= on ? { x: W / 2, y: bl - 0.8 * px } : { x: knot.x - 0.15 * px * Math.sin(2.1 * tau), y: knot.y + 1.3 * px };
             var mid = { x: (knot.x + end.x) / 2 + 0.22 * px * Math.sin(3 * tau + 1), y: (knot.y + end.y) / 2 };
             put(1, [bezier(knot, mid, mid, end, 16)], 1, false, 0.7, 0.025, 2);
@@ -1512,7 +1515,8 @@ function peakPieces(L, t, W, px, bl) {
     case "plane": {
         // a paper plane swoops in over the word, nose first, and sticks in its top right corner
         var p0 = { x: -2.5 * px, y: bl - 3.4 * px }, c0 = { x: W + 4.5 * px, y: bl - 4.6 * px };
-        var c1 = { x: W + 0.7 * px, y: bl - 2.4 * px }, p1 = { x: W - 0.02 * px, y: bl - 0.7 * px };
+        // it comes down nearly straight at the end, so once stuck its tail stands up clear of the next word
+        var c1 = { x: W - 0.1 * px, y: bl - 2.6 * px }, p1 = { x: W - 0.12 * px, y: bl - 0.72 * px };
         var fu = 1 - Math.pow(1 - M.clamp(tau / PROP_D.plane), 1.7);
         var P = cubicAt(p0, c0, c1, p1, fu);
         var head = Math.atan2(P.dy, P.dx) * 180 / Math.PI;

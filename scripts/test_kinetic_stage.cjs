@@ -427,6 +427,27 @@ test("hand places a sticker and pulls back", () => {
     assert.ok(drawn(later[1]) && !drawn(later[0]), "sticker stays, hand leaves");
 });
 
+test("props wait for the line to finish coming in", () => {
+    for (const fx of K.PROP_FX) {
+        const { L } = peakWith(fx);
+        L.words[L.heroWi].start = L.enterAt + 0.1;   // hero sung right as the line comes in
+        assert.ok(K.peakOnAt(L) >= L.enterAt + K.PROP_SETTLE - 1e-9, fx + " lands mid-entry");
+    }
+});
+test("balloon stays as low as the bulb", () => {
+    const { L } = peakWith("balloon");
+    const on = K.peakOnAt(L), pop = K.balloonPop(L);
+    for (let t = on - K.PROP_D.balloon; t < pop; t += 0.02) {
+        const pc = pcs(L, t)[0];
+        if (drawn(pc)) assert.ok(Math.min(...pts(pc).map(q => q.y)) > BL - 2.35 * PX, "too high at " + (t - on).toFixed(2));
+    }
+});
+test("stuck plane keeps clear of the next word", () => {
+    const { L } = peakWith("plane");
+    const on = K.peakOnAt(L);
+    for (const dt of [0.3, 1, 2]) assert.ok(maxX(pcs(L, on + dt)[0]) < PW_ + 0.5 * PX, "tail over the next word " + dt);
+});
+
 test("NaN sweep", () => {
     for (const max of [false, true]) {
         const m = K.build(longSong().concat(demo.map(e => Object.assign({}, e, { time: (e.time !== undefined ? e.time : 0) + 200 }))), { max: max });
