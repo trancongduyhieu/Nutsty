@@ -55,35 +55,6 @@ Item {
     function weightFor(key) { return key === "heavy" ? Font.Black : (key === "mono" ? Font.Bold : Font.Normal); }
     function withAlpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a); }
 
-    // One stroke of a PenMark: the idx-th list of { x, y } from Stage.penStrokes / doodleStrokes
-    component PenStroke: ShapePath {
-        property Item owner
-        property int idx: 0
-        readonly property bool used: owner !== null && idx < owner.strokes.length
-        strokeColor: used ? owner.ink : "transparent"
-        strokeWidth: owner ? owner.penW * (idx === 0 ? 1 : 0.85) : 1
-        fillColor: "transparent"
-        capStyle: owner ? owner.cap : ShapePath.RoundCap
-        joinStyle: ShapePath.RoundJoin
-        PathPolyline { path: used ? owner.strokes[idx].map(function (p) { return Qt.point(p.x, p.y); }) : [] }
-    }
-
-    // A pen mark of up to six strokes (three, each drawn twice in the maximal cut)
-    component PenMark: Shape {
-        id: pen
-        property var strokes: []
-        property color ink: "white"
-        property real penW: 2
-        property int cap: ShapePath.RoundCap
-        visible: strokes.length > 0
-        preferredRendererType: Shape.CurveRenderer
-        PenStroke { owner: pen; idx: 0 }
-        PenStroke { owner: pen; idx: 1 }
-        PenStroke { owner: pen; idx: 2 }
-        PenStroke { owner: pen; idx: 3 }
-        PenStroke { owner: pen; idx: 4 }
-        PenStroke { owner: pen; idx: 5 }
-    }
     function mix(a, b, k) { return Qt.rgba(a.r + (b.r - a.r) * k, a.g + (b.g - a.g) * k, a.b + (b.b - a.b) * k, 1); }
 
     implicitWidth: 880

@@ -30,6 +30,7 @@ FriendsPulseBar 1.0 FriendsPulseBar.qml
 GeneratedCover 1.0 GeneratedCover.qml
 GachaAnimeLyricsView 1.0 GachaAnimeLyricsView.qml
 KineticStageView 1.0 KineticStageView.qml
+PenMark 1.0 PenMark.qml
 ExpressiveLyricsView 1.0 ExpressiveLyricsView.qml
 LyricsPresetCard 1.0 LyricsPresetCard.qml
 singleton LyricsPresets 1.0 LyricsPresets.qml
