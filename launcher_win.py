@@ -120,6 +120,10 @@ class ThreadLocalStream:
             except Exception:
                 pass
 
+    def fileno(self):
+        # route_dispatcher --serve answers nutsty-daemon on a dup of this descriptor
+        return getattr(self._local, "stream", self._default).fileno()
+
 if sys.platform == "win32":
     if sys.stdout and hasattr(sys.stdout, "reconfigure"):
         try:
@@ -187,6 +191,7 @@ BACKEND_MAP = {
     "updater.py": "updater",
     "cache_manager.py": "cache_manager",
     "stream_resolver.py": "stream_resolver",
+    "route_dispatcher.py": "route_dispatcher",
     "nutsty-library": "library",
     "nutsty-library.exe": "library",
 }
@@ -1270,6 +1275,14 @@ def register_qml_types():
 
 _nutsty_daemon_proc = None
 
+def daemon_env():
+    """nutsty-daemon forwards most routes to Python workers. A PC with only Nutsty.exe has no
+    `python` on PATH, so hand it our own interpreter (Nutsty.exe when frozen, which runs
+    route_dispatcher.py headless through check_cli_dispatch)."""
+    env = os.environ.copy()
+    env["NUTSTY_PYTHON"] = sys.executable
+    return env
+
 def start_daemons():
     """Start resident backend daemons (nutsty-daemon native Rust or auth_server HTTP daemon, palette_extractor)."""
     global _nutsty_daemon_proc
@@ -1282,7 +1295,7 @@ def start_daemons():
             res = sock.connect_ex(("127.0.0.1", 17890))
             sock.close()
             if res != 0:
-                _nutsty_daemon_proc = subprocess.Popen([daemon_exe], **pc.get_daemon_popen_kwargs())
+                _nutsty_daemon_proc = subprocess.Popen([daemon_exe], env=daemon_env(), **pc.get_daemon_popen_kwargs())
         except Exception as e:
             sys.stderr.write(f"nutsty-daemon launch error: {e}\n")
     """Start resident backend daemons (auth_server HTTP daemon, palette_extractor)."""

@@ -66,6 +66,23 @@ class CliDispatchTest(unittest.TestCase):
     def test_plain_launch_still_opens_gui(self):
         self.assertEqual(dispatch(), (None, []))
 
+    def test_route_dispatcher_worker_runs_headless(self):
+        # nutsty-daemon spawns [NUTSTY_PYTHON, route_dispatcher.py, --serve]; in the bundle that is Nutsty.exe
+        script = os.path.join(REPO, "_internal", "backend", "route_dispatcher.py")
+        code, imported = dispatch(script, "--serve")
+        self.assertEqual(code, 0, "route_dispatcher worker was refused, so every forwarded route fails")
+        self.assertEqual(imported, ["route_dispatcher"])
+
+    def test_wrapped_stdout_keeps_its_file_descriptor(self):
+        # route_dispatcher --serve answers on os.dup(sys.stdout.fileno())
+        with open(os.devnull, "w") as f:
+            self.assertEqual(launcher_win.ThreadLocalStream(f).fileno(), f.fileno())
+
+    def test_daemon_is_told_which_python_to_run(self):
+        # A PC with only Nutsty.exe has no `python` on PATH: the daemon must reuse our interpreter
+        env = launcher_win.daemon_env()
+        self.assertEqual(env.get("NUTSTY_PYTHON"), sys.executable)
+
     def test_every_backend_module_that_respawns_itself_is_mapped(self):
         # Modules that spawn [sys.executable, <their own __file__>, ...]
         backend = os.path.join(REPO, "backend")

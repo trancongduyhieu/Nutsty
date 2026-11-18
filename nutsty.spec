@@ -79,6 +79,7 @@ hidden_imports = [
     'cloud_relay_client',
     'social_routes',
     'music_routes',
+    'route_dispatcher',
     'player_daemon',
     'download_manager',
     'library',

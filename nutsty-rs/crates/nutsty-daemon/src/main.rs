@@ -13,7 +13,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
 use tiny_http::{Header, Method, Response, Server, StatusCode};
@@ -45,8 +45,18 @@ const WORKER_TIMEOUT: Duration = Duration::from_secs(120);
 const BUSY_WAIT: Duration = Duration::from_millis(400);
 const SPARE_SPAWN_WAIT: Duration = Duration::from_millis(150);
 
+/// NUTSTY_PYTHON is set by launcher_win.py: a PC with only Nutsty.exe has no `python` on PATH
+/// (it resolves to the Store stub), so every forwarded route would fail with 500.
 fn python_cmd() -> &'static str {
-    if cfg!(windows) { "python" } else { "python3" }
+    static CMD: OnceLock<String> = OnceLock::new();
+    CMD.get_or_init(|| pick_python(env::var("NUTSTY_PYTHON").ok()))
+}
+
+fn pick_python(from_env: Option<String>) -> String {
+    match from_env.map(|s| s.trim().to_string()) {
+        Some(s) if !s.is_empty() => s,
+        _ => if cfg!(windows) { "python" } else { "python3" }.to_string(),
+    }
 }
 
 fn no_console(cmd: &mut Command) {
@@ -571,5 +581,23 @@ fn main() {
             handle_request(st, request);
             trim_system_memory();
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pick_python;
+
+    #[test]
+    fn launcher_interpreter_wins_over_path_python() {
+        let exe = r"C:\Program Files\Nutsty\Nutsty.exe".to_string();
+        assert_eq!(pick_python(Some(exe.clone())), exe);
+    }
+
+    #[test]
+    fn falls_back_to_path_python_when_unset_or_blank() {
+        let fallback = if cfg!(windows) { "python" } else { "python3" };
+        assert_eq!(pick_python(None), fallback);
+        assert_eq!(pick_python(Some("  ".into())), fallback);
     }
 }
