@@ -100,6 +100,80 @@ test("preset 7 unchanged", () => {
     });
 });
 
+// A long song: runs of fast lines, a slow line after them, medium lines, and a very fast line
+const MID = ["ngày mai nắng lên rồi", "mình đi qua phố nhỏ", "em ơi đừng khóc nữa", "gió vẫn thổi bên thềm"];
+const SLOW = ["em vẫn ở đây", "đừng đi xa", "mãi mãi thôi", "nhớ không em", "về với nhau"];
+const RUSH = "nói đi nói đi nói đi em ơi đừng im lặng mãi như thế nữa mà anh chờ";
+function longSong() {
+    const rows = [];
+    let t = 0;
+    for (let b = 0; b < 5; b++) {
+        for (let i = 0; i < 3; i++) { rows.push([t, FAST[(b + i) % 4]]); t += 1.6; }
+        rows.push([t, SLOW[b]]); t += 3.5;
+        for (let i = 0; i < 4; i++) { rows.push([t, MID[(b + i) % 4]]); t += 2.5; }
+        rows.push([t, RUSH]); t += 2;
+        for (let i = 0; i < 3; i++) { rows.push([t, MID[(b + i + 1) % 4]]); t += 2.5; }
+    }
+    return song(rows);
+}
+
+test("fx never repeats per role", () => {
+    const m = K.build(longSong(), { max: true });
+    const pools = { peak: K.PEAK_FX, duo: K.DUO_FX, stack: K.STACK_FX };
+    const last = {};
+    const seen = {};
+    m.piles.forEach(P => {
+        seen[P.role] = (seen[P.role] || 0) + 1;
+        if (P.role === "rush") { assert.strictEqual(P.fx, ""); return; }
+        assert.ok(pools[P.role].indexOf(P.fx) >= 0, P.role + " fx " + P.fx);
+        assert.notStrictEqual(P.fx, last[P.role], P.role + " repeated " + P.fx);
+        last[P.role] = P.fx;
+    });
+    assert.ok(seen.peak >= 3 && seen.rush >= 3 && seen.stack >= 3, JSON.stringify(seen));
+});
+
+test("pile doodle cap", () => {
+    const m = K.build(longSong(), { max: true });
+    m.piles.filter(P => P.role === "duo" || P.role === "stack").forEach(P => {
+        const n = P.lines.reduce((a, L) => a + L.doodles.length, 0);
+        assert.ok(n <= K.PILE_DOODLES, n + " doodles in a " + P.role);
+    });
+});
+
+test("rush dressing", () => {
+    const m = K.build(longSong(), { max: true });
+    const L = m.piles.find(P => P.role === "rush").lines[0];
+    const n = Math.min(K.RUSH_DOODLES, L.mainIdx.length);
+    assert.strictEqual(L.doodles.length, n + 2);
+    const sides = L.doodles.slice(n);
+    assert.ok(sides.every(d => d.kind === "speed"));
+    assert.strictEqual(sides.map(d => d.spot).sort().join(","), "left,right");
+    L.doodles.slice(0, n).forEach((d, k) => {
+        assert.ok(d.spot === "above" || d.spot === "below");
+        assert.ok(Math.abs(d.at - (L.words[L.mainIdx[k]].start - K.LEAD)) < 1e-9);
+    });
+    assert.strictEqual(Object.keys(L.wordMarks).length, L.mainIdx.length);
+    assert.strictEqual(L.boil, 12);
+    assert.strictEqual(L.lineMark, "rushline");
+});
+
+test("peak dressing and fallback", () => {
+    const m = K.build(longSong(), { max: true });
+    m.piles.filter(P => P.role === "peak").forEach(P => {
+        const L = P.lines[0];
+        assert.strictEqual(L.doodles.length, 0);
+        assert.strictEqual(L.lineMark, "");
+        assert.strictEqual(L.hiWi, -1);
+        assert.strictEqual(P.frameX, 0);
+        assert.ok(L.heroWi >= 0);
+    });
+    // a peak whose words are all hidden under the redaction bar has no hero to light
+    const rows = [[0, FAST[0]], [1.6, FAST[1]], [3.2, FAST[2]], [4.8, FAST[3]], [6.4, "fuck fuck fuck"], [9.9, FAST[0]], [11.5, FAST[1]]];
+    const P = pileOf(K.build(song(rows), { max: true }), "fuck fuck fuck");
+    assert.strictEqual(P.role, "peak");
+    assert.strictEqual(P.fx, "ink");
+});
+
 let failed = 0;
 for (const [name, fn] of tests) {
     try { fn(); console.log("ok " + name); }

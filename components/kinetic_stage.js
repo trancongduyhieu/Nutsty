@@ -71,6 +71,14 @@ var DOODLE_SPOTS = ["above", "above", "left", "right", "above", "below"];
 // song's median): a slow line straight after fast ones is a peak, a very fast line is a rush; both
 // stand alone. Every other pile is a duo (two lines) or a stack.
 var TEMPO = { slow: 0.75, prevFast: 1.0, minLines: 4, fast: 1.35, fastPct: 0.8, peakMinDur: 1.2 };
+// What each role draws. A peak picks one big move; a duo or stack one mark that ties its lines
+// together; a rush gets everything at once. Never the same pick twice running within a role.
+var PEAK_FX = ["bulb", "spot", "rays", "ink", "stamp"];
+var DUO_FX = ["arrow", "brace", "versus", "swoop", "pair"];
+var STACK_FX = ["notebook", "numbers", "stairs", "frame", "draft"];
+var PILE_DOODLES = 5;     // doodles a whole duo or stack may carry
+var RUSH_DOODLES = 10;    // one per word on a rush line, at most this many
+var RUSH_KINDS = ["speed", "sparkle", "bang", "burst"];
 // How the words of a line sit: level, a zigzag (one up, one down), stairs climbing, or an arc
 var STAGGER_ORDER = ["zig", "stairs", "arc", "zig"];
 
@@ -133,6 +141,76 @@ function tempoRoles(lines) {
         roles.push(role);
     }
     return roles;
+}
+
+// The maximal cut: give every pile its role and pick, then dress its lines for that role
+function dressPiles(piles) {
+    var lastFx = {};
+    for (var q = 0; q < piles.length; q++) {
+        var P = piles[q];
+        if (!P.role) P.role = P.lines.length === 2 ? "duo" : "stack";
+        var pool = P.role === "peak" ? (P.lines[0].heroOk ? PEAK_FX : ["ink"])
+                 : P.role === "duo" ? DUO_FX : (P.role === "stack" ? STACK_FX : []);
+        P.fx = "";
+        if (pool.length > 0) {
+            var k = Math.floor(M.r(P.seed, 31, 431) * pool.length);
+            if (pool.length > 1 && pool[k] === lastFx[P.role]) k = (k + 1) % pool.length;
+            P.fx = pool[k];
+            lastFx[P.role] = P.fx;
+        }
+        if (P.role === "peak") dressPeak(P.lines[0]);
+        else if (P.role === "rush") dressRush(P.lines[0]);
+        else capDoodles(P);
+    }
+}
+
+// A peak keeps its letters clear for its one big move
+function dressPeak(L) {
+    L.doodles = [];
+    L.lineMark = "";
+    L.heroMark = "";
+    L.ringWi = -1;
+    L.hiWi = -1;
+    L.scribble = "";
+}
+
+// A rush throws a doodle off every word as it lands, speed lines both sides, a zigzag and a line
+// under it, and a tick or a small ring on each word; its strokes boil half again as fast
+function dressRush(L) {
+    var main = L.mainIdx, n = Math.min(RUSH_DOODLES, main.length);
+    L.doodles = [];
+    for (var k = 0; k < n; k++) {
+        var w = L.words[main[k]];
+        L.doodles.push({
+            kind: RUSH_KINDS[Math.floor(M.r(L.seed, k, 441) * RUSH_KINDS.length)],
+            spot: k % 2 ? "below" : "above",
+            u: (k + 0.5) / main.length,
+            k: 0.5 + 0.2 * M.r(L.seed, k, 442),
+            rot: 30 * M.rs(L.seed, k, 443),
+            accent: k % 2 === 0,
+            at: w.start - LEAD,
+            dur: 0.18
+        });
+    }
+    for (var sd = 0; sd < 2; sd++)
+        L.doodles.push({ kind: "speed", spot: sd ? "right" : "left", u: 0.5, k: 0.9, rot: sd ? 0 : 180,
+                         accent: false, at: L.start - 0.1, dur: 0.2 });
+    L.wordMarks = {};
+    for (var m = 0; m < main.length; m++)
+        if (!L.words[main[m]].censor) L.wordMarks[main[m]] = m % 2 ? "ring" : "tick";
+    L.lineMark = "rushline";
+    L.scribble = "rushline";
+    L.boil = 12;
+}
+
+// A duo or stack carries at most PILE_DOODLES doodles between its lines: the earliest ones stay
+function capDoodles(P) {
+    var all = [];
+    P.lines.forEach(function (L) { L.doodles.forEach(function (d) { all.push(d); }); });
+    if (all.length <= PILE_DOODLES) return;
+    all.sort(function (a, b) { return a.at - b.at; });
+    var keep = all.slice(0, PILE_DOODLES);
+    P.lines.forEach(function (L) { L.doodles = L.doodles.filter(function (d) { return keep.indexOf(d) >= 0; }); });
 }
 
 function build(lyrics, opts) {
@@ -282,6 +360,10 @@ function build(lyrics, opts) {
         L.hiWi = -1;
         L.doodles = [];
         L.rough = maxi;
+        L.heroWi = heroWi;
+        L.heroOk = heroOk;
+        L.wordMarks = {};
+        L.boil = 8;
         if (!maxi) {
             if (treat !== "decode" && M.r(seed, 23, 423) < 0.82) {
                 var pool = [];
@@ -365,7 +447,7 @@ function build(lyrics, opts) {
         cur.slot = pile.lines.length;
         pile.lines.push(cur);
     }
-    if (maxi) piles.forEach(function (P) { if (!P.role) P.role = P.lines.length === 2 ? "duo" : "stack"; });
+    if (maxi) dressPiles(piles);
     var prevShot = "", prevExit = "";
     for (var q = 0; q < piles.length; q++) {
         var P = piles[q];
@@ -376,6 +458,10 @@ function build(lyrics, opts) {
         var xk = Math.floor(M.r(P.seed, 25, 425) * XO.length);
         if (XO[xk] === prevExit) xk = (xk + 1) % XO.length;
         P.exitStyle = XO[xk];
+        // a peak smudges away slowly, a rush is struck out; the pile before a bulb cuts to the dark
+        if (P.role === "peak") P.exitStyle = "smudge";
+        else if (P.role === "rush") P.exitStyle = "strike";
+        if (next && next.pile.fx === "bulb") P.exitStyle = "lift";
         // A pen exit needs room before the next pile sings; a tight cut falls back to the lift
         if (next && next.start - 0.3 - (EXITS[P.exitStyle] - EXIT_DUR) < Math.max(last.start + 0.4, last.end - 0.8)) P.exitStyle = "lift";
         prevExit = P.exitStyle;
@@ -393,6 +479,7 @@ function build(lyrics, opts) {
         P.frameX = 0.03 * M.r(P.seed, 8, 408);
         // A single line sits off-centre, left or right, the way a title card would
         if (P.solo && M.r(P.seed, 21, 421) < 0.6) P.frameX = 0.06 + 0.04 * M.r(P.seed, 22, 422);
+        if (P.role === "peak") P.frameX = 0;      // the peak takes the middle of the frame
         P.startAt = P.lines[0].enterAt;
     }
     for (var g = 0; g < lines.length; g++) lines[g].goneAt = lines[g].pile.goneAt;
