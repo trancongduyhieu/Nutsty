@@ -86,7 +86,8 @@ var TEMPO = { slow: 0.75, prevFast: 1.0, minLines: 4, fast: 1.35, fastPct: 0.8, 
 var PROP_FX = ["balloon", "note", "plane", "roll", "vine", "jack", "fold", "hand"];
 var PROP_D = {
     balloon: 0.9, note: 1.0, plane: 0.8, roll: 0.7, vine: 0, jack: 0, fold: 0.6, hand: 0.6,
-    shatter: 0.6, snap: 0.7, rip: 0.5
+    shatter: 0.6, snap: 0.7, rip: 0.5,
+    spray: 0.7, micdrop: 0.6, tapex: 0.5
 };
 // a prop lands no sooner than this after its line starts coming in, so the line is whole by then
 var PROP_SETTLE = 0.6;
@@ -104,7 +105,11 @@ var SETS = {
         rush: ["bolt", "crack", "spike", "bang"],
         peaks: ["shatter", "snap", "rip"].concat(SHARED_PEAKS)
     },
-    street: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS },
+    street: {
+        doodles: ["crown", "drip", "arrow", "tag", "burst"],
+        rush: ["crown", "drip", "arrow", "burst"],
+        peaks: ["spray", "micdrop", "tapex"].concat(SHARED_PEAKS)
+    },
     dance: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS },
     calm: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS },
     classic: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS },
@@ -1221,6 +1226,105 @@ function markShape(kind, sd, w, h) {
         ]);
         break;
     }
+    case "crown": {
+        // a 3-pointed graffiti crown with a base band and jewel accents
+        var bx0 = w * (0.16 + 0.04 * M.rs(sd, 1, 851));
+        var bx1 = w * (0.84 + 0.04 * M.rs(sd, 2, 852));
+        var by = h * (0.82 + 0.03 * M.rs(sd, 3, 853));
+        var p1x = w * (0.18 + 0.03 * M.rs(sd, 4, 854)), p1y = h * (0.36 + 0.04 * M.rs(sd, 5, 855));
+        var v1x = w * (0.36 + 0.03 * M.rs(sd, 6, 856)), v1y = h * (0.58 + 0.04 * M.rs(sd, 7, 857));
+        var p2x = w * (0.50 + 0.03 * M.rs(sd, 8, 858)), p2y = h * (0.18 + 0.04 * M.rs(sd, 9, 859));
+        var v2x = w * (0.64 + 0.03 * M.rs(sd, 10, 860)), v2y = h * (0.58 + 0.04 * M.rs(sd, 11, 861));
+        var p3x = w * (0.82 + 0.03 * M.rs(sd, 12, 862)), p3y = h * (0.36 + 0.04 * M.rs(sd, 13, 863));
+        S.push([
+            { x: bx0, y: by },
+            { x: p1x, y: p1y },
+            { x: v1x, y: v1y },
+            { x: p2x, y: p2y },
+            { x: v2x, y: v2y },
+            { x: p3x, y: p3y },
+            { x: bx1, y: by },
+            { x: bx0, y: by }
+        ]);
+        S.push([
+            { x: bx0 + w * 0.02, y: by - h * 0.12 },
+            { x: bx1 - w * 0.02, y: by - h * 0.12 }
+        ]);
+        var jr = Math.min(w, h) * 0.04;
+        S.push([{ x: p1x - jr, y: p1y - jr }, { x: p1x + jr, y: p1y - jr }]);
+        S.push([{ x: p2x, y: p2y - jr * 2 }, { x: p2x, y: p2y - jr * 0.5 }]);
+        S.push([{ x: p3x - jr, y: p3y - jr }, { x: p3x + jr, y: p3y - jr }]);
+        break;
+    }
+    case "drip": {
+        // graffiti paint drips: pool across the top with teardrop drips falling
+        var poolY = h * (0.24 + 0.03 * M.rs(sd, 1, 865));
+        var dx1 = w * (0.32 + 0.04 * M.rs(sd, 2, 866));
+        var d1Bot = h * (0.76 + 0.05 * M.rs(sd, 3, 867));
+        var dx2 = w * (0.68 + 0.04 * M.rs(sd, 4, 868));
+        var d2Bot = h * (0.58 + 0.05 * M.rs(sd, 5, 869));
+        S.push([
+            { x: w * 0.12, y: poolY },
+            { x: w * 0.24, y: poolY - h * 0.06 },
+            { x: w * 0.50, y: poolY + h * 0.04 },
+            { x: w * 0.78, y: poolY - h * 0.05 },
+            { x: w * 0.88, y: poolY }
+        ]);
+        var rw1 = w * 0.05;
+        S.push([
+            { x: dx1 - rw1, y: poolY },
+            { x: dx1 - rw1, y: d1Bot - h * 0.08 },
+            { x: dx1 - rw1 * 1.5, y: d1Bot - h * 0.03 },
+            { x: dx1, y: d1Bot },
+            { x: dx1 + rw1 * 1.5, y: d1Bot - h * 0.03 },
+            { x: dx1 + rw1, y: d1Bot - h * 0.08 },
+            { x: dx1 + rw1, y: poolY }
+        ]);
+        var rw2 = w * 0.045;
+        S.push([
+            { x: dx2 - rw2, y: poolY },
+            { x: dx2 - rw2, y: d2Bot - h * 0.06 },
+            { x: dx2 - rw2 * 1.4, y: d2Bot - h * 0.02 },
+            { x: dx2, y: d2Bot },
+            { x: dx2 + rw2 * 1.4, y: d2Bot - h * 0.02 },
+            { x: dx2 + rw2, y: d2Bot - h * 0.06 },
+            { x: dx2 + rw2, y: poolY }
+        ]);
+        var dropY = Math.min(h * 0.94, d1Bot + h * 0.12);
+        S.push([
+            { x: dx1, y: dropY - h * 0.04 },
+            { x: dx1 + rw1 * 0.8, y: dropY },
+            { x: dx1, y: dropY + h * 0.03 },
+            { x: dx1 - rw1 * 0.8, y: dropY },
+            { x: dx1, y: dropY - h * 0.04 }
+        ]);
+        break;
+    }
+    case "tag": {
+        // a graffiti tag signature flourish: stylized lettering loops, underline sweep, and quote accents
+        var yBase = h * (0.52 + 0.04 * M.rs(sd, 1, 881));
+        var t1 = { x: w * 0.14, y: yBase + h * 0.08 };
+        var t2 = { x: w * 0.24, y: yBase - h * 0.32 };
+        var t3 = { x: w * 0.30, y: yBase + h * 0.16 };
+        var t4 = { x: w * 0.44, y: yBase - h * 0.26 };
+        var t5 = { x: w * 0.52, y: yBase + h * 0.18 };
+        var t6 = { x: w * 0.64, y: yBase - h * 0.28 };
+        var t7 = { x: w * 0.58, y: yBase - h * 0.04 };
+        var t8 = { x: w * 0.76, y: yBase - h * 0.18 };
+        var t9 = { x: w * 0.86, y: yBase + h * 0.04 };
+        S.push([t1, t2, t3, t4, t5, t6, t7, t8, t9]);
+        var unY = h * (0.80 + 0.03 * M.rs(sd, 2, 882));
+        S.push([
+            { x: w * 0.12, y: unY },
+            { x: w * 0.50, y: unY + h * 0.04 },
+            { x: w * 0.84, y: unY },
+            { x: w * 0.90, y: unY - h * 0.08 }
+        ]);
+        var qY = h * (0.18 + 0.03 * M.rs(sd, 3, 883));
+        S.push([{ x: w * 0.74, y: qY + h * 0.06 }, { x: w * 0.78, y: qY }]);
+        S.push([{ x: w * 0.82, y: qY + h * 0.06 }, { x: w * 0.86, y: qY }]);
+        break;
+    }
     case "wrap":
     case "ring": {
         var th0 = -2.2 + 0.6 * M.rs(sd, 1, 803);
@@ -1264,22 +1368,32 @@ function markShape(kind, sd, w, h) {
         break;
     }
     case "arrow": {
-        // a swoosh in from below-left (or right) that ends in an arrowhead at the word
+        // a dynamic street graffiti arrow arching across the box with a barbed head and tail flick
         var fl = M.r(sd, 4, 820) < 0.5;
-        var P0 = { x: -h * 0.95, y: h * 1.35 }, C = { x: -h * 0.85, y: h * 0.45 }, P1 = { x: -h * 0.08, y: h * 0.55 };
+        var pStart = { x: w * 0.16, y: h * (0.82 + 0.04 * M.rs(sd, 1, 871)) };
+        var cMid = { x: w * (0.38 + 0.05 * M.rs(sd, 2, 872)), y: h * (0.55 + 0.05 * M.rs(sd, 3, 873)) };
+        var pEnd = { x: w * (0.82 + 0.04 * M.rs(sd, 4, 874)), y: h * (0.24 + 0.04 * M.rs(sd, 5, 875)) };
         pts = [];
         for (i = 0; i <= 20; i++) {
             u = i / 20;
             var q0 = (1 - u) * (1 - u), q1 = 2 * u * (1 - u), q2 = u * u;
-            pts.push({ x: q0 * P0.x + q1 * C.x + q2 * P1.x, y: q0 * P0.y + q1 * C.y + q2 * P1.y });
+            pts.push({ x: q0 * pStart.x + q1 * cMid.x + q2 * pEnd.x, y: q0 * pStart.y + q1 * cMid.y + q2 * pEnd.y });
         }
-        var dxA = P1.x - C.x, dyA = P1.y - C.y, lA = Math.sqrt(dxA * dxA + dyA * dyA);
-        dxA /= lA; dyA /= lA;
-        var hl = h * 0.2;
-        function rot(dx, dy, a) { return { x: dx * Math.cos(a) - dy * Math.sin(a), y: dx * Math.sin(a) + dy * Math.cos(a) }; }
-        var hA = rot(-dxA, -dyA, 0.55), hB = rot(-dxA, -dyA, -0.55);
+        var dxA = pEnd.x - cMid.x, dyA = pEnd.y - cMid.y, lA = Math.sqrt(dxA * dxA + dyA * dyA);
+        dxA = (lA > 1e-4 ? dxA / lA : 1); dyA = (lA > 1e-4 ? dyA / lA : 0);
+        var hl = Math.min(w, h) * 0.28;
+        function rotA(dx, dy, a) { return { x: dx * Math.cos(a) - dy * Math.sin(a), y: dx * Math.sin(a) + dy * Math.cos(a) }; }
+        var hA = rotA(-dxA, -dyA, 0.65), hB = rotA(-dxA, -dyA, -0.65);
         S.push(pts);
-        S.push([{ x: P1.x + hA.x * hl, y: P1.y + hA.y * hl }, P1, { x: P1.x + hB.x * hl, y: P1.y + hB.y * hl }]);
+        var barbA = { x: pEnd.x + hA.x * hl, y: pEnd.y + hA.y * hl };
+        var barbB = { x: pEnd.x + hB.x * hl, y: pEnd.y + hB.y * hl };
+        var notchA = { x: pEnd.x + hA.x * hl * 0.5 + hB.x * hl * 0.2, y: pEnd.y + hA.y * hl * 0.5 + hB.y * hl * 0.2 };
+        var notchB = { x: pEnd.x + hB.x * hl * 0.5 + hA.x * hl * 0.2, y: pEnd.y + hB.y * hl * 0.5 + hA.x * hl * 0.2 };
+        S.push([barbA, pEnd, barbB, notchB, notchA, barbA]);
+        S.push([
+            { x: pStart.x - w * 0.05, y: pStart.y - h * 0.08 },
+            { x: pStart.x + w * 0.08, y: pStart.y + h * 0.08 }
+        ]);
         if (fl) S = S.map(function (st) { return st.map(function (p) { return { x: w - p.x, y: p.y }; }); });
         break;
     }
@@ -1637,6 +1751,23 @@ function peakState(L, t) {
         case "rip":
             if (tp >= 0) st.heroS = 1 + 0.08 * Math.exp(-6 * tp) * Math.sin(18 * tp);
             break;
+        case "spray":
+            if (tp >= 0) {
+                st.heroDy = -0.04 * Math.exp(-6 * tp) * Math.sin(18 * tp);
+            }
+            break;
+        case "micdrop":
+            if (tp >= 0) {
+                st.heroDy = -0.12 * Math.exp(-8 * tp) * Math.sin(24 * tp);
+                st.heroRot = 2.0 * Math.exp(-7 * tp) * Math.sin(18 * tp);
+            }
+            break;
+        case "tapex":
+            if (tp >= 0) {
+                st.heroS = 1 - 0.05 * Math.exp(-12 * tp) * Math.sin(22 * tp);
+                st.heroDy = 0.03 * Math.exp(-9 * tp) * Math.cos(18 * tp);
+            }
+            break;
         }
     }
     return st;
@@ -1744,6 +1875,34 @@ function propShape(kind) {
         return [[{ x: -0.4, y: 0 }, { x: -0.1, y: 0 }, { x: 0.1, y: -0.1 }, { x: 0.22, y: -0.25 }, { x: 0.1, y: -0.32 }, { x: 0.02, y: -0.22 }]];
     case "rip":
         return [[{ x: 0, y: -0.5 }, { x: 0.08, y: -0.25 }, { x: -0.08, y: 0 }, { x: 0.08, y: 0.25 }, { x: 0, y: 0.5 }]];
+    case "spray":
+        return [
+            [{ x: -0.22, y: 0.5 }, { x: -0.22, y: -0.25 }, { x: -0.15, y: -0.38 },
+             { x: 0.15, y: -0.38 }, { x: 0.22, y: -0.25 }, { x: 0.22, y: 0.5 }, { x: -0.22, y: 0.5 }],
+            [{ x: -0.22, y: 0.44 }, { x: 0, y: 0.48 }, { x: 0.22, y: 0.44 }],
+            [{ x: -0.09, y: -0.38 }, { x: -0.09, y: -0.5 }, { x: 0.09, y: -0.5 }, { x: 0.09, y: -0.38 }],
+            [{ x: -0.05, y: -0.47 }, { x: -0.15, y: -0.47 }, { x: -0.15, y: -0.42 }],
+            [{ x: -0.22, y: 0.1 }, { x: 0.22, y: 0.1 }]
+        ];
+    case "micdrop":
+        return [
+            [{ x: -0.16, y: -0.32 }, { x: -0.15, y: -0.48 }, { x: -0.08, y: -0.58 },
+             { x: 0.08, y: -0.58 }, { x: 0.15, y: -0.48 }, { x: 0.16, y: -0.32 }, { x: -0.16, y: -0.32 }],
+            [{ x: 0, y: -0.58 }, { x: 0, y: -0.32 }],
+            [{ x: -0.15, y: -0.42 }, { x: 0.15, y: -0.42 }],
+            [{ x: -0.13, y: -0.32 }, { x: 0.13, y: -0.32 }],
+            [{ x: -0.11, y: -0.32 }, { x: -0.06, y: 0.38 }, { x: 0.06, y: 0.38 }, { x: 0.11, y: -0.32 }],
+            [{ x: -0.04, y: 0.38 }, { x: -0.04, y: 0.48 }, { x: 0.04, y: 0.48 }, { x: 0.04, y: 0.38 }]
+        ];
+    case "tapex":
+        return [
+            [{ x: -0.45, y: -0.12 }, { x: 0.45, y: -0.12 },
+             { x: 0.48, y: -0.05 }, { x: 0.43, y: 0.03 }, { x: 0.47, y: 0.12 },
+             { x: -0.45, y: 0.12 },
+             { x: -0.48, y: 0.05 }, { x: -0.43, y: -0.03 }, { x: -0.45, y: -0.12 }],
+            [{ x: -0.22, y: -0.09 }, { x: -0.18, y: 0.09 }],
+            [{ x: 0.18, y: -0.09 }, { x: 0.22, y: 0.09 }]
+        ];
     }
     return [];
 }
@@ -2050,6 +2209,205 @@ function peakPieces(L, t, W, px, bl) {
                     [{ x: gxRip + 0.05 * px + 0.2 * px * tp, y: yBot - 0.1 * px }, { x: gxRip + 0.15 * px + 0.3 * px * tp, y: yBot - 0.05 * px }]
                 ];
                 put(3, Flecks, 1, true, fade(tp, 0.25), 0.03, 3);
+            }
+        }
+        break;
+    }
+    case "spray": {
+        // a spray can flies in, shakes, sprays a tag behind the word, paint drips down
+        var canX0 = W + 2.0 * px, canY0 = bl - 1.6 * px;
+        var canTargetX = W + 0.35 * px, canTargetY = bl - 0.52 * px;
+        var canX, canY, canRot = -20;
+        if (tp < 0) {
+            var uSpray = M.clamp(tau / PROP_D.spray);
+            var inS = M.E.outCubic(uSpray);
+            canX = canX0 + (canTargetX - canX0) * inS;
+            canY = canY0 + (canTargetY - canY0) * inS;
+            if (uSpray > 0.4) {
+                var rattle = 0.03 * px * Math.sin(tau * 40) * (uSpray - 0.4) / 0.6;
+                canX += rattle;
+                canY += rattle * 0.6;
+                canRot += 4 * Math.sin(tau * 40);
+            }
+            put(0, place(propShape("spray"), canX, canY, canRot, px * 0.72), 1, false, 0.9, 0.035, 3);
+        } else {
+            var spraySung = Math.max(0.4, sung);
+            var recoil = tp < 0.35 ? 0.02 * px * Math.sin(tp * 48) : 0;
+            canX = canTargetX + recoil;
+            canY = canTargetY;
+            var canFade = fade(tp - spraySung - 0.2, 0.35);
+            put(0, place(propShape("spray"), canX, canY, canRot, px * 0.72), 1, false, 0.9 * canFade, 0.035, 3);
+
+            // Piece 1: Sprayed graffiti bubble tag behind the word (z: 1)
+            var tagProg = M.clamp(tp / 0.22);
+            var Tag = [];
+            var padX = 0.12 * px, tagTop = bl - 0.9 * px, tagBot = bl + 0.12 * px;
+            var wL = -padX, wR = W + padX;
+            // puffy graffiti throw-up cloud outline behind word
+            var cloud = [
+                { x: wL, y: bl - 0.4 * px },
+                { x: wL + 0.1 * px, y: tagTop },
+                { x: wL + (wR - wL) * 0.3, y: tagTop - 0.08 * px },
+                { x: wL + (wR - wL) * 0.5, y: tagTop + 0.04 * px },
+                { x: wL + (wR - wL) * 0.7, y: tagTop - 0.06 * px },
+                { x: wR - 0.1 * px, y: tagTop },
+                { x: wR, y: bl - 0.4 * px },
+                { x: wR - 0.05 * px, y: tagBot },
+                { x: wL + (wR - wL) * 0.7, y: tagBot + 0.06 * px },
+                { x: wL + (wR - wL) * 0.3, y: tagBot + 0.04 * px },
+                { x: wL, y: tagBot - 0.04 * px },
+                { x: wL, y: bl - 0.4 * px }
+            ];
+            Tag.push(cloud);
+            // dynamic street tag slash underline
+            Tag.push([
+                { x: wL - 0.06 * px, y: bl + 0.08 * px },
+                { x: wR + 0.06 * px, y: bl + 0.05 * px }
+            ]);
+            put(1, Tag, tagProg, true, 0.8 * fade(tp - spraySung - 0.4, 0.4), 0.045, 1);
+
+            // Piece 2: Paint drips running down below the baseline (z: 1)
+            var Drips = [];
+            var dripXs = [W * 0.25, W * 0.55, W * 0.85];
+            for (var dri = 0; dri < dripXs.length; dri++) {
+                var dx = dripXs[dri] + 0.04 * px * M.rs(sd, dri, 933);
+                var maxDripH = (0.35 + 0.15 * dri) * px;
+                var curDripH = maxDripH * M.clamp((tp - 0.08 * dri) / 0.3);
+                if (curDripH > 0.01) {
+                    var dy0 = bl + 0.06 * px, dy1 = dy0 + curDripH;
+                    var rw = 0.035 * px;
+                    Drips.push([
+                        { x: dx - rw, y: dy0 },
+                        { x: dx - rw, y: dy1 - rw },
+                        { x: dx, y: dy1 },
+                        { x: dx + rw, y: dy1 - rw },
+                        { x: dx + rw, y: dy0 }
+                    ]);
+                    if (tp > 0.3 + 0.08 * dri) {
+                        var dropY = dy1 + 0.09 * px;
+                        Drips.push([
+                            { x: dx, y: dropY - rw },
+                            { x: dx + rw, y: dropY },
+                            { x: dx, y: dropY + rw },
+                            { x: dx - rw, y: dropY },
+                            { x: dx, y: dropY - rw }
+                        ]);
+                    }
+                }
+            }
+            put(2, Drips, 1, true, 0.9 * fade(tp - spraySung - 0.5, 0.4), 0.035, 1);
+
+            if (tp < 0.42) {
+                var nozX = canX - 0.14 * px, nozY = canY - 0.35 * px;
+                var Mist = [];
+                for (var mi = 0; mi < 6; mi++) {
+                    var mAngle = Math.PI + 0.22 * (mi - 2.5);
+                    var mDist = (0.28 + 0.3 * M.r(sd, mi, 934)) * px * M.clamp(tp / 0.15);
+                    Mist.push([
+                        { x: nozX, y: nozY },
+                        { x: nozX + Math.cos(mAngle) * mDist, y: nozY + Math.sin(mAngle) * mDist }
+                    ]);
+                }
+                put(3, Mist, 1, true, fade(tp, 0.42), 0.03, 3);
+            }
+        }
+        break;
+    }
+    case "micdrop": {
+        // a mic drops onto the baseline, bounces, sound lines radiate
+        var micX = W + 0.05 * px;
+        var landY = bl - 0.08 * px;
+        if (tp < 0) {
+            var uMic = M.clamp(tau / PROP_D.micdrop);
+            var dropY = (bl - 2.2 * px) + (2.12 * px) * (uMic * uMic);
+            var dropRot = -20 + 35 * uMic;
+            put(0, place(propShape("micdrop"), micX, dropY, dropRot, px * 0.72), 1, false, 0.9, 0.035, 2);
+            var cable = bezier({ x: micX, y: dropY + 0.32 * px },
+                               { x: micX + 0.35 * px, y: dropY + 0.9 * px },
+                               { x: micX + 0.65 * px, y: bl - 1.8 * px },
+                               { x: micX + 0.95 * px, y: bl - 2.2 * px }, 12);
+            put(3, [cable], 1, false, 0.65, 0.025, 1);
+        } else {
+            var bounce = Math.abs(Math.exp(-8 * tp) * Math.cos(16 * tp));
+            var curY = landY - 0.28 * px * bounce;
+            var curRot = 65 + 16 * Math.exp(-6 * tp) * Math.sin(14 * tp);
+            var micFade = fade(tp - sung - 0.4, 0.4);
+            put(0, place(propShape("micdrop"), micX, curY, curRot, px * 0.72), 1, false, 0.9 * micFade, 0.035, 2);
+
+            var SoundLines = [];
+            for (var si = 0; si < 3; si++) {
+                var sDelay = si * 0.06;
+                var stp = tp - sDelay;
+                if (stp > 0 && stp < 0.42) {
+                    var sRad = (0.2 + 0.85 * (stp / 0.35)) * px;
+                    var arcPts = [];
+                    for (var ai = 0; ai <= 12; ai++) {
+                        var ang = -Math.PI * 0.95 + (ai / 12) * Math.PI * 0.65;
+                        arcPts.push({ x: micX + sRad * Math.cos(ang), y: bl + sRad * Math.sin(ang) * 0.65 });
+                    }
+                    SoundLines.push(arcPts);
+                }
+            }
+            if (SoundLines.length) put(1, SoundLines, 1, true, fade(tp, 0.42), 0.035, 3);
+
+            if (tp < 0.28) {
+                var Ticks = [
+                    [{ x: micX - 0.28 * px, y: bl }, { x: micX + 0.28 * px, y: bl }],
+                    [{ x: micX - 0.15 * px, y: bl }, { x: micX - 0.24 * px, y: bl - 0.12 * px }],
+                    [{ x: micX + 0.15 * px, y: bl }, { x: micX + 0.24 * px, y: bl - 0.12 * px }]
+                ];
+                put(2, Ticks, 1, true, fade(tp, 0.28), 0.035, 2);
+            }
+
+            var restCable = bezier({ x: micX + 0.22 * px, y: curY + 0.08 * px },
+                                   { x: micX + 0.5 * px, y: bl + 0.06 * px },
+                                   { x: micX + 0.85 * px, y: bl - 0.02 * px },
+                                   { x: micX + 1.2 * px, y: bl + 0.04 * px }, 12);
+            put(3, [restCable], 1, false, 0.7 * micFade, 0.025, 1);
+        }
+        break;
+    }
+    case "tapex": {
+        // two tape strips slap on crosswise over the corner
+        var cxTape = 0.06 * W;
+        var cyTape = bl - 0.82 * px;
+        var ang1 = 38, ang2 = -42;
+        var tapeFade = fade(tp - sung - 0.4, 0.35);
+
+        var tStrip1 = tau / (PROP_D.tapex * 0.6);
+        if (tStrip1 > 0.05) {
+            var s1Prog = M.clamp(tStrip1);
+            var s1X = cxTape - 0.4 * px * (1 - M.E.outBack(s1Prog, 1.5));
+            var s1Y = cyTape - 0.4 * px * (1 - M.E.outBack(s1Prog, 1.5));
+            var s1Shape = place(propShape("tapex"), s1X, s1Y, ang1, px * 0.75);
+            put(0, s1Shape, 1, false, 0.85 * tapeFade, 0.035, 3);
+        }
+
+        if (tp >= -0.2) {
+            var s2Prog = M.clamp((tau - PROP_D.tapex * 0.6) / (PROP_D.tapex * 0.4));
+            var s2X = cxTape + 0.35 * px * (1 - M.E.outBack(s2Prog, 1.8));
+            var s2Y = cyTape - 0.45 * px * (1 - M.E.outBack(s2Prog, 1.8));
+            var s2Shape = place(propShape("tapex"), s2X, s2Y, ang2, px * 0.75);
+            put(1, s2Shape, 1, false, 0.85 * tapeFade, 0.035, 3);
+        }
+
+        if (tp >= 0) {
+            var Creases = [
+                [{ x: cxTape - 0.12 * px, y: cyTape - 0.08 * px }, { x: cxTape + 0.12 * px, y: cyTape + 0.08 * px }],
+                [{ x: cxTape - 0.08 * px, y: cyTape + 0.12 * px }, { x: cxTape + 0.08 * px, y: cyTape - 0.12 * px }]
+            ];
+            put(2, Creases, 1, true, 0.8 * tapeFade, 0.025, 4);
+
+            if (tp < 0.22) {
+                var SnapTicks = [];
+                for (var sti = 0; sti < 4; sti++) {
+                    var stAng = sti * (Math.PI / 2) + Math.PI / 4;
+                    SnapTicks.push([
+                        { x: cxTape + 0.15 * px * Math.cos(stAng), y: cyTape + 0.15 * px * Math.sin(stAng) },
+                        { x: cxTape + 0.35 * px * Math.cos(stAng), y: cyTape + 0.35 * px * Math.sin(stAng) }
+                    ]);
+                }
+                put(3, SnapTicks, 1, true, fade(tp, 0.22), 0.035, 4);
             }
         }
         break;
