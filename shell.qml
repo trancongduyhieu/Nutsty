@@ -1558,9 +1558,11 @@ Scope {
                                 win.visible = true;
                                 if (res.mock_update) {
                                     win.updateDemo = true;
+                                    win.appVersion = "2.3.0";
+                                    win.latestVersion = "v2.3.1";
                                     win.hasAppUpdate = true;
                                     win.updatePackageBytes = 399087882;
-                                    win.updateReleaseNotes = win.updateReleaseNotes || "- **Cập nhật chỉ tải phần thay đổi**: Chỉ tải những tệp khác bản bạn đang dùng.\n- **Hộp thoại cập nhật mới**: Vòng chữ xoay quanh số phiên bản, tốc độ và thời gian còn lại.\n- **Giữ nguyên trình phát mpv**: Không đổi giữa các bản.";
+                                    win.updateReleaseNotes = "- **Cập nhật chỉ tải phần thay đổi**: Chỉ tải những tệp khác bản bạn đang dùng.\n- **Hộp thoại cập nhật mới**: Vòng chữ xoay quanh số phiên bản, tốc độ và thời gian còn lại.\n- **Giữ nguyên trình phát mpv**: Không đổi giữa các bản.";
                                     win.openUpdateModal();
                                     win.latestVersion = res.latest_version || "v1.0.4.1";
                                     win.appVersion = res.current_version || "1.0.4.1";

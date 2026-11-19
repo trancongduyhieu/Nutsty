@@ -174,15 +174,10 @@ Item {
             spacing: 14
             z: 5
 
-            // Close
+            // Close sits alone at the top right; the ring below carries the title
             RowLayout {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 32
-                Text {
-                    text: I18n.tr("Cập nhật", "Update")
-                    font.family: Theme.fontFamily; font.pixelSize: 20; font.bold: true
-                    color: Theme.textPrimary
-                }
                 Item { Layout.fillWidth: true }
                 Rectangle {
                     width: 32; height: 32; radius: 16
@@ -207,26 +202,28 @@ Item {
                 }
             }
 
-            // Hero: the version ring turns slowly; its middle shows the version, then the live percent
+            // The ring turns slowly. Its middle is the Nutsty icon with the version (or the live percent) under it
             Item {
                 id: hero
                 Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: 200
-                Layout.preferredHeight: 200
+                Layout.topMargin: -22
+                Layout.preferredWidth: 236
+                Layout.preferredHeight: 236
 
                 Item {
                     id: ring
                     anchors.fill: parent
+                    readonly property real mid: 102
                     readonly property string unit: "NUTSTY  " + (root.cleanLatest || root.cleanCurrent) + "  "
                     // Whole repeats of the unit, so the text meets itself at the seam
-                    readonly property int cells: unit.length * Math.max(1, Math.round(34 / unit.length))
+                    readonly property int cells: unit.length * Math.max(1, Math.round(48 / unit.length))
 
                     Rectangle {
                         anchors.centerIn: parent
-                        width: 2 * 88 + 2; height: width; radius: width / 2
+                        width: 2 * (ring.mid + 15); height: width; radius: width / 2
                         color: "transparent"
-                        border.width: 28
-                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, root.phase === "ready" ? 0.22 : 0.10)
+                        border.width: 30
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, root.phase === "ready" ? 0.24 : 0.10)
                         Behavior on border.color { ColorAnimation { duration: 400 } }
                     }
 
@@ -234,7 +231,7 @@ Item {
                         id: spinner
                         anchors.fill: parent
                         NumberAnimation on rotation {
-                            from: 0; to: 360; duration: 32000
+                            from: 0; to: 360; duration: 40000
                             loops: Animation.Infinite
                             running: root.isOpen && !root.liteMode
                         }
@@ -247,99 +244,74 @@ Item {
                                 rotation: index * 360 / ring.cells
                                 Text {
                                     x: -width / 2
-                                    y: -74 - height / 2
+                                    y: -ring.mid - height / 2
                                     text: ring.unit.charAt(index % ring.unit.length)
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 13; font.bold: true
-                                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.55)
+                                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.62)
                                 }
                             }
                         }
                     }
 
-                    // The middle of the ring
                     Column {
                         anchors.centerIn: parent
-                        spacing: 2
+                        spacing: 6
 
+                        RoundedImage {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: 72; height: 72
+                            radius: 18
+                            source: "../assets/nutsty-app-icon.svg"
+                            sourceSize: Qt.size(144, 144)
+                            fillMode: Image.PreserveAspectCrop
+                            autoCropBlackBars: false
+                            useInitialsFallback: false
+                        }
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            visible: root.phase !== "downloading" && root.phase !== "ready"
-                            text: root.phase === "upToDate" ? root.cleanCurrent : (root.cleanLatest || root.cleanCurrent)
-                            font.family: Theme.fontFamily; font.pixelSize: 36; font.bold: true
-                            font.letterSpacing: -1
+                            text: root.phase === "downloading" ? ((root.updateState.percent || 0) + "%")
+                                  : (root.phase === "upToDate" ? root.cleanCurrent : (root.cleanLatest || root.cleanCurrent))
+                            font.family: Theme.fontFamily; font.pixelSize: 22; font.bold: true
+                            font.letterSpacing: -0.4
                             color: Theme.textPrimary
                         }
-                        Text {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            visible: root.phase === "available" || root.phase === "planning"
-                            text: I18n.tr("từ " + root.cleanCurrent, "from " + root.cleanCurrent)
-                            font.family: Theme.fontFamily; font.pixelSize: 12
-                            color: Theme.textSecondary
-                        }
-                        Text {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            visible: root.phase === "downloading"
-                            text: (root.updateState.percent || 0) + "%"
-                            font.family: Theme.fontFamily; font.pixelSize: 40; font.bold: true
-                            font.letterSpacing: -1
-                            color: Theme.textPrimary
-                        }
-                        AppIcon {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            visible: root.phase === "ready"
-                            source: "../assets/icons/emblem-ok-symbolic.svg"
-                            iconSize: 44
-                            color: root.accentColor
-                        }
-                    }
-
-                    CircularSpinner {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        y: parent.height / 2 + 28
-                        size: 22
-                        visible: root.phase === "planning" || root.phase === "checking"
-                        color: root.accentColor
                     }
                 }
             }
 
-            // Headline and the size sentence
+            // Headline, then one plain sentence about the cost
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 4
                 Text {
                     Layout.fillWidth: true
-                    horizontalAlignment: Text.AlignHCenter
-                    text: root.headline
-                    font.family: Theme.fontFamily; font.pixelSize: 17; font.bold: true
+                    text: root.phase === "available" || root.phase === "planning"
+                          ? I18n.tr("Nutsty " + root.cleanLatest + " đã có", "Nutsty " + root.cleanLatest + " is out")
+                          : root.headline
+                    font.family: Theme.fontFamily; font.pixelSize: 22; font.bold: true
+                    font.letterSpacing: -0.4
                     color: Theme.textPrimary
                     wrapMode: Text.WordWrap
                 }
                 Text {
                     Layout.fillWidth: true
-                    horizontalAlignment: Text.AlignHCenter
                     visible: text !== ""
                     text: root.phase === "error" ? String(root.updateState.error || "")
                           : (root.phase === "downloading"
                              ? (root.formatBytes(root.updateState.bytes_done) + " / " + root.formatBytes(root.updateState.bytes_total)
                                 + (root.updateState.speed > 1 ? "  ·  " + root.formatBytes(root.updateState.speed) + "/s" : "")
                                 + (root.formatEta(root.updateState.eta) !== "" ? "  ·  " + root.formatEta(root.updateState.eta) : ""))
-                             : (root.phase === "ready" ? I18n.tr("Bấm Khởi động lại để dùng bản " + root.cleanLatest, "Restart to use version " + root.cleanLatest) : root.sizeLine))
-                    font.family: Theme.fontFamily; font.pixelSize: 12
+                             : (root.phase === "ready" ? I18n.tr("Bấm Khởi động lại để dùng bản " + root.cleanLatest, "Restart to use version " + root.cleanLatest)
+                                : (root.phase === "available" && root.savedPercent >= 10
+                                   ? root.sizeLine + I18n.tr(", nhẹ hơn " + root.savedPercent + "%", ", " + root.savedPercent + "% lighter")
+                                   : root.sizeLine)))
+                    font.family: Theme.fontFamily; font.pixelSize: 13
                     color: root.phase === "error" ? Qt.rgba(244 / 255, 63 / 255, 94 / 255, 1) : Theme.textSecondary
                     wrapMode: Text.WordWrap
                 }
-                Text {
-                    Layout.alignment: Qt.AlignHCenter
-                    visible: root.savedPercent >= 10 && (root.phase === "available")
-                    text: I18n.tr("Nhẹ hơn " + root.savedPercent + "% so với tải cả bản", root.savedPercent + "% lighter than a full download")
-                    font.family: Theme.fontFamily; font.pixelSize: 11; font.bold: true
-                    color: root.accentColor
-                }
             }
 
-            // Progress bar
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 6
@@ -354,7 +326,7 @@ Item {
                 }
             }
 
-            // Release notes
+            // Release notes: plain rows split by hairlines
             Flickable {
                 id: notes
                 Layout.fillWidth: true
@@ -369,19 +341,19 @@ Item {
                 Column {
                     id: notesCol
                     width: notes.width - 10
-                    spacing: 12
-                    Text {
-                        text: I18n.tr("Có gì mới", "What is new")
-                        font.family: Theme.fontFamily; font.pixelSize: 13; font.bold: true
-                        color: Theme.textPrimary
-                        visible: root.changelogItems.length > 0
-                    }
+                    spacing: 0
                     Repeater {
                         model: root.changelogItems
                         delegate: Column {
+                            required property int index
                             required property var modelData
                             width: notesCol.width
-                            spacing: 2
+                            Rectangle {
+                                width: parent.width; height: 1
+                                color: Qt.rgba(255, 255, 255, 0.08)
+                                visible: index > 0
+                            }
+                            Item { width: 1; height: 10 }
                             Text {
                                 width: parent.width
                                 text: modelData.title
@@ -399,6 +371,7 @@ Item {
                                 maximumLineCount: 3
                                 elide: Text.ElideRight
                             }
+                            Item { width: 1; height: 10 }
                         }
                     }
                 }
@@ -412,10 +385,10 @@ Item {
 
                 // Secondary
                 Rectangle {
-                    Layout.preferredHeight: 40
+                    Layout.preferredHeight: 42
                     Layout.preferredWidth: root.phase === "error" ? 160 : 120
                     Layout.fillWidth: root.phase === "upToDate" || root.phase === "downloading"
-                    radius: 20
+                    radius: 12
                     color: secHover.hovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
                                             : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.10)
                     border.width: 1
@@ -447,8 +420,8 @@ Item {
                 Rectangle {
                     id: primaryBtn
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 40
-                    radius: 20
+                    Layout.preferredHeight: 42
+                    radius: 12
                     visible: root.phase === "available" || root.phase === "ready" || root.phase === "error"
                     color: priHover.hovered ? Theme.accentGreenHover : root.accentColor
                     opacity: root.phase === "planning" ? 0.5 : 1
