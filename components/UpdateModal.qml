@@ -65,10 +65,14 @@ Item {
         refreshNotes();
         isOpen = true;
         planSettled = false;
+        knownPlan = null;
+        // Reopened while already downloading or ready: the plan in the state is current, no new compare is coming
+        planFresh = busy || stateName === "ready" || !hasAppUpdate;
+        minSpin = hasAppUpdate && !busy && stateName !== "ready";
+        minSpinTimer.restart();
         planWait.restart();
         ringFwd.stop(); ringBack.stop();
-        ringMotion.a = ringMoved ? 1 : 0;
-        ringMotion.b = ringMoved ? 1 : 0;
+        ringMotion.p = ringMoved ? 1 : 0;
         badge.replay();
         forceActiveFocus();
         if (hasAppUpdate && !busy && stateName !== "ready") root.planRequested();
@@ -87,21 +91,18 @@ Item {
         if (ringMoved) { ringBack.stop(); ringFwd.restart(); }
         else { ringFwd.stop(); ringBack.restart(); }
     }
-    ParallelAnimation {
+    // Out and back both overshoot a little and settle, like a cartoon landing
+    NumberAnimation {
         id: ringFwd
-        NumberAnimation { target: ringMotion; property: "a"; to: 1; duration: 800 * root.motion; easing.type: Easing.Linear }
-        SequentialAnimation {
-            PauseAnimation { duration: 260 * root.motion }
-            NumberAnimation { target: ringMotion; property: "b"; to: 1; duration: 900 * root.motion; easing.type: Easing.OutBack; easing.overshoot: 2.4 }
-        }
+        target: ringMotion; property: "p"; to: 1
+        duration: 1100 * root.motion
+        easing.type: Easing.OutBack; easing.overshoot: 1.7
     }
-    ParallelAnimation {
+    NumberAnimation {
         id: ringBack
-        NumberAnimation { target: ringMotion; property: "b"; to: 0; duration: 520 * root.motion; easing.type: Easing.InCubic }
-        SequentialAnimation {
-            PauseAnimation { duration: 220 * root.motion }
-            NumberAnimation { target: ringMotion; property: "a"; to: 0; duration: 800 * root.motion; easing.type: Easing.OutBack; easing.overshoot: 1.6 }
-        }
+        target: ringMotion; property: "p"; to: 0
+        duration: 900 * root.motion
+        easing.type: Easing.OutBack; easing.overshoot: 1.2
     }
 
     Timer { id: closeTimer; interval: 200; onTriggered: root.closingGuard = false }
@@ -142,18 +143,24 @@ Item {
 
     // The last real answer about how much has to be downloaded. Kept across cancel/re-plan so the size never blinks away
     property var knownPlan: null
+    // False right after open until the backend reports it is comparing, so a stale plan never shows
+    property bool planFresh: false
+    // Keeps the reels spinning for a moment even when the answer is instant, so the effect is always seen
+    property bool minSpin: false
+    Timer { id: minSpinTimer; interval: 1300; onTriggered: root.minSpin = false }
     // True once the backend finished comparing (or we gave up waiting), so a plain package size may be shown
     property bool planSettled: false
     onUpdateStateChanged: {
-        if (plan && updateState.mode === "delta" && plan.download_bytes >= 0) knownPlan = plan;
-        if (stateName === "planned" || stateName === "error") planSettled = true;
+        if (stateName === "planning") planFresh = true;
+        if (plan && planFresh && updateState.mode === "delta" && plan.download_bytes >= 0) knownPlan = plan;
+        if (planFresh && (stateName === "planned" || stateName === "error")) planSettled = true;
     }
     onLatestVersionChanged: { knownPlan = null; planSettled = false; }
-    Timer { id: planWait; interval: 6000; onTriggered: root.planSettled = true }
+    Timer { id: planWait; interval: 6000; onTriggered: { root.planFresh = true; root.planSettled = true; } }
 
-    readonly property var shownPlan: plan || knownPlan
+    readonly property var shownPlan: (plan && planFresh) ? plan : knownPlan
     readonly property bool isDelta: !!shownPlan && shownPlan.download_bytes >= 0 && (knownPlan !== null || updateState.mode === "delta")
-    readonly property bool sizeKnown: isDelta || (planSettled && packageBytes > 0)
+    readonly property bool sizeKnown: !minSpin && (isDelta || (planSettled && packageBytes > 0))
     // Waiting for the size: show a quiet dot only, no text that would change under the reader
     readonly property bool sizePending: (phase === "available" || phase === "planning") && !sizeKnown
     readonly property real savedPercent: (isDelta && shownPlan.full_bytes > 0)
@@ -229,7 +236,7 @@ Item {
         // Version ring. At rest it sits in the top-right corner, cropped by the dialog edge. When the update starts
         // that ring swells and leaves up and to the left, fading out, while a second one arrives from beyond the
         // bottom-left corner, overshoots a little and settles back, like a cartoon landing.
-        QtObject { id: ringMotion; property real a: 0; property real b: 0 }
+        QtObject { id: ringMotion; property real p: 0 }
 
         Repeater {
             model: 2
@@ -237,15 +244,15 @@ Item {
                 id: band
                 required property int index
                 readonly property bool isEnter: index === 1
-                readonly property real p: isEnter ? ringMotion.b : ringMotion.a
-                readonly property real cx: isEnter ? (-110 + 134 * p) : (dialog.width - 24 - (dialog.width - 48) * 1.1 * p)
-                readonly property real cy: isEnter ? (dialog.height + 110 - 126 * p) : (16 + (dialog.height - 32) * 1.1 * p)
+                readonly property real p: ringMotion.p
+                // Both rings travel the same distance upward, like a strip that wraps: whatever leaves through the
+                // top edge of the dialog re-enters from the bottom edge, so the two crops always add up to one ring.
+                readonly property real travel: 190
                 width: 210; height: 210
-                x: cx - width / 2
-                y: cy - height / 2
-                scale: 1 + 0.82 * p
-                opacity: isEnter ? Math.min(1, p * 3) : Math.max(0, 1 - p)
-                visible: opacity > 0.01
+                x: (isEnter ? 24 : dialog.width - 24) - width / 2
+                y: (isEnter ? (dialog.height - 16 + travel * (1 - p)) : (16 - travel * p)) - height / 2
+                scale: 1 + (isEnter ? 0.82 : 0.5) * p
+                visible: isEnter ? p > 0.001 : p < 0.999
                 z: 3
                 readonly property real mid: 88
                 readonly property string unit: "NUTSTY  " + (root.cleanLatest || root.cleanCurrent) + "  "
