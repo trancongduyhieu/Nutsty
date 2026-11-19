@@ -1907,7 +1907,7 @@ Scope {
         if (win.updateDemo) {
             demoTickTimer.stop();
             win.isDownloadingUpdate = false;
-            win.demoPlan();
+            win.updateState = ({ status: "planned", mode: "delta", plan: win.demoPlanInfo });
             return;
         }
         var xhr = new XMLHttpRequest();

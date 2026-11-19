@@ -64,6 +64,8 @@ Item {
         closingGuard = false;
         refreshNotes();
         isOpen = true;
+        planSettled = false;
+        planWait.restart();
         badge.replay();
         forceActiveFocus();
         if (hasAppUpdate && !busy && stateName !== "ready") root.planRequested();
@@ -113,30 +115,46 @@ Item {
         return I18n.tr("còn khoảng " + Math.ceil(s / 60) + " phút", "about " + Math.ceil(s / 60) + " min left");
     }
 
-    readonly property bool isDelta: plan && updateState.mode === "delta" && plan.download_bytes >= 0
-    readonly property real savedPercent: (isDelta && plan.full_bytes > 0)
-        ? Math.max(0, Math.min(99, Math.round(100 * (1 - plan.download_bytes / plan.full_bytes)))) : 0
-    readonly property string onVersion: I18n.tr("Bạn đang dùng bản " + cleanCurrent, "You are on " + cleanCurrent)
+    // The last real answer about how much has to be downloaded. Kept across cancel/re-plan so the size never blinks away
+    property var knownPlan: null
+    // True once the backend finished comparing (or we gave up waiting), so a plain package size may be shown
+    property bool planSettled: false
+    onUpdateStateChanged: {
+        if (plan && updateState.mode === "delta" && plan.download_bytes >= 0) knownPlan = plan;
+        if (stateName === "planned" || stateName === "error") planSettled = true;
+    }
+    onLatestVersionChanged: { knownPlan = null; planSettled = false; }
+    Timer { id: planWait; interval: 6000; onTriggered: root.planSettled = true }
+
+    readonly property var shownPlan: plan || knownPlan
+    readonly property bool isDelta: !!shownPlan && shownPlan.download_bytes >= 0 && (knownPlan !== null || updateState.mode === "delta")
+    readonly property bool sizeKnown: isDelta || (planSettled && packageBytes > 0)
+    // Waiting for the size: show a quiet dot only, no text that would change under the reader
+    readonly property bool sizePending: (phase === "available" || phase === "planning") && !sizeKnown
+    readonly property real savedPercent: (isDelta && shownPlan.full_bytes > 0)
+        ? Math.max(0, Math.min(99, Math.round(100 * (1 - shownPlan.download_bytes / shownPlan.full_bytes)))) : 0
+    readonly property string sizeText: {
+        if (isDelta) {
+            if (shownPlan.changed === 0) return I18n.tr("Không cần tải gì, chỉ cần khởi động lại", "Nothing to download, just restart");
+            return I18n.tr("Chỉ tải " + formatBytes(shownPlan.download_bytes) + (savedPercent >= 10 ? ", nhẹ hơn " + savedPercent + "%" : ""),
+                           "Only " + formatBytes(shownPlan.download_bytes) + (savedPercent >= 10 ? ", " + savedPercent + "% lighter" : ""));
+        }
+        if (planSettled && packageBytes > 0) return I18n.tr("Dung lượng tải: " + formatBytes(packageBytes), "Download size: " + formatBytes(packageBytes));
+        return "";
+    }
 
     // Two fixed lines under the version: what matters now, then the detail. Both are always one line,
     // so the layout below never moves when the phase changes.
     readonly property string statusMain: {
         switch (phase) {
         case "checking": return I18n.tr("Đang kiểm tra", "Checking");
-        case "planning": return I18n.tr("Đang so sánh với bản của bạn", "Comparing with your version");
         case "upToDate": return I18n.tr("Bạn đang dùng bản mới nhất", "You are up to date");
         case "ready": return I18n.tr("Đã tải xong", "Download complete");
         case "downloading":
             return stateName === "extracting" ? I18n.tr("Đang chuẩn bị", "Getting ready")
                                               : I18n.tr("Đang tải " + (updateState.percent || 0) + "%", "Downloading " + (updateState.percent || 0) + "%");
         case "error": return I18n.tr("Cập nhật chưa xong", "The update did not finish");
-        default:
-            if (isDelta) {
-                if (plan.changed === 0) return I18n.tr("Không cần tải gì, chỉ cần khởi động lại", "Nothing to download, just restart");
-                return I18n.tr("Chỉ tải " + formatBytes(plan.download_bytes) + (savedPercent >= 10 ? ", nhẹ hơn " + savedPercent + "%" : ""),
-                               "Only " + formatBytes(plan.download_bytes) + (savedPercent >= 10 ? ", " + savedPercent + "% lighter" : ""));
-            }
-            return packageBytes > 0 ? I18n.tr("Dung lượng tải: " + formatBytes(packageBytes), "Download size: " + formatBytes(packageBytes)) : I18n.tr("Có bản mới", "A new version is out");
+        default: return sizeText;
         }
     }
     readonly property string statusSub: {
@@ -147,10 +165,7 @@ Item {
                    + (formatEta(updateState.eta) !== "" ? "  ·  " + formatEta(updateState.eta) : "");
         case "ready": return I18n.tr("Bấm Khởi động lại để dùng bản " + cleanLatest, "Restart to use version " + cleanLatest);
         case "error": return String(updateState.error || "");
-        case "upToDate": return "";
-        case "available":
-            return (isDelta && plan.changed > 0 ? I18n.tr("Bản đầy đủ " + formatBytes(plan.full_bytes) + "  ·  ", "Full build " + formatBytes(plan.full_bytes) + "  ·  ") : "") + onVersion;
-        default: return onVersion;
+        default: return "";
         }
     }
 
@@ -190,8 +205,12 @@ Item {
         Item {
             id: ring
             width: 210; height: 210
-            x: dialog.width - 24 - width / 2
-            y: 16 - height / 2
+            // Rests in the top-right corner; while an update runs it travels to the bottom-left corner and grows 40%
+            property real m: (root.busy || root.phase === "ready") ? 1 : 0
+            Behavior on m { NumberAnimation { duration: 900 * root.motion; easing.type: Easing.OutExpo } }
+            x: (dialog.width - 24) * (1 - m) + 24 * m - width / 2
+            y: 16 * (1 - m) + (dialog.height - 16) * m - height / 2
+            scale: 1 + 0.4 * m
             z: 3
             readonly property real mid: 88
             readonly property string unit: "NUTSTY  " + (root.cleanLatest || root.cleanCurrent) + "  "
@@ -293,7 +312,6 @@ Item {
                             switch (root.phase) {
                             case "available":
                             case "planning": return I18n.tr("Ê cập nhật đi bản mới nè!", "Hey, grab the new version!");
-                            case "downloading": return I18n.tr("Đang tải", "Downloading");
                             case "ready": return I18n.tr("Sẵn sàng", "Ready");
                             case "upToDate": return I18n.tr("Mới nhất", "Latest");
                             default: return "";
@@ -330,7 +348,7 @@ Item {
                     spacing: 8
                     Rectangle {
                         id: waitDot
-                        visible: root.phase === "checking" || root.phase === "planning"
+                        visible: root.phase === "checking" || root.sizePending
                         Layout.preferredWidth: 8; Layout.preferredHeight: 8
                         radius: 4
                         color: root.accentColor
@@ -343,6 +361,7 @@ Item {
                     }
                     Text {
                         Layout.fillWidth: true
+                        Layout.preferredHeight: 22
                         text: root.statusMain
                         font.family: Theme.fontFamily; font.pixelSize: 16; font.bold: true
                         color: root.phase === "error" ? Qt.rgba(244 / 255, 63 / 255, 94 / 255, 1) : Theme.textPrimary
@@ -457,7 +476,7 @@ Item {
                                             : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.10)
                     border.width: 1
                     border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.32)
-                    visible: root.phase !== "checking" && root.phase !== "planning"
+                    visible: root.phase !== "checking"
                     Behavior on color { ColorAnimation { duration: 120 } }
                     HoverHandler { id: secHover }
                     Text {
@@ -487,16 +506,19 @@ Item {
                     Layout.preferredHeight: 42
                     radius: 12
                     visible: root.phase === "available" || root.phase === "ready" || root.phase === "error"
-                    color: priHover.hovered ? Theme.accentGreenHover : root.accentColor
-                    opacity: root.phase === "planning" ? 0.5 : 1
+                    color: priHover.hovered ? Qt.tint(root.accentColor, Qt.rgba(1, 1, 1, 0.15)) : root.accentColor
+                    // Hidden until the size is known, so its label never changes under the cursor
+                    opacity: root.sizePending ? 0 : 1
+                    enabled: !root.sizePending
+                    Behavior on opacity { NumberAnimation { duration: 200 * root.motion; easing.type: Easing.OutExpo } }
                     Behavior on color { ColorAnimation { duration: 120 } }
                     HoverHandler { id: priHover }
                     Text {
                         anchors.centerIn: parent
                         text: root.phase === "ready" ? I18n.tr("Khởi động lại ngay", "Restart now")
                               : (root.phase === "error" ? I18n.tr("Thử lại", "Try again")
-                                 : (root.plan && root.updateState.mode === "delta" && root.plan.download_bytes > 0
-                                    ? I18n.tr("Cập nhật · " + root.formatBytes(root.plan.download_bytes), "Update · " + root.formatBytes(root.plan.download_bytes))
+                                 : (root.isDelta && root.shownPlan.download_bytes > 0
+                                    ? I18n.tr("Cập nhật · " + root.formatBytes(root.shownPlan.download_bytes), "Update · " + root.formatBytes(root.shownPlan.download_bytes))
                                     : I18n.tr("Cập nhật ngay", "Update now")))
                         font.family: Theme.fontFamily; font.pixelSize: 13; font.bold: true
                         color: "#14100a"
