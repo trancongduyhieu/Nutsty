@@ -80,7 +80,7 @@ Item {
     Timer { id: closeTimer; interval: 200; onTriggered: root.closingGuard = false }
 
     onReleaseNotesChanged: refreshNotes()
-    onPhaseChanged: statusPop.restart()
+    onPhaseChanged: if (!statusPop.running) statusPop.start()
 
     // The release body is the CHANGELOG section: "- **Title**: detail" lines, sub-bullets indented
     function refreshNotes() {
@@ -162,14 +162,8 @@ Item {
         clip: true
         z: 2
 
-        scale: root.isOpen ? 1.0 : 0.94
-        Behavior on scale {
-            NumberAnimation {
-                duration: 320 * root.motion
-                easing.type: root.isOpen ? Easing.OutBack : Easing.OutCubic
-                easing.overshoot: 1.3
-            }
-        }
+        scale: root.isOpen ? 1.0 : 0.97
+        Behavior on scale { NumberAnimation { duration: 240 * root.motion; easing.type: Easing.OutCubic } }
 
         Rectangle { anchors.fill: parent; radius: dialog.radius; color: Qt.rgba(0.04, 0.05, 0.08, 0.88); z: 1 }
         Rectangle {
@@ -285,8 +279,8 @@ Item {
                         font.letterSpacing: -2
                         color: Theme.textPrimary
                     }
-                    // Springs in on open and whenever the state changes
-                    Rectangle {
+                    // Plain accent text beside the version, no capsule. It only fades in, never bounces
+                    Text {
                         id: badge
                         readonly property string label: {
                             switch (root.phase) {
@@ -298,36 +292,24 @@ Item {
                             default: return "";
                             }
                         }
-                        property real pop: 1
                         visible: label !== ""
-                        Layout.alignment: Qt.AlignVCenter
-                        Layout.preferredWidth: badgeText.implicitWidth + 24
-                        Layout.preferredHeight: 28
-                        radius: 14
-                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
-                        border.width: 1
-                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40)
-                        transformOrigin: Item.Left
-                        scale: 0.6 + 0.4 * pop
-                        opacity: Math.min(1, pop * 2)
+                        Layout.alignment: Qt.AlignBottom
+                        Layout.bottomMargin: 8
+                        Layout.fillWidth: true
+                        text: label
+                        font.family: Theme.fontFamily; font.pixelSize: 14; font.bold: true
+                        color: root.accentColor
+                        wrapMode: Text.WordWrap
                         onLabelChanged: replay()
-                        function replay() { if (label !== "") popAnim.restart(); }
+                        function replay() { if (label !== "") fadeAnim.restart(); }
                         NumberAnimation {
-                            id: popAnim
-                            target: badge; property: "pop"
+                            id: fadeAnim
+                            target: badge; property: "opacity"
                             from: 0; to: 1
-                            duration: 520 * root.motion
-                            easing.type: Easing.OutBack; easing.overshoot: 2.4
-                        }
-                        Text {
-                            id: badgeText
-                            anchors.centerIn: parent
-                            text: badge.label
-                            font.family: Theme.fontFamily; font.pixelSize: 12; font.bold: true
-                            color: root.accentColor
+                            duration: 260 * root.motion
+                            easing.type: Easing.OutExpo
                         }
                     }
-                    Item { Layout.fillWidth: true }
                 }
             }
 
@@ -337,15 +319,14 @@ Item {
                 Layout.fillWidth: true
                 spacing: 4
                 property real pop: 1
-                transformOrigin: Item.TopLeft
-                scale: 0.94 + 0.06 * pop
-                opacity: Math.min(1, 0.3 + pop)
+                opacity: 0.35 + 0.65 * pop
+                transform: Translate { y: (1 - statusBlock.pop) * 6 }
                 NumberAnimation {
                     id: statusPop
                     target: statusBlock; property: "pop"
-                    from: 0; to: 1
-                    duration: 380 * root.motion
-                    easing.type: Easing.OutBack; easing.overshoot: 1.8
+                    from: 0.4; to: 1
+                    duration: 280 * root.motion
+                    easing.type: Easing.OutExpo
                 }
                 RowLayout {
                     Layout.fillWidth: true
