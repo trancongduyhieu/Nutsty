@@ -185,7 +185,10 @@ function quantile(sorted, q) {
     return i + 1 < sorted.length ? sorted[i] + (sorted[i + 1] - sorted[i]) * f : sorted[i];
 }
 // "peak" | "rush" | "" for each line
-function tempoRoles(lines) {
+// "more" peaks: any line sung slower than the song's median, after lines no slower than it
+var TEMPO_MORE = { slow: 0.95, prevFast: 0.85, peakMinDur: 0.9 };
+function tempoRoles(lines, more) {
+    var T = more ? TEMPO_MORE : TEMPO;
     var rates = lines.map(rateOf);
     var sorted = rates.filter(function (r) { return r > 0; }).sort(function (a, b) { return a - b; });
     var med = quantile(sorted, 0.5), hi = Math.max(TEMPO.fast * med, quantile(sorted, TEMPO.fastPct));
@@ -196,7 +199,8 @@ function tempoRoles(lines) {
             var prev = [];
             for (var k = i - 1; k >= 0 && prev.length < 2; k--) if (rates[k] > 0) prev.push(rates[k]);
             var prevMean = prev.length ? prev.reduce(function (a, b) { return a + b; }, 0) / prev.length : 0;
-            if (!lines[i].guessEnd && r <= TEMPO.slow * med && lines[i].end - lines[i].start >= TEMPO.peakMinDur && prev.length > 0 && prevMean >= TEMPO.prevFast * med)
+            if (!lines[i].guessEnd && r <= T.slow * med && lines[i].end - lines[i].start >= T.peakMinDur && prev.length > 0 && prevMean >= T.prevFast * med
+                && !(more && roles[i - 1] === "peak"))
                 role = "peak";
             else if (r >= hi && r > med && roles[i - 1] !== "rush") role = "rush";
         }
@@ -382,7 +386,7 @@ function pickSet(genre, lyrics) {
 }
 
 // The maximal cut: give every pile its role and pick, then dress its lines for that role
-function dressPiles(piles, set) {
+function dressPiles(piles, set, cap) {
     var setCfg = (set && SETS[set]) ? SETS[set] : SETS.sweet;
     var lastFx = {};
     for (var q = 0; q < piles.length; q++) {
@@ -399,7 +403,7 @@ function dressPiles(piles, set) {
         }
         if (P.role === "peak") dressPeak(P.lines[0]);
         else if (P.role === "rush") dressRush(P.lines[0], set);
-        else { capDoodles(P); if (P.role === "duo") dressDuo(P); }
+        else { capDoodles(P, cap); if (P.role === "duo") dressDuo(P); }
     }
 }
 
@@ -456,12 +460,13 @@ function dressRush(L, set) {
 }
 
 // A duo or stack carries at most PILE_DOODLES doodles between its lines: the earliest ones stay
-function capDoodles(P) {
+function capDoodles(P, cap) {
+    var maxD = cap > 0 ? cap : PILE_DOODLES;
     var all = [];
     P.lines.forEach(function (L) { L.doodles.forEach(function (d) { all.push(d); }); });
-    if (all.length <= PILE_DOODLES) return;
+    if (all.length <= maxD) return;
     all.sort(function (a, b) { return a.at - b.at; });
-    var keep = all.slice(0, PILE_DOODLES);
+    var keep = all.slice(0, maxD);
     P.lines.forEach(function (L) { L.doodles = L.doodles.filter(function (d) { return keep.indexOf(d) >= 0; }); });
 }
 
@@ -469,6 +474,10 @@ function build(lyrics, opts) {
     lyrics = lyrics || [];
     var maxi = !!(opts && opts.max);
     var set = (opts && opts.set) ? opts.set : pickSet(null, lyrics);
+    // Preset 8 settings: peaks "natural" | "more" | "every", doodles "few" | "normal" | "lots", film on/off
+    var peaksMode = opts && opts.alwaysPeak ? "every" : (opts && opts.peaks) || "natural";
+    var doodleMode = (opts && opts.doodles) || "normal";
+    var doodleDelta = doodleMode === "few" ? -2 : (doodleMode === "lots" ? 2 : 0);
     if (!SETS[set]) set = "sweet";
     var setCfg = SETS[set];
     var songSeed = 0;
@@ -655,6 +664,7 @@ function build(lyrics, opts) {
             L.scribble = L.lineMark || L.heroMark;
             // More doodles on the loud lines and the ones with two heroes
             var nd = Math.min(5, 2 + 2 * loud + (scores.length > 1 && heroes[scores[1].wi] ? 1 : 0) + (M.r(seed, 30, 430) < 0.4 ? 1 : 0));
+            nd = Math.max(doodleMode === "few" ? 0 : 1, Math.min(doodleMode === "lots" ? 7 : 5, nd + doodleDelta));
             var span = Math.max(0.4, (words[words.length - 1].end - start) * 0.8);
             for (var di = 0; di < nd; di++) {
                 var spot = DOODLE_SPOTS[Math.floor(M.r(seed, di, 431) * DOODLE_SPOTS.length)];
@@ -685,8 +695,7 @@ function build(lyrics, opts) {
     // Piles
     var piles = [];
     var pile = null;
-    // alwaysPeak (a preset 8 switch): every line is a peak, to try the peak moves on any song
-    var roles = !maxi ? [] : (opts && opts.alwaysPeak) ? lines.map(function () { return "peak"; }) : tempoRoles(lines);
+    var roles = !maxi ? [] : peaksMode === "every" ? lines.map(function () { return "peak"; }) : tempoRoles(lines, peaksMode === "more");
     for (var p = 0; p < lines.length; p++) {
         var cur = lines[p];
         var prev = p > 0 ? lines[p - 1] : null;
@@ -704,7 +713,7 @@ function build(lyrics, opts) {
         cur.slot = pile.lines.length;
         pile.lines.push(cur);
     }
-    if (maxi) dressPiles(piles, set);
+    if (maxi) dressPiles(piles, set, doodleMode === "lots" ? 8 : (doodleMode === "few" ? 2 : PILE_DOODLES));
     var prevShot = "", prevExit = "";
     for (var q = 0; q < piles.length; q++) {
         var P = piles[q];
@@ -748,7 +757,8 @@ function build(lyrics, opts) {
         var from = piles[gq].goneAt, to = piles[gq + 1].lines[0].enterAt;
         if (to - from >= GAP_MIN) gaps.push({ from: from, to: to });
     }
-    return { lines: lines, piles: piles, gaps: gaps, seed: songSeed, max: maxi, set: set };
+    return { lines: lines, piles: piles, gaps: gaps, seed: songSeed, max: maxi, set: set,
+             film: !(opts && opts.film === false) };
 }
 
 // The waiting dots between piles: { alpha, prog (0..1 towards the next line), t0 }
@@ -769,6 +779,7 @@ function film(motion, t) {
               hair: 0, hairX: 0.1, hairAmp: 0.01, hairPhase: 0, scratchX: 0.5, scratchA: 0,
               smear: 0, smearDir: 1, bulge: 0 };
     if (!motion || !motion.lines) return f;
+    if (motion.film === false) { f.grain = 0; f.scan = 0; return f; }
     var seed = motion.seed | 0;
     f.flicker = 1 + 0.045 * M.rs(seed, f.frame, 601);
 

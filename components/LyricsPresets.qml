@@ -37,6 +37,40 @@ QtObject {
 
     readonly property int fallbackId: 2
 
+    // Preset 8 effect sets (kinetic_stage.js SETS), in the order the settings show them
+    readonly property var kineticSets: [
+        { key: "sweet",   vi: "Ngọt ngào", en: "Sweet",
+          aboutVi: "Pop, ballad, nhạc tình: tim, sao lấp lánh, bóng đèn, bóng bay",
+          aboutEn: "Pop, ballads, love songs: hearts, sparkles, a bulb, balloons" },
+        { key: "rough",   vi: "Rock", en: "Rock",
+          aboutVi: "Rock, metal, punk: tia sét, vết nứt, chữ vỡ, dây đàn đứt",
+          aboutEn: "Rock, metal, punk: bolts, cracks, shattered words, a snapped string" },
+        { key: "street",  vi: "Rap", en: "Rap",
+          aboutVi: "Rap, hip-hop: vương miện, sơn chảy, bình xịt, micro rơi",
+          aboutEn: "Rap, hip-hop: crowns, paint drips, a spray can, a mic drop" },
+        { key: "dance",   vi: "Nhảy", en: "Dance",
+          aboutVi: "EDM, house, pop nhanh: sóng âm, quả cầu disco, cột âm lượng, laser",
+          aboutEn: "EDM, house, fast pop: waves, a disco ball, EQ bars, lasers" },
+        { key: "calm",    vi: "Êm dịu", en: "Calm",
+          aboutVi: "Nhạc êm, không lời: mây, giọt nước, lá rơi, trăng lên",
+          aboutEn: "Ambient, instrumental: clouds, drops, a falling leaf, moonrise" },
+        { key: "classic", vi: "Jazz", en: "Jazz",
+          aboutVi: "Jazz, blues, soul: nốt nhạc, đĩa than, khói, kèn",
+          aboutEn: "Jazz, blues, soul: notes, a record, smoke, a horn" },
+        { key: "anime",   vi: "Anime", en: "Anime",
+          aboutVi: "Anime, nhạc phim: sao bốn cánh, mồ hôi, vệt tập trung, hoa anh đào",
+          aboutEn: "Anime, soundtracks: four-point stars, sweat drops, focus lines, sakura" },
+        { key: "folk",    vi: "Dân ca", en: "Folk",
+          aboutVi: "Dân ca, đồng quê: mặt trời mọc, đàn chim, mầm cây",
+          aboutEn: "Folk, country: sunrise, a flock of birds, a sprout" }
+    ]
+    function kineticSet(key) {
+        for (var i = 0; i < kineticSets.length; i++) {
+            if (kineticSets[i].key === key) return kineticSets[i];
+        }
+        return kineticSets[0];
+    }
+
     function get(id) {
         for (var i = 0; i < list.length; i++) {
             if (list[i].id === id) return list[i];

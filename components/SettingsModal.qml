@@ -61,7 +61,7 @@ Rectangle {
     property string taskbarLyricsPlacement: "taskbar"
     property string taskbarLyricsAlign: "center"
     property bool lyricsRomanizationEnabled: true
-    property bool kineticAlwaysPeak: false
+    property var kineticOptions: ({})
     property int lyricsPreset: 2 // id from LyricsPresets.qml (1-8)
     property int customX: -1
     property int customY: -1
@@ -79,6 +79,8 @@ Rectangle {
     // DesktopLyricsWidget, for the wallpaper palette the previews are drawn in
     property var lyricsHost: null
     readonly property bool lyricsPreviewsLive: root.visible && root.currentTab === 1
+    // Preset 8's own panel, laid over the dialog; the preset cards stop while it is up
+    property bool kineticPanelOpen: false
     readonly property bool lyricsPreviewUsesSong: root.previewIsPlaying && !!root.previewLyrics && root.previewLyrics.length > 0
     readonly property var demoLyrics: LyricsDemo.build()
     property real demoTime: 0.0
@@ -86,6 +88,12 @@ Rectangle {
     onLyricsPreviewsLiveChanged: {
         root.demoTime = 0.0;
         root.demoLastTick = Date.now();
+        if (!root.lyricsPreviewsLive) root.kineticPanelOpen = false;
+    }
+    // A still of the wallpaper for the previews (a video wallpaper is grabbed once)
+    WallpaperStill {
+        id: wallStill
+        source: root.previewWallpaper
     }
     // Demo clock: runs only while the lyrics tab is open and no song feeds the previews
     Timer {
@@ -484,7 +492,7 @@ Rectangle {
     signal changeTaskbarLyricsPlacementRequested(string placement)
     signal changeTaskbarLyricsAlignRequested(string align)
     signal toggleLyricsRomanizationRequested(bool enabled)
-    signal toggleKineticAlwaysPeakRequested(bool enabled)
+    signal changeKineticOptionRequested(string key, var value)
     signal selectLyricsPresetRequested(int preset)
     signal resetLyricsPositionRequested()
     signal saveSpotifySpdcRequested(string spdc)
@@ -4199,17 +4207,18 @@ Rectangle {
 
                         meta: modelData
                         selected: root.lyricsPreset === modelData.id
-                        running: inView
+                        running: inView && !root.kineticPanelOpen
                         isDemo: !root.lyricsPreviewUsesSong
+                        customizable: modelData.id === 8
                         accentColor: root.accentColor
-                        wallpaperSource: root.previewWallpaper
+                        wallpaperSource: wallStill.still
                         magicFontFamily: root.magicFontFamily
                         activeLyrics: root.lyricsPreviewUsesSong ? root.previewLyrics : root.demoLyrics
                         currentTime: root.lyricsPreviewUsesSong ? root.previewTime : root.demoTime
                         isPlaying: true
                         currentTrack: root.lyricsPreviewUsesSong ? root.previewTrack : null
                         lyricsRomanizationEnabled: root.lyricsRomanizationEnabled
-                        kineticAlwaysPeak: root.kineticAlwaysPeak
+                        kineticOptions: root.kineticOptions
                         colHighlight: root.lyricsHost ? root.lyricsHost.colHighlight : "#deb06c"
                         colActiveText: root.lyricsHost ? root.lyricsHost.colActiveText : "#f8fafc"
                         colDeadText: root.lyricsHost ? root.lyricsHost.colDeadText : "#f1f5f9"
@@ -4217,68 +4226,7 @@ Rectangle {
                         colShadowAmb: root.lyricsHost ? root.lyricsHost.colShadowAmb : "#66000000"
                         isLightArea: root.lyricsHost ? root.lyricsHost.isLightArea : false
                         onPicked: root.selectLyricsPresetRequested(modelData.id)
-                    }
-                }
-
-                // Preset 8 only: every line is a peak, for trying the big moves on any song
-                Item {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 46
-                    visible: root.lyricsPreset === 8
-
-                    Column {
-                        anchors.left: parent.left
-                        anchors.right: toggleAlwaysPeak.left
-                        anchors.rightMargin: 16
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 2
-
-                        Text {
-                            width: parent.width
-                            text: I18n.tr("Câu nào cũng là cao trào", "Every line is a peak")
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 14
-                            font.bold: true
-                            color: Theme.textPrimary
-                            elide: Text.ElideRight
-                        }
-
-                        Text {
-                            width: parent.width
-                            text: I18n.tr("Mẫu 8 bung hiệu ứng lớn ở mọi câu hát, không chờ đoạn chậm lại", "Preset 8 plays a big move on every line instead of waiting for a slow one")
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 11
-                            color: Theme.textSecondary
-                            wrapMode: Text.WordWrap
-                        }
-                    }
-
-                    Rectangle {
-                        id: toggleAlwaysPeak
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 44
-                        height: 24
-                        radius: 12
-                        color: root.kineticAlwaysPeak ? root.accentColor : Qt.rgba(255, 255, 255, 0.14)
-                        Behavior on color { ColorAnimation { duration: 150 } }
-
-                        Rectangle {
-                            width: 18
-                            height: 18
-                            radius: 9
-                            color: "#ffffff"
-                            anchors.verticalCenter: parent.verticalCenter
-                            x: root.kineticAlwaysPeak ? parent.width - width - 3 : 3
-                            Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            preventStealing: false
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.toggleKineticAlwaysPeakRequested(!root.kineticAlwaysPeak)
-                        }
+                        onCustomize: root.kineticPanelOpen = true
                     }
                 }
 
@@ -4359,5 +4307,30 @@ Rectangle {
         } // Close inner Item
     } // Close settingsScroll
 } // Close ColumnLayout
+
+        KineticOptionsPanel {
+            anchors.fill: parent
+            z: 20
+            open: root.kineticPanelOpen
+            options: root.kineticOptions
+            accentColor: root.accentColor
+            lite: root.liteMode === "on" || (root.liteMode === "auto" && root.liteModeAutoActive)
+            wallpaperSource: wallStill.still
+            magicFontFamily: root.magicFontFamily
+            isDemo: !root.lyricsPreviewUsesSong
+            activeLyrics: root.lyricsPreviewUsesSong ? root.previewLyrics : root.demoLyrics
+            currentTime: root.lyricsPreviewUsesSong ? root.previewTime : root.demoTime
+            isPlaying: true
+            currentTrack: root.lyricsPreviewUsesSong ? root.previewTrack : null
+            lyricsRomanizationEnabled: root.lyricsRomanizationEnabled
+            colHighlight: root.lyricsHost ? root.lyricsHost.colHighlight : "#deb06c"
+            colActiveText: root.lyricsHost ? root.lyricsHost.colActiveText : "#f8fafc"
+            colDeadText: root.lyricsHost ? root.lyricsHost.colDeadText : "#f1f5f9"
+            colShadowDir: root.lyricsHost ? root.lyricsHost.colShadowDir : "#a6020305"
+            colShadowAmb: root.lyricsHost ? root.lyricsHost.colShadowAmb : "#66000000"
+            isLightArea: root.lyricsHost ? root.lyricsHost.isLightArea : false
+            onChangeOption: (key, value) => root.changeKineticOptionRequested(key, value)
+            onClosed: root.kineticPanelOpen = false
+        }
     } // Close dialog
 }

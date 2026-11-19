@@ -33,6 +33,9 @@ KineticStageView 1.0 KineticStageView.qml
 PenMark 1.0 PenMark.qml
 ExpressiveLyricsView 1.0 ExpressiveLyricsView.qml
 LyricsPresetCard 1.0 LyricsPresetCard.qml
+LyricsPresetPreview 1.0 LyricsPresetPreview.qml
+KineticOptionsPanel 1.0 KineticOptionsPanel.qml
+WallpaperStill 1.0 WallpaperStill.qml
 singleton LyricsPresets 1.0 LyricsPresets.qml
 LyricsPresetView 1.0 LyricsPresetView.qml
 MotionLyricsView 1.0 MotionLyricsView.qml

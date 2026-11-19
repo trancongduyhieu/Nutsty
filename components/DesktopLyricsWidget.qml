@@ -16,7 +16,7 @@ PanelWindow {
     property var currentTrack: null
     property bool enabled: true
     property bool lyricsRomanizationEnabled: true
-    property bool kineticAlwaysPeak: false
+    property var kineticOptions: ({})
     property int lyricsPreset: 2 // id from LyricsPresets.qml (1-8)
     property int customX: -1
     property int customY: -1
@@ -267,7 +267,7 @@ PanelWindow {
             isPlaying: root.isPlaying
             currentTrack: root.currentTrack
             lyricsRomanizationEnabled: root.lyricsRomanizationEnabled
-            kineticAlwaysPeak: root.kineticAlwaysPeak
+            kineticOptions: root.kineticOptions
             magicFontFamily: root.magicFontFamily
             colHighlight: root.colHighlight
             colActiveText: root.colActiveText

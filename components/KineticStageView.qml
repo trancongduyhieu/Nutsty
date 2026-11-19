@@ -34,7 +34,11 @@ Item {
     property bool isLightArea: false
     // Preset 8: the maximal cut, every line covered in pen marks and doodles (kinetic_stage.js)
     property bool maximal: false
-    property bool alwaysPeak: false   // preset 8 switch: every line is a peak
+    // Preset 8 settings: { set: "auto" | a SETS key, peaks, doodles, film } (kinetic_stage.js build)
+    property var options: ({})
+    // The set the song itself picks, and the one on stage (differs when the user forces a set)
+    property string autoSet: ""
+    property string activeSet: ""
     property string artist: ""
     property string currentGenre: ""
     property var genreCache: ({})
@@ -87,8 +91,11 @@ Item {
 
     function rebuild() {
         root.bodyW = {};
-        var pickedSet = root.maximal ? Stage.pickSet(root.currentGenre, root.activeLyrics) : "sweet";
-        root.motion = Stage.build(root.activeLyrics, { max: root.maximal, set: pickedSet, alwaysPeak: root.alwaysPeak });
+        var o = root.options || {};
+        root.autoSet = root.maximal ? Stage.pickSet(root.currentGenre, root.activeLyrics) : "sweet";
+        root.activeSet = (root.maximal && o.set && o.set !== "auto" && Stage.SETS[o.set]) ? o.set : root.autoSet;
+        root.motion = Stage.build(root.activeLyrics, { max: root.maximal, set: root.activeSet,
+                                                       peaks: o.peaks, doodles: o.doodles, film: o.film });
         visibleLines.clear();
         syncVisible();
     }
@@ -170,7 +177,7 @@ Item {
     onArtistChanged: fetchGenre()
     onActiveLyricsChanged: rebuild()
     onMaximalChanged: rebuild()
-    onAlwaysPeakChanged: rebuild()
+    onOptionsChanged: rebuild()
     onRenderableChanged: if (renderable) { root.animClock = root.currentTime; advanceClock(); }
     Component.onCompleted: {
         root.animClock = root.currentTime;
@@ -198,7 +205,8 @@ Item {
         Item {
             id: stage
             anchors.fill: parent
-            layer.enabled: root.renderable
+            // the old film pass is skipped entirely when the user turns it off
+            layer.enabled: root.renderable && root.motion.film !== false
             layer.effect: ShaderEffect {
                 readonly property var f: root.filmFx
                 property size u_size: Qt.size(stage.width, stage.height)
@@ -285,8 +293,8 @@ Item {
                     readonly property var ps: on ? Stage.pileState(line.pile, root.t, root.width, root.height, root.anchorY, bodyW) : null
                     width: root.width
                     height: root.height
-                    visible: on && ps.alpha > 0.003
-                    opacity: on ? ps.alpha * (line.pile.fx === "draft" ? 0.5 : 1) : 0
+                    visible: on && ps !== null && ps.alpha > 0.003
+                    opacity: on && ps !== null ? ps.alpha * (line.pile.fx === "draft" ? 0.5 : 1) : 0
                     transform: [
                         Rotation { origin.x: pileItem.width / 2; origin.y: pileItem.height / 2; axis { x: 1; y: 0; z: 0 } angle: pileItem.cam ? pileItem.cam.rx : 0 },
                         Rotation { origin.x: pileItem.width / 2; origin.y: pileItem.height / 2; axis { x: 0; y: 1; z: 0 } angle: pileItem.cam ? pileItem.cam.ry : 0 },

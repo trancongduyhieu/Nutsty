@@ -1123,6 +1123,8 @@ test("NaN sweep", () => {
     for (const set of Object.keys(K.SETS)) {
         sweep(K.build(fullSong, { max: true, set: set }));
         sweep(K.build(fullSong, { max: true, set: set, alwaysPeak: true }));
+        sweep(K.build(fullSong, { max: true, set: set, peaks: "more", doodles: "lots", film: false }));
+        sweep(K.build(fullSong, { max: true, set: set, doodles: "few" }));
     }
 });
 
@@ -1149,6 +1151,29 @@ test("alwaysPeak makes every line a solo peak, only in preset 8", () => {
     const off = K.build(ly, { max: true, set: "sweet" });
     assert.ok(off.lines.some(L => L.pile.role !== "peak"), "off by default");
     assert.ok(!K.build(ly, { alwaysPeak: true }).lines.some(L => L.pile.role === "peak"), "preset 7 untouched");
+});
+
+test("preset 8 options: peaks, doodles, film", () => {
+    const ly = longSong();
+    const count = (m, role) => m.piles.filter(P => P.role === role).length;
+    const nat = K.build(ly, { max: true, set: "sweet" });
+    const more = K.build(ly, { max: true, set: "sweet", peaks: "more" });
+    const every = K.build(ly, { max: true, set: "sweet", peaks: "every" });
+    assert.ok(count(more, "peak") > count(nat, "peak"), "more gives more peaks: " + count(nat, "peak") + " vs " + count(more, "peak"));
+    assert.strictEqual(count(every, "peak"), every.lines.length);
+    assert.ok(!more.piles.some((P, i) => i > 0 && P.role === "peak" && more.piles[i - 1].role === "peak"), "more never stacks two peaks");
+    const dsum = m => m.lines.reduce((n, L) => n + L.doodles.length, 0);
+    const few = K.build(ly, { max: true, set: "rough", doodles: "few" });
+    const norm = K.build(ly, { max: true, set: "rough" });
+    const lots = K.build(ly, { max: true, set: "rough", doodles: "lots" });
+    assert.ok(dsum(few) < dsum(norm) && dsum(norm) < dsum(lots), [dsum(few), dsum(norm), dsum(lots)].join(" "));
+    const off = K.build(ly, { max: true, film: false });
+    const f = K.film(off, 12.3);
+    assert.strictEqual(f.grain, 0);
+    assert.strictEqual(f.scratchA, 0);
+    assert.ok(K.film(nat, 12.3).grain > 0);
+    // the old switch still means every line
+    assert.strictEqual(count(K.build(ly, { max: true, alwaysPeak: true }), "peak"), every.lines.length);
 });
 
 let failed = 0;

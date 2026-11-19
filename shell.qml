@@ -214,7 +214,7 @@ Scope {
         }
     }
     property bool lyricsRomanizationEnabled: true
-    property bool kineticAlwaysPeak: false   // preset 8: every lyric line is a peak
+    property var kineticOptions: ({ set: "auto", peaks: "natural", doodles: "normal", film: true })   // preset 8 settings
     property bool animatedCoverEnabled: true
     // Crossfade & AutoMix (player_daemon.py crossfade_play / automix_plan)
     property bool crossfadeEnabled: false
@@ -3587,7 +3587,7 @@ Scope {
             taskbarLyricsPlacement: win.taskbarLyricsPlacement
             taskbarLyricsAlign: win.taskbarLyricsAlign
             lyricsRomanizationEnabled: win.lyricsRomanizationEnabled
-            kineticAlwaysPeak: win.kineticAlwaysPeak
+            kineticOptions: win.kineticOptions
             animatedCoverEnabled: win.animatedCoverEnabled
             canvasPreference: win.canvasPreference
             crossfadeEnabled: win.crossfadeEnabled
@@ -3722,8 +3722,10 @@ Scope {
                 win.lyricsRomanizationEnabled = enabled;
                 win.saveSettings();
             }
-            onToggleKineticAlwaysPeakRequested: enabled => {
-                win.kineticAlwaysPeak = enabled;
+            onChangeKineticOptionRequested: (key, value) => {
+                var o = Object.assign({}, win.kineticOptions);
+                o[key] = value;
+                win.kineticOptions = o;
                 win.saveSettings();
             }
             onSelectLyricsPresetRequested: preset => {
@@ -4337,7 +4339,10 @@ Scope {
             if (obj.taskbarLyricsPlacement !== undefined && typeof obj.taskbarLyricsPlacement === "string") win.taskbarLyricsPlacement = obj.taskbarLyricsPlacement;
             if (obj.taskbarLyricsAlign !== undefined && typeof obj.taskbarLyricsAlign === "string") win.taskbarLyricsAlign = obj.taskbarLyricsAlign;
             if (obj.lyricsRomanizationEnabled !== undefined) win.lyricsRomanizationEnabled = !!obj.lyricsRomanizationEnabled;
-            if (obj.kineticAlwaysPeak !== undefined) win.kineticAlwaysPeak = !!obj.kineticAlwaysPeak;
+            if (obj.kineticOptions && typeof obj.kineticOptions === "object")
+                win.kineticOptions = Object.assign({}, win.kineticOptions, obj.kineticOptions);
+            else if (obj.kineticAlwaysPeak === true)
+                win.kineticOptions = Object.assign({}, win.kineticOptions, { peaks: "every" });
             if (obj.canvasPreference !== undefined && typeof obj.canvasPreference === "string") {
                 win.canvasPreference = obj.canvasPreference;
                 win.animatedCoverEnabled = (win.canvasPreference !== "off");
@@ -4425,7 +4430,7 @@ Scope {
             taskbarLyricsPlacement: win.taskbarLyricsPlacement,
             taskbarLyricsAlign: win.taskbarLyricsAlign,
             lyricsRomanizationEnabled: win.lyricsRomanizationEnabled,
-            kineticAlwaysPeak: win.kineticAlwaysPeak,
+            kineticOptions: win.kineticOptions,
             animatedCoverEnabled: win.animatedCoverEnabled,
             canvasPreference: win.canvasPreference,
             desktopLyricsPreset: win.desktopLyricsPreset,
@@ -5985,7 +5990,7 @@ Scope {
         currentTrack: win.currentTrack
         enabled: win.desktopLyricsEnabled
         lyricsRomanizationEnabled: win.lyricsRomanizationEnabled
-        kineticAlwaysPeak: win.kineticAlwaysPeak
+        kineticOptions: win.kineticOptions
         lyricsPreset: win.desktopLyricsPreset
         customX: win.desktopLyricsCustomX
         customY: win.desktopLyricsCustomY
