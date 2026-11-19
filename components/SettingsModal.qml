@@ -61,6 +61,7 @@ Rectangle {
     property string taskbarLyricsPlacement: "taskbar"
     property string taskbarLyricsAlign: "center"
     property bool lyricsRomanizationEnabled: true
+    property bool kineticAlwaysPeak: false
     property int lyricsPreset: 2 // id from LyricsPresets.qml (1-8)
     property int customX: -1
     property int customY: -1
@@ -483,6 +484,7 @@ Rectangle {
     signal changeTaskbarLyricsPlacementRequested(string placement)
     signal changeTaskbarLyricsAlignRequested(string align)
     signal toggleLyricsRomanizationRequested(bool enabled)
+    signal toggleKineticAlwaysPeakRequested(bool enabled)
     signal selectLyricsPresetRequested(int preset)
     signal resetLyricsPositionRequested()
     signal saveSpotifySpdcRequested(string spdc)
@@ -4207,6 +4209,7 @@ Rectangle {
                         isPlaying: true
                         currentTrack: root.lyricsPreviewUsesSong ? root.previewTrack : null
                         lyricsRomanizationEnabled: root.lyricsRomanizationEnabled
+                        kineticAlwaysPeak: root.kineticAlwaysPeak
                         colHighlight: root.lyricsHost ? root.lyricsHost.colHighlight : "#deb06c"
                         colActiveText: root.lyricsHost ? root.lyricsHost.colActiveText : "#f8fafc"
                         colDeadText: root.lyricsHost ? root.lyricsHost.colDeadText : "#f1f5f9"
@@ -4214,6 +4217,68 @@ Rectangle {
                         colShadowAmb: root.lyricsHost ? root.lyricsHost.colShadowAmb : "#66000000"
                         isLightArea: root.lyricsHost ? root.lyricsHost.isLightArea : false
                         onPicked: root.selectLyricsPresetRequested(modelData.id)
+                    }
+                }
+
+                // Preset 8 only: every line is a peak, for trying the big moves on any song
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 46
+                    visible: root.lyricsPreset === 8
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: toggleAlwaysPeak.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Câu nào cũng là cao trào", "Every line is a peak")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 14
+                            font.bold: true
+                            color: Theme.textPrimary
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Mẫu 8 bung hiệu ứng lớn ở mọi câu hát, không chờ đoạn chậm lại", "Preset 8 plays a big move on every line instead of waiting for a slow one")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+
+                    Rectangle {
+                        id: toggleAlwaysPeak
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 44
+                        height: 24
+                        radius: 12
+                        color: root.kineticAlwaysPeak ? root.accentColor : Qt.rgba(255, 255, 255, 0.14)
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        Rectangle {
+                            width: 18
+                            height: 18
+                            radius: 9
+                            color: "#ffffff"
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: root.kineticAlwaysPeak ? parent.width - width - 3 : 3
+                            Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            preventStealing: false
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.toggleKineticAlwaysPeakRequested(!root.kineticAlwaysPeak)
+                        }
                     }
                 }
 

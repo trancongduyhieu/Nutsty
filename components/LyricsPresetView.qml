@@ -18,6 +18,7 @@ Item {
     property bool isPlaying: false
     property var currentTrack: null
     property bool lyricsRomanizationEnabled: true
+    property bool kineticAlwaysPeak: false
     property string magicFontFamily: "Instrument Serif"
 
     property color colHighlight: "#deb06c"
@@ -165,6 +166,7 @@ Item {
             colShadowAmb: root.colShadowAmb
             isLightArea: root.isLightArea
             maximal: root.meta.id === 8
+            alwaysPeak: root.kineticAlwaysPeak
         }
     }
 }

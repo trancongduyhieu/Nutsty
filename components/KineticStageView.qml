@@ -34,6 +34,7 @@ Item {
     property bool isLightArea: false
     // Preset 8: the maximal cut, every line covered in pen marks and doodles (kinetic_stage.js)
     property bool maximal: false
+    property bool alwaysPeak: false   // preset 8 switch: every line is a peak
     property string artist: ""
     property string currentGenre: ""
     property var genreCache: ({})
@@ -87,7 +88,7 @@ Item {
     function rebuild() {
         root.bodyW = {};
         var pickedSet = root.maximal ? Stage.pickSet(root.currentGenre, root.activeLyrics) : "sweet";
-        root.motion = Stage.build(root.activeLyrics, { max: root.maximal, set: pickedSet });
+        root.motion = Stage.build(root.activeLyrics, { max: root.maximal, set: pickedSet, alwaysPeak: root.alwaysPeak });
         visibleLines.clear();
         syncVisible();
     }
@@ -169,6 +170,7 @@ Item {
     onArtistChanged: fetchGenre()
     onActiveLyricsChanged: rebuild()
     onMaximalChanged: rebuild()
+    onAlwaysPeakChanged: rebuild()
     onRenderableChanged: if (renderable) { root.animClock = root.currentTime; advanceClock(); }
     Component.onCompleted: {
         root.animClock = root.currentTime;

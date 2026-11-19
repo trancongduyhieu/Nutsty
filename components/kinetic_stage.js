@@ -685,7 +685,8 @@ function build(lyrics, opts) {
     // Piles
     var piles = [];
     var pile = null;
-    var roles = maxi ? tempoRoles(lines) : [];
+    // alwaysPeak (a preset 8 switch): every line is a peak, to try the peak moves on any song
+    var roles = !maxi ? [] : (opts && opts.alwaysPeak) ? lines.map(function () { return "peak"; }) : tempoRoles(lines);
     for (var p = 0; p < lines.length; p++) {
         var cur = lines[p];
         var prev = p > 0 ? lines[p - 1] : null;

@@ -20,6 +20,7 @@ Rectangle {
     property bool isPlaying: false
     property var currentTrack: null
     property bool lyricsRomanizationEnabled: true
+    property bool kineticAlwaysPeak: false
     property color colHighlight: "#deb06c"
     property color colActiveText: "#f8fafc"
     property color colDeadText: "#f1f5f9"
@@ -154,6 +155,7 @@ Rectangle {
                 isPlaying: root.isPlaying
                 currentTrack: root.currentTrack
                 lyricsRomanizationEnabled: root.lyricsRomanizationEnabled
+                kineticAlwaysPeak: root.kineticAlwaysPeak
                 magicFontFamily: root.magicFontFamily
                 colHighlight: root.colHighlight
                 colActiveText: root.colActiveText

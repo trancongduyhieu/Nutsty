@@ -1122,6 +1122,7 @@ test("NaN sweep", () => {
     // preset 8 over every set in SETS
     for (const set of Object.keys(K.SETS)) {
         sweep(K.build(fullSong, { max: true, set: set }));
+        sweep(K.build(fullSong, { max: true, set: set, alwaysPeak: true }));
     }
 });
 
@@ -1132,6 +1133,22 @@ test("maximal cut never decodes, preset 7 still does", () => {
     assert.ok(!K.build(ly, { max: true }).lines.some(L => L.treat === "decode"));
     assert.ok(K.build(ly).lines.some(L => L.treat === "decode"));
     assert.ok(!K.build(demo, { max: true }).lines.some(L => L.treat === "decode"));
+});
+
+test("alwaysPeak makes every line a solo peak, only in preset 8", () => {
+    const ly = song(Array.from({ length: 24 }, (_, i) => [i * 2.5, FAST[i % 4]]));
+    for (const set of Object.keys(K.SETS)) {
+        const m = K.build(ly, { max: true, set: set, alwaysPeak: true });
+        assert.ok(m.lines.length > 0);
+        m.lines.forEach(L => {
+            assert.strictEqual(L.pile.role, "peak");
+            assert.strictEqual(L.pile.lines.length, 1);
+            assert.ok(L.pile.fx, "peak has a move");
+        });
+    }
+    const off = K.build(ly, { max: true, set: "sweet" });
+    assert.ok(off.lines.some(L => L.pile.role !== "peak"), "off by default");
+    assert.ok(!K.build(ly, { alwaysPeak: true }).lines.some(L => L.pile.role === "peak"), "preset 7 untouched");
 });
 
 let failed = 0;
