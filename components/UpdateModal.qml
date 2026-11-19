@@ -22,6 +22,8 @@ Item {
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
     property Item backgroundSourceItem: null
     property bool liteMode: (typeof win !== "undefined") ? !!win.liteMode : false
+    // 0 in Lite mode: every motion below multiplies its duration by this, so Lite shows the end state at once
+    readonly property int motion: liteMode ? 0 : 1
 
     // Fed by the shell
     property string appVersion: ""
@@ -62,6 +64,7 @@ Item {
         closingGuard = false;
         refreshNotes();
         isOpen = true;
+        badge.replay();
         forceActiveFocus();
         if (hasAppUpdate && !busy && stateName !== "ready") root.planRequested();
     }
@@ -77,6 +80,7 @@ Item {
     Timer { id: closeTimer; interval: 200; onTriggered: root.closingGuard = false }
 
     onReleaseNotesChanged: refreshNotes()
+    onPhaseChanged: statusPop.restart()
 
     // The release body is the CHANGELOG section: "- **Title**: detail" lines, sub-bullets indented
     function refreshNotes() {
@@ -115,9 +119,9 @@ Item {
         switch (phase) {
         case "checking": return I18n.tr("Đang kiểm tra", "Checking");
         case "upToDate": return I18n.tr("Bạn đang dùng bản mới nhất", "You are up to date");
-        case "available": return I18n.tr("Có bản mới", "A new version is here");
-        case "planning": return I18n.tr("Đang so sánh với bản của bạn", "Comparing with your version");
-        case "downloading": return stateName === "extracting" ? I18n.tr("Đang chuẩn bị", "Getting ready") : I18n.tr("Đang tải", "Downloading");
+        case "available": return I18n.tr("Bạn đang dùng bản " + cleanCurrent, "You are on " + cleanCurrent);
+        case "planning": return I18n.tr("Đang so sánh với bản " + cleanCurrent, "Comparing with " + cleanCurrent);
+        case "downloading": return stateName === "extracting" ? I18n.tr("Đang chuẩn bị", "Getting ready") : I18n.tr("Đang tải " + (updateState.percent || 0) + "%", "Downloading " + (updateState.percent || 0) + "%");
         case "ready": return I18n.tr("Đã sẵn sàng", "Ready to install");
         default: return I18n.tr("Cập nhật chưa xong", "The update did not finish");
         }
@@ -159,7 +163,13 @@ Item {
         z: 2
 
         scale: root.isOpen ? 1.0 : 0.94
-        Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+        Behavior on scale {
+            NumberAnimation {
+                duration: 320 * root.motion
+                easing.type: root.isOpen ? Easing.OutBack : Easing.OutCubic
+                easing.overshoot: 1.3
+            }
+        }
 
         Rectangle { anchors.fill: parent; radius: dialog.radius; color: Qt.rgba(0.04, 0.05, 0.08, 0.88); z: 1 }
         Rectangle {
@@ -168,129 +178,199 @@ Item {
         }
         MouseArea { anchors.fill: parent; z: 2; onClicked: mouse => { mouse.accepted = true; } }
 
+        // Version ring: a big band of text centred just inside the top-right corner, so the dialog edge
+        // crops it. It frames the close button (the corner sits in its empty middle) and turns slowly.
+        Item {
+            id: ring
+            width: 210; height: 210
+            x: dialog.width - 24 - width / 2
+            y: 16 - height / 2
+            z: 3
+            readonly property real mid: 88
+            readonly property string unit: "NUTSTY  " + (root.cleanLatest || root.cleanCurrent) + "  "
+            // Whole repeats of the unit, so the text meets itself at the seam
+            readonly property int cells: unit.length * Math.max(1, Math.round(48 / unit.length))
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: 2 * (ring.mid + 14); height: width; radius: width / 2
+                color: "transparent"
+                border.width: 28
+                border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, root.phase === "ready" ? 0.24 : 0.10)
+                Behavior on border.color { ColorAnimation { duration: 400 * root.motion } }
+            }
+            Item {
+                id: spinner
+                anchors.fill: parent
+                NumberAnimation on rotation {
+                    from: 0; to: 360; duration: 40000
+                    loops: Animation.Infinite
+                    running: root.isOpen && !root.liteMode
+                }
+                Repeater {
+                    model: ring.cells
+                    delegate: Item {
+                        required property int index
+                        width: 0; height: 0
+                        x: spinner.width / 2; y: spinner.height / 2
+                        rotation: index * 360 / ring.cells
+                        Text {
+                            x: -width / 2
+                            y: -ring.mid - height / 2
+                            text: ring.unit.charAt(index % ring.unit.length)
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 12; font.bold: true
+                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.62)
+                        }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            width: 32; height: 32; radius: 16
+            anchors.top: parent.top; anchors.right: parent.right
+            anchors.topMargin: 24; anchors.rightMargin: 24
+            z: 10
+            opacity: root.busy ? 0.4 : 1
+            color: closeHover.hovered ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.05)
+            border.color: closeHover.hovered ? Qt.rgba(255, 255, 255, 0.16) : Qt.rgba(255, 255, 255, 0.08)
+            border.width: 1
+            Behavior on color { ColorAnimation { duration: 120 } }
+            HoverHandler { id: closeHover }
+            AppIcon {
+                anchors.centerIn: parent
+                source: "../assets/icons/window-close-symbolic.svg"
+                iconSize: 12
+                color: closeHover.hovered ? "#ffffff" : Theme.textSecondary
+            }
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                enabled: !root.busy
+                onClicked: root.closeModal()
+            }
+        }
+
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 24
             spacing: 14
             z: 5
 
-            // Close sits alone at the top right; the ring below carries the title
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 32
-                Item { Layout.fillWidth: true }
-                Rectangle {
-                    width: 32; height: 32; radius: 16
-                    opacity: root.busy ? 0.4 : 1
-                    color: closeHover.hovered ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.05)
-                    border.color: closeHover.hovered ? Qt.rgba(255, 255, 255, 0.16) : Qt.rgba(255, 255, 255, 0.08)
-                    border.width: 1
-                    Behavior on color { ColorAnimation { duration: 120 } }
-                    HoverHandler { id: closeHover }
-                    AppIcon {
-                        anchors.centerIn: parent
-                        source: "../assets/icons/window-close-symbolic.svg"
-                        iconSize: 12
-                        color: closeHover.hovered ? "#ffffff" : Theme.textSecondary
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        enabled: !root.busy
-                        onClicked: root.closeModal()
-                    }
-                }
+            // The same icon Nutsty.exe carries; already a rounded square, drawn at its native 64 px
+            Image {
+                Layout.alignment: Qt.AlignLeft
+                Layout.preferredWidth: 64; Layout.preferredHeight: 64
+                source: "../assets/icons/nutsty.png"
+                fillMode: Image.PreserveAspectFit
+                smooth: true
             }
 
-            // The ring turns slowly. Its middle is the Nutsty icon with the version (or the live percent) under it
-            Item {
-                id: hero
-                Layout.alignment: Qt.AlignHCenter
-                Layout.topMargin: -22
-                Layout.preferredWidth: 236
-                Layout.preferredHeight: 236
-
-                Item {
-                    id: ring
-                    anchors.fill: parent
-                    readonly property real mid: 102
-                    readonly property string unit: "NUTSTY  " + (root.cleanLatest || root.cleanCurrent) + "  "
-                    // Whole repeats of the unit, so the text meets itself at the seam
-                    readonly property int cells: unit.length * Math.max(1, Math.round(48 / unit.length))
-
-                    Rectangle {
-                        anchors.centerIn: parent
-                        width: 2 * (ring.mid + 15); height: width; radius: width / 2
-                        color: "transparent"
-                        border.width: 30
-                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, root.phase === "ready" ? 0.24 : 0.10)
-                        Behavior on border.color { ColorAnimation { duration: 400 } }
-                    }
-
-                    Item {
-                        id: spinner
-                        anchors.fill: parent
-                        NumberAnimation on rotation {
-                            from: 0; to: 360; duration: 40000
-                            loops: Animation.Infinite
-                            running: root.isOpen && !root.liteMode
-                        }
-                        Repeater {
-                            model: ring.cells
-                            delegate: Item {
-                                required property int index
-                                width: 0; height: 0
-                                x: spinner.width / 2; y: spinner.height / 2
-                                rotation: index * 360 / ring.cells
-                                Text {
-                                    x: -width / 2
-                                    y: -ring.mid - height / 2
-                                    text: ring.unit.charAt(index % ring.unit.length)
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 13; font.bold: true
-                                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.62)
-                                }
-                            }
-                        }
-                    }
-
-                    Column {
-                        anchors.centerIn: parent
-                        spacing: 6
-
-                        // The same icon Nutsty.exe carries; already a rounded square, drawn at its native 64 px
-                        Image {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            width: 64; height: 64
-                            source: "../assets/icons/nutsty.png"
-                            fillMode: Image.PreserveAspectFit
-                            smooth: true
-                        }
-                        Text {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            text: root.phase === "downloading" ? ((root.updateState.percent || 0) + "%")
-                                  : (root.phase === "upToDate" ? root.cleanCurrent : (root.cleanLatest || root.cleanCurrent))
-                            font.family: Theme.fontFamily; font.pixelSize: 22; font.bold: true
-                            font.letterSpacing: -0.4
-                            color: Theme.textPrimary
-                        }
-                    }
-                }
-            }
-
-            // Headline, then one plain sentence about the cost
             ColumnLayout {
                 Layout.fillWidth: true
-                spacing: 4
+                spacing: -2
                 Text {
+                    text: "Nutsty"
+                    font.family: Theme.fontFamily; font.pixelSize: 15; font.bold: true
+                    font.letterSpacing: -0.3
+                    color: Theme.textSecondary
+                }
+                RowLayout {
                     Layout.fillWidth: true
-                    text: root.phase === "available" || root.phase === "planning"
-                          ? I18n.tr("Nutsty " + root.cleanLatest + " đã có", "Nutsty " + root.cleanLatest + " is out")
-                          : root.headline
-                    font.family: Theme.fontFamily; font.pixelSize: 22; font.bold: true
-                    font.letterSpacing: -0.4
-                    color: Theme.textPrimary
-                    wrapMode: Text.WordWrap
+                    spacing: 12
+                    Text {
+                        text: root.phase === "upToDate" ? root.cleanCurrent : (root.cleanLatest || root.cleanCurrent)
+                        font.family: Theme.fontFamily; font.pixelSize: 44; font.bold: true
+                        font.letterSpacing: -2
+                        color: Theme.textPrimary
+                    }
+                    // Springs in on open and whenever the state changes
+                    Rectangle {
+                        id: badge
+                        readonly property string label: {
+                            switch (root.phase) {
+                            case "available":
+                            case "planning": return I18n.tr("Ê cập nhật đi bản mới nè!", "Hey, grab the new version!");
+                            case "downloading": return I18n.tr("Đang tải", "Downloading");
+                            case "ready": return I18n.tr("Sẵn sàng", "Ready");
+                            case "upToDate": return I18n.tr("Mới nhất", "Latest");
+                            default: return "";
+                            }
+                        }
+                        property real pop: 1
+                        visible: label !== ""
+                        Layout.alignment: Qt.AlignVCenter
+                        Layout.preferredWidth: badgeText.implicitWidth + 24
+                        Layout.preferredHeight: 28
+                        radius: 14
+                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
+                        border.width: 1
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.40)
+                        transformOrigin: Item.Left
+                        scale: 0.6 + 0.4 * pop
+                        opacity: Math.min(1, pop * 2)
+                        onLabelChanged: replay()
+                        function replay() { if (label !== "") popAnim.restart(); }
+                        NumberAnimation {
+                            id: popAnim
+                            target: badge; property: "pop"
+                            from: 0; to: 1
+                            duration: 520 * root.motion
+                            easing.type: Easing.OutBack; easing.overshoot: 2.4
+                        }
+                        Text {
+                            id: badgeText
+                            anchors.centerIn: parent
+                            text: badge.label
+                            font.family: Theme.fontFamily; font.pixelSize: 12; font.bold: true
+                            color: root.accentColor
+                        }
+                    }
+                    Item { Layout.fillWidth: true }
+                }
+            }
+
+            // Status: a dot that breathes while we wait, a headline, then one plain sentence. It springs on every phase change
+            ColumnLayout {
+                id: statusBlock
+                Layout.fillWidth: true
+                spacing: 4
+                property real pop: 1
+                transformOrigin: Item.TopLeft
+                scale: 0.94 + 0.06 * pop
+                opacity: Math.min(1, 0.3 + pop)
+                NumberAnimation {
+                    id: statusPop
+                    target: statusBlock; property: "pop"
+                    from: 0; to: 1
+                    duration: 380 * root.motion
+                    easing.type: Easing.OutBack; easing.overshoot: 1.8
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Rectangle {
+                        id: waitDot
+                        visible: root.phase === "checking" || root.phase === "planning"
+                        Layout.preferredWidth: 8; Layout.preferredHeight: 8
+                        radius: 4
+                        color: root.accentColor
+                        SequentialAnimation on opacity {
+                            running: waitDot.visible && root.isOpen && !root.liteMode
+                            loops: Animation.Infinite
+                            NumberAnimation { from: 1.0; to: 0.25; duration: 650; easing.type: Easing.InOutSine }
+                            NumberAnimation { from: 0.25; to: 1.0; duration: 650; easing.type: Easing.InOutSine }
+                        }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: root.headline
+                        font.family: Theme.fontFamily; font.pixelSize: 20; font.bold: true
+                        font.letterSpacing: -0.4
+                        color: Theme.textPrimary
+                        wrapMode: Text.WordWrap
+                    }
                 }
                 Text {
                     Layout.fillWidth: true
@@ -320,7 +400,7 @@ Item {
                     height: parent.height; radius: 3
                     width: parent.width * Math.max(0.02, Math.min(1.0, root.updateState.progress || 0))
                     color: root.accentColor
-                    Behavior on width { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                    Behavior on width { NumberAnimation { duration: 160 * root.motion; easing.type: Easing.OutCubic } }
                 }
             }
 
@@ -343,9 +423,23 @@ Item {
                     Repeater {
                         model: root.changelogItems
                         delegate: Column {
+                            id: rowItem
                             required property int index
                             required property var modelData
                             width: notesCol.width
+                            // Rows glide in one after another when the list shows
+                            property real shown: root.motion === 0 ? 1 : 0
+                            readonly property bool go: root.isOpen && notes.visible
+                            onGoChanged: if (go && root.motion !== 0) rowAnim.restart()
+                            Component.onCompleted: if (go && root.motion !== 0) rowAnim.restart()
+                            opacity: shown
+                            transform: Translate { y: (1 - rowItem.shown) * 12 }
+                            SequentialAnimation {
+                                id: rowAnim
+                                PropertyAction { target: rowItem; property: "shown"; value: 0 }
+                                PauseAnimation { duration: 120 + Math.min(rowItem.index, 8) * 45 }
+                                NumberAnimation { target: rowItem; property: "shown"; to: 1; duration: 420; easing.type: Easing.OutExpo }
+                            }
                             Rectangle {
                                 width: parent.width; height: 1
                                 color: Qt.rgba(255, 255, 255, 0.08)
