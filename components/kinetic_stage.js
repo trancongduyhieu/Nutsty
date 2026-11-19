@@ -89,7 +89,8 @@ var PROP_D = {
     shatter: 0.6, snap: 0.7, rip: 0.5,
     spray: 0.7, micdrop: 0.6, tapex: 0.5,
     disco: 0.8, eq: 0.6, laser: 0.6,
-    calm_leaf: 0.8, droplet: 0.6, moonrise: 0.7
+    calm_leaf: 0.8, droplet: 0.6, moonrise: 0.7,
+    classic_vinyl: 0.8, vinyl: 0.8, classic_smoke: 0.7, smoke: 0.7, horn: 0.7
 };
 // a prop lands no sooner than this after its line starts coming in, so the line is whole by then
 var PROP_SETTLE = 0.6;
@@ -122,7 +123,11 @@ var SETS = {
         rush: ["cloud", "drop", "ripple", "leaf"],
         peaks: ["calm_leaf", "droplet", "moonrise"].concat(SHARED_PEAKS)
     },
-    classic: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS },
+    classic: {
+        doodles: ["note", "notes", "smoke", "vinyl", "swing"],
+        rush: ["note", "notes", "smoke", "vinyl"],
+        peaks: ["classic_vinyl", "classic_smoke", "horn"].concat(SHARED_PEAKS)
+    },
     anime: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS },
     folk: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS }
 };
@@ -1605,6 +1610,172 @@ function markShape(kind, sd, w, h) {
         S.push([{ x: s2x, y: s2y - h * 0.05 }, { x: s2x, y: s2y + h * 0.05 }]);
         break;
     }
+    case "note": {
+        // a classic single musical note with tilted oval notehead, upright stem and curved flag
+        var ncx = w * 0.38, ncy = h * 0.70;
+        var nrx = w * 0.18, nry = h * 0.13;
+        var NoteHead = [];
+        for (i = 0; i <= 16; i++) {
+            u = i / 16;
+            var a = u * 2 * Math.PI;
+            var cosT = 0.894, sinT = -0.447; // cos(-26.5 deg), sin(-26.5 deg)
+            var ex = nrx * Math.cos(a), ey = nry * Math.sin(a);
+            NoteHead.push({ x: ncx + ex * cosT - ey * sinT, y: ncy + ex * sinT + ey * cosT });
+        }
+        S.push(NoteHead);
+        S.push([
+            { x: ncx - nrx * 0.45, y: ncy + nry * 0.25 },
+            { x: ncx + nrx * 0.45, y: ncy - nry * 0.25 }
+        ]);
+
+        var stemX = ncx + nrx * 0.75;
+        var stemTopY = h * 0.18;
+        S.push([
+            { x: stemX, y: ncy },
+            { x: stemX, y: stemTopY }
+        ]);
+
+        var Flag = [
+            { x: stemX, y: stemTopY },
+            { x: stemX + w * 0.14, y: stemTopY + h * 0.08 },
+            { x: stemX + w * 0.22, y: stemTopY + h * 0.22 },
+            { x: stemX + w * 0.18, y: stemTopY + h * 0.36 },
+            { x: stemX + w * 0.10, y: stemTopY + h * 0.38 }
+        ];
+        S.push(Flag);
+        break;
+    }
+    case "notes": {
+        // beamed pair of musical eighth notes connected across the top
+        var n1x = w * 0.26, n1y = h * 0.74;
+        var n2x = w * 0.66, n2y = h * 0.65;
+        var brx = w * 0.15, bry = h * 0.11;
+        var cosB = 0.906, sinB = -0.422;
+
+        var Head1 = [];
+        for (i = 0; i <= 16; i++) {
+            u = i / 16;
+            var a1 = u * 2 * Math.PI;
+            var e1x = brx * Math.cos(a1), e1y = bry * Math.sin(a1);
+            Head1.push({ x: n1x + e1x * cosB - e1y * sinB, y: n1y + e1x * sinB + e1y * cosB });
+        }
+        S.push(Head1);
+        S.push([
+            { x: n1x - brx * 0.45, y: n1y + bry * 0.25 },
+            { x: n1x + brx * 0.45, y: n1y - bry * 0.25 }
+        ]);
+
+        var Head2 = [];
+        for (i = 0; i <= 16; i++) {
+            u = i / 16;
+            var a2 = u * 2 * Math.PI;
+            var e2x = brx * Math.cos(a2), e2y = bry * Math.sin(a2);
+            Head2.push({ x: n2x + e2x * cosB - e2y * sinB, y: n2y + e2x * sinB + e2y * cosB });
+        }
+        S.push(Head2);
+        S.push([
+            { x: n2x - brx * 0.45, y: n2y + bry * 0.25 },
+            { x: n2x + brx * 0.45, y: n2y - bry * 0.25 }
+        ]);
+
+        var stem1X = n1x + brx * 0.75, stem1TopY = h * 0.24;
+        var stem2X = n2x + brx * 0.75, stem2TopY = h * 0.15;
+        S.push([{ x: stem1X, y: n1y }, { x: stem1X, y: stem1TopY }]);
+        S.push([{ x: stem2X, y: n2y }, { x: stem2X, y: stem2TopY }]);
+
+        // Primary and secondary beams
+        S.push([{ x: stem1X, y: stem1TopY }, { x: stem2X, y: stem2TopY }]);
+        S.push([{ x: stem1X, y: stem1TopY + h * 0.08 }, { x: stem2X, y: stem2TopY + h * 0.08 }]);
+        break;
+    }
+    case "smoke": {
+        // an elegant atmospheric curl of rising smoke with graceful S-curves
+        var Smoke1 = [];
+        for (i = 0; i <= 24; i++) {
+            u = i / 24;
+            var sx = w * (0.48 - 0.24 * Math.sin(u * Math.PI * 1.5) + 0.12 * Math.sin(u * Math.PI * 3.0));
+            var sy = h * (0.86 - 0.70 * u);
+            Smoke1.push({ x: sx, y: sy });
+        }
+        S.push(Smoke1);
+
+        var Smoke2 = [];
+        for (i = 0; i <= 20; i++) {
+            u = i / 20;
+            var s2x = w * (0.54 + 0.18 * Math.sin(u * Math.PI * 1.8) - 0.10 * Math.sin(u * Math.PI * 3.2));
+            var s2y = h * (0.80 - 0.58 * u);
+            Smoke2.push({ x: s2x, y: s2y });
+        }
+        S.push(Smoke2);
+
+        // Top dispersing swirl
+        var SwirlSmoke = [];
+        for (i = 0; i <= 14; i++) {
+            u = i / 14;
+            var aSm = u * 1.6 * Math.PI;
+            var rSmX = w * (0.12 * (1 - 0.45 * u));
+            var rSmY = h * (0.08 * (1 - 0.45 * u));
+            SwirlSmoke.push({
+                x: w * 0.46 + rSmX * Math.cos(aSm),
+                y: h * 0.18 - rSmY * Math.sin(aSm)
+            });
+        }
+        S.push(SwirlSmoke);
+        break;
+    }
+    case "vinyl": {
+        // a vinyl record disc with concentric sound grooves, center label and radial sheen
+        var vcx = w * 0.50, vcy = h * 0.50;
+        var rDisc = Math.min(w, h) * 0.44;
+        S.push(ellipsePts(vcx, vcy, rDisc, rDisc, 0, 2 * Math.PI, 28));
+        S.push(ellipsePts(vcx, vcy, rDisc * 0.82, rDisc * 0.82, 0, 2 * Math.PI, 24));
+        S.push(ellipsePts(vcx, vcy, rDisc * 0.64, rDisc * 0.64, 0, 2 * Math.PI, 20));
+        S.push(ellipsePts(vcx, vcy, rDisc * 0.36, rDisc * 0.36, 0, 2 * Math.PI, 16));
+        S.push(ellipsePts(vcx, vcy, rDisc * 0.10, rDisc * 0.10, 0, 2 * Math.PI, 10));
+
+        // Specular sheen radial glints
+        S.push([
+            { x: vcx - rDisc * 0.72, y: vcy - rDisc * 0.45 },
+            { x: vcx - rDisc * 0.40, y: vcy - rDisc * 0.25 }
+        ]);
+        S.push([
+            { x: vcx + rDisc * 0.72, y: vcy + rDisc * 0.45 },
+            { x: vcx + rDisc * 0.40, y: vcy + rDisc * 0.25 }
+        ]);
+        break;
+    }
+    case "swing": {
+        // jazz swing motif: dynamic sweeping rhythm curves with syncopated bounce accents
+        var SwingArc = [];
+        for (i = 0; i <= 20; i++) {
+            u = i / 20;
+            var swx = w * (0.16 + 0.68 * u);
+            var swy = h * (0.72 + 0.16 * Math.sin(u * Math.PI * 1.5) - 0.58 * (u * u));
+            SwingArc.push({ x: swx, y: swy });
+        }
+        S.push(SwingArc);
+
+        var SwingWave = [];
+        for (i = 0; i <= 16; i++) {
+            u = i / 16;
+            var wvx = w * (0.24 + 0.56 * u);
+            var wvy = h * (0.46 - 0.16 * Math.sin(u * Math.PI) - 0.08 * u);
+            SwingWave.push({ x: wvx, y: wvy });
+        }
+        S.push(SwingWave);
+
+        // Syncopated accents
+        S.push([
+            { x: w * 0.32, y: h * 0.34 },
+            { x: w * 0.40, y: h * 0.24 }
+        ]);
+        S.push([
+            { x: w * 0.62, y: h * 0.22 },
+            { x: w * 0.72, y: h * 0.14 }
+        ]);
+        S.push(ellipsePts(w * 0.52, h * 0.26, Math.min(w, h) * 0.05, Math.min(w, h) * 0.05, 0, 2 * Math.PI, 10));
+        break;
+    }
     case "wrap":
     case "ring": {
         var th0 = -2.2 + 0.6 * M.rs(sd, 1, 803);
@@ -2085,6 +2256,29 @@ function peakState(L, t) {
                 st.heroS = 1 + 0.05 * Math.exp(-5 * tp) * Math.sin(16 * tp);
             }
             break;
+        case "classic_vinyl":
+        case "vinyl":
+            if (tp >= 0) {
+                st.heroS = 1 + 0.05 * Math.exp(-6 * tp) * Math.sin(18 * tp);
+                st.heroDy = 0.04 * Math.exp(-7 * tp) * Math.cos(18 * tp);
+                st.heroRot = 1.2 * Math.exp(-6 * tp) * Math.sin(16 * tp);
+            }
+            break;
+        case "classic_smoke":
+        case "smoke":
+            if (tp >= 0) {
+                st.heroDy = -0.05 * Math.sin(tp * 8) * Math.exp(-tp * 0.8);
+                st.heroRot = 1.0 * Math.sin(tp * 3.5) * Math.exp(-tp * 0.8);
+                st.heroS = 1 + 0.03 * Math.cos(tp * 5) * Math.exp(-tp * 1.2);
+            }
+            break;
+        case "horn":
+            if (tp >= 0) {
+                st.heroS = 1 + 0.07 * Math.exp(-7 * tp) * Math.cos(20 * tp);
+                st.heroDy = -0.05 * Math.exp(-7 * tp) * Math.sin(20 * tp);
+                st.heroRot = -1.8 * Math.exp(-6 * tp) * Math.sin(16 * tp);
+            }
+            break;
         }
     }
     return st;
@@ -2275,6 +2469,46 @@ function propShape(kind) {
              { x: -0.16 + 0.42 * Math.cos(-Math.PI * 0.44), y: 0.42 * Math.sin(-Math.PI * 0.44) }],
             [{ x: 0.46 * Math.cos(Math.PI * 0.44), y: 0.46 * Math.sin(Math.PI * 0.44) },
              { x: -0.16 + 0.42 * Math.cos(Math.PI * 0.44), y: 0.42 * Math.sin(Math.PI * 0.44) }]
+        ];
+    case "classic_vinyl":
+    case "vinyl":
+        return [
+            ellipsePts(0, 0, 0.48, 0.48, 0, 2 * Math.PI, 28),
+            ellipsePts(0, 0, 0.40, 0.40, 0, 2 * Math.PI, 24),
+            ellipsePts(0, 0, 0.32, 0.32, 0, 2 * Math.PI, 20),
+            ellipsePts(0, 0, 0.24, 0.24, 0, 2 * Math.PI, 18),
+            ellipsePts(0, 0, 0.16, 0.16, 0, 2 * Math.PI, 16),
+            ellipsePts(0, 0, 0.04, 0.04, 0, 2 * Math.PI, 10),
+            [{ x: -0.36, y: -0.22 }, { x: -0.18, y: -0.11 }],
+            [{ x: 0.36, y: 0.22 }, { x: 0.18, y: 0.11 }],
+            [{ x: -0.22, y: 0.36 }, { x: -0.11, y: 0.18 }],
+            [{ x: 0.22, y: -0.36 }, { x: 0.11, y: -0.18 }]
+        ];
+    case "classic_smoke":
+    case "smoke":
+        return [
+            bezier({ x: 0, y: 0.35 }, { x: -0.22, y: 0.12 }, { x: 0.18, y: -0.15 }, { x: -0.06, y: -0.48 }, 20),
+            bezier({ x: -0.22, y: 0.32 }, { x: -0.35, y: 0.08 }, { x: -0.12, y: -0.18 }, { x: -0.26, y: -0.42 }, 18),
+            bezier({ x: 0.22, y: 0.32 }, { x: 0.35, y: 0.08 }, { x: 0.12, y: -0.18 }, { x: 0.26, y: -0.42 }, 18),
+            ellipsePts(-0.06, -0.48, 0.10, 0.07, 0, Math.PI * 1.6, 12)
+        ];
+    case "horn":
+        return [
+            // Leadpipe / mouthpiece tubing
+            [{ x: -0.52, y: 0.08 }, { x: -0.24, y: 0.08 }],
+            [{ x: -0.55, y: 0.03 }, { x: -0.52, y: 0.08 }, { x: -0.55, y: 0.13 }, { x: -0.55, y: 0.03 }],
+            // Valve casing block
+            [{ x: -0.28, y: -0.04 }, { x: -0.14, y: -0.04 }, { x: -0.14, y: 0.18 }, { x: -0.28, y: 0.18 }, { x: -0.28, y: -0.04 }],
+            // Three valve pistons
+            [{ x: -0.25, y: -0.12 }, { x: -0.25, y: -0.04 }],
+            [{ x: -0.21, y: -0.12 }, { x: -0.21, y: -0.04 }],
+            [{ x: -0.17, y: -0.12 }, { x: -0.17, y: -0.04 }],
+            // Flared horn bell top and bottom contours
+            bezier({ x: -0.14, y: 0.04 }, { x: 0.04, y: 0.02 }, { x: 0.16, y: -0.10 }, { x: 0.30, y: -0.32 }, 16),
+            bezier({ x: -0.14, y: 0.12 }, { x: 0.04, y: 0.14 }, { x: 0.16, y: 0.26 }, { x: 0.30, y: 0.48 }, 16),
+            // Bell opening rim
+            ellipsePts(0.30, 0.08, 0.07, 0.40, 0, 2 * Math.PI, 22),
+            ellipsePts(0.26, 0.08, 0.04, 0.26, 0, 2 * Math.PI, 16)
         ];
     }
     return [];
@@ -3206,6 +3440,243 @@ function peakPieces(L, t, W, px, bl) {
                    { x: cloudX + 0.38 * px, y: cloudY + 0.06 * px }, 14)
         ];
         put(3, CloudWisp, 1, false, 0.75 * moonFade, 0.028, 2);
+        break;
+    }
+    case "classic_vinyl":
+    case "vinyl": {
+        // a record rolls in, stops behind the word, spins
+        var vinylFade = fade(tp - sung - 0.5, 0.4);
+        var landX = W * 0.5;
+        var landY = bl - 0.48 * px;
+        var startX = -2.2 * px;
+        var rDisc = px * 0.72;
+        var sDisc = px * 1.5;
+
+        var cxDisc, cyDisc, discRot;
+        if (tp < 0) {
+            var uDisc = M.clamp(tau / PROP_D.classic_vinyl);
+            cxDisc = startX + (landX - startX) * M.E.outCubic(uDisc);
+            cyDisc = landY;
+            discRot = ((cxDisc - startX) / rDisc) * (180 / Math.PI);
+        } else {
+            var settleX = 0.03 * px * Math.exp(-6 * tp) * Math.sin(18 * tp);
+            cxDisc = landX + settleX;
+            cyDisc = landY;
+            discRot = ((landX - startX) / rDisc) * (180 / Math.PI) + tp * 360;
+        }
+
+        // Piece 0: The vinyl record disc (placed behind hero word z: 1)
+        var DiscShape = place(propShape("classic_vinyl"), cxDisc, cyDisc, discRot, sDisc);
+        put(0, DiscShape, 1, false, 0.95 * vinylFade, 0.035, 1);
+
+        // Piece 1: Rotating groove sheen arcs (z: 1)
+        var radRot = discRot * Math.PI / 180;
+        var Sheen = [
+            ellipsePts(cxDisc, cyDisc, rDisc * 0.75, rDisc * 0.75, radRot - 0.28, radRot + 0.28, 14),
+            ellipsePts(cxDisc, cyDisc, rDisc * 0.75, rDisc * 0.75, radRot + Math.PI - 0.28, radRot + Math.PI + 0.28, 14),
+            ellipsePts(cxDisc, cyDisc, rDisc * 0.52, rDisc * 0.52, radRot + Math.PI * 0.5 - 0.24, radRot + Math.PI * 0.5 + 0.24, 12),
+            ellipsePts(cxDisc, cyDisc, rDisc * 0.52, rDisc * 0.52, radRot - Math.PI * 0.5 - 0.24, radRot - Math.PI * 0.5 + 0.24, 12)
+        ];
+        put(1, Sheen, 1, true, 0.85 * vinylFade, 0.032, 1);
+
+        // Piece 2: Tonearm swinging in and dropping on the spinning record (z: 2)
+        if (tp >= -0.15) {
+            var uArm = M.clamp((tp + 0.15) / 0.35);
+            var armPivotX = cxDisc + rDisc * 0.92, armPivotY = cyDisc - rDisc * 0.80;
+            var armHeadRestX = cxDisc + rDisc * 0.55, armHeadRestY = cyDisc - rDisc * 0.30;
+            var armHeadStartX = armPivotX - 0.15 * px, armHeadStartY = armPivotY - 0.40 * px;
+            var curHeadX = armHeadStartX + (armHeadRestX - armHeadStartX) * M.E.outBack(uArm, 1.2);
+            var curHeadY = armHeadStartY + (armHeadRestY - armHeadStartY) * M.E.outBack(uArm, 1.2);
+            var Tonearm = [
+                ellipsePts(armPivotX, armPivotY, 0.06 * px, 0.06 * px, 0, 2 * Math.PI, 12),
+                [{ x: armPivotX, y: armPivotY }, { x: (armPivotX + curHeadX) * 0.5 + 0.05 * px, y: (armPivotY + curHeadY) * 0.5 - 0.08 * px }, { x: curHeadX, y: curHeadY }],
+                [{ x: curHeadX - 0.04 * px, y: curHeadY - 0.02 * px }, { x: curHeadX + 0.04 * px, y: curHeadY + 0.02 * px }],
+                [{ x: curHeadX, y: curHeadY }, { x: curHeadX - 0.02 * px, y: curHeadY + 0.06 * px }]
+            ];
+            put(2, Tonearm, 1, false, 0.90 * vinylFade, 0.035, 2);
+        }
+
+        // Piece 3: Groove musical vibes / sparkles floating off spinning disc (z: 3)
+        if (tp >= 0) {
+            var Vibes = [];
+            for (var vi = 0; vi < 5; vi++) {
+                var vPhase = tp * 4.5 + vi * 1.3;
+                var vDist = (0.35 + 0.45 * Math.sin(vPhase * 0.7)) * rDisc;
+                var vAng = radRot * 1.5 + vi * (Math.PI * 2 / 5);
+                var vx = cxDisc + vDist * Math.cos(vAng);
+                var vy = cyDisc - 0.15 * px - (0.25 * px * (tp / 0.8)) + vDist * 0.3 * Math.sin(vAng);
+                var vLen = 0.05 * px;
+                Vibes.push([
+                    { x: vx - vLen, y: vy },
+                    { x: vx + vLen, y: vy }
+                ]);
+                Vibes.push([
+                    { x: vx, y: vy - vLen },
+                    { x: vx, y: vy + vLen }
+                ]);
+            }
+            put(3, Vibes, 1, true, 0.85 * fade(tp - sung - 0.2, 0.3), 0.032, 3);
+        }
+        break;
+    }
+    case "classic_smoke":
+    case "smoke": {
+        // a curl of smoke rises off the word
+        var smokeFade = fade(tp - sung - 0.5, 0.4);
+        var cxSmoke = W * 0.5;
+        var baseSmokeY = bl - 0.15 * px;
+
+        var yLift, sway;
+        if (tp < 0) {
+            var uSmoke = M.clamp(tau / PROP_D.classic_smoke);
+            yLift = -0.42 * px * (uSmoke * uSmoke);
+            sway = 0.04 * px * Math.sin(uSmoke * Math.PI * 3);
+        } else {
+            yLift = -0.42 * px - 0.12 * px * Math.sin(tp * 3);
+            sway = 0.07 * px * Math.sin(tp * 3.5);
+        }
+
+        // Piece 0: Main plume of curling smoke wafting off the hero word (z: 1)
+        var sSmoke = px * (0.85 + 0.15 * (tp < 0 ? M.clamp(tau / PROP_D.classic_smoke) : 1));
+        var SmokePlume = place(propShape("classic_smoke"), cxSmoke + sway, baseSmokeY + yLift, 3 * Math.sin(tp * 2.5), sSmoke);
+        put(0, SmokePlume, 1, false, 0.92 * smokeFade, 0.035, 1);
+
+        // Piece 1: Atmospheric smoke rings / expanding vapor loops wafting above (z: 2)
+        if (tp >= -0.1) {
+            var Rings = [];
+            for (var ri = 0; ri < 3; ri++) {
+                var rDelay = ri * 0.18;
+                var rtp = tp - rDelay;
+                if (rtp > 0) {
+                    var uRing = M.clamp(rtp / 0.65);
+                    var ringY = baseSmokeY - 0.65 * px - uRing * 0.85 * px;
+                    var ringX = cxSmoke + 0.20 * px * Math.sin(rtp * 3 + ri * 2);
+                    var rxRing = (0.10 + 0.28 * M.E.outCubic(uRing)) * px;
+                    var ryRing = rxRing * 0.42;
+                    Rings.push(ellipsePts(ringX, ringY, rxRing, ryRing, 0, 2 * Math.PI, 18));
+                }
+            }
+            if (Rings.length) put(1, Rings, 1, true, 0.82 * smokeFade, 0.028, 2);
+        }
+
+        // Piece 2: Fine wisps & tendrils drifting off individual hero letters (z: 3)
+        var Tendrils = [];
+        var hwLen = hw.text ? hw.text.length : 3;
+        for (var ti = 0; ti < Math.min(4, hwLen); ti++) {
+            var txPos = W * (0.2 + 0.6 * (ti / Math.max(1, hwLen - 1)));
+            var tProg = tp < 0 ? M.clamp((tau - ti * 0.1) / (PROP_D.classic_smoke * 0.6)) : 1;
+            if (tProg > 0.05) {
+                var tWisp = [];
+                for (var tj = 0; tj <= 10; tj++) {
+                    var tu = tj / 10;
+                    var twx = txPos + 0.08 * px * Math.sin(tu * Math.PI * 2 + tp * 4 + ti);
+                    var twy = (bl - 0.72 * px) - tu * 0.45 * px * tProg;
+                    tWisp.push({ x: twx, y: twy });
+                }
+                Tendrils.push(tWisp);
+            }
+        }
+        if (Tendrils.length) put(2, Tendrils, 1, false, 0.78 * smokeFade, 0.026, 3);
+
+        // Piece 3: Soft ambient vapor mist floating along word baseline (z: 1)
+        var Mist = [
+            bezier({ x: cxSmoke - 0.55 * px, y: bl - 0.05 * px },
+                   { x: cxSmoke - 0.18 * px, y: bl - 0.12 * px + 0.03 * px * Math.sin(tp * 3) },
+                   { x: cxSmoke + 0.18 * px, y: bl - 0.12 * px - 0.03 * px * Math.sin(tp * 3) },
+                   { x: cxSmoke + 0.55 * px, y: bl - 0.05 * px }, 16)
+        ];
+        put(3, Mist, 1, true, 0.65 * smokeFade, 0.03, 1);
+        break;
+    }
+    case "horn": {
+        // a horn pokes in and blows notes over the word
+        var hornFade = fade(tp - sung - 0.45, 0.35);
+        var targetHornX = -0.15 * px;
+        var hornY = bl - 0.75 * px;
+        var startHornX = -1.45 * px;
+
+        var curHornX;
+        if (tp < 0) {
+            var uHorn = M.clamp(tau / PROP_D.horn);
+            curHornX = startHornX + (targetHornX - startHornX) * M.E.outBack(uHorn, 1.4);
+        } else {
+            var recoil = -0.06 * px * Math.exp(-6 * tp) * Math.sin(20 * tp);
+            curHornX = targetHornX + recoil;
+        }
+
+        // Piece 0: The brass horn instrument (z: 3)
+        var HornShape = place(propShape("horn"), curHornX, hornY, 12, px * 0.82);
+        put(0, HornShape, 1, false, 0.95 * hornFade, 0.038, 3);
+
+        // Piece 1: Sound vibration blast cone waves bursting from bell mouth (z: 2)
+        if (tp >= 0) {
+            var bellMouthX = curHornX + 0.24 * px;
+            var bellMouthY = hornY + 0.06 * px;
+            var Blast = [];
+            for (var bi = 0; bi < 3; bi++) {
+                var bDelay = bi * 0.08;
+                var btp = tp - bDelay;
+                if (btp > 0) {
+                    var uBlast = M.clamp(btp / 0.45);
+                    var rBlast = (0.15 + 0.75 * M.E.outCubic(uBlast)) * px;
+                    var blastAng0 = -0.55, blastAng1 = 0.55;
+                    Blast.push(ellipsePts(bellMouthX, bellMouthY, rBlast, rBlast * 0.85, blastAng0, blastAng1, 14));
+                }
+            }
+            if (Blast.length) put(1, Blast, 1, true, 0.88 * fade(tp - sung - 0.2, 0.3), 0.034, 2);
+
+            // Piece 2: Musical notes blown out across and over the hero word (z: 4)
+            var Notes = [];
+            var noteDefs = [
+                { delay: 0.02, speed: 1.1, yOff: -0.25, type: "eighth" },
+                { delay: 0.10, speed: 0.95, yOff: -0.48, type: "beamed" },
+                { delay: 0.18, speed: 0.82, yOff: -0.15, type: "quarter" }
+            ];
+            for (var ni = 0; ni < noteDefs.length; ni++) {
+                var nd = noteDefs[ni];
+                var ntp = tp - nd.delay;
+                if (ntp > 0) {
+                    var uNote = M.clamp(ntp / 0.65);
+                    var travelX = bellMouthX + 0.12 * px + (W * 0.95) * M.E.outCubic(uNote) * nd.speed;
+                    var bobY = 0.06 * px * Math.sin(ntp * 12 + ni * 2);
+                    var curNy = hornY + nd.yOff * px + bobY;
+                    var nsz = px * 0.22;
+
+                    if (nd.type === "beamed") {
+                        // Mini beamed eighth pair
+                        var b1x = travelX, b1y = curNy;
+                        var b2x = travelX + nsz * 1.1, b2y = curNy - nsz * 0.2;
+                        Notes.push(ellipsePts(b1x, b1y, nsz * 0.32, nsz * 0.22, -0.3, 2 * Math.PI - 0.3, 10));
+                        Notes.push(ellipsePts(b2x, b2y, nsz * 0.32, nsz * 0.22, -0.3, 2 * Math.PI - 0.3, 10));
+                        Notes.push([{ x: b1x + nsz * 0.24, y: b1y }, { x: b1x + nsz * 0.24, y: b1y - nsz * 0.9 }]);
+                        Notes.push([{ x: b2x + nsz * 0.24, y: b2y }, { x: b2x + nsz * 0.24, y: b2y - nsz * 0.9 }]);
+                        Notes.push([{ x: b1x + nsz * 0.24, y: b1y - nsz * 0.9 }, { x: b2x + nsz * 0.24, y: b2y - nsz * 0.9 }]);
+                    } else if (nd.type === "eighth") {
+                        // Mini single eighth note with flag
+                        Notes.push(ellipsePts(travelX, curNy, nsz * 0.35, nsz * 0.24, -0.3, 2 * Math.PI - 0.3, 10));
+                        var nStemX = travelX + nsz * 0.26;
+                        Notes.push([{ x: nStemX, y: curNy }, { x: nStemX, y: curNy - nsz * 0.95 }]);
+                        Notes.push([{ x: nStemX, y: curNy - nsz * 0.95 }, { x: nStemX + nsz * 0.35, y: curNy - nsz * 0.65 }, { x: nStemX + nsz * 0.2, y: curNy - nsz * 0.35 }]);
+                    } else {
+                        // Quarter note
+                        Notes.push(ellipsePts(travelX, curNy, nsz * 0.35, nsz * 0.24, -0.3, 2 * Math.PI - 0.3, 10));
+                        Notes.push([{ x: travelX + nsz * 0.26, y: curNy }, { x: travelX + nsz * 0.26, y: curNy - nsz * 0.95 }]);
+                        Notes.push([{ x: travelX - nsz * 0.15, y: curNy + nsz * 0.1 }, { x: travelX + nsz * 0.15, y: curNy - nsz * 0.1 }]);
+                    }
+                }
+            }
+            if (Notes.length) put(2, Notes, 1, true, 0.95 * fade(tp - sung - 0.25, 0.35), 0.035, 4);
+
+            // Piece 3: Brass sparkle glint on horn bell rim (z: 4)
+            var glintPhase = tp * 6;
+            var gx = bellMouthX + 0.05 * px;
+            var gy = bellMouthY - 0.16 * px;
+            var Glint = [
+                [{ x: gx - 0.10 * px, y: gy }, { x: gx + 0.10 * px, y: gy }],
+                [{ x: gx, y: gy - 0.10 * px }, { x: gx, y: gy + 0.10 * px }]
+            ];
+            put(3, Glint, 1, true, 0.9 * fade(tp - sung - 0.2, 0.3), 0.035, 4);
+        }
         break;
     }
     }
