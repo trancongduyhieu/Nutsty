@@ -147,7 +147,7 @@ Item {
     property bool planFresh: false
     // Keeps the reels spinning for a moment even when the answer is instant, so the effect is always seen
     property bool minSpin: false
-    Timer { id: minSpinTimer; interval: 1300; onTriggered: root.minSpin = false }
+    Timer { id: minSpinTimer; interval: 900; onTriggered: root.minSpin = false }
     // True once the backend finished comparing (or we gave up waiting), so a plain package size may be shown
     property bool planSettled: false
     onUpdateStateChanged: {
@@ -172,8 +172,6 @@ Item {
                                       : ((planSettled && packageBytes > 0) ? formatBytes(packageBytes) : "00.0 MB")
     readonly property string sizeNumber: sizeFigure.split(" ")[0]
     readonly property string sizeUnit: sizeFigure.split(" ")[1] || ""
-    readonly property string sizeTail: (isDelta && !nothingToDownload && savedPercent >= 10)
-        ? I18n.tr(", nhẹ hơn " + savedPercent + "%", ", " + savedPercent + "% lighter") : ""
     readonly property bool showSizeRow: (phase === "available" || phase === "planning") && !nothingToDownload
 
     // Two fixed lines under the version: what matters now, then the detail. Both are always one line,
@@ -249,7 +247,7 @@ Item {
                 // top edge of the dialog re-enters from the bottom edge, so the two crops always add up to one ring.
                 readonly property real travel: 190
                 width: 210; height: 210
-                x: (isEnter ? 24 : dialog.width - 24) - width / 2
+                x: (isEnter ? 24 + 0.3 * travel * (1 - p) : dialog.width - 24 - 0.3 * travel * p) - width / 2
                 y: (isEnter ? (dialog.height - 16 + travel * (1 - p)) : (16 - travel * p)) - height / 2
                 scale: 1 + (isEnter ? 0.82 : 0.5) * p
                 visible: isEnter ? p > 0.001 : p < 0.999
@@ -327,13 +325,13 @@ Item {
             spacing: 14
             z: 5
 
-            // The same icon Nutsty.exe carries; already a rounded square, drawn at its native 64 px
-            Image {
+            // The Nutsty mark in white (the outline SVG, tinted by AppIcon)
+            AppIcon {
                 Layout.alignment: Qt.AlignLeft
                 Layout.preferredWidth: 64; Layout.preferredHeight: 64
-                source: "../assets/icons/nutsty.png"
-                fillMode: Image.PreserveAspectFit
-                smooth: true
+                source: "../assets/icons/nutsty-outline-symbolic.svg"
+                iconSize: 64
+                color: "#ffffff"
             }
 
             ColumnLayout {
@@ -341,15 +339,17 @@ Item {
                 spacing: -2
                 RowLayout {
                     Layout.fillWidth: true
+                    Layout.preferredHeight: 80
                     spacing: 12
                     Text {
+                        Layout.alignment: Qt.AlignBottom
                         text: root.phase === "upToDate" ? root.cleanCurrent : (root.cleanLatest || root.cleanCurrent)
                         font.family: Theme.fontFamily; font.pixelSize: 44; font.bold: true
                         font.letterSpacing: -2
                         color: Theme.textPrimary
                     }
-                    // Plain accent text beside the version, no capsule. It only fades in, never bounces
-                    Text {
+                    // Accent text beside the version, no capsule. Its first word ("Ê") is set 50% larger than the version
+                    Item {
                         id: badge
                         readonly property string label: {
                             switch (root.phase) {
@@ -360,14 +360,15 @@ Item {
                             default: return "";
                             }
                         }
+                        readonly property bool exclaim: root.phase === "available" || root.phase === "planning"
+                        readonly property int cut: label.indexOf(" ")
+                        readonly property string head: (exclaim && cut > 0) ? label.substring(0, cut) : ""
+                        readonly property string rest: head !== "" ? label.substring(cut) : label
                         visible: label !== ""
                         Layout.alignment: Qt.AlignBottom
-                        Layout.bottomMargin: 8
-                        Layout.fillWidth: true
-                        text: label
-                        font.family: Theme.fontFamily; font.pixelSize: 14; font.bold: true
-                        color: root.accentColor
-                        wrapMode: Text.WordWrap
+                        Layout.bottomMargin: 2
+                        Layout.preferredWidth: headText.width + restText.implicitWidth
+                        Layout.preferredHeight: headText.implicitHeight
                         onLabelChanged: replay()
                         function replay() { if (label !== "") fadeAnim.restart(); }
                         NumberAnimation {
@@ -376,6 +377,23 @@ Item {
                             from: 0; to: 1
                             duration: 260 * root.motion
                             easing.type: Easing.OutExpo
+                        }
+                        Text {
+                            id: headText
+                            visible: badge.head !== ""
+                            width: visible ? implicitWidth : 0
+                            text: badge.head
+                            font.family: Theme.fontFamily; font.pixelSize: 66; font.bold: true
+                            font.letterSpacing: -2
+                            color: root.accentColor
+                        }
+                        Text {
+                            id: restText
+                            anchors.left: headText.right
+                            anchors.baseline: headText.baseline
+                            text: badge.rest
+                            font.family: Theme.fontFamily; font.pixelSize: 14; font.bold: true
+                            color: root.accentColor
                         }
                     }
                 }
@@ -430,7 +448,7 @@ Item {
                             liteMode: root.liteMode
                         }
                         Text {
-                            text: " " + root.sizeUnit + root.sizeTail
+                            text: " " + root.sizeUnit
                             font.family: Theme.fontFamily; font.pixelSize: 16; font.bold: true
                             color: Theme.textPrimary
                         }

@@ -16,17 +16,25 @@ Row {
     property bool down: false
     property real roll: 1
     property real spin: 0
+    // Set when the reels stop spinning: they glide on from where they were instead of starting another full lap
+    property bool fromSpin: false
+    property real spinAtStop: 0
 
     function restartRoll() { roll = 0; rollAnim.restart(); }
     onGenChanged: restartRoll()
-    onTextChanged: if (!spinning) restartRoll()
-    onSpinningChanged: if (!spinning) restartRoll()
+    onTextChanged: if (!spinning) { fromSpin = false; restartRoll(); }
+    onSpinningChanged: {
+        if (spinning) { fromSpin = false; return; }
+        fromSpin = true;
+        spinAtStop = spin;
+        restartRoll();
+    }
     Component.onCompleted: if (!spinning) restartRoll()
 
     NumberAnimation {
         id: rollAnim
         target: odo; property: "roll"; from: 0; to: 1
-        duration: odo.liteMode ? 1 : 1400
+        duration: odo.liteMode ? 1 : (odo.fromSpin ? 900 : 1400)
         easing.type: Easing.BezierSpline; easing.bezierCurve: [0.2, 0, 0, 1, 1, 1]
     }
     // A whole number of laps per loop, so the wrap is invisible
@@ -47,6 +55,9 @@ Row {
             readonly property real t: Math.max(0, Math.min(1, (odo.roll - lag) / (1 - lag)))
             readonly property real spinPos: (odo.spin * (1 + index % 3)) % 10
             readonly property real digitValue: isDigit ? parseInt(modelData) : 0
+            // Where this reel was when spinning stopped, and the shortest way down to its digit (never more than one lap)
+            readonly property real idxStop: 10 - (odo.spinAtStop * (1 + index % 3)) % 10
+            readonly property real idxFrom: idxStop < digitValue ? idxStop + 10 : idxStop
             width: probe.implicitWidth
             height: probe.implicitHeight
             clip: true
@@ -67,7 +78,8 @@ Row {
                 // a full lap plus the digit, so even a 0 rolls
                 y: odo.spinning
                    ? (odo.down ? -(10 - digit.spinPos) : -digit.spinPos) * digit.height
-                   : (odo.down ? -(digit.digitValue + 10 * (1 - digit.t)) : -(10 + digit.digitValue) * digit.t) * digit.height
+                   : (odo.fromSpin ? -(digit.idxFrom + (digit.digitValue - digit.idxFrom) * digit.t)
+                                   : (odo.down ? -(digit.digitValue + 10 * (1 - digit.t)) : -(10 + digit.digitValue) * digit.t)) * digit.height
                 Repeater {
                     model: 20
                     Text {
