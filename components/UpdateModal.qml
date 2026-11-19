@@ -116,6 +116,8 @@ Item {
         var lines = String(root.releaseNotes || "").split(/\r?\n/);
         for (var i = 0; i < lines.length; i++) {
             var raw = lines[i];
+            var hm = raw.match(/^##\s+(v?[\d.]+)\s*$/);
+            if (hm) { out.push({ "title": hm[1], "detail": "", "header": true }); continue; }
             if (/^\s+[-*]/.test(raw) || !/^[-*]\s+/.test(raw)) continue;
             var body = raw.replace(/^[-*]\s+/, "").trim();
             if (/^\**bước\s*\d+/i.test(body)) continue;
@@ -559,8 +561,8 @@ Item {
                             Text {
                                 width: parent.width
                                 text: modelData.title
-                                font.family: Theme.fontFamily; font.pixelSize: 13; font.bold: true
-                                color: Theme.textPrimary
+                                font.family: Theme.fontFamily; font.pixelSize: modelData.header ? 12 : 13; font.bold: true
+                                color: modelData.header ? root.accentColor : Theme.textPrimary
                                 wrapMode: Text.WordWrap
                             }
                             Item { width: 1; height: 2 }

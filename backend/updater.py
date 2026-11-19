@@ -98,6 +98,7 @@ def check_for_updates(force=False, mock=False):
 
     repos = ["trancongduyhieu/FrostifyLocal", "trancongduyhieu/Nutsty"]
     release_data = None
+    all_releases = []
     last_err = ""
 
     for repo in repos:
@@ -116,6 +117,7 @@ def check_for_updates(force=False, mock=False):
                     if isinstance(releases, list) and len(releases) > 0:
                         # Find first non-prerelease or the latest release
                         non_pre = [r for r in releases if not r.get("prerelease", False)]
+                        all_releases = non_pre
                         release_data = non_pre[0] if non_pre else releases[0]
                         break
         except Exception as e:
@@ -182,6 +184,11 @@ def check_for_updates(force=False, mock=False):
     latest_tag = release_data.get("tag_name", "")
     release_name = release_data.get("name") or latest_tag
     body = (release_data.get("body") or "").strip()
+    # Skipping versions (2.1.0 -> 2.3.1): show what every release in between added, newest first
+    skipped = [r for r in all_releases
+               if is_newer_version(r.get("tag_name", ""), current_ver) and (r.get("body") or "").strip()]
+    if len(skipped) > 1:
+        body = "\n".join(f"## {r.get('tag_name', '')}\n{(r.get('body') or '').strip()}" for r in skipped)
     html_url = release_data.get("html_url", "https://github.com/trancongduyhieu/Nutsty/releases")
 
     # Find download asset
