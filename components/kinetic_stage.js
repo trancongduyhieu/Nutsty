@@ -87,7 +87,8 @@ var PROP_FX = ["balloon", "note", "plane", "roll", "vine", "jack", "fold", "hand
 var PROP_D = {
     balloon: 0.9, note: 1.0, plane: 0.8, roll: 0.7, vine: 0, jack: 0, fold: 0.6, hand: 0.6,
     shatter: 0.6, snap: 0.7, rip: 0.5,
-    spray: 0.7, micdrop: 0.6, tapex: 0.5
+    spray: 0.7, micdrop: 0.6, tapex: 0.5,
+    disco: 0.8, eq: 0.6, laser: 0.6
 };
 // a prop lands no sooner than this after its line starts coming in, so the line is whole by then
 var PROP_SETTLE = 0.6;
@@ -110,7 +111,11 @@ var SETS = {
         rush: ["crown", "drip", "arrow", "burst"],
         peaks: ["spray", "micdrop", "tapex"].concat(SHARED_PEAKS)
     },
-    dance: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS },
+    dance: {
+        doodles: ["wave", "dots", "beam", "grid", "sparkle"],
+        rush: ["wave", "dots", "beam", "sparkle"],
+        peaks: ["disco", "eq", "laser"].concat(SHARED_PEAKS)
+    },
     calm: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS },
     classic: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS },
     anime: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS },
@@ -1069,13 +1074,33 @@ function markShape(kind, sd, w, h) {
         S.push(pts);
         break;
     case "wave": {
-        var per = 2.5 + 1.5 * M.r(sd, 1, 816), ph = M.r(sd, 2, 817) * 6.28;
-        pts = [];
-        for (i = 0; i <= 64; i++) {
-            u = i / 64;
-            pts.push({ x: w * u, y: h * (0.5 + 0.32 * Math.sin(u * per * 2 * Math.PI + ph) * (0.7 + 0.3 * Math.sin(u * 3.1 + ph))) });
+        if (w / Math.max(1, h) < 2.5) {
+            // doodle: 3 stacked synth/audio waves
+            for (var dwi = 0; dwi < 3; dwi++) {
+                var wpts = [];
+                var wPhase = M.r(sd, dwi, 817) * 6.28 + dwi * 0.8;
+                var wFreq = 2.2 + 0.8 * M.r(sd, dwi + 5, 818);
+                var midY = h * (0.24 + 0.26 * dwi);
+                var ampY = h * 0.14;
+                for (i = 0; i <= 32; i++) {
+                    u = i / 32;
+                    var env = Math.sin(u * Math.PI);
+                    wpts.push({
+                        x: w * (0.06 + 0.88 * u),
+                        y: midY + ampY * env * Math.sin(u * wFreq * 2 * Math.PI + wPhase)
+                    });
+                }
+                S.push(wpts);
+            }
+        } else {
+            var per = 2.5 + 1.5 * M.r(sd, 1, 816), ph = M.r(sd, 2, 817) * 6.28;
+            pts = [];
+            for (i = 0; i <= 64; i++) {
+                u = i / 64;
+                pts.push({ x: w * u, y: h * (0.5 + 0.32 * Math.sin(u * per * 2 * Math.PI + ph) * (0.7 + 0.3 * Math.sin(u * 3.1 + ph))) });
+            }
+            S.push(pts);
         }
-        S.push(pts);
         break;
     }
     case "hilite": {
@@ -1323,6 +1348,73 @@ function markShape(kind, sd, w, h) {
         var qY = h * (0.18 + 0.03 * M.rs(sd, 3, 883));
         S.push([{ x: w * 0.74, y: qY + h * 0.06 }, { x: w * 0.78, y: qY }]);
         S.push([{ x: w * 0.82, y: qY + h * 0.06 }, { x: w * 0.86, y: qY }]);
+        break;
+    }
+    case "dots": {
+        // a rhythm dot matrix: 3 rows of 3 pulsed LED beat dots with an accent spark
+        var dotR = Math.min(w, h) * 0.055;
+        for (var row = 0; row < 3; row++) {
+            for (var col = 0; col < 3; col++) {
+                var dcx = w * (0.24 + 0.26 * col + 0.02 * M.rs(sd, row * 3 + col, 891));
+                var dcy = h * (0.24 + 0.26 * row + 0.02 * M.rs(sd, row * 3 + col + 10, 892));
+                var curR = dotR * (0.85 + 0.3 * M.r(sd, row * 3 + col + 20, 893));
+                var dpts = [];
+                for (var dk = 0; dk <= 8; dk++) {
+                    var da = dk / 8 * 2 * Math.PI;
+                    dpts.push({ x: dcx + curR * Math.cos(da), y: dcy + curR * Math.sin(da) });
+                }
+                S.push(dpts);
+            }
+        }
+        S.push([
+            { x: w * 0.88, y: h * 0.16 },
+            { x: w * 0.88, y: h * 0.28 }
+        ]);
+        S.push([
+            { x: w * 0.82, y: h * 0.22 },
+            { x: w * 0.94, y: h * 0.22 }
+        ]);
+        break;
+    }
+    case "beam": {
+        // stage spotlight beams fanning out from apex with crossing strobe rays
+        var apexX = w * (0.16 + 0.04 * M.rs(sd, 1, 895));
+        var apexY = h * (0.14 + 0.04 * M.rs(sd, 2, 896));
+        var bEnd1 = { x: w * (0.58 + 0.04 * M.rs(sd, 3, 897)), y: h * 0.92 };
+        var bEnd2 = { x: w * 0.92, y: h * (0.58 + 0.04 * M.rs(sd, 4, 898)) };
+        S.push([{ x: apexX, y: apexY }, bEnd1, bEnd2, { x: apexX, y: apexY }]);
+        var bMid = { x: (bEnd1.x + bEnd2.x) * 0.5, y: (bEnd1.y + bEnd2.y) * 0.5 };
+        S.push([{ x: apexX, y: apexY }, bMid]);
+        var ringP1 = { x: apexX + (bEnd1.x - apexX) * 0.5, y: apexY + (bEnd1.y - apexY) * 0.5 };
+        var ringP2 = { x: apexX + (bEnd2.x - apexX) * 0.5, y: apexY + (bEnd2.y - apexY) * 0.5 };
+        S.push([ringP1, ringP2]);
+        S.push([
+            { x: w * 0.08, y: h * 0.75 },
+            { x: w * 0.88, y: h * 0.28 }
+        ]);
+        break;
+    }
+    case "grid": {
+        // synthwave / club perspective wireframe grid
+        var vpx = w * (0.50 + 0.04 * M.rs(sd, 1, 901));
+        var vpy = h * 0.16;
+        var horizY = h * 0.34;
+        S.push([{ x: w * 0.06, y: horizY }, { x: w * 0.94, y: horizY }]);
+        var xTargets = [0.08, 0.26, 0.42, 0.58, 0.74, 0.92];
+        for (var gi = 0; gi < xTargets.length; gi++) {
+            var tx = w * xTargets[gi];
+            var uH = (horizY - vpy) / (h * 0.94 - vpy);
+            var hx = vpx + (tx - vpx) * uH;
+            S.push([{ x: hx, y: horizY }, { x: tx, y: h * 0.94 }]);
+        }
+        var horizLines = [0.46, 0.62, 0.78, 0.94];
+        for (var hi = 0; hi < horizLines.length; hi++) {
+            var hy = h * horizLines[hi];
+            var uHy = (hy - vpy) / (h * 0.94 - vpy);
+            var xL = vpx + (w * 0.08 - vpx) * uHy;
+            var xR = vpx + (w * 0.92 - vpx) * uHy;
+            S.push([{ x: xL, y: hy }, { x: xR, y: hy }]);
+        }
         break;
     }
     case "wrap":
@@ -1768,6 +1860,25 @@ function peakState(L, t) {
                 st.heroDy = 0.03 * Math.exp(-9 * tp) * Math.cos(18 * tp);
             }
             break;
+        case "disco":
+            if (tp >= 0) {
+                st.heroS = 1 + 0.06 * Math.exp(-6 * tp) * Math.sin(20 * tp);
+                st.heroDy = -0.05 * Math.exp(-7 * tp) * Math.cos(22 * tp);
+            }
+            break;
+        case "eq":
+            if (tp >= 0) {
+                var eqSung = Math.max(0.4, pw ? pw.end - pw.start : 0.4);
+                st.heroDy = -0.06 * Math.sin(tp * 16) * Math.exp(-2.5 * tp / eqSung);
+                st.heroS = 1 + 0.04 * Math.abs(Math.cos(tp * 16)) * Math.exp(-2.5 * tp / eqSung);
+            }
+            break;
+        case "laser":
+            if (tp >= 0) {
+                st.heroS = 1 + 0.08 * Math.exp(-8 * tp) * Math.cos(22 * tp);
+                st.heroDy = 0.04 * Math.exp(-9 * tp) * Math.sin(26 * tp);
+            }
+            break;
         }
     }
     return st;
@@ -1902,6 +2013,34 @@ function propShape(kind) {
              { x: -0.48, y: 0.05 }, { x: -0.43, y: -0.03 }, { x: -0.45, y: -0.12 }],
             [{ x: -0.22, y: -0.09 }, { x: -0.18, y: 0.09 }],
             [{ x: 0.18, y: -0.09 }, { x: 0.22, y: 0.09 }]
+        ];
+    case "disco":
+        return [
+            ellipsePts(0, 0, 0.45, 0.45, 0, 2 * Math.PI, 24),
+            [{ x: -0.06, y: -0.45 }, { x: 0, y: -0.55 }, { x: 0.06, y: -0.45 }],
+            ellipsePts(0, 0, 0.45, 0.14, 0, 2 * Math.PI, 16),
+            ellipsePts(0, -0.22, 0.38, 0.11, 0, 2 * Math.PI, 16),
+            ellipsePts(0, 0.22, 0.38, 0.11, 0, 2 * Math.PI, 16),
+            ellipsePts(0, 0, 0.18, 0.45, 0, 2 * Math.PI, 16)
+        ];
+    case "eq":
+        return [
+            [{ x: -0.5, y: 0.5 }, { x: 0.5, y: 0.5 }],
+            [{ x: -0.35, y: 0.5 }, { x: -0.35, y: -0.2 }],
+            [{ x: -0.12, y: 0.5 }, { x: -0.12, y: -0.5 }],
+            [{ x: 0.12, y: 0.5 }, { x: 0.12, y: -0.35 }],
+            [{ x: 0.35, y: 0.5 }, { x: 0.35, y: -0.1 }],
+            [{ x: -0.42, y: -0.3 }, { x: -0.28, y: -0.3 }],
+            [{ x: -0.19, y: -0.6 }, { x: -0.05, y: -0.6 }],
+            [{ x: 0.05, y: -0.45 }, { x: 0.19, y: -0.45 }],
+            [{ x: 0.28, y: -0.2 }, { x: 0.42, y: -0.2 }]
+        ];
+    case "laser":
+        return [
+            [{ x: -0.45, y: -0.45 }, { x: 0.45, y: 0.45 }],
+            [{ x: -0.45, y: 0.45 }, { x: 0.45, y: -0.45 }],
+            starPts(0.4, 0.12),
+            ellipsePts(0, 0, 0.25, 0.25, 0, 2 * Math.PI, 16)
         ];
     }
     return [];
@@ -2408,6 +2547,207 @@ function peakPieces(L, t, W, px, bl) {
                     ]);
                 }
                 put(3, SnapTicks, 1, true, fade(tp, 0.22), 0.035, 4);
+            }
+        }
+        break;
+    }
+    case "disco": {
+        // a disco ball lowers on its cord, turns, throws light flecks
+        var cxDisco = W * 0.5;
+        var cyTop = bl - 3.2 * px;
+        var cyRest = bl - 1.45 * px;
+        var rDisco = 0.42 * px;
+        var cyDisco;
+        var discoFade = fade(tp - sung - 0.5, 0.4);
+
+        if (tp < 0) {
+            var uDisco = M.clamp(tau / PROP_D.disco);
+            cyDisco = cyTop + (cyRest - cyTop) * M.E.outBack(uDisco, 1.4);
+        } else {
+            var bob = 0.04 * px * Math.exp(-4 * tp) * Math.sin(16 * tp);
+            cyDisco = cyRest + bob;
+        }
+
+        // Piece 0: Hanging cord + ball outer contour and hanger cap (z: 3)
+        var Ball = [
+            [{ x: cxDisco, y: cyTop }, { x: cxDisco, y: cyDisco - rDisco }],
+            [{ x: cxDisco - 0.07 * px, y: cyDisco - rDisco }, { x: cxDisco, y: cyDisco - rDisco - 0.08 * px }, { x: cxDisco + 0.07 * px, y: cyDisco - rDisco }],
+            ellipsePts(cxDisco, cyDisco, rDisco, rDisco, 0, 2 * Math.PI, 28)
+        ];
+        put(0, Ball, 1, false, 0.95 * discoFade, 0.035, 3);
+
+        // Piece 1: Rotating facet grid (latitude rings + spinning longitude meridians) (z: 3)
+        var spinAng = tau * 3.8;
+        var Facets = [
+            ellipsePts(cxDisco, cyDisco, rDisco * 0.98, rDisco * 0.28, 0, 2 * Math.PI, 20),
+            ellipsePts(cxDisco, cyDisco - rDisco * 0.46, rDisco * 0.88, rDisco * 0.22, 0, 2 * Math.PI, 18),
+            ellipsePts(cxDisco, cyDisco + rDisco * 0.46, rDisco * 0.88, rDisco * 0.22, 0, 2 * Math.PI, 18)
+        ];
+        for (var mi = 0; mi < 4; mi++) {
+            var mPh = spinAng + mi * (Math.PI / 4);
+            var mRx = rDisco * Math.sin(mPh);
+            if (Math.abs(mRx) > 0.02 * px) {
+                Facets.push(ellipsePts(cxDisco, cyDisco, Math.abs(mRx), rDisco, -Math.PI / 2, Math.PI / 2, 14));
+            }
+        }
+        put(1, Facets, 1, false, 0.78 * discoFade, 0.025, 3);
+
+        // Piece 2: Light flecks / specular reflections dancing across the hero word (z: 2)
+        if (tp >= 0) {
+            var Flecks = [];
+            for (var fi = 0; fi < 8; fi++) {
+                var fAng = spinAng * 1.5 + fi * (Math.PI / 4) + 0.2 * M.rs(sd, fi, 921);
+                var fDist = (0.7 + 0.9 * M.r(sd, fi, 922)) * px;
+                var fxX = cxDisco + fDist * Math.cos(fAng);
+                var fxY = bl - 0.45 * px + 0.35 * px * Math.sin(fAng * 2 + tp * 6);
+                var flkLen = 0.06 * px;
+                Flecks.push([
+                    { x: fxX - flkLen, y: fxY },
+                    { x: fxX + flkLen, y: fxY }
+                ]);
+                Flecks.push([
+                    { x: fxX, y: fxY - flkLen },
+                    { x: fxX, y: fxY + flkLen }
+                ]);
+            }
+            put(2, Flecks, 1, true, 0.9 * fade(tp - sung - 0.3, 0.4), 0.035, 2);
+
+            // Piece 3: Star sparkle glints on ball highlight (z: 4)
+            var glintPhase = tp * 5;
+            var gx = cxDisco + rDisco * 0.55 * Math.cos(glintPhase);
+            var gy = cyDisco - rDisco * 0.35;
+            var Glints = [
+                [{ x: gx - 0.12 * px, y: gy }, { x: gx + 0.12 * px, y: gy }],
+                [{ x: gx, y: gy - 0.12 * px }, { x: gx, y: gy + 0.12 * px }]
+            ];
+            put(3, Glints, 1, true, fade(tp - sung - 0.2, 0.3), 0.04, 4);
+        }
+        break;
+    }
+    case "eq": {
+        // equalizer bars behind the word jump with the singing
+        var eqFade = fade(tp - sung - 0.5, 0.4);
+        var nBars = 9;
+        var eqX0 = -0.06 * px;
+        var eqX1 = W + 0.06 * px;
+        var eqBaseY = bl + 0.06 * px;
+        var maxBarH = 1.05 * px;
+        var bWidth = Math.min(0.08 * px, (eqX1 - eqX0) / (nBars * 2.0));
+
+        // Piece 0: Equalizer baseline rack and frequency boundary ticks (z: 1)
+        var Frame = [
+            [{ x: eqX0 - 0.04 * px, y: eqBaseY }, { x: eqX1 + 0.04 * px, y: eqBaseY }],
+            [{ x: eqX0, y: eqBaseY - 0.08 * px }, { x: eqX0, y: eqBaseY + 0.04 * px }],
+            [{ x: eqX1, y: eqBaseY - 0.08 * px }, { x: eqX1, y: eqBaseY + 0.04 * px }]
+        ];
+        put(0, Frame, 1, false, 0.8 * eqFade, 0.03, 1);
+
+        // Piece 1: Equalizer bars jumping dynamically behind the word (z: 1)
+        var BarStrokes = [];
+        var PeakHold = [];
+        var WaveLine = [];
+
+        for (var bi = 0; bi < nBars; bi++) {
+            var bx = eqX0 + (eqX1 - eqX0) * (bi + 0.5) / nBars;
+            var barH;
+            if (tp < 0) {
+                var uEq = M.clamp(tau / PROP_D.eq);
+                barH = maxBarH * (0.12 + 0.08 * Math.sin(tau * 12 + bi * 1.5)) * uEq;
+            } else {
+                var bFreq = 14 + 4 * M.rs(sd, bi, 941);
+                var jump = Math.abs(Math.sin(tp * bFreq + bi * 1.6) * Math.cos(tp * 7.5 + bi * 0.8));
+                barH = maxBarH * (0.28 + 0.72 * jump);
+            }
+            var nRungs = 6;
+            for (var ri = 0; ri < nRungs; ri++) {
+                var rungY = eqBaseY - (ri + 0.5) * (maxBarH / nRungs);
+                if (rungY >= eqBaseY - barH) {
+                    BarStrokes.push([
+                        { x: bx - bWidth, y: rungY },
+                        { x: bx + bWidth, y: rungY }
+                    ]);
+                }
+            }
+            // Piece 2: Peak hold indicator dash floating above the bar
+            var peakY = eqBaseY - barH - 0.06 * px;
+            PeakHold.push([
+                { x: bx - bWidth * 1.1, y: peakY },
+                { x: bx + bWidth * 1.1, y: peakY }
+            ]);
+            WaveLine.push({ x: bx, y: peakY });
+        }
+        put(1, BarStrokes, 1, true, 0.9 * eqFade, 0.038, 1);
+        put(2, PeakHold, 1, true, 0.95 * eqFade, 0.035, 1);
+
+        // Piece 3: Beat audio waveform connecting the bar peaks across the top (z: 1)
+        if (WaveLine.length > 1) {
+            put(3, [WaveLine], 1, false, 0.7 * eqFade, 0.025, 1);
+        }
+        break;
+    }
+    case "laser": {
+        // two beams sweep across the word and cross on it
+        var laserFade = fade(tp - sung - 0.4, 0.35);
+        var e1X = -0.6 * px, e1Y = bl - 2.0 * px;
+        var e2X = W + 0.6 * px, e2Y = bl - 2.0 * px;
+        var targetMidX = W * 0.5, targetMidY = bl - 0.45 * px;
+
+        var t1X, t1Y, t2X, t2Y;
+        if (tp < 0) {
+            var uLaser = M.clamp(tau / PROP_D.laser);
+            var swp = M.E.outCubic(uLaser);
+            var start1X = W * 1.15, start1Y = bl + 0.15 * px;
+            var start2X = -0.15 * px, start2Y = bl + 0.15 * px;
+            t1X = start1X + (targetMidX - start1X) * swp;
+            t1Y = start1Y + (targetMidY - start1Y) * swp;
+            t2X = start2X + (targetMidX - start2X) * swp;
+            t2Y = start2Y + (targetMidY - start2Y) * swp;
+        } else {
+            var scan = 0.08 * px * Math.sin(tp * 20);
+            t1X = targetMidX + scan;
+            t1Y = targetMidY;
+            t2X = targetMidX - scan;
+            t2Y = targetMidY;
+        }
+
+        // Piece 0: The two sweeping laser beams and their emitter heads (z: 3)
+        var Beams = [
+            [{ x: e1X, y: e1Y }, { x: t1X, y: t1Y }],
+            [{ x: e2X, y: e2Y }, { x: t2X, y: t2Y }],
+            [{ x: e1X - 0.06 * px, y: e1Y - 0.04 * px }, { x: e1X + 0.06 * px, y: e1Y + 0.04 * px }],
+            [{ x: e2X + 0.06 * px, y: e2Y - 0.04 * px }, { x: e2X - 0.06 * px, y: e2Y + 0.04 * px }]
+        ];
+        put(0, Beams, 1, true, 0.95 * laserFade, 0.038, 3);
+
+        // Piece 1: Intersection flare / star burst at the crossing point (z: 4)
+        if (tp >= 0) {
+            var cxLaser = (t1X + t2X) * 0.5;
+            var cyLaser = (t1Y + t2Y) * 0.5;
+            var flareR = 0.22 * px * (1 + 0.2 * Math.sin(tp * 30));
+            var Star = starPts(flareR, flareR * 0.32);
+            var Flare = place([Star], cxLaser, cyLaser, tp * 40, 1)[0];
+            var Ring = ellipsePts(cxLaser, cyLaser, flareR * 0.6, flareR * 0.6, 0, 2 * Math.PI, 16);
+            put(1, [Flare, Ring], 1, true, 0.95 * laserFade, 0.035, 4);
+
+            // Piece 2: Horizontal laser scan / burn underline across the hero word (z: 1)
+            var Burn = [
+                [{ x: -0.08 * px, y: bl + 0.06 * px }, { x: W + 0.08 * px, y: bl + 0.06 * px }],
+                [{ x: -0.04 * px, y: bl + 0.10 * px }, { x: W + 0.04 * px, y: bl + 0.10 * px }]
+            ];
+            put(2, Burn, 1, false, 0.8 * laserFade, 0.03, 1);
+
+            // Piece 3: Laser sparks scattering from the intersection point (z: 4)
+            if (tp < 0.35) {
+                var Sparks = [];
+                for (var spi = 0; spi < 6; spi++) {
+                    var spAng = spi * (Math.PI / 3) + 0.2 * M.rs(sd, spi, 951);
+                    var spDist = (0.12 + 0.25 * (tp / 0.35)) * px;
+                    Sparks.push([
+                        { x: cxLaser + 0.05 * px * Math.cos(spAng), y: cyLaser + 0.05 * px * Math.sin(spAng) },
+                        { x: cxLaser + spDist * Math.cos(spAng), y: cyLaser + spDist * Math.sin(spAng) }
+                    ]);
+                }
+                put(3, Sparks, 1, true, fade(tp, 0.35), 0.032, 4);
             }
         }
         break;
