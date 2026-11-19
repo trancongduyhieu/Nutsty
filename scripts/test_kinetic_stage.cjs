@@ -664,6 +664,82 @@ test("laser: two beams sweep across and cross on word", () => {
     assert.ok(Math.abs(K.peakState(L, on + 0.05).heroS - 1) > 0.01, "word does not react to laser cross");
 });
 
+test("calm set entry has doodles, rush, and peaks", () => {
+    assert.deepStrictEqual(Array.from(K.SETS.calm.doodles), ["cloud", "drop", "ripple", "leaf", "moon"]);
+    assert.deepStrictEqual(Array.from(K.SETS.calm.rush), ["cloud", "drop", "ripple", "leaf"]);
+    assert.deepStrictEqual(Array.from(K.SETS.calm.peaks), ["calm_leaf", "droplet", "moonrise", "spot", "rays", "ink", "stamp"]);
+});
+
+test("calm doodles: cloud, drop, ripple, leaf, moon finite at several sizes", () => {
+    for (const kind of ["cloud", "drop", "ripple", "leaf", "moon"]) {
+        for (const [w, h] of [[12, 12], [24, 24], [48, 48], [120, 60]]) {
+            const S = K.markShape(kind, 888, w, h);
+            assert.ok(S.length > 0, kind + " has no strokes at " + w + "x" + h);
+            for (const st of S) {
+                assert.ok(st.length > 1, kind + " stroke too short");
+                for (const p of st) {
+                    assert.ok(isFinite(p.x) && isFinite(p.y), kind + " non-finite point");
+                    assert.ok(p.x >= -w * 0.5 && p.x <= w * 1.5, kind + " x out of bounds: " + p.x);
+                    assert.ok(p.y >= -h * 0.5 && p.y <= h * 1.5, kind + " y out of bounds: " + p.y);
+                }
+            }
+        }
+    }
+});
+
+test("calm peaks: nothing before start, something on cue, four finite pieces", () => {
+    for (const fx of ["calm_leaf", "droplet", "moonrise"]) {
+        const { L } = peakWith(fx);
+        const on = K.peakOnAt(L), start = on - K.PROP_D[fx];
+        assert.ok(start >= L.enterAt - 1e-9, fx + " starts before its line");
+        const before = pcs(L, start - 0.05);
+        assert.strictEqual(before.length, 4);
+        assert.ok(before.every(pc => !drawn(pc)), fx + " draws before start");
+        assert.ok(pcs(L, on + 0.1).some(drawn), fx + " draws nothing on cue");
+        for (let t = L.enterAt - 0.5; t < L.pile.exitAt + 1; t += 0.03) {
+            const P = pcs(L, t);
+            assert.strictEqual(P.length, 4);
+            finiteDeep(P, fx);
+            finiteDeep(K.peakState(L, t), fx + " state");
+            L.words[L.heroWi].chars.forEach((c, ci) => finiteDeep(K.letterState(L, t, L.heroWi, ci), fx + " letter"));
+        }
+    }
+});
+
+test("calm_leaf: leaf drifts down side to side and lands on word", () => {
+    const { L } = peakWith("calm_leaf");
+    const on = K.peakOnAt(L), start = on - K.PROP_D.calm_leaf;
+    assert.ok(drawn(pcs(L, start + 0.3)[0]), "leaf not drawn drifting");
+    const y0 = meanY(pcs(L, start + 0.1)[0]);
+    const y1 = meanY(pcs(L, on)[0]);
+    assert.ok(y1 > y0 + PX * 0.5, "leaf does not drift down: " + y0 + " vs " + y1);
+    assert.ok(drawn(pcs(L, on + 0.1)[0]), "leaf not drawn on cue");
+    assert.ok(drawn(pcs(L, on + 0.1)[2]), "dewdrop not drawn on cue");
+    assert.ok(Math.abs(K.peakState(L, on + 0.05).heroDy) > 0.01, "word does not react to leaf landing");
+});
+
+test("droplet: drop falls, ripples spread under word", () => {
+    const { L } = peakWith("droplet");
+    const on = K.peakOnAt(L), start = on - K.PROP_D.droplet;
+    assert.ok(drawn(pcs(L, start + 0.2)[0]), "drop not drawn falling");
+    const y0 = meanY(pcs(L, start + 0.1)[0]);
+    const y1 = meanY(pcs(L, on)[0]);
+    assert.ok(y1 > y0 + PX * 0.5, "drop does not fall: " + y0 + " vs " + y1);
+    assert.ok(drawn(pcs(L, on + 0.1)[1]), "ripples not drawn spreading on cue");
+    assert.ok(Math.abs(K.peakState(L, on + 0.05).heroDy) > 0.01, "word does not react to droplet splash");
+});
+
+test("moonrise: crescent rises behind word", () => {
+    const { L } = peakWith("moonrise");
+    const on = K.peakOnAt(L), start = on - K.PROP_D.moonrise;
+    assert.ok(drawn(pcs(L, start + 0.2)[0]), "moon not drawn rising");
+    const y0 = meanY(pcs(L, start + 0.1)[0]);
+    const y1 = meanY(pcs(L, on)[0]);
+    assert.ok(y1 < y0 - PX * 0.5, "moon does not rise: " + y0 + " vs " + y1);
+    assert.ok(drawn(pcs(L, on + 0.1)[1]), "halo not drawn on cue");
+    assert.ok(Math.abs(K.peakState(L, on + 0.05).heroDy) > 0.01, "word does not react to moonrise");
+});
+
 test("familyOf on real names", () => {
     assert.strictEqual(K.familyOf("Pop"), "pop");
     assert.strictEqual(K.familyOf("Hip-Hop/Rap"), "street");

@@ -88,7 +88,8 @@ var PROP_D = {
     balloon: 0.9, note: 1.0, plane: 0.8, roll: 0.7, vine: 0, jack: 0, fold: 0.6, hand: 0.6,
     shatter: 0.6, snap: 0.7, rip: 0.5,
     spray: 0.7, micdrop: 0.6, tapex: 0.5,
-    disco: 0.8, eq: 0.6, laser: 0.6
+    disco: 0.8, eq: 0.6, laser: 0.6,
+    calm_leaf: 0.8, droplet: 0.6, moonrise: 0.7
 };
 // a prop lands no sooner than this after its line starts coming in, so the line is whole by then
 var PROP_SETTLE = 0.6;
@@ -116,7 +117,11 @@ var SETS = {
         rush: ["wave", "dots", "beam", "sparkle"],
         peaks: ["disco", "eq", "laser"].concat(SHARED_PEAKS)
     },
-    calm: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS },
+    calm: {
+        doodles: ["cloud", "drop", "ripple", "leaf", "moon"],
+        rush: ["cloud", "drop", "ripple", "leaf"],
+        peaks: ["calm_leaf", "droplet", "moonrise"].concat(SHARED_PEAKS)
+    },
     classic: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS },
     anime: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS },
     folk: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS }
@@ -1417,6 +1422,189 @@ function markShape(kind, sd, w, h) {
         }
         break;
     }
+    case "cloud": {
+        // a soft serene cloud with puffy curved lobes and a flat base with gentle curls
+        var baseY = h * 0.74;
+        var cloudPts = [];
+        cloudPts.push({ x: w * 0.84, y: baseY });
+        cloudPts.push({ x: w * 0.16, y: baseY });
+        for (i = 0; i <= 8; i++) {
+            u = i / 8;
+            var aL = Math.PI * 0.5 + u * Math.PI * 0.82;
+            cloudPts.push({
+                x: w * 0.24 + w * 0.14 * Math.cos(aL),
+                y: h * 0.60 + h * 0.16 * Math.sin(aL)
+            });
+        }
+        for (i = 0; i <= 10; i++) {
+            u = i / 10;
+            var aTL = Math.PI * 1.15 + u * Math.PI * 0.82;
+            cloudPts.push({
+                x: w * 0.40 + w * 0.18 * Math.cos(aTL),
+                y: h * 0.42 + h * 0.19 * Math.sin(aTL)
+            });
+        }
+        for (i = 0; i <= 10; i++) {
+            u = i / 10;
+            var aTR = Math.PI * 1.25 + u * Math.PI * 0.88;
+            cloudPts.push({
+                x: w * 0.62 + w * 0.19 * Math.cos(aTR),
+                y: h * 0.44 + h * 0.20 * Math.sin(aTR)
+            });
+        }
+        for (i = 0; i <= 8; i++) {
+            u = i / 8;
+            var aR = -Math.PI * 0.32 + u * Math.PI * 0.82;
+            cloudPts.push({
+                x: w * 0.76 + w * 0.13 * Math.cos(aR),
+                y: h * 0.60 + h * 0.15 * Math.sin(aR)
+            });
+        }
+        cloudPts.push({ x: w * 0.84, y: baseY });
+        S.push(cloudPts);
+
+        var Swirl = [];
+        for (i = 0; i <= 10; i++) {
+            u = i / 10;
+            Swirl.push({
+                x: w * (0.36 + 0.28 * u),
+                y: h * 0.62 - h * 0.06 * Math.sin(u * Math.PI)
+            });
+        }
+        S.push(Swirl);
+        break;
+    }
+    case "drop": {
+        // a water teardrop tapering smoothly from pointed apex to bulbous rounded bottom
+        var dApexX = w * 0.5, dApexY = h * 0.14;
+        var dBotCx = w * 0.5, dBotCy = h * 0.64;
+        var dRx = w * 0.26, dRy = h * 0.26;
+        var DropContour = [{ x: dApexX, y: dApexY }];
+        // Right flank to round bottom
+        for (i = 0; i <= 16; i++) {
+            u = i / 16;
+            var aDrop = -Math.PI * 0.12 + u * Math.PI * 1.24;
+            DropContour.push({
+                x: dBotCx + dRx * Math.cos(aDrop),
+                y: dBotCy + dRy * Math.sin(aDrop)
+            });
+        }
+        DropContour.push({ x: dApexX, y: dApexY });
+        S.push(DropContour);
+
+        // Specular curved reflection shine on upper-left flank
+        var Shine = [];
+        for (i = 0; i <= 8; i++) {
+            u = i / 8;
+            Shine.push({
+                x: w * (0.40 - 0.08 * Math.sin(u * Math.PI)),
+                y: h * (0.36 + 0.26 * u)
+            });
+        }
+        S.push(Shine);
+        S.push([
+            { x: w * 0.34, y: h * 0.68 },
+            { x: w * 0.36, y: h * 0.72 }
+        ]);
+        break;
+    }
+    case "ripple": {
+        // concentric elliptical water ripples with center droplet splash
+        var rcx = w * 0.5, rcy = h * 0.56;
+        S.push(ellipsePts(rcx, rcy, w * 0.42, h * 0.24, 0, 2 * Math.PI, 28));
+        S.push(ellipsePts(rcx, rcy, w * 0.26, h * 0.15, 0, 2 * Math.PI, 22));
+        S.push(ellipsePts(rcx, rcy, w * 0.12, h * 0.07, 0, 2 * Math.PI, 16));
+        S.push([
+            { x: rcx, y: rcy - h * 0.02 },
+            { x: rcx, y: rcy - h * 0.24 }
+        ]);
+        S.push(ellipsePts(rcx, rcy - h * 0.30, w * 0.04, h * 0.06, 0, 2 * Math.PI, 12));
+        break;
+    }
+    case "leaf": {
+        // an organic botanical leaf with curved stem and branching side veins
+        var stemBase = { x: w * 0.14, y: h * 0.84 };
+        var leafBase = { x: w * 0.24, y: h * 0.74 };
+        var leafTip = { x: w * 0.86, y: h * 0.16 };
+        S.push([stemBase, leafBase]);
+        var Blade = [leafBase];
+        for (i = 1; i <= 16; i++) {
+            u = i / 16;
+            var bxT = leafBase.x + (leafTip.x - leafBase.x) * u - w * 0.22 * Math.sin(u * Math.PI);
+            var byT = leafBase.y + (leafTip.y - leafBase.y) * u - h * 0.18 * Math.sin(u * Math.PI);
+            Blade.push({ x: bxT, y: byT });
+        }
+        Blade.push(leafTip);
+        for (i = 1; i <= 16; i++) {
+            u = i / 16;
+            var bxB = leafTip.x + (leafBase.x - leafTip.x) * u + w * 0.20 * Math.sin(u * Math.PI);
+            var byB = leafTip.y + (leafBase.y - leafTip.y) * u + h * 0.20 * Math.sin(u * Math.PI);
+            Blade.push({ x: bxB, y: byB });
+        }
+        Blade.push(leafBase);
+        S.push(Blade);
+
+        var Midrib = [];
+        for (i = 0; i <= 12; i++) {
+            u = i / 12;
+            Midrib.push({
+                x: leafBase.x + (leafTip.x - leafBase.x) * u - w * 0.04 * Math.sin(u * Math.PI),
+                y: leafBase.y + (leafTip.y - leafBase.y) * u - h * 0.02 * Math.sin(u * Math.PI)
+            });
+        }
+        S.push(Midrib);
+
+        var veinU = [0.28, 0.50, 0.72];
+        for (var vi = 0; vi < veinU.length; vi++) {
+            var vu = veinU[vi];
+            var vx = leafBase.x + (leafTip.x - leafBase.x) * vu;
+            var vy = leafBase.y + (leafTip.y - leafBase.y) * vu;
+            S.push([
+                { x: vx, y: vy },
+                { x: vx - w * 0.10 * (1 - vu * 0.5), y: vy - h * 0.10 * (1 - vu * 0.5) }
+            ]);
+            S.push([
+                { x: vx, y: vy },
+                { x: vx + w * 0.09 * (1 - vu * 0.5), y: vy + h * 0.08 * (1 - vu * 0.5) }
+            ]);
+        }
+        break;
+    }
+    case "moon": {
+        // a glowing crescent moon with surrounding calm starlight sparkles
+        var mcx = w * 0.54, mcy = h * 0.50;
+        var rOuter = Math.min(w, h) * 0.38;
+        var rInner = rOuter * 0.88;
+        var innerOffX = w * 0.14;
+        var MoonCrescent = [];
+        for (i = 0; i <= 20; i++) {
+            u = i / 20;
+            var aOut = -Math.PI * 0.42 + u * Math.PI * 0.84;
+            MoonCrescent.push({
+                x: mcx + rOuter * Math.cos(aOut),
+                y: mcy + rOuter * Math.sin(aOut)
+            });
+        }
+        for (i = 0; i <= 20; i++) {
+            u = i / 20;
+            var aIn = Math.PI * 0.42 - u * Math.PI * 0.84;
+            MoonCrescent.push({
+                x: mcx - innerOffX + rInner * Math.cos(aIn),
+                y: mcy + rInner * Math.sin(aIn)
+            });
+        }
+        MoonCrescent.push(MoonCrescent[0]);
+        S.push(MoonCrescent);
+
+        var s1x = w * 0.28, s1y = h * 0.38;
+        S.push([{ x: s1x - w * 0.06, y: s1y }, { x: s1x + w * 0.06, y: s1y }]);
+        S.push([{ x: s1x, y: s1y - h * 0.08 }, { x: s1x, y: s1y + h * 0.08 }]);
+
+        var s2x = w * 0.32, s2y = h * 0.65;
+        S.push([{ x: s2x - w * 0.04, y: s2y }, { x: s2x + w * 0.04, y: s2y }]);
+        S.push([{ x: s2x, y: s2y - h * 0.05 }, { x: s2x, y: s2y + h * 0.05 }]);
+        break;
+    }
     case "wrap":
     case "ring": {
         var th0 = -2.2 + 0.6 * M.rs(sd, 1, 803);
@@ -1879,6 +2067,24 @@ function peakState(L, t) {
                 st.heroDy = 0.04 * Math.exp(-9 * tp) * Math.sin(26 * tp);
             }
             break;
+        case "calm_leaf":
+            if (tp >= 0) {
+                st.heroDy = 0.04 * Math.exp(-6 * tp) * Math.sin(18 * tp);
+                st.heroRot = 1.5 * Math.exp(-5 * tp) * Math.sin(14 * tp);
+            }
+            break;
+        case "droplet":
+            if (tp >= 0) {
+                st.heroDy = -0.06 * Math.exp(-8 * tp) * Math.sin(22 * tp);
+                st.heroS = 1 + 0.04 * Math.exp(-7 * tp) * Math.cos(18 * tp);
+            }
+            break;
+        case "moonrise":
+            if (tp >= 0) {
+                st.heroDy = -0.05 * M.E.outCubic(M.clamp(tp / 0.35));
+                st.heroS = 1 + 0.05 * Math.exp(-5 * tp) * Math.sin(16 * tp);
+            }
+            break;
         }
     }
     return st;
@@ -2041,6 +2247,34 @@ function propShape(kind) {
             [{ x: -0.45, y: 0.45 }, { x: 0.45, y: -0.45 }],
             starPts(0.4, 0.12),
             ellipsePts(0, 0, 0.25, 0.25, 0, 2 * Math.PI, 16)
+        ];
+    case "calm_leaf":
+        return [
+            [{ x: 0, y: 0 }, { x: 0.15, y: -0.22 }, { x: 0.45, y: -0.28 }, { x: 0.82, y: -0.12 },
+             { x: 0.58, y: 0.18 }, { x: 0.22, y: 0.16 }, { x: 0, y: 0 }],
+            [{ x: -0.18, y: 0.08 }, { x: 0, y: 0 }],
+            [{ x: 0, y: 0 }, { x: 0.40, y: -0.06 }, { x: 0.82, y: -0.12 }],
+            [{ x: 0.25, y: -0.04 }, { x: 0.18, y: -0.16 }],
+            [{ x: 0.25, y: -0.04 }, { x: 0.32, y: 0.12 }],
+            [{ x: 0.50, y: -0.08 }, { x: 0.44, y: -0.22 }],
+            [{ x: 0.50, y: -0.08 }, { x: 0.55, y: 0.08 }]
+        ];
+    case "droplet":
+        return [
+            [{ x: 0, y: -0.52 }, { x: 0.18, y: -0.12 }, { x: 0.26, y: 0.18 }, { x: 0.15, y: 0.38 },
+             { x: 0, y: 0.45 }, { x: -0.15, y: 0.38 }, { x: -0.26, y: 0.18 }, { x: -0.18, y: -0.12 },
+             { x: 0, y: -0.52 }],
+            [{ x: -0.10, y: 0.0 }, { x: -0.14, y: 0.22 }],
+            ellipsePts(0, 0.15, 0.08, 0.08, 0, 2 * Math.PI, 10)
+        ];
+    case "moonrise":
+        return [
+            ellipsePts(0, 0, 0.46, 0.46, -Math.PI * 0.44, Math.PI * 0.44, 20),
+            ellipsePts(-0.16, 0, 0.42, 0.42, -Math.PI * 0.44, Math.PI * 0.44, 20),
+            [{ x: 0.46 * Math.cos(-Math.PI * 0.44), y: 0.46 * Math.sin(-Math.PI * 0.44) },
+             { x: -0.16 + 0.42 * Math.cos(-Math.PI * 0.44), y: 0.42 * Math.sin(-Math.PI * 0.44) }],
+            [{ x: 0.46 * Math.cos(Math.PI * 0.44), y: 0.46 * Math.sin(Math.PI * 0.44) },
+             { x: -0.16 + 0.42 * Math.cos(Math.PI * 0.44), y: 0.42 * Math.sin(Math.PI * 0.44) }]
         ];
     }
     return [];
@@ -2750,6 +2984,228 @@ function peakPieces(L, t, W, px, bl) {
                 put(3, Sparks, 1, true, fade(tp, 0.35), 0.032, 4);
             }
         }
+        break;
+    }
+    case "calm_leaf": {
+        // a leaf drifts down side to side and lands on the word
+        var leafFade = fade(tp - sung - 0.45, 0.35);
+        var landX = W * 0.5 + 0.05 * px;
+        var landY = bl - 0.88 * px;
+        var startY = bl - 2.8 * px;
+
+        var xLeaf, yLeaf, tiltLeaf;
+        if (tp < 0) {
+            var uLeaf = M.clamp(tau / PROP_D.calm_leaf);
+            yLeaf = startY + (landY - startY) * inOutSine(uLeaf);
+            var sway = Math.sin(uLeaf * Math.PI * 3.5) * (1 - 0.35 * uLeaf) * 0.65 * px;
+            xLeaf = landX + sway;
+            tiltLeaf = -15 + 32 * Math.cos(uLeaf * Math.PI * 3.5);
+        } else {
+            var settleY = 0.04 * px * Math.exp(-6 * tp) * Math.sin(16 * tp);
+            var settleRot = 12 + 6 * Math.exp(-5 * tp) * Math.cos(14 * tp);
+            xLeaf = landX;
+            yLeaf = landY + settleY;
+            tiltLeaf = settleRot;
+        }
+
+        // Piece 0: The leaf itself (z: 3)
+        var LeafShape = place(propShape("calm_leaf"), xLeaf, yLeaf, tiltLeaf, px * 0.72);
+        put(0, LeafShape, 1, false, 0.95 * leafFade, 0.035, 3);
+
+        // Piece 1: Air breeze trail stream floating above during drift (z: 2)
+        if (tp < 0.1) {
+            var Trail = [];
+            var trProg = M.clamp(tau / (PROP_D.calm_leaf * 0.6));
+            if (trProg > 0.05) {
+                var pMidTrail = { x: landX + 0.3 * px * Math.sin(tau * 4), y: (startY + yLeaf) * 0.5 };
+                Trail.push(bezier({ x: landX - 0.2 * px, y: startY + 0.2 * px },
+                                  pMidTrail, pMidTrail,
+                                  { x: xLeaf, y: yLeaf - 0.25 * px }, 16));
+            }
+            if (Trail.length) put(1, Trail, 1, true, 0.75 * fade(-tp, 0.2), 0.025, 2);
+        } else {
+            // Soft resting breeze underline under leaf
+            var Breeze = [
+                [{ x: landX - 0.35 * px, y: landY + 0.05 * px },
+                 { x: landX + 0.35 * px, y: landY + 0.05 * px }]
+            ];
+            put(1, Breeze, 1, true, 0.7 * leafFade, 0.025, 2);
+        }
+
+        // Piece 2: Dewdrop & landing sparkle glints (z: 4)
+        if (tp >= 0) {
+            var Dew = [
+                ellipsePts(xLeaf + 0.12 * px, yLeaf - 0.05 * px, 0.06 * px, 0.06 * px, 0, 2 * Math.PI, 12),
+                [{ x: xLeaf + 0.10 * px, y: yLeaf - 0.07 * px }, { x: xLeaf + 0.14 * px, y: yLeaf - 0.07 * px }]
+            ];
+            if (tp < 0.35) {
+                Dew.push([
+                    { x: xLeaf - 0.18 * px, y: yLeaf - 0.15 * px },
+                    { x: xLeaf - 0.06 * px, y: yLeaf - 0.15 * px }
+                ]);
+                Dew.push([
+                    { x: xLeaf - 0.12 * px, y: yLeaf - 0.21 * px },
+                    { x: xLeaf - 0.12 * px, y: yLeaf - 0.09 * px }
+                ]);
+            }
+            put(2, Dew, 1, true, 0.9 * leafFade, 0.035, 4);
+
+            // Piece 3: Soft contact shadow along hero word top (z: 1)
+            var Shadow = [
+                [{ x: landX - 0.28 * px, y: bl - 0.82 * px },
+                 { x: landX + 0.28 * px, y: bl - 0.82 * px }]
+            ];
+            put(3, Shadow, 1, false, 0.65 * leafFade, 0.03, 1);
+        }
+        break;
+    }
+    case "droplet": {
+        // a drop falls, ripples spread under the word
+        var dropFade = fade(tp - sung - 0.45, 0.35);
+        var cxDrop = W * 0.5;
+        var yTop = bl - 2.6 * px;
+        var yLand = bl + 0.05 * px;
+
+        if (tp < 0) {
+            var uDrop = M.clamp(tau / PROP_D.droplet);
+            var yDrop = yTop + (yLand - yTop) * (uDrop * uDrop);
+            var sDropY = px * (0.65 + 0.25 * uDrop);
+
+            // Piece 0: Falling teardrop (z: 3)
+            var Drop = place(propShape("droplet"), cxDrop, yDrop, 0, sDropY);
+            put(0, Drop, 1, false, 0.95, 0.035, 3);
+
+            // Piece 3: Vertical descent wake streak (z: 2)
+            var Wake = [
+                [{ x: cxDrop, y: Math.max(yTop, yDrop - 0.45 * px) }, { x: cxDrop, y: yDrop }]
+            ];
+            put(3, Wake, 1, true, 0.65 * uDrop, 0.025, 2);
+        } else {
+            // Piece 0: Splash crown & rebound droplet on impact (z: 3)
+            if (tp < 0.42) {
+                var reboundH = 0.35 * px * Math.exp(-8 * tp) * Math.sin(16 * tp);
+                var curRebY = yLand - Math.max(0, reboundH);
+                var Splash = [
+                    ellipsePts(cxDrop, curRebY, 0.05 * px, 0.07 * px, 0, 2 * Math.PI, 12),
+                    [{ x: cxDrop - 0.14 * px, y: yLand }, { x: cxDrop - 0.24 * px, y: yLand - 0.16 * px }],
+                    [{ x: cxDrop + 0.14 * px, y: yLand }, { x: cxDrop + 0.24 * px, y: yLand - 0.16 * px }]
+                ];
+                put(0, Splash, 1, true, fade(tp, 0.42), 0.035, 3);
+            }
+
+            // Piece 1: Primary ripple expanding under the word (z: 1)
+            var uRip1 = M.clamp(tp / 0.55);
+            var rx1 = (0.15 + 1.25 * M.E.outCubic(uRip1)) * px;
+            var ry1 = rx1 * 0.26;
+            var Rip1 = [ellipsePts(cxDrop, yLand, rx1, ry1, 0, 2 * Math.PI, 28)];
+            put(1, Rip1, 1, true, (1 - uRip1 * uRip1) * 0.95 * dropFade, 0.038, 1);
+
+            // Piece 2: Secondary and tertiary ripples lagging behind (z: 1)
+            var SubRipples = [];
+            var tp2 = tp - 0.08;
+            if (tp2 > 0) {
+                var uRip2 = M.clamp(tp2 / 0.50);
+                var rx2 = (0.12 + 0.95 * M.E.outCubic(uRip2)) * px;
+                var ry2 = rx2 * 0.26;
+                SubRipples.push(ellipsePts(cxDrop, yLand, rx2, ry2, 0, 2 * Math.PI, 24));
+            }
+            var tp3 = tp - 0.16;
+            if (tp3 > 0) {
+                var uRip3 = M.clamp(tp3 / 0.45);
+                var rx3 = (0.10 + 0.65 * M.E.outCubic(uRip3)) * px;
+                var ry3 = rx3 * 0.26;
+                SubRipples.push(ellipsePts(cxDrop, yLand, rx3, ry3, 0, 2 * Math.PI, 20));
+            }
+            if (SubRipples.length) put(2, SubRipples, 1, false, 0.85 * dropFade, 0.028, 1);
+
+            // Piece 3: Splash flecks scattering upward on impact (z: 4)
+            if (tp < 0.28) {
+                var Flecks = [];
+                for (var fki = 0; fki < 6; fki++) {
+                    var fkAng = -Math.PI * 0.85 + fki * (Math.PI * 0.7 / 5) + 0.1 * M.rs(sd, fki, 961);
+                    var fkDist = (0.12 + 0.28 * (tp / 0.28)) * px;
+                    Flecks.push([
+                        { x: cxDrop + 0.05 * px * Math.cos(fkAng), y: yLand + 0.03 * px * Math.sin(fkAng) },
+                        { x: cxDrop + fkDist * Math.cos(fkAng), y: yLand + fkDist * Math.sin(fkAng) * 0.8 }
+                    ]);
+                }
+                put(3, Flecks, 1, true, fade(tp, 0.28), 0.032, 4);
+            }
+        }
+        break;
+    }
+    case "moonrise": {
+        // a crescent rises behind the word
+        var moonFade = fade(tp - sung - 0.5, 0.4);
+        var cxMoon = W * 0.5 + 0.12 * px;
+        var startY = bl + 0.45 * px;
+        var restY = bl - 1.25 * px;
+
+        var cyMoon, sMoon;
+        if (tp < 0) {
+            var uMoon = M.clamp(tau / PROP_D.moonrise);
+            cyMoon = startY + (restY - startY) * M.E.outCubic(uMoon);
+            sMoon = px * (0.65 + 0.25 * uMoon);
+        } else {
+            var floatY = 0.03 * px * Math.sin(tp * 3.5);
+            cyMoon = restY + floatY;
+            sMoon = px * 0.90;
+        }
+
+        // Piece 0: The crescent moon shape rising behind hero word (z: 1)
+        var Moon = place(propShape("moonrise"), cxMoon, cyMoon, -12 + 3 * Math.sin(tp * 2), sMoon);
+        put(0, Moon, 1, false, 0.95 * moonFade, 0.036, 1);
+
+        // Piece 1: Lunar aura / halo rings encircling the crescent (z: 1)
+        var rHalo1 = sMoon * 0.62 * (1 + 0.04 * Math.sin(tp * 4));
+        var rHalo2 = sMoon * 0.92 * (1 + 0.05 * Math.cos(tp * 3.5));
+        var Halo = [
+            ellipsePts(cxMoon, cyMoon, rHalo1, rHalo1, 0, 2 * Math.PI, 24),
+            ellipsePts(cxMoon, cyMoon, rHalo2, rHalo2, 0, 2 * Math.PI, 28)
+        ];
+        put(1, Halo, 1, true, 0.8 * moonFade, 0.025, 1);
+
+        // Piece 2: Night stars & sparkles twinkling around the moon (z: 2)
+        if (tp >= -0.2) {
+            var starProg = M.clamp((tau - PROP_D.moonrise * 0.6) / (PROP_D.moonrise * 0.4));
+            var Stars = [];
+            var starCoords = [
+                { dx: -0.72, dy: -0.38, sz: 0.12 },
+                { dx: 0.68, dy: -0.42, sz: 0.10 },
+                { dx: -0.58, dy: 0.52, sz: 0.09 },
+                { dx: 0.54, dy: 0.48, sz: 0.08 }
+            ];
+            for (var sti = 0; sti < starCoords.length; sti++) {
+                var sc = starCoords[sti];
+                var sx = cxMoon + sc.dx * px;
+                var sy = cyMoon + sc.dy * px;
+                var tw = (1 + 0.25 * Math.sin(tp * 5 + sti * 1.5)) * sc.sz * px;
+                Stars.push([
+                    { x: sx - tw, y: sy },
+                    { x: sx + tw, y: sy }
+                ]);
+                Stars.push([
+                    { x: sx, y: sy - tw },
+                    { x: sx, y: sy + tw }
+                ]);
+            }
+            put(2, Stars, 1, true, 0.9 * starProg * moonFade, 0.03, 2);
+        }
+
+        // Piece 3: Soft night cloud wisp drifting across crescent base (z: 2)
+        var cloudX = cxMoon - 0.15 * px + 0.12 * px * Math.sin(tp * 2);
+        var cloudY = cyMoon + 0.32 * px;
+        var CloudWisp = [
+            bezier({ x: cloudX - 0.55 * px, y: cloudY },
+                   { x: cloudX - 0.18 * px, y: cloudY - 0.06 * px },
+                   { x: cloudX + 0.18 * px, y: cloudY + 0.06 * px },
+                   { x: cloudX + 0.55 * px, y: cloudY }, 16),
+            bezier({ x: cloudX - 0.35 * px, y: cloudY + 0.08 * px },
+                   { x: cloudX, y: cloudY + 0.04 * px },
+                   { x: cloudX + 0.15 * px, y: cloudY + 0.12 * px },
+                   { x: cloudX + 0.38 * px, y: cloudY + 0.06 * px }, 14)
+        ];
+        put(3, CloudWisp, 1, false, 0.75 * moonFade, 0.028, 2);
         break;
     }
     }
