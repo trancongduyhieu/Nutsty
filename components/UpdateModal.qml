@@ -258,15 +258,13 @@ Item {
                         anchors.centerIn: parent
                         spacing: 6
 
-                        RoundedImage {
+                        // The same icon Nutsty.exe carries; already a rounded square, drawn at its native 64 px
+                        Image {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            width: 72; height: 72
-                            radius: 18
-                            source: "../assets/nutsty-app-icon.svg"
-                            sourceSize: Qt.size(144, 144)
-                            fillMode: Image.PreserveAspectCrop
-                            autoCropBlackBars: false
-                            useInitialsFallback: false
+                            width: 64; height: 64
+                            source: "../assets/icons/nutsty.png"
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
                         }
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
