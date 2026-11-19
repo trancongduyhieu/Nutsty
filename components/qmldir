@@ -114,3 +114,4 @@ DotGrid 1.0 DotGrid.qml
 RecapStory 1.0 RecapStory.qml
 WelcomeCardOverlay 1.0 WelcomeCardOverlay.qml
 VerifiedStamp 1.0 VerifiedStamp.qml
+FadeText 1.0 FadeText.qml

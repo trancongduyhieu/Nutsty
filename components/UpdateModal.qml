@@ -24,6 +24,7 @@ Item {
     property bool liteMode: (typeof win !== "undefined") ? !!win.liteMode : false
     // 0 in Lite mode: every motion below multiplies its duration by this, so Lite shows the end state at once
     readonly property int motion: liteMode ? 0 : 1
+    readonly property bool primaryOn: phase === "available" || phase === "ready" || phase === "error"
 
     // Fed by the shell
     property string appVersion: ""
@@ -362,21 +363,33 @@ Item {
                         }
                         readonly property bool exclaim: root.phase === "available" || root.phase === "planning"
                         readonly property int cut: label.indexOf(" ")
-                        readonly property string head: (exclaim && cut > 0) ? label.substring(0, cut) : ""
-                        readonly property string rest: head !== "" ? label.substring(cut) : label
-                        visible: label !== ""
+                        readonly property string head: (shownExclaim && shown.indexOf(" ") > 0) ? shown.substring(0, shown.indexOf(" ")) : ""
+                        readonly property string rest: head !== "" ? shown.substring(shown.indexOf(" ")) : shown
+                        property string shown: ""
+                        property bool shownExclaim: false
+                        visible: opacity > 0.001
+                        opacity: 0
+                        transform: Translate { id: badgeShift; y: 0 }
+                        Component.onCompleted: { shown = label; shownExclaim = exclaim; opacity = label !== "" ? 1 : 0; }
                         Layout.alignment: Qt.AlignBottom
                         Layout.bottomMargin: 2
                         Layout.preferredWidth: headText.width + restText.implicitWidth
+                        Behavior on Layout.preferredWidth { NumberAnimation { duration: 260 * root.motion; easing.type: Easing.OutExpo } }
                         Layout.preferredHeight: headText.implicitHeight
                         onLabelChanged: replay()
-                        function replay() { if (label !== "") fadeAnim.restart(); }
-                        NumberAnimation {
+                        function replay() { fadeAnim.restart(); }
+                        // Out (drift up, fade), swap the words, then in (rise from below, fade), the way Mochy swaps content
+                        SequentialAnimation {
                             id: fadeAnim
-                            target: badge; property: "opacity"
-                            from: 0; to: 1
-                            duration: 260 * root.motion
-                            easing.type: Easing.OutExpo
+                            ParallelAnimation {
+                                NumberAnimation { target: badge; property: "opacity"; to: 0; duration: 140 * root.motion; easing.type: Easing.OutCubic }
+                                NumberAnimation { target: badgeShift; property: "y"; to: -6; duration: 140 * root.motion; easing.type: Easing.OutCubic }
+                            }
+                            ScriptAction { script: { badge.shown = badge.label; badge.shownExclaim = badge.exclaim; badgeShift.y = 10; } }
+                            ParallelAnimation {
+                                NumberAnimation { target: badge; property: "opacity"; to: badge.label !== "" ? 1 : 0; duration: 320 * root.motion; easing.type: Easing.OutExpo }
+                                NumberAnimation { target: badgeShift; property: "y"; to: 0; duration: 320 * root.motion; easing.type: Easing.OutExpo }
+                            }
                         }
                         Text {
                             id: headText
@@ -406,34 +419,44 @@ Item {
                 spacing: 3
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 8
+                    spacing: 0
                     Rectangle {
                         id: waitDot
-                        visible: root.phase === "checking"
-                        Layout.preferredWidth: 8; Layout.preferredHeight: 8
+                        readonly property bool on: root.phase === "checking"
+                        Layout.preferredWidth: on ? 8 : 0; Layout.preferredHeight: 8
+                        Layout.rightMargin: on ? 8 : 0
+                        scale: on ? 1 : 0.3
+                        Behavior on Layout.preferredWidth { NumberAnimation { duration: 260 * root.motion; easing.type: Easing.OutExpo } }
+                        Behavior on Layout.rightMargin { NumberAnimation { duration: 260 * root.motion; easing.type: Easing.OutExpo } }
+                        Behavior on scale { NumberAnimation { duration: 260 * root.motion; easing.type: Easing.OutExpo } }
                         radius: 4
                         color: root.accentColor
                         SequentialAnimation on opacity {
-                            running: waitDot.visible && root.isOpen && !root.liteMode
+                            running: waitDot.on && root.isOpen && !root.liteMode
                             loops: Animation.Infinite
                             NumberAnimation { from: 1.0; to: 0.25; duration: 650; easing.type: Easing.InOutSine }
                             NumberAnimation { from: 0.25; to: 1.0; duration: 650; easing.type: Easing.InOutSine }
                         }
                     }
-                    Text {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 22
-                        visible: !root.showSizeRow
-                        text: root.statusMain
+                  Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 22
+                    FadeText {
+                        width: parent.width
+                        height: 22
+                        opacity: root.showSizeRow ? 0 : 1
+                        value: root.statusMain
+                        motion: root.motion
                         font.family: Theme.fontFamily; font.pixelSize: 16; font.bold: true
                         color: root.phase === "error" ? Qt.rgba(244 / 255, 63 / 255, 94 / 255, 1) : Theme.textPrimary
                         elide: Text.ElideRight
                     }
                     // "Cần tải 40.0 MB, nhẹ hơn 89%": the figure is a slot-machine reel until the real size is known
                     Row {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 22
-                        visible: root.showSizeRow
+                        width: parent.width
+                        height: 22
+                        opacity: root.showSizeRow ? 1 : 0
+                        Behavior on opacity { NumberAnimation { duration: 240 * root.motion; easing.type: Easing.OutExpo } }
                         Text {
                             text: I18n.tr("Cần tải ", "Download ")
                             font.family: Theme.fontFamily; font.pixelSize: 16; font.bold: true
@@ -453,11 +476,13 @@ Item {
                             color: Theme.textPrimary
                         }
                     }
+                  }
                 }
-                Text {
+                FadeText {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 16
-                    text: root.statusSub
+                    motion: root.motion
+                    value: root.statusSub
                     font.family: Theme.fontFamily; font.pixelSize: 12
                     color: Theme.textSecondary
                     elide: Text.ElideRight
@@ -466,9 +491,12 @@ Item {
 
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 6
+                property real t: root.phase === "downloading" ? 1 : 0
+                Behavior on t { NumberAnimation { duration: 320 * root.motion; easing.type: Easing.OutExpo } }
+                Layout.preferredHeight: 6 * t
+                Layout.topMargin: -14 * (1 - t)
+                opacity: t
                 radius: 3
-                visible: root.phase === "downloading"
                 color: Qt.rgba(255, 255, 255, 0.10)
                 Rectangle {
                     height: parent.height; radius: 3
@@ -481,7 +509,8 @@ Item {
             // Release notes: a quiet heading, then rows separated by space only
             Text {
                 Layout.topMargin: 6
-                visible: notes.visible && root.changelogItems.length > 0
+                opacity: notes.shown && root.changelogItems.length > 0 ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: 260 * root.motion; easing.type: Easing.OutExpo } }
                 text: I18n.tr("Có gì mới", "What's new")
                 font.family: Theme.fontFamily; font.pixelSize: 12; font.bold: true
                 color: Theme.textSecondary
@@ -490,7 +519,10 @@ Item {
                 id: notes
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                visible: root.phase === "available" || root.phase === "planning" || root.phase === "downloading"
+                readonly property bool shown: root.phase === "available" || root.phase === "planning" || root.phase === "downloading"
+                opacity: shown ? 1 : 0
+                visible: opacity > 0.001
+                Behavior on opacity { NumberAnimation { duration: 260 * root.motion; easing.type: Easing.OutExpo } }
                 clip: true
                 contentWidth: width
                 contentHeight: notesCol.implicitHeight
@@ -549,25 +581,28 @@ Item {
 
             // Actions
             RowLayout {
+                id: actionsRow
                 Layout.fillWidth: true
-                spacing: 10
+                spacing: 0
 
                 // Secondary
                 Rectangle {
                     Layout.preferredHeight: 42
-                    Layout.preferredWidth: root.phase === "error" ? 160 : 120
-                    Layout.fillWidth: root.phase === "upToDate" || root.phase === "downloading"
+                    Layout.preferredWidth: !root.primaryOn ? actionsRow.width : (root.phase === "error" ? 160 : 120)
                     radius: 12
                     color: secHover.hovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
                                             : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.10)
                     border.width: 1
                     border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.32)
-                    visible: root.phase !== "checking"
+                    opacity: root.phase !== "checking" ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 240 * root.motion; easing.type: Easing.OutExpo } }
+                    Behavior on Layout.preferredWidth { NumberAnimation { duration: 300 * root.motion; easing.type: Easing.OutExpo } }
                     Behavior on color { ColorAnimation { duration: 120 } }
                     HoverHandler { id: secHover }
-                    Text {
+                    FadeText {
                         anchors.centerIn: parent
-                        text: root.phase === "downloading" ? I18n.tr("Hủy", "Cancel")
+                        motion: root.motion
+                        value: root.phase === "downloading" ? I18n.tr("Hủy", "Cancel")
                               : (root.phase === "upToDate" ? I18n.tr("Kiểm tra lại", "Check again")
                                  : (root.phase === "error" ? I18n.tr("Xem trên GitHub", "Open on GitHub") : I18n.tr("Để sau", "Later")))
                         font.family: Theme.fontFamily; font.pixelSize: 13; font.bold: true
@@ -591,17 +626,22 @@ Item {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 42
                     radius: 12
-                    visible: root.phase === "available" || root.phase === "ready" || root.phase === "error"
+                    Layout.leftMargin: root.primaryOn ? 10 : 0
+                    Layout.preferredWidth: 0
+                    Layout.minimumWidth: 0
+                    Behavior on Layout.leftMargin { NumberAnimation { duration: 300 * root.motion; easing.type: Easing.OutExpo } }
+                    clip: true
                     color: priHover.hovered ? Qt.tint(root.accentColor, Qt.rgba(1, 1, 1, 0.15)) : root.accentColor
                     // Hidden until the size is known, so its label never changes under the cursor
-                    opacity: root.sizePending ? 0 : 1
-                    enabled: !root.sizePending
+                    opacity: (root.primaryOn && !root.sizePending) ? 1 : 0
+                    enabled: root.primaryOn && !root.sizePending
                     Behavior on opacity { NumberAnimation { duration: 200 * root.motion; easing.type: Easing.OutExpo } }
                     Behavior on color { ColorAnimation { duration: 120 } }
                     HoverHandler { id: priHover }
-                    Text {
+                    FadeText {
                         anchors.centerIn: parent
-                        text: root.phase === "ready" ? I18n.tr("Khởi động lại ngay", "Restart now")
+                        motion: root.motion
+                        value: root.phase === "ready" ? I18n.tr("Khởi động lại ngay", "Restart now")
                               : (root.phase === "error" ? I18n.tr("Thử lại", "Try again")
                                  : (root.isDelta && root.shownPlan.download_bytes > 0
                                     ? I18n.tr("Cập nhật · " + root.formatBytes(root.shownPlan.download_bytes), "Update · " + root.formatBytes(root.shownPlan.download_bytes))

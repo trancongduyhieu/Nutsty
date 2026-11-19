@@ -94,5 +94,7 @@ Tài liệu đặc tả chuyên sâu về hệ thống daemon phát nhạc, giao
 
 ## 12. Cập Nhật Delta (`backend/update_delta.py`, `updater.py`, `components/UpdateModal.qml`)
 - **Cơ chế**: Windows đọc central directory của zip release qua HTTP Range (CRC32 + size = manifest), chỉ tải tệp khác bản đang cài, kiểm CRC, tệp staged đúng thì bỏ qua (resume). Không có Range thì tải nguyên zip.
+- **Delta vs nguyên gói**: chỉ Windows có delta (~40 MB so với zip ~381 MB); Linux và máy không có Range tải nguyên gói. Bản 2.3.0 trở xuống vẫn phải tải đủ một lần để có bộ cập nhật mới. Số MB chỉ hiện khi đã biết thật (`sizeKnown`), chưa biết thì chạy Odometer quay.
 - **API**: `/api/update/plan` (`planning`→`planned`), `/start`, `/cancel`, `/status`. UI: `UpdateModal.qml`, state ở `shell.qml` `updateState`.
+- **UI**: `UpdateModal.qml` cấm xuất hiện/biến mất đột ngột: dùng opacity + Behavior (OutExpo) và `FadeText` thay vì `visible`/`text` đổi thẳng; nhân thời lượng với `root.motion` (0 ở Lite). Mở `open_settings?mock=1` để xem demo.
 - **Footgun**: CI phải ghim mpv (mpv đổi = ~97 MB mỗi bản). Suffix Range `bytes=-N` bị CDN GitHub từ chối (501), luôn dùng khoảng tuyệt đối. `.source`/`*.part` bị loại khi robocopy. Chạy `scripts/test_update_delta.py`.
