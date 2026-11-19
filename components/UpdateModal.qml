@@ -205,12 +205,12 @@ Item {
         Item {
             id: ring
             width: 210; height: 210
-            // Rests in the top-right corner; while an update runs it travels to the bottom-left corner and grows 40%
+            // Rests in the top-right corner; while an update runs it travels to the bottom-left corner and grows 82%
             property real m: (root.busy || root.phase === "ready") ? 1 : 0
             Behavior on m { NumberAnimation { duration: 900 * root.motion; easing.type: Easing.OutExpo } }
             x: (dialog.width - 24) * (1 - m) + 24 * m - width / 2
             y: 16 * (1 - m) + (dialog.height - 16) * m - height / 2
-            scale: 1 + 0.4 * m
+            scale: 1 + 0.82 * m
             z: 3
             readonly property real mid: 88
             readonly property string unit: "NUTSTY  " + (root.cleanLatest || root.cleanCurrent) + "  "
