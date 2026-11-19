@@ -59,7 +59,7 @@ jobs:
           Invoke-WebRequest -Uri "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" -OutFile "bin\yt-dlp.exe"
           
           Write-Host "Downloading standalone mpv.exe..."
-          $mpvUrl = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260921/mpv-x86_64-20260921-git-e76a35ec95.7z"
+          $mpvUrl = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20261110/mpv-x86_64-20261110-git-a61f6c3abd.7z"
           # Pinned on purpose: a floating mpv changes mpv.exe in every release and defeats the delta updater.
           Write-Host "Downloading MPV from $mpvUrl..."
           Invoke-WebRequest -Uri $mpvUrl -OutFile "mpv.7z"
