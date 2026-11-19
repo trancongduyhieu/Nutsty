@@ -66,6 +66,9 @@ Item {
         isOpen = true;
         planSettled = false;
         planWait.restart();
+        ringFwd.stop(); ringBack.stop();
+        ringMotion.a = ringMoved ? 1 : 0;
+        ringMotion.b = ringMoved ? 1 : 0;
         badge.replay();
         forceActiveFocus();
         if (hasAppUpdate && !busy && stateName !== "ready") root.planRequested();
@@ -77,6 +80,28 @@ Item {
         closingGuard = true;
         closeTimer.restart();
         root.closeRequested();
+    }
+
+    readonly property bool ringMoved: busy || phase === "ready"
+    onRingMovedChanged: {
+        if (ringMoved) { ringBack.stop(); ringFwd.restart(); }
+        else { ringFwd.stop(); ringBack.restart(); }
+    }
+    ParallelAnimation {
+        id: ringFwd
+        NumberAnimation { target: ringMotion; property: "a"; to: 1; duration: 760 * root.motion; easing.type: Easing.InCubic }
+        SequentialAnimation {
+            PauseAnimation { duration: 320 * root.motion }
+            NumberAnimation { target: ringMotion; property: "b"; to: 1; duration: 900 * root.motion; easing.type: Easing.OutBack; easing.overshoot: 2.4 }
+        }
+    }
+    ParallelAnimation {
+        id: ringBack
+        NumberAnimation { target: ringMotion; property: "b"; to: 0; duration: 520 * root.motion; easing.type: Easing.InCubic }
+        SequentialAnimation {
+            PauseAnimation { duration: 220 * root.motion }
+            NumberAnimation { target: ringMotion; property: "a"; to: 0; duration: 800 * root.motion; easing.type: Easing.OutBack; easing.overshoot: 1.6 }
+        }
     }
 
     Timer { id: closeTimer; interval: 200; onTriggered: root.closingGuard = false }
@@ -200,53 +225,63 @@ Item {
         }
         MouseArea { anchors.fill: parent; z: 2; onClicked: mouse => { mouse.accepted = true; } }
 
-        // Version ring: a big band of text centred just inside the top-right corner, so the dialog edge
-        // crops it. It frames the close button (the corner sits in its empty middle) and turns slowly.
-        Item {
-            id: ring
-            width: 210; height: 210
-            // Rests in the top-right corner; while an update runs it travels to the bottom-left corner and grows 82%
-            property real m: (root.busy || root.phase === "ready") ? 1 : 0
-            Behavior on m { NumberAnimation { duration: 900 * root.motion; easing.type: Easing.OutExpo } }
-            x: (dialog.width - 24) * (1 - m) + 24 * m - width / 2
-            y: 16 * (1 - m) + (dialog.height - 16) * m - height / 2
-            scale: 1 + 0.82 * m
-            z: 3
-            readonly property real mid: 88
-            readonly property string unit: "NUTSTY  " + (root.cleanLatest || root.cleanCurrent) + "  "
-            // Whole repeats of the unit, so the text meets itself at the seam
-            readonly property int cells: unit.length * Math.max(1, Math.round(48 / unit.length))
+        // Version ring. At rest it sits in the top-right corner, cropped by the dialog edge. When the update starts
+        // that ring swells and leaves up and to the left, fading out, while a second one arrives from beyond the
+        // bottom-left corner, overshoots a little and settles back, like a cartoon landing.
+        QtObject { id: ringMotion; property real a: 0; property real b: 0 }
 
-            Rectangle {
-                anchors.centerIn: parent
-                width: 2 * (ring.mid + 14); height: width; radius: width / 2
-                color: "transparent"
-                border.width: 28
-                border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, root.phase === "ready" ? 0.24 : 0.10)
-                Behavior on border.color { ColorAnimation { duration: 400 * root.motion } }
-            }
-            Item {
-                id: spinner
-                anchors.fill: parent
-                NumberAnimation on rotation {
-                    from: 0; to: 360; duration: 40000
-                    loops: Animation.Infinite
-                    running: root.isOpen && !root.liteMode
+        Repeater {
+            model: 2
+            delegate: Item {
+                id: band
+                required property int index
+                readonly property bool isEnter: index === 1
+                readonly property real p: isEnter ? ringMotion.b : ringMotion.a
+                readonly property real cx: isEnter ? (-110 + 134 * p) : (dialog.width - 24 - 300 * p)
+                readonly property real cy: isEnter ? (dialog.height + 110 - 126 * p) : (16 - 260 * p)
+                width: 210; height: 210
+                x: cx - width / 2
+                y: cy - height / 2
+                scale: 1 + (isEnter ? 0.82 : 0.8) * p
+                opacity: isEnter ? Math.min(1, p * 3) : Math.max(0, 1 - p)
+                visible: opacity > 0.01
+                z: 3
+                readonly property real mid: 88
+                readonly property string unit: "NUTSTY  " + (root.cleanLatest || root.cleanCurrent) + "  "
+                // Whole repeats of the unit, so the text meets itself at the seam
+                readonly property int cells: unit.length * Math.max(1, Math.round(48 / unit.length))
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 2 * (band.mid + 14); height: width; radius: width / 2
+                    color: "transparent"
+                    border.width: 28
+                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, root.phase === "ready" ? 0.24 : 0.10)
+                    Behavior on border.color { ColorAnimation { duration: 400 * root.motion } }
                 }
-                Repeater {
-                    model: ring.cells
-                    delegate: Item {
-                        required property int index
-                        width: 0; height: 0
-                        x: spinner.width / 2; y: spinner.height / 2
-                        rotation: index * 360 / ring.cells
-                        Text {
-                            x: -width / 2
-                            y: -ring.mid - height / 2
-                            text: ring.unit.charAt(index % ring.unit.length)
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 12; font.bold: true
-                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.62)
+                Item {
+                    id: spinner
+                    anchors.fill: parent
+                    NumberAnimation on rotation {
+                        from: 0; to: 360; duration: 40000
+                        loops: Animation.Infinite
+                        running: root.isOpen && !root.liteMode && band.visible
+                    }
+                    Repeater {
+                        model: band.cells
+                        delegate: Item {
+                            required property int index
+                            width: 0; height: 0
+                            x: spinner.width / 2; y: spinner.height / 2
+                            rotation: index * 360 / band.cells
+                            Text {
+                                x: -width / 2
+                                y: -band.mid - height / 2
+                                text: band.unit.charAt(index % band.unit.length)
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12; font.bold: true
+                                color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.62)
+                            }
                         }
                     }
                 }
