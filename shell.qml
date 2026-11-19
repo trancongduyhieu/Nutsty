@@ -384,9 +384,9 @@ Scope {
     property NotificationStore notificationStore: NotificationStore {}
     property string localApiUrl: "http://127.0.0.1:17890"
     property string notesApiUrl: Quickshell.env("NUTSTY_WORKER_URL") || "http://127.0.0.1:17890"
-    property string appVersion: "2.3.0"
-    property string latestVersion: "2.3.0"
-    property string lastSeenVersion: "2.3.0"
+    property string appVersion: "2.3.1"
+    property string latestVersion: "2.3.1"
+    property string lastSeenVersion: "2.3.1"
     property bool hasAppUpdate: false
     property bool isCheckingUpdate: false
     property string updateUrl: ""
@@ -394,6 +394,10 @@ Scope {
     property var appUpdateInfo: null
     property bool isDownloadingUpdate: false
     property real updateDownloadProgress: 0.0
+    // Latest /api/update/status (phase, bytes, speed, plan); the update dialog draws from it
+    property var updateState: ({})
+    property real updatePackageBytes: 0
+    readonly property bool updatePolling: isDownloadingUpdate || (updateState && updateState.status === "planning")
     property string updateStatusMessage: ""
     property real lastNowPlayingSyncTime: 0
     property bool isFetchingNotesFast: false
@@ -1477,7 +1481,7 @@ Scope {
         id: updateStatusPollTimer
         interval: 400
         repeat: true
-        running: win.isDownloadingUpdate
+        running: win.updatePolling
         onTriggered: {
             var xhr = new XMLHttpRequest();
             xhr.open("GET", (win.localApiUrl || "http://127.0.0.1:17890") + "/api/update/status", true);
@@ -1485,9 +1489,13 @@ Scope {
                 if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
                     try {
                         var st = JSON.parse(xhr.responseText);
+                        win.updateState = st;
                         win.updateDownloadProgress = st.progress || 0.0;
                         win.updateStatusMessage = st.message || "";
-                        if (st.status === "ready") {
+                        if (st.status === "idle" && win.isDownloadingUpdate) {
+                            win.isDownloadingUpdate = false;
+                            win.updateDownloadProgress = 0.0;
+                        } else if (st.status === "ready") {
                             win.isDownloadingUpdate = false;
                             win.notify("update", I18n.tr("Đã tải xong bản cập nhật!", "Update download complete!"));
                         } else if (st.status === "error") {
@@ -1797,6 +1805,7 @@ Scope {
                         win.updateUrl = data.download_url || data.release_url || "https://github.com/trancongduyhieu/Nutsty/releases";
                         win.updateReleaseNotes = data.changelog || "";
                         win.hasAppUpdate = !!data.has_update;
+                        win.updatePackageBytes = data.download_size || 0;
 
                         if (data.has_update) {
                             var title = I18n.tr("Cập nhật Nutsty khả dụng!", "Nutsty update available!");
@@ -1832,6 +1841,33 @@ Scope {
         } catch(e) {
             win.isCheckingUpdate = false;
         }
+    }
+
+    // Ask the backend how much of the new version really has to be downloaded
+    function planUpdate() {
+        if (win.isDownloadingUpdate) return;
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", (win.localApiUrl || "http://127.0.0.1:17890") + "/api/update/plan", true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                var st = {};
+                try { st = JSON.parse(xhr.responseText); } catch(e) {}
+                if (st.success) win.updateState = ({ status: "planning" });
+            }
+        };
+        xhr.send(JSON.stringify({ download_url: win.updateUrl, target_version: win.latestVersion }));
+    }
+
+    function cancelDirectUpdate() {
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", (win.localApiUrl || "http://127.0.0.1:17890") + "/api/update/cancel", true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.send("{}");
+    }
+
+    function openUpdateModal() {
+        updateModalLoader.ensure().openModal();
     }
 
     function startDirectUpdate() {
@@ -3626,7 +3662,7 @@ Scope {
             onOpenWhatsNewRequested: whatsNewModalLoader.ensure().openModal(win.updateReleaseNotes)
             onCheckUpdateRequested: win.checkForUpdates(true, true)
             onOpenUpdateUrlRequested: win.openExternalUrl(win.updateUrl)
-            onStartDirectUpdateRequested: win.startDirectUpdate()
+            onStartDirectUpdateRequested: win.openUpdateModal()
             onApplyUpdateRequested: win.applyUpdateAndRestart()
             onSpotifyImportRequested: {
                 spotifyImportModal.openModal();
@@ -4010,6 +4046,30 @@ Scope {
         }
 
         LazyModalLoader {
+            id: updateModalLoader
+            anchors.fill: parent
+            z: 9998
+            releaseDelay: 120000
+            sourceComponent: UpdateModal {
+                backgroundSourceItem: masterBackdropStack
+                accentColor: win.accentColor
+                appVersion: win.appVersion
+                latestVersion: win.latestVersion
+                hasAppUpdate: win.hasAppUpdate
+                isChecking: win.isCheckingUpdate
+                releaseNotes: win.updateReleaseNotes
+                packageBytes: win.updatePackageBytes
+                updateState: win.updateState
+                onPlanRequested: win.planUpdate()
+                onStartRequested: win.startDirectUpdate()
+                onCancelRequested: win.cancelDirectUpdate()
+                onApplyRequested: win.applyUpdateAndRestart()
+                onCheckRequested: win.checkForUpdates(true, true)
+                onReleasePageRequested: win.openExternalUrl("https://github.com/trancongduyhieu/Nutsty/releases")
+            }
+        }
+
+        LazyModalLoader {
             id: friendStoryModalLoader
             anchors.fill: parent
             z: 9999
@@ -4086,10 +4146,7 @@ Scope {
             hasUpdate: win.hasAppUpdate
             latestVersion: win.latestVersion
             onFriendRequestsRequested: (xPos, yPos) => friendRequestsPopover.toggleAt(win.pendingFriendRequests, xPos, yPos)
-            onUpdateRequested: {
-                settingsModal.currentTab = 0;
-                settingsModal.visible = true;
-            }
+            onUpdateRequested: win.openUpdateModal()
         }
 
         FriendRequestsPopover {

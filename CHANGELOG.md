@@ -7,6 +7,15 @@ Số phiên bản có dạng `A.B.C`, ví dụ `1.2.0`:
 - **B (số thứ 2)** tăng khi có tính năng mới mà mọi thứ cũ vẫn dùng bình thường. Số thứ 3 về 0, ví dụ `2.1.3` lên `2.2.0`.
 - **A (số đầu tiên)** tăng khi có thay đổi lớn buộc bạn làm lại gì đó hoặc dữ liệu, cài đặt của bản cũ không dùng được nữa. Hai số sau về 0, ví dụ `2.4.1` lên `3.0.0`.
 
+## [2.3.1] - 2026-11-19
+
+### Added
+- **Cập nhật chỉ tải phần thay đổi**: Trước đây mỗi lần cập nhật trên Windows đều phải tải lại cả gói gần 400 MB. Giờ Nutsty so với bản bạn đang dùng và chỉ tải những tệp thật sự khác, thường chỉ còn vài chục MB. Tải dở mà mất mạng thì lần sau làm tiếp từ chỗ cũ, tệp nào tải xong rồi không tải lại. Bản này vẫn phải cập nhật theo cách cũ một lần, từ bản kế tiếp mới nhẹ.
+- **Hộp thoại cập nhật mới**: Bấm "Cập nhật ngay" trong Cài đặt hoặc ở Thông báo để mở một hộp thoại riêng. Vòng chữ xoay quanh số phiên bản, thấy ngay sẽ tải bao nhiêu MB và nhẹ hơn tải cả bản bao nhiêu phần trăm, kèm danh sách điểm mới. Khi tải có phần trăm lớn, tốc độ và thời gian còn lại, có nút Hủy, xong thì bấm Khởi động lại.
+
+### Fixed
+- **Bản phát hành không còn tự đổi trình phát mpv**: Trước đây mỗi bản mới lại kéo mpv mới nhất nên một tệp gần 100 MB đổi theo, làm cập nhật nặng vô ích. Giờ mpv được giữ nguyên giữa các bản.
+
 ## [2.3.0] - 2026-11-19
 
 ### Added

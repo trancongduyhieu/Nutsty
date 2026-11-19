@@ -49,6 +49,7 @@ jobs:
           python scripts/verify_qml_compat.py
           python scripts/test_playlist_backend.py
           python scripts/test_playlist_store.py
+          python scripts/test_update_delta.py
 
       - name: Download Standalone Windows Binaries (yt-dlp and mpv)
         shell: pwsh
@@ -59,15 +60,7 @@ jobs:
           
           Write-Host "Downloading standalone mpv.exe..."
           $mpvUrl = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260921/mpv-x86_64-20260921-git-e76a35ec95.7z"
-          try {
-            $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest"
-            $asset = $rel.assets | Where-Object { $_.name -match '^mpv-x86_64-\d+.*\.7z$' } | Select-Object -First 1
-            if ($asset -and $asset.browser_download_url) {
-              $mpvUrl = $asset.browser_download_url
-            }
-          } catch {
-            Write-Host "Could not query GitHub API for mpv, falling back to static release URL: $mpvUrl"
-          }
+          # Pinned on purpose: a floating mpv changes mpv.exe in every release and defeats the delta updater.
           Write-Host "Downloading MPV from $mpvUrl..."
           Invoke-WebRequest -Uri $mpvUrl -OutFile "mpv.7z"
           Write-Host "Extracting mpv.exe..."

@@ -170,6 +170,22 @@ def dispatch_request(method, path, query_dict, body_str):
                 handler._send_json(res, 200 if res.get("success") else 400)
             except Exception as e:
                 handler._send_json({"success": False, "error": str(e)}, 500)
+        elif clean_path == "/api/update/plan":
+            try:
+                import updater
+                dl_url = req_json.get("download_url") if isinstance(req_json, dict) else None
+                tgt_ver = req_json.get("target_version") if isinstance(req_json, dict) else None
+                res = updater.direct_updater.start_plan(dl_url, tgt_ver)
+                handler._send_json(res, 200 if res.get("success") else 400)
+            except Exception as e:
+                handler._send_json({"success": False, "error": str(e)}, 500)
+        elif clean_path == "/api/update/cancel":
+            try:
+                import updater
+                res = updater.direct_updater.cancel()
+                handler._send_json(res, 200 if res.get("success") else 400)
+            except Exception as e:
+                handler._send_json({"success": False, "error": str(e)}, 500)
         elif clean_path == "/api/update/apply":
             try:
                 import updater

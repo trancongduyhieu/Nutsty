@@ -54,15 +54,13 @@ Tài liệu đặc tả chuyên sâu về hệ thống daemon phát nhạc, giao
 
 ## 6. Trình Quản Lý Tải Nhạc Đa Luồng (Download Manager Daemon)
 - **Backend**: `backend/download_manager.py` chạy thường trú, giao tiếp qua Unix Domain Socket `/tmp/nutsty_download.sock` và file trạng thái nguyên tử (atomic JSON) `/tmp/frostify_download_status.json`.
-- **Chất lượng**: Tự động tải âm thanh 192k AAC/M4A qua `yt-dlp`, nhúng metadata ID3 và bìa album chất lượng cao qua FFmpeg (`-an -frames:v 1 -update 1`).
-- **Synced Lyrics**: Tự động tải file lời bài hát đồng bộ (`.lrc`) đi kèm vào thư mục `~/Music/Downloads_Phone`.
+- **Chất lượng**: Tự động tải âm thanh 192k AAC/M4A qua `yt-dlp`, nhúng ID3 + bìa qua FFmpeg (`-an -frames:v 1 -update 1`), tải kèm `.lrc` vào `~/Music/Downloads_Phone`.
 - **Giao diện**: `components/DownloadManager.qml` (State engine qua `FileView` + polling timer 250ms) và `components/DownloadQueuePopover.qml` (Minimalist Clean #121212 Nutsty, progress bar 3px, nút hủy, nút mở thư mục nhạc).
 
 ---
 
 ## 7. Kiến Trúc Modular Social & Music Engine (3 SSOT Chuẩn Hóa)
 - **Backend Modular**: `backend/auth_server.py` điều phối sang `backend/music_routes.py` và `backend/social_routes.py`. Toàn bộ logic mạng xã hội tập trung tại Deep Module `backend/social_relay_core.py` (caching, danh tính SSOT #2, phân phối event).
-- **Loại bỏ CLI Subprocess**: 6 khối `Process` zombie cũ trong `shell.qml` đã bị gỡ bỏ; giao tiếp mạng xã hội chạy 100% qua non-blocking async `XMLHttpRequest` tới Port 17890.
 - **Frontend Engines**: `components/social_engine.js` (Listen Along, bạn bè, Danmaku) và `components/playback_engine.js` (toàn bộ vòng đời phát nhạc, mutate queue, reconcile MPV status).
 - **3 Single Sources of Truth (SSOT)**:
   1. **SSOT #1 (Config Path)**: `platform_compat.get_config_dir()` trả về `~/.config/noctalia` đồng nhất trên Linux & Windows.
@@ -73,8 +71,7 @@ Tài liệu đặc tả chuyên sâu về hệ thống daemon phát nhạc, giao
 
 ## 8. Friends 24h Notes, Listen Along & PlaybackEngine Consolidate
 - **PlaybackEngine (`components/playback_engine.js`)**: Tập trung toàn bộ logic `playOnlineTrack`, `playTrack`, `togglePlay`, `playNext`, `seekAudio`, `handlePlayerStatus` (bù trôi, sleep timer, auto-advance). `shell.qml` chỉ giữ 1-line delegates.
-- **Đồng bộ 2 chiều thời gian thực (Bidirectional RPC)**: Hàng đợi FIFO `/api/notes/events` truyền sự kiện tức thì (`join`, `leave`, `play`, `pause`, `seek`, `chat_message`) độ trễ < 50ms.
-- **Seek Drift Reconciliation**: Tính toán `expectedPos = np.position + elapsed`. Tự động nắn chỉnh nếu độ lệch $\Delta t > 2.0\text{s}$, giữ trôi lệch thực tế $< 0.4\text{s}$.
+- **Đồng bộ 2 chiều**: FIFO `/api/notes/events` (`join`, `leave`, `play`, `pause`, `seek`, `chat_message`) < 50ms. Drift: `expectedPos = np.position + elapsed`, nắn khi lệch > 2.0s.
 - **Bẫy lỗi**: Host khi pause vẫn phải gửi `now_playing` kèm `is_playing: false` thay vì `null`. Cờ `isSyncingFromFriend` chặn loop phản hồi ngược.
 
 ---
@@ -83,17 +80,19 @@ Tài liệu đặc tả chuyên sâu về hệ thống daemon phát nhạc, giao
 - **Cài đặt (`~/.config/noctalia/nutsty_settings.json`)**: `shell.qml` nạp qua `FileView` + timer `delayedSettingsRead` (100ms). Nút Shuffle/Repeat chỉ phát signal `toggleShuffle()` / `toggleRepeat()` để `shell.qml` xử lý và gọi `saveSettings()`.
 - **Presence & Liveness**: Cloudflare Edge Worker & local daemon áp dụng ngưỡng 25s (`ONLINE_THRESHOLD_MS = 25000`). Khi thoát app, `shell.qml` gọi `sendOfflineSignal()` tới `/api/users/offline` để xóa `now_playing` và đặt `last_active_at = 0` tức thì.
 
----
-
 ## 10. Spotify Embed Importer & 0-Friction Session Cache
-- **Trích xuất Embed không cần Token**: `backend/spotify_importer.py` phân tích JSON `__NEXT_DATA__` từ `https://open.spotify.com/embed/playlist/{id}`, hoàn toàn miễn nhiễm lỗi 429 Rate-Limit và trích xuất tracks trong <0.5s.
-- **Fast-path 0 giây**: `handle_post_spotify_auto_sync` và `handle_post_auth_auto_sync` ưu tiên kiểm tra session hợp lệ trong `nutsty_settings.json` / `ytmusic_auth.json` trước khi mở browser, tránh bắt đăng nhập lại.
-
-
+- **Embed không cần Token**: `backend/spotify_importer.py` đọc JSON `__NEXT_DATA__` từ `open.spotify.com/embed/playlist/{id}`, không dính 429, <0.5s. Auto-sync kiểm session trong `nutsty_settings.json` / `ytmusic_auth.json` trước khi mở browser.
 
 ## 11. Warm Python Worker Pool (`nutsty-daemon` → `route_dispatcher.py --serve`)
 - **Tệp**: `nutsty-rs/crates/nutsty-daemon/src/main.rs` (`WorkerPool`), `backend/route_dispatcher.py` (`serve`). Daemon xử lý mỗi request trên 1 thread, giữ 2 worker Python sống (1 dòng JSON vào / 1 dòng ra); cache hit ~1 ms thay vì ~0,8 s spawn + import `ytmusicapi`.
 - **Vòng đời**: worker 0 prewarm lúc daemon bật; tự thoát khi rảnh 10 phút, sau 500 request, hoặc khi có `backend/*.py` mới hơn lúc nạp (sửa code / updater) → spawn lại lười. Cả 2 bận > 400 ms → fallback one-shot cũ.
 - **Footgun**: `/api/update*`, `/api/check_update`, `/api/spotify*` giữ tiến trình trong RAM nên **luôn pin worker 0**. Cache trong module phải chịu được nhiều tiến trình (auth status theo mtime `AUTH_FILE`, `online_tracks` reload theo mtime + merge khi ghi). Handler `print()` đi stderr; stdout là kênh trả lời.
-- **Social fast path** (`nutsty-daemon/src/social.rs`, `ureq`): notes/events, notes, friends (GET), now_playing (POST) gọi thẳng relay; Timer social không còn giữ worker Python.
+- **Social fast path** (`social.rs`, `ureq`): notes, events, friends, now_playing gọi thẳng relay, không giữ worker Python.
 - **Footgun**: `try_handle` trả `None` → Python xử lý (chưa có identity, cần sync tên/avatar, 401, events cục bộ, `/api/notes` lỗi mạng). Sửa route/identity ở Python phải sửa cả `social.rs`.
+
+---
+
+## 12. Cập Nhật Delta (`backend/update_delta.py`, `updater.py`, `components/UpdateModal.qml`)
+- **Cơ chế**: Windows đọc central directory của zip release qua HTTP Range (CRC32 + size = manifest), chỉ tải tệp khác bản đang cài, kiểm CRC, tệp staged đúng thì bỏ qua (resume). Không có Range thì tải nguyên zip.
+- **API**: `/api/update/plan` (`planning`→`planned`), `/start`, `/cancel`, `/status`. UI: `UpdateModal.qml`, state ở `shell.qml` `updateState`.
+- **Footgun**: CI phải ghim mpv (mpv đổi = ~97 MB mỗi bản). Suffix Range `bytes=-N` bị CDN GitHub từ chối (501), luôn dùng khoảng tuyệt đối. `.source`/`*.part` bị loại khi robocopy. Chạy `scripts/test_update_delta.py`.

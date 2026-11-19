@@ -293,8 +293,8 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                 "action": "open_settings",
                 "tab": tab,
                 "mock_update": mock_upd,
-                "current_version": "2.3.0",
-                "latest_version": "v2.3.0",
+                "current_version": "2.3.1",
+                "latest_version": "v2.3.1",
                 "release_url": "https://github.com/trancongduyhieu/Nutsty/releases"
             }
             try:
@@ -389,6 +389,23 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                 dl_url = data.get("download_url") if isinstance(data, dict) else None
                 tgt_ver = data.get("target_version") if isinstance(data, dict) else None
                 res = updater.direct_updater.start_download_update(dl_url, tgt_ver)
+                self._send_json(res, 200 if res.get("success") else 400)
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e)}, 500)
+        elif self.path == "/api/update/plan":
+            try:
+                import updater
+                data = self._read_post_json()
+                dl_url = data.get("download_url") if isinstance(data, dict) else None
+                tgt_ver = data.get("target_version") if isinstance(data, dict) else None
+                res = updater.direct_updater.start_plan(dl_url, tgt_ver)
+                self._send_json(res, 200 if res.get("success") else 400)
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e)}, 500)
+        elif self.path == "/api/update/cancel":
+            try:
+                import updater
+                res = updater.direct_updater.cancel()
                 self._send_json(res, 200 if res.get("success") else 400)
             except Exception as e:
                 self._send_json({"success": False, "error": str(e)}, 500)
