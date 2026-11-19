@@ -80,8 +80,7 @@ Item {
     Timer { id: closeTimer; interval: 200; onTriggered: root.closingGuard = false }
 
     onReleaseNotesChanged: refreshNotes()
-    onPhaseChanged: if (!statusPop.running) statusPop.start()
-
+    
     // The release body is the CHANGELOG section: "- **Title**: detail" lines, sub-bullets indented
     function refreshNotes() {
         var out = [];
@@ -114,32 +113,46 @@ Item {
         return I18n.tr("còn khoảng " + Math.ceil(s / 60) + " phút", "about " + Math.ceil(s / 60) + " min left");
     }
 
-    // Plain-language headline for the current phase
-    readonly property string headline: {
+    readonly property bool isDelta: plan && updateState.mode === "delta" && plan.download_bytes >= 0
+    readonly property real savedPercent: (isDelta && plan.full_bytes > 0)
+        ? Math.max(0, Math.min(99, Math.round(100 * (1 - plan.download_bytes / plan.full_bytes)))) : 0
+    readonly property string onVersion: I18n.tr("Bạn đang dùng bản " + cleanCurrent, "You are on " + cleanCurrent)
+
+    // Two fixed lines under the version: what matters now, then the detail. Both are always one line,
+    // so the layout below never moves when the phase changes.
+    readonly property string statusMain: {
         switch (phase) {
         case "checking": return I18n.tr("Đang kiểm tra", "Checking");
+        case "planning": return I18n.tr("Đang so sánh với bản của bạn", "Comparing with your version");
         case "upToDate": return I18n.tr("Bạn đang dùng bản mới nhất", "You are up to date");
-        case "available": return I18n.tr("Bạn đang dùng bản " + cleanCurrent, "You are on " + cleanCurrent);
-        case "planning": return I18n.tr("Đang so sánh với bản " + cleanCurrent, "Comparing with " + cleanCurrent);
-        case "downloading": return stateName === "extracting" ? I18n.tr("Đang chuẩn bị", "Getting ready") : I18n.tr("Đang tải " + (updateState.percent || 0) + "%", "Downloading " + (updateState.percent || 0) + "%");
-        case "ready": return I18n.tr("Đã sẵn sàng", "Ready to install");
-        default: return I18n.tr("Cập nhật chưa xong", "The update did not finish");
+        case "ready": return I18n.tr("Đã tải xong", "Download complete");
+        case "downloading":
+            return stateName === "extracting" ? I18n.tr("Đang chuẩn bị", "Getting ready")
+                                              : I18n.tr("Đang tải " + (updateState.percent || 0) + "%", "Downloading " + (updateState.percent || 0) + "%");
+        case "error": return I18n.tr("Cập nhật chưa xong", "The update did not finish");
+        default:
+            if (isDelta) {
+                if (plan.changed === 0) return I18n.tr("Không cần tải gì, chỉ cần khởi động lại", "Nothing to download, just restart");
+                return I18n.tr("Chỉ tải " + formatBytes(plan.download_bytes) + (savedPercent >= 10 ? ", nhẹ hơn " + savedPercent + "%" : ""),
+                               "Only " + formatBytes(plan.download_bytes) + (savedPercent >= 10 ? ", " + savedPercent + "% lighter" : ""));
+            }
+            return packageBytes > 0 ? I18n.tr("Dung lượng tải: " + formatBytes(packageBytes), "Download size: " + formatBytes(packageBytes)) : I18n.tr("Có bản mới", "A new version is out");
         }
     }
-
-    // What the download costs, in one sentence
-    readonly property string sizeLine: {
-        if (phase === "planning" || phase === "checking") return "";
-        if (plan && plan.download_bytes >= 0 && updateState.mode === "delta") {
-            if (plan.changed === 0) return I18n.tr("Không có gì cần tải, chỉ cần khởi động lại", "Nothing to download, just a restart");
-            return I18n.tr("Chỉ tải phần thay đổi: " + formatBytes(plan.download_bytes) + " thay vì " + formatBytes(plan.full_bytes),
-                           "Only what changed: " + formatBytes(plan.download_bytes) + " instead of " + formatBytes(plan.full_bytes));
+    readonly property string statusSub: {
+        switch (phase) {
+        case "downloading":
+            return formatBytes(updateState.bytes_done) + " / " + formatBytes(updateState.bytes_total)
+                   + (updateState.speed > 1 ? "  ·  " + formatBytes(updateState.speed) + "/s" : "")
+                   + (formatEta(updateState.eta) !== "" ? "  ·  " + formatEta(updateState.eta) : "");
+        case "ready": return I18n.tr("Bấm Khởi động lại để dùng bản " + cleanLatest, "Restart to use version " + cleanLatest);
+        case "error": return String(updateState.error || "");
+        case "upToDate": return "";
+        case "available":
+            return (isDelta && plan.changed > 0 ? I18n.tr("Bản đầy đủ " + formatBytes(plan.full_bytes) + "  ·  ", "Full build " + formatBytes(plan.full_bytes) + "  ·  ") : "") + onVersion;
+        default: return onVersion;
         }
-        if (packageBytes > 0) return I18n.tr("Dung lượng tải: " + formatBytes(packageBytes), "Download size: " + formatBytes(packageBytes));
-        return "";
     }
-    readonly property real savedPercent: (plan && updateState.mode === "delta" && plan.full_bytes > 0)
-        ? Math.max(0, Math.min(99, Math.round(100 * (1 - plan.download_bytes / plan.full_bytes)))) : 0
 
     Rectangle {
         anchors.fill: parent
@@ -264,12 +277,6 @@ Item {
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: -2
-                Text {
-                    text: "Nutsty"
-                    font.family: Theme.fontFamily; font.pixelSize: 15; font.bold: true
-                    font.letterSpacing: -0.3
-                    color: Theme.textSecondary
-                }
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 12
@@ -313,21 +320,11 @@ Item {
                 }
             }
 
-            // Status: a dot that breathes while we wait, a headline, then one plain sentence. It springs on every phase change
+            // Status: the one line to read, then its detail. Fixed height, so nothing below shifts
             ColumnLayout {
                 id: statusBlock
                 Layout.fillWidth: true
-                spacing: 4
-                property real pop: 1
-                opacity: 0.35 + 0.65 * pop
-                transform: Translate { y: (1 - statusBlock.pop) * 6 }
-                NumberAnimation {
-                    id: statusPop
-                    target: statusBlock; property: "pop"
-                    from: 0.4; to: 1
-                    duration: 280 * root.motion
-                    easing.type: Easing.OutExpo
-                }
+                spacing: 3
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 8
@@ -346,28 +343,19 @@ Item {
                     }
                     Text {
                         Layout.fillWidth: true
-                        text: root.headline
-                        font.family: Theme.fontFamily; font.pixelSize: 20; font.bold: true
-                        font.letterSpacing: -0.4
-                        color: Theme.textPrimary
-                        wrapMode: Text.WordWrap
+                        text: root.statusMain
+                        font.family: Theme.fontFamily; font.pixelSize: 16; font.bold: true
+                        color: root.phase === "error" ? Qt.rgba(244 / 255, 63 / 255, 94 / 255, 1) : Theme.textPrimary
+                        elide: Text.ElideRight
                     }
                 }
                 Text {
                     Layout.fillWidth: true
-                    visible: text !== ""
-                    text: root.phase === "error" ? String(root.updateState.error || "")
-                          : (root.phase === "downloading"
-                             ? (root.formatBytes(root.updateState.bytes_done) + " / " + root.formatBytes(root.updateState.bytes_total)
-                                + (root.updateState.speed > 1 ? "  ·  " + root.formatBytes(root.updateState.speed) + "/s" : "")
-                                + (root.formatEta(root.updateState.eta) !== "" ? "  ·  " + root.formatEta(root.updateState.eta) : ""))
-                             : (root.phase === "ready" ? I18n.tr("Bấm Khởi động lại để dùng bản " + root.cleanLatest, "Restart to use version " + root.cleanLatest)
-                                : (root.phase === "available" && root.savedPercent >= 10
-                                   ? root.sizeLine + I18n.tr(", nhẹ hơn " + root.savedPercent + "%", ", " + root.savedPercent + "% lighter")
-                                   : root.sizeLine)))
-                    font.family: Theme.fontFamily; font.pixelSize: 13
-                    color: root.phase === "error" ? Qt.rgba(244 / 255, 63 / 255, 94 / 255, 1) : Theme.textSecondary
-                    wrapMode: Text.WordWrap
+                    Layout.preferredHeight: 16
+                    text: root.statusSub
+                    font.family: Theme.fontFamily; font.pixelSize: 12
+                    color: Theme.textSecondary
+                    elide: Text.ElideRight
                 }
             }
 
@@ -385,7 +373,14 @@ Item {
                 }
             }
 
-            // Release notes: plain rows split by hairlines
+            // Release notes: a quiet heading, then rows separated by space only
+            Text {
+                Layout.topMargin: 6
+                visible: notes.visible && root.changelogItems.length > 0
+                text: I18n.tr("Có gì mới", "What's new")
+                font.family: Theme.fontFamily; font.pixelSize: 12; font.bold: true
+                color: Theme.textSecondary
+            }
             Flickable {
                 id: notes
                 Layout.fillWidth: true
@@ -421,30 +416,26 @@ Item {
                                 PauseAnimation { duration: 120 + Math.min(rowItem.index, 8) * 45 }
                                 NumberAnimation { target: rowItem; property: "shown"; to: 1; duration: 420; easing.type: Easing.OutExpo }
                             }
-                            Rectangle {
-                                width: parent.width; height: 1
-                                color: Qt.rgba(255, 255, 255, 0.08)
-                                visible: index > 0
-                            }
-                            Item { width: 1; height: 10 }
+
                             Text {
                                 width: parent.width
                                 text: modelData.title
-                                font.family: Theme.fontFamily; font.pixelSize: 12; font.bold: true
+                                font.family: Theme.fontFamily; font.pixelSize: 13; font.bold: true
                                 color: Theme.textPrimary
                                 wrapMode: Text.WordWrap
                             }
+                            Item { width: 1; height: 2 }
                             Text {
                                 width: parent.width
                                 visible: modelData.detail !== ""
                                 text: modelData.detail
-                                font.family: Theme.fontFamily; font.pixelSize: 11
+                                font.family: Theme.fontFamily; font.pixelSize: 12
                                 color: Theme.textSecondary
                                 wrapMode: Text.WordWrap
                                 maximumLineCount: 3
                                 elide: Text.ElideRight
                             }
-                            Item { width: 1; height: 10 }
+                            Item { width: 1; height: 16 }
                         }
                     }
                 }
