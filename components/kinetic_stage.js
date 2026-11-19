@@ -90,7 +90,8 @@ var PROP_D = {
     spray: 0.7, micdrop: 0.6, tapex: 0.5,
     disco: 0.8, eq: 0.6, laser: 0.6,
     calm_leaf: 0.8, droplet: 0.6, moonrise: 0.7,
-    classic_vinyl: 0.8, vinyl: 0.8, classic_smoke: 0.7, smoke: 0.7, horn: 0.7
+    classic_vinyl: 0.8, vinyl: 0.8, classic_smoke: 0.7, smoke: 0.7, horn: 0.7,
+    flash: 0.6, focus: 0.7, sakura: 0.8
 };
 // a prop lands no sooner than this after its line starts coming in, so the line is whole by then
 var PROP_SETTLE = 0.6;
@@ -128,7 +129,11 @@ var SETS = {
         rush: ["note", "notes", "smoke", "vinyl"],
         peaks: ["classic_vinyl", "classic_smoke", "horn"].concat(SHARED_PEAKS)
     },
-    anime: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS },
+    anime: {
+        doodles: ["star4", "speed", "sweat", "anger", "sparkle"],
+        rush: ["star4", "speed", "sweat", "anger"],
+        peaks: ["flash", "focus", "sakura"].concat(SHARED_PEAKS)
+    },
     folk: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS }
 };
 // How the words of a line sit: level, a zigzag (one up, one down), stairs climbing, or an arc
@@ -1776,6 +1781,113 @@ function markShape(kind, sd, w, h) {
         S.push(ellipsePts(w * 0.52, h * 0.26, Math.min(w, h) * 0.05, Math.min(w, h) * 0.05, 0, 2 * Math.PI, 10));
         break;
     }
+    case "star4": {
+        // an anime four-point sparkling star with pinched waist and companion twinkle
+        pts = [];
+        var a0 = -Math.PI / 2 + 0.15 * M.rs(sd, 1, 881);
+        for (i = 0; i <= 8; i++) {
+            var sa = a0 + i * Math.PI / 4;
+            var sr = (i % 2 ? 0.20 : 0.46) * (0.92 + 0.16 * M.r(sd, i % 8, 882));
+            pts.push({ x: w / 2 + w * sr * Math.cos(sa), y: h / 2 + h * sr * Math.sin(sa) });
+        }
+        S.push(pts);
+        // companion tiny diamond glint
+        var gx = w * 0.82, gy = h * 0.22, gr = Math.min(w, h) * 0.10;
+        S.push([
+            { x: gx, y: gy - gr }, { x: gx + gr * 0.4, y: gy },
+            { x: gx, y: gy + gr }, { x: gx - gr * 0.4, y: gy },
+            { x: gx, y: gy - gr }
+        ]);
+        break;
+    }
+    case "sweat": {
+        // an anime sweat drop (teardrop) with shiny highlight arc and side splash ticks
+        var swApexX = w * 0.42;
+        var swApexY = h * 0.14;
+        var swBulbX = w * 0.52;
+        var swBulbY = h * 0.62;
+        var swR = Math.min(w, h) * 0.25;
+
+        var sddx = swBulbX - swApexX, sddy = swBulbY - swApexY;
+        var sdDist = Math.sqrt(sddx * sddx + sddy * sddy);
+        var sdAng = Math.atan2(sddy, sddx);
+        var sdAlpha = Math.asin(Math.min(0.99, swR / Math.max(swR, sdDist)));
+        var sdA0 = sdAng - Math.PI / 2 + sdAlpha;
+        var sdA1 = sdAng + Math.PI / 2 - sdAlpha;
+
+        var dropPts = [{ x: swApexX, y: swApexY }];
+        for (i = 0; i <= 16; i++) {
+            var da = sdA1 - (i / 16) * (sdA1 - sdA0);
+            dropPts.push({ x: swBulbX + swR * Math.cos(da), y: swBulbY + swR * Math.sin(da) });
+        }
+        dropPts.push({ x: swApexX, y: swApexY });
+        S.push(dropPts);
+
+        // Specular highlight crescent inside the drop
+        S.push(ellipsePts(swBulbX - swR * 0.35, swBulbY - swR * 0.10, swR * 0.42, swR * 0.42, Math.PI * 0.8, Math.PI * 1.4, 8));
+
+        // Side splash ticks
+        S.push([
+            { x: w * 0.18, y: h * 0.42 },
+            { x: w * 0.10, y: h * 0.54 }
+        ]);
+        S.push([
+            { x: w * 0.22, y: h * 0.66 },
+            { x: w * 0.14, y: h * 0.78 }
+        ]);
+        break;
+    }
+    case "anger": {
+        // iconic anime 4-curved bulging vein pop symbol (ikari mark)
+        var aLeft = w * 0.16, aRight = w * 0.84;
+        var aTop = h * 0.16, aBot = h * 0.84;
+
+        // Top horizontal curve bulging upward
+        var topCurve = [];
+        for (i = 0; i <= 12; i++) {
+            u = i / 12;
+            var tcx = aLeft + (aRight - aLeft) * u;
+            var tcy = h * 0.36 - h * 0.09 * Math.sin(u * Math.PI);
+            topCurve.push({ x: tcx, y: tcy });
+        }
+        S.push(topCurve);
+
+        // Bottom horizontal curve bulging downward
+        var botCurve = [];
+        for (i = 0; i <= 12; i++) {
+            u = i / 12;
+            var bcx = aLeft + (aRight - aLeft) * u;
+            var bcy = h * 0.64 + h * 0.09 * Math.sin(u * Math.PI);
+            botCurve.push({ x: bcx, y: bcy });
+        }
+        S.push(botCurve);
+
+        // Left vertical curve bulging leftward
+        var leftCurve = [];
+        for (i = 0; i <= 12; i++) {
+            u = i / 12;
+            var lcy = aTop + (aBot - aTop) * u;
+            var lcx = w * 0.36 - w * 0.09 * Math.sin(u * Math.PI);
+            leftCurve.push({ x: lcx, y: lcy });
+        }
+        S.push(leftCurve);
+
+        // Right vertical curve bulging rightward
+        var rightCurve = [];
+        for (i = 0; i <= 12; i++) {
+            u = i / 12;
+            var rcy = aTop + (aBot - aTop) * u;
+            var rcx = w * 0.64 + w * 0.09 * Math.sin(u * Math.PI);
+            rightCurve.push({ x: rcx, y: rcy });
+        }
+        S.push(rightCurve);
+
+        // Corner vein tick accents
+        S.push([{ x: w * 0.84, y: h * 0.16 }, { x: w * 0.94, y: h * 0.08 }]);
+        S.push([{ x: w * 0.16, y: h * 0.84 }, { x: w * 0.06, y: h * 0.92 }]);
+        S.push([{ x: w * 0.84, y: h * 0.84 }, { x: w * 0.94, y: h * 0.92 }]);
+        break;
+    }
     case "wrap":
     case "ring": {
         var th0 = -2.2 + 0.6 * M.rs(sd, 1, 803);
@@ -2279,6 +2391,27 @@ function peakState(L, t) {
                 st.heroRot = -1.8 * Math.exp(-6 * tp) * Math.sin(16 * tp);
             }
             break;
+        case "flash":
+            if (tp >= 0) {
+                st.heroS = 1 + 0.08 * Math.exp(-8 * tp) * Math.cos(22 * tp);
+                st.heroDy = -0.04 * Math.exp(-8 * tp) * Math.sin(20 * tp);
+                st.heroRot = 1.0 * Math.exp(-7 * tp) * Math.sin(18 * tp);
+            }
+            break;
+        case "focus":
+            if (tp >= 0) {
+                st.heroS = 1 + 0.09 * Math.exp(-6 * tp) * Math.sin(16 * tp);
+                st.heroDy = -0.05 * Math.exp(-6 * tp) * Math.cos(16 * tp);
+                st.heroRot = -1.2 * Math.exp(-6 * tp) * Math.sin(14 * tp);
+            }
+            break;
+        case "sakura":
+            if (tp >= 0) {
+                st.heroDy = -0.05 * Math.sin(tp * 8) * Math.exp(-tp * 0.7);
+                st.heroRot = 0.8 * Math.sin(tp * 2.8) * Math.exp(-tp * 0.7);
+                st.heroS = 1 + 0.03 * Math.cos(tp * 4) * Math.exp(-tp * 1.0);
+            }
+            break;
         }
     }
     return st;
@@ -2320,6 +2453,14 @@ function ellipsePts(cx, cy, rx, ry, a0, a1, n) {
 function starPts(r, ri) {
     var pts = [];
     for (var i = 0; i <= 10; i++) { var a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? ri : r; pts.push({ x: rr * Math.cos(a), y: rr * Math.sin(a) }); }
+    return pts;
+}
+function star4Pts(r, ri) {
+    var pts = [];
+    for (var i = 0; i <= 8; i++) {
+        var a = -Math.PI / 2 + i * Math.PI / 4, rr = i % 2 ? ri : r;
+        pts.push({ x: rr * Math.cos(a), y: rr * Math.sin(a) });
+    }
     return pts;
 }
 function cubicAt(p0, c0, c1, p1, u) {
@@ -2509,6 +2650,41 @@ function propShape(kind) {
             // Bell opening rim
             ellipsePts(0.30, 0.08, 0.07, 0.40, 0, 2 * Math.PI, 22),
             ellipsePts(0.26, 0.08, 0.04, 0.26, 0, 2 * Math.PI, 16)
+        ];
+    case "flash":
+        return [
+            star4Pts(0.50, 0.12),
+            star4Pts(0.22, 0.05),
+            [{ x: -0.65, y: 0 }, { x: 0.65, y: 0 }],
+            [{ x: 0, y: -0.65 }, { x: 0, y: 0.65 }]
+        ];
+    case "focus": {
+        var Foc = [];
+        for (var fi = 0; fi < 16; fi++) {
+            var fa = fi * (2 * Math.PI / 16);
+            Foc.push([
+                { x: 0.50 * Math.cos(fa), y: 0.50 * Math.sin(fa) },
+                { x: 0.22 * Math.cos(fa), y: 0.22 * Math.sin(fa) }
+            ]);
+        }
+        return Foc;
+    }
+    case "sakura":
+        return [
+            [
+                { x: 0, y: 0.45 },
+                { x: -0.22, y: 0.18 },
+                { x: -0.25, y: -0.15 },
+                { x: -0.14, y: -0.38 },
+                { x: -0.06, y: -0.45 },
+                { x: 0, y: -0.32 },
+                { x: 0.06, y: -0.45 },
+                { x: 0.14, y: -0.38 },
+                { x: 0.25, y: -0.15 },
+                { x: 0.22, y: 0.18 },
+                { x: 0, y: 0.45 }
+            ],
+            [{ x: 0, y: 0.35 }, { x: 0, y: -0.12 }]
         ];
     }
     return [];
@@ -3676,6 +3852,242 @@ function peakPieces(L, t, W, px, bl) {
                 [{ x: gx, y: gy - 0.10 * px }, { x: gx, y: gy + 0.10 * px }]
             ];
             put(3, Glint, 1, true, 0.9 * fade(tp - sung - 0.2, 0.3), 0.035, 4);
+        }
+        break;
+    }
+    case "flash": {
+        // a four-point star flashes on the hero with glints
+        var flashFade = fade(tp - sung - 0.4, 0.35);
+        var cxFlash = W * 0.5;
+        var cyFlash = bl - 0.38 * px;
+
+        var sFlash, rotFlash;
+        if (tp < 0) {
+            var uFlash = M.clamp(tau / PROP_D.flash);
+            sFlash = px * (0.15 + 0.45 * M.E.outCubic(uFlash));
+            rotFlash = uFlash * 90;
+        } else {
+            sFlash = px * (0.95 + 0.35 * Math.exp(-8 * tp));
+            rotFlash = 90 + tp * 35;
+        }
+
+        // Piece 0: The main 4-point star flash (z: 2)
+        var StarShape = place(propShape("flash"), cxFlash, cyFlash, rotFlash, sFlash);
+        put(0, StarShape, 1, false, 0.95 * flashFade, 0.038, 2);
+
+        // Piece 1: Radiating cardinal and diagonal glint beams (z: 3, accent ink)
+        if (tp >= 0) {
+            var bLen = px * (0.8 + 1.2 * M.E.outCubic(M.clamp(tp / 0.25)));
+            var Glints = [
+                // Cardinal spikes
+                [{ x: cxFlash - bLen, y: cyFlash }, { x: cxFlash + bLen, y: cyFlash }],
+                [{ x: cxFlash, y: cyFlash - bLen * 0.85 }, { x: cxFlash, y: cyFlash + bLen * 0.85 }],
+                // Diagonal needles
+                [{ x: cxFlash - bLen * 0.45, y: cyFlash - bLen * 0.38 }, { x: cxFlash + bLen * 0.45, y: cyFlash + bLen * 0.38 }],
+                [{ x: cxFlash - bLen * 0.45, y: cyFlash + bLen * 0.38 }, { x: cxFlash + bLen * 0.45, y: cyFlash - bLen * 0.38 }]
+            ];
+            put(1, Glints, 1, true, 0.90 * fade(tp - sung - 0.2, 0.3), 0.035, 3);
+
+            // Piece 2: Secondary orbital diamond sparkles popping around the hero word (z: 4)
+            var Sparkles = [];
+            var sparkOffsets = [
+                { dx: -0.38 * W, dy: -0.42 * px, phase: 0.02 },
+                { dx: 0.36 * W, dy: -0.36 * px, phase: 0.08 },
+                { dx: -0.22 * W, dy: 0.32 * px, phase: 0.14 },
+                { dx: 0.28 * W, dy: 0.35 * px, phase: 0.06 }
+            ];
+            for (var si = 0; si < sparkOffsets.length; si++) {
+                var so = sparkOffsets[si];
+                var stp = tp - so.phase;
+                if (stp > 0) {
+                    var sS = px * 0.32 * (1 - fade(stp, 0.35));
+                    var spRot = stp * 60;
+                    Sparkles = Sparkles.concat(place(propShape("flash"), cxFlash + so.dx, cyFlash + so.dy, spRot, sS));
+                }
+            }
+            if (Sparkles.length) put(2, Sparkles, 1, true, 0.85 * flashFade, 0.03, 4);
+
+            // Piece 3: Expanding diamond aura ring (z: 1)
+            var uRing = M.clamp(tp / 0.45);
+            var rRing = (0.2 + 0.95 * M.E.outCubic(uRing)) * px;
+            var Ring = [ellipsePts(cxFlash, cyFlash, rRing, rRing * 0.75, 0, 2 * Math.PI, 20)];
+            put(3, Ring, 1, false, 0.75 * fade(tp - 0.45, 0.25), 0.028, 1);
+        }
+        break;
+    }
+    case "focus": {
+        // manga focus lines close in from the frame edges
+        var focusFade = fade(tp - sung - 0.45, 0.35);
+        var cxFocus = W * 0.5;
+        var cyFocus = bl - 0.35 * px;
+
+        // Outer radius at frame boundary; inner radius converges toward word
+        var rOuter = Math.max(W * 0.9, 3.2 * px);
+        var rInnerLand = Math.max(W * 0.52, 0.75 * px);
+        var rInnerStart = rOuter * 0.85;
+
+        var curRInner;
+        if (tp < 0) {
+            var uFocus = M.clamp(tau / PROP_D.focus);
+            curRInner = rInnerStart + (rInnerLand - rInnerStart) * M.E.outCubic(uFocus);
+        } else {
+            // Speed line boil vibration on cue
+            var jitter = 0.03 * px * Math.sin(tp * 45);
+            curRInner = rInnerLand + jitter;
+        }
+
+        // Piece 0: Left-side focus lines converging from left frame (z: 1)
+        var LeftLines = [];
+        for (var lfi = 0; lfi < 6; lfi++) {
+            var lfa = Math.PI * 0.65 + (lfi / 5) * Math.PI * 0.70;
+            var lJitter = 0.04 * px * M.rs(sd, lfi, 941);
+            var lx0 = cxFocus + (curRInner + lJitter) * Math.cos(lfa);
+            var ly0 = cyFocus + (curRInner * 0.65 + lJitter) * Math.sin(lfa);
+            var lx1 = cxFocus + (rOuter + lJitter) * Math.cos(lfa);
+            var ly1 = cyFocus + (rOuter * 0.65 + lJitter) * Math.sin(lfa);
+            LeftLines.push([{ x: lx0, y: ly0 }, { x: lx1, y: ly1 }]);
+        }
+        put(0, LeftLines, 1, false, 0.90 * focusFade, 0.035, 1);
+
+        // Piece 1: Right-side focus lines converging from right frame (z: 1)
+        var RightLines = [];
+        for (var rfi = 0; rfi < 6; rfi++) {
+            var rfa = -Math.PI * 0.35 + (rfi / 5) * Math.PI * 0.70;
+            var rJitter = 0.04 * px * M.rs(sd, rfi, 942);
+            var rx0 = cxFocus + (curRInner + rJitter) * Math.cos(rfa);
+            var ry0 = cyFocus + (curRInner * 0.65 + rJitter) * Math.sin(rfa);
+            var rx1 = cxFocus + (rOuter + rJitter) * Math.cos(rfa);
+            var ry1 = cyFocus + (rOuter * 0.65 + rJitter) * Math.sin(rfa);
+            RightLines.push([{ x: rx0, y: ry0 }, { x: rx1, y: ry1 }]);
+        }
+        put(1, RightLines, 1, false, 0.90 * focusFade, 0.035, 1);
+
+        // Piece 2: Top and bottom vertical focus lines (z: 1)
+        var VertLines = [];
+        for (var vfi = 0; vfi < 4; vfi++) {
+            var vfaTop = -Math.PI * 0.75 + (vfi / 3) * Math.PI * 0.50;
+            var vfaBot = Math.PI * 0.25 + (vfi / 3) * Math.PI * 0.50;
+            VertLines.push([
+                { x: cxFocus + curRInner * Math.cos(vfaTop), y: cyFocus + curRInner * 0.65 * Math.sin(vfaTop) },
+                { x: cxFocus + rOuter * Math.cos(vfaTop), y: cyFocus + rOuter * 0.65 * Math.sin(vfaTop) }
+            ]);
+            VertLines.push([
+                { x: cxFocus + curRInner * Math.cos(vfaBot), y: cyFocus + curRInner * 0.65 * Math.sin(vfaBot) },
+                { x: cxFocus + rOuter * Math.cos(vfaBot), y: cyFocus + rOuter * 0.65 * Math.sin(vfaBot) }
+            ]);
+        }
+        put(2, VertLines, 1, false, 0.85 * focusFade, 0.032, 1);
+
+        // Piece 3: Impact frame corner brackets framing the hero word on cue (z: 2, accent ink)
+        if (tp >= 0) {
+            var bLenK = 0.18 * px;
+            var bw = W * 0.52 + 0.08 * px;
+            var bh = 0.45 * px;
+            var Brackets = [
+                // Top-left corner bracket
+                [{ x: cxFocus - bw + bLenK, y: cyFocus - bh }, { x: cxFocus - bw, y: cyFocus - bh }, { x: cxFocus - bw, y: cyFocus - bh + bLenK }],
+                // Top-right corner bracket
+                [{ x: cxFocus + bw - bLenK, y: cyFocus - bh }, { x: cxFocus + bw, y: cyFocus - bh }, { x: cxFocus + bw, y: cyFocus - bh + bLenK }],
+                // Bottom-left corner bracket
+                [{ x: cxFocus - bw + bLenK, y: cyFocus + bh }, { x: cxFocus - bw, y: cyFocus + bh }, { x: cxFocus - bw, y: cyFocus + bh - bLenK }],
+                // Bottom-right corner bracket
+                [{ x: cxFocus + bw - bLenK, y: cyFocus + bh }, { x: cxFocus + bw, y: cyFocus + bh }, { x: cxFocus + bw, y: cyFocus + bh - bLenK }]
+            ];
+            put(3, Brackets, 1, true, 0.95 * fade(tp - sung - 0.2, 0.3), 0.038, 2);
+        }
+        break;
+    }
+    case "sakura": {
+        // petals drift across the word
+        var sakuraFade = fade(tp - sung - 0.5, 0.4);
+        var cxSakura = W * 0.5;
+        var cySakura = bl - 0.35 * px;
+
+        // Start at top-left above hero word; drift down and across to lower-right
+        var startSakuraX = cxSakura - 1.2 * px;
+        var startSakuraY = cySakura - 1.3 * px;
+        var landSakuraX = cxSakura + 0.20 * px;
+        var landSakuraY = cySakura + 0.12 * px;
+
+        var mainX, mainY, mainRot;
+        if (tp < 0) {
+            var uSakura = M.clamp(tau / PROP_D.sakura);
+            mainX = startSakuraX + (landSakuraX - startSakuraX) * M.E.outCubic(uSakura) + 0.08 * px * Math.sin(uSakura * Math.PI * 3);
+            mainY = startSakuraY + (landSakuraY - startSakuraY) * M.E.outCubic(uSakura);
+            mainRot = -30 + uSakura * 75 + 15 * Math.sin(uSakura * Math.PI * 4);
+        } else {
+            mainX = landSakuraX + tp * 0.35 * px + 0.06 * px * Math.sin(tp * 3.5);
+            mainY = landSakuraY + tp * 0.28 * px;
+            mainRot = 45 + tp * 40 + 15 * Math.sin(tp * 4);
+        }
+
+        // Piece 0: Main fluttering hero sakura petal (z: 3)
+        var MainPetal = place(propShape("sakura"), mainX, mainY, mainRot, px * 0.72);
+        put(0, MainPetal, 1, false, 0.95 * sakuraFade, 0.035, 3);
+
+        // Piece 1: Companion swarm of sakura petals drifting at various depths (z: 1)
+        var Companions = [];
+        var petalConfigs = [
+            { offX: -0.55 * px, offY: -0.35 * px, s: 0.52, rotOff: 20, speedX: 0.28, speedY: 0.22, delay: 0.05 },
+            { offX: 0.45 * px, offY: -0.48 * px, s: 0.46, rotOff: -35, speedX: 0.32, speedY: 0.26, delay: 0.12 },
+            { offX: -0.25 * px, offY: 0.38 * px, s: 0.50, rotOff: 50, speedX: 0.25, speedY: 0.20, delay: 0.18 },
+            { offX: 0.65 * px, offY: 0.25 * px, s: 0.42, rotOff: -15, speedX: 0.30, speedY: 0.24, delay: 0.08 }
+        ];
+        for (var pi = 0; pi < petalConfigs.length; pi++) {
+            var pcg = petalConfigs[pi];
+            var ptp = tp - pcg.delay;
+            var ptau = tau - pcg.delay;
+            if (ptau > 0) {
+                var pxX, pxY, pxRot;
+                if (ptp < 0) {
+                    var pu = M.clamp(ptau / (PROP_D.sakura * 0.9));
+                    pxX = (startSakuraX + pcg.offX) + ((landSakuraX + pcg.offX) - (startSakuraX + pcg.offX)) * M.E.outCubic(pu);
+                    pxY = (startSakuraY + pcg.offY) + ((landSakuraY + pcg.offY) - (startSakuraY + pcg.offY)) * M.E.outCubic(pu);
+                    pxRot = pcg.rotOff + pu * 60;
+                } else {
+                    pxX = landSakuraX + pcg.offX + ptp * pcg.speedX * px;
+                    pxY = landSakuraY + pcg.offY + ptp * pcg.speedY * px;
+                    pxRot = pcg.rotOff + 60 + ptp * 35;
+                }
+                Companions = Companions.concat(place(propShape("sakura"), pxX, pxY, pxRot, px * pcg.s));
+            }
+        }
+        if (Companions.length) put(1, Companions, 1, false, 0.88 * sakuraFade, 0.03, 1);
+
+        // Piece 2: Gentle wind breeze slipstream trails (z: 2, accent ink)
+        var Breeze = [];
+        for (var bi = 0; bi < 3; bi++) {
+            var bY = cySakura + (bi - 1) * 0.32 * px;
+            var bWisp = bezier(
+                { x: cxSakura - 0.85 * px, y: bY - 0.15 * px },
+                { x: cxSakura - 0.25 * px, y: bY + 0.08 * px * Math.sin(tp * 3 + bi) },
+                { x: cxSakura + 0.25 * px, y: bY - 0.08 * px * Math.sin(tp * 3 + bi) },
+                { x: cxSakura + 0.85 * px, y: bY + 0.15 * px },
+                16
+            );
+            Breeze.push(bWisp);
+        }
+        put(2, Breeze, 1, true, 0.75 * sakuraFade, 0.026, 2);
+
+        // Piece 3: Floating petal settle & subtle pollen sparkles on the hero word (z: 4)
+        if (tp >= 0) {
+            var Pollen = [];
+            for (var pli = 0; pli < 5; pli++) {
+                var plAng = pli * (Math.PI * 2 / 5) + tp * 2;
+                var plDist = (0.25 + 0.18 * Math.sin(tp * 3 + pli)) * px;
+                var plx = mainX + plDist * Math.cos(plAng);
+                var ply = mainY + plDist * Math.sin(plAng);
+                var plS = 0.03 * px;
+                Pollen.push([
+                    { x: plx - plS, y: ply },
+                    { x: plx + plS, y: ply }
+                ]);
+                Pollen.push([
+                    { x: plx, y: ply - plS },
+                    { x: plx, y: ply + plS }
+                ]);
+            }
+            put(3, Pollen, 1, true, 0.82 * fade(tp - sung - 0.2, 0.3), 0.028, 4);
         }
         break;
     }
