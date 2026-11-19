@@ -445,6 +445,7 @@ Item {
                         width: parent.width
                         height: 22
                         opacity: root.showSizeRow ? 0 : 1
+                        key: root.phase
                         value: root.statusMain
                         motion: root.motion
                         font.family: Theme.fontFamily; font.pixelSize: 16; font.bold: true
@@ -482,6 +483,7 @@ Item {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 16
                     motion: root.motion
+                    key: root.phase
                     value: root.statusSub
                     font.family: Theme.fontFamily; font.pixelSize: 12
                     color: Theme.textSecondary

@@ -5,9 +5,17 @@ Text {
     id: t
     property string value: ""
     property real motion: 1
+    property var key: ""          // fade only when the key changes; live figures (percent, speed) update in place
     property bool ready: false
-    onValueChanged: { if (ready) swap.restart(); }
-    Component.onCompleted: { text = value; ready = true; }
+    property var lastKey: ""
+    onValueChanged: {
+        if (!ready) return;
+        if (key === lastKey) { if (!swap.running) text = value; return; }
+        lastKey = key;
+        swap.restart();
+    }
+    onKeyChanged: { if (ready && key !== lastKey) { lastKey = key; swap.restart(); } }
+    Component.onCompleted: { text = value; lastKey = key; ready = true; }
     SequentialAnimation {
         id: swap
         NumberAnimation { target: t; property: "opacity"; to: 0; duration: 110 * t.motion; easing.type: Easing.OutCubic }
