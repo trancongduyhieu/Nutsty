@@ -84,7 +84,10 @@ var TEMPO = { slow: 0.75, prevFast: 1.0, minLines: 4, fast: 1.35, fastPct: 0.8, 
 // together; a rush gets everything at once. Never the same pick twice running within a role.
 // Props with their own motion (peakPieces): each arrives over PROP_D seconds and lands on the hero
 var PROP_FX = ["balloon", "note", "plane", "roll", "vine", "jack", "fold", "hand"];
-var PROP_D = { balloon: 0.9, note: 1.0, plane: 0.8, roll: 0.7, vine: 0, jack: 0, fold: 0.6, hand: 0.6 };
+var PROP_D = {
+    balloon: 0.9, note: 1.0, plane: 0.8, roll: 0.7, vine: 0, jack: 0, fold: 0.6, hand: 0.6,
+    shatter: 0.6, snap: 0.7, rip: 0.5
+};
 // a prop lands no sooner than this after its line starts coming in, so the line is whole by then
 var PROP_SETTLE = 0.6;
 var PEAK_FX = ["bulb", "spot", "rays", "ink", "stamp"].concat(PROP_FX);
@@ -96,7 +99,11 @@ var RUSH_DOODLES = 10;    // one per word on a rush line, at most this many
 var RUSH_KINDS = ["speed", "sparkle", "bang", "burst"];
 var SETS = {
     sweet: { doodles: DOODLES, rush: RUSH_KINDS, peaks: PEAK_FX },
-    rough: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS },
+    rough: {
+        doodles: ["bolt", "crack", "spike", "cross", "bang"],
+        rush: ["bolt", "crack", "spike", "bang"],
+        peaks: ["shatter", "snap", "rip"].concat(SHARED_PEAKS)
+    },
     street: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS },
     dance: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS },
     calm: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS },
@@ -1151,6 +1158,69 @@ function markShape(kind, sd, w, h) {
         S.push([{ x: w * 0.1, y: h * 0.15 }, { x: w * 0.9, y: h * 0.85 }]);
         S.push([{ x: w * 0.88, y: h * 0.12 }, { x: w * 0.12, y: h * 0.9 }]);
         break;
+    case "bolt": {
+        // a jagged lightning bolt with a sharp spark branch
+        var bx1 = w * (0.6 + 0.06 * M.rs(sd, 1, 831));
+        var bx2 = w * (0.34 + 0.05 * M.rs(sd, 2, 832));
+        var bx3 = w * (0.58 + 0.05 * M.rs(sd, 3, 833));
+        var bx4 = w * (0.26 + 0.06 * M.rs(sd, 4, 834));
+        var byMid = h * (0.44 + 0.04 * M.rs(sd, 5, 835));
+        S.push([
+            { x: bx1, y: h * 0.05 },
+            { x: bx2, y: byMid },
+            { x: bx3, y: byMid },
+            { x: bx4, y: h * 0.95 }
+        ]);
+        S.push([
+            { x: (bx2 + bx3) * 0.5, y: byMid },
+            { x: w * (0.7 + 0.08 * M.rs(sd, 6, 836)), y: h * (0.58 + 0.06 * M.rs(sd, 7, 837)) }
+        ]);
+        break;
+    }
+    case "crack": {
+        // branching fracture lines radiating across the box
+        var cx0 = w * (0.48 + 0.08 * M.rs(sd, 1, 841));
+        var cx1 = w * (0.4 + 0.08 * M.rs(sd, 2, 842));
+        var cx2 = w * (0.58 + 0.08 * M.rs(sd, 3, 843));
+        var cx3 = w * (0.36 + 0.08 * M.rs(sd, 4, 844));
+        var cx4 = w * (0.44 + 0.08 * M.rs(sd, 5, 845));
+        S.push([
+            { x: cx0, y: h * 0.06 },
+            { x: cx1, y: h * 0.28 },
+            { x: cx2, y: h * 0.55 },
+            { x: cx3, y: h * 0.78 },
+            { x: cx4, y: h * 0.94 }
+        ]);
+        S.push([
+            { x: cx1, y: h * 0.28 },
+            { x: w * (0.2 + 0.06 * M.rs(sd, 6, 846)), y: h * (0.42 + 0.05 * M.rs(sd, 7, 847)) },
+            { x: w * (0.1 + 0.05 * M.rs(sd, 8, 848)), y: h * 0.48 }
+        ]);
+        S.push([
+            { x: cx2, y: h * 0.55 },
+            { x: w * (0.78 + 0.06 * M.rs(sd, 9, 849)), y: h * (0.68 + 0.05 * M.rs(sd, 10, 850)) },
+            { x: w * (0.92 + 0.05 * M.rs(sd, 11, 851)), y: h * 0.82 }
+        ]);
+        break;
+    }
+    case "spike": {
+        // a row of three sharp punk/metal spikes with a baseline
+        var spBaseY = h * 0.88;
+        S.push([
+            { x: w * 0.08, y: spBaseY },
+            { x: w * 0.24, y: h * 0.22 },
+            { x: w * 0.38, y: spBaseY - h * 0.12 },
+            { x: w * 0.52, y: h * 0.1 },
+            { x: w * 0.66, y: spBaseY - h * 0.12 },
+            { x: w * 0.8, y: h * 0.22 },
+            { x: w * 0.94, y: spBaseY }
+        ]);
+        S.push([
+            { x: w * 0.05, y: spBaseY },
+            { x: w * 0.95, y: spBaseY }
+        ]);
+        break;
+    }
     case "wrap":
     case "ring": {
         var th0 = -2.2 + 0.6 * M.rs(sd, 1, 803);
@@ -1552,6 +1622,21 @@ function peakState(L, t) {
             st.restA = M.lerp(1, 0.55, M.E.outQuad(tp / 0.3));
             break;
         case "hand": if (tp >= 0) st.heroS = 1 - 0.05 * Math.sin(Math.PI * M.clamp(tp / 0.18)); break;
+        case "shatter":
+            if (tp >= 0) {
+                st.heroDy = 0.14 * Math.exp(-9 * tp) * Math.sin(32 * tp);
+                st.heroRot = 4.5 * Math.exp(-8 * tp) * Math.sin(26 * tp);
+            }
+            break;
+        case "snap":
+            if (tp >= 0) {
+                st.heroDy = 0.1 * Math.exp(-8 * tp) * Math.sin(28 * tp);
+                st.heroRot = 3 * Math.exp(-7 * tp) * Math.sin(22 * tp);
+            }
+            break;
+        case "rip":
+            if (tp >= 0) st.heroS = 1 + 0.08 * Math.exp(-6 * tp) * Math.sin(18 * tp);
+            break;
         }
     }
     return st;
@@ -1563,6 +1648,16 @@ function jackSplit(L, t) {
     var land = peakOnAt(L), tau = t - land;
     if (tau < 0) return 0;
     return M.E.outBack(tau / 0.16, 2.4) * (1 - M.E.outQuad((t - land - 1.0) / 0.22));
+}
+// How far a ripped hero is torn open and slipped apart; it closes back as the word ends
+function ripSplit(L, t) {
+    var land = peakOnAt(L), tau = t - land;
+    if (tau < 0) return 0;
+    var hw = L.words[L.heroWi >= 0 ? L.heroWi : 0];
+    var sung = Math.max(0.4, hw.end - hw.start);
+    var open = M.E.outBack(M.clamp(tau / 0.18), 1.8);
+    var shut = M.clamp((tau - (sung + 0.1)) / 0.25);
+    return Math.max(0, open * (1 - M.E.outQuad(shut)));
 }
 // The roll's place across the hero, 0 (left edge) .. 1 (right edge), as the word is sung
 function rollAt(L, t) {
@@ -1640,6 +1735,15 @@ function propShape(kind) {
                 [{ x: 1.02, y: -0.04 }, { x: 4.6, y: 1.3 }], [{ x: 1.05, y: 0.45 }, { x: 4.4, y: 1.8 }]];
     case "sticker":
         return [ellipsePts(0, 0, 1, 1, 0, 2 * Math.PI + 0.25, 24), starPts(0.58, 0.25)];
+    case "shard":
+        return [[{ x: -0.15, y: -0.1 }, { x: 0.18, y: -0.05 }, { x: 0.02, y: 0.18 }, { x: -0.15, y: -0.1 }]];
+    case "shatter":
+        return [[{ x: -0.5, y: -0.4 }, { x: -0.2, y: -0.15 }, { x: 0, y: 0 }, { x: 0.25, y: -0.2 }, { x: 0.5, y: -0.4 }],
+                [{ x: -0.4, y: 0.35 }, { x: 0, y: 0 }, { x: 0.38, y: 0.38 }]];
+    case "snap":
+        return [[{ x: -0.4, y: 0 }, { x: -0.1, y: 0 }, { x: 0.1, y: -0.1 }, { x: 0.22, y: -0.25 }, { x: 0.1, y: -0.32 }, { x: 0.02, y: -0.22 }]];
+    case "rip":
+        return [[{ x: 0, y: -0.5 }, { x: 0.08, y: -0.25 }, { x: -0.08, y: 0 }, { x: 0.08, y: 0.25 }, { x: 0, y: 0.5 }]];
     }
     return [];
 }
@@ -1651,7 +1755,7 @@ function propShape(kind) {
 function noPiece() { return { strokes: [], accent: false, a: 0, pen: 1.5, z: 2, flat: false }; }
 function peakPieces(L, t, W, px, bl) {
     var out = [noPiece(), noPiece(), noPiece(), noPiece()];
-    if (!L || !L.pile || L.pile.role !== "peak" || PROP_FX.indexOf(L.pile.fx) < 0 || !(W > 1) || !(px > 1)) return out;
+    if (!L || !L.pile || L.pile.role !== "peak" || !(L.pile.fx in PROP_D) || !(W > 1) || !(px > 1)) return out;
     var fx = L.pile.fx, hw = L.words[L.heroWi >= 0 ? L.heroWi : 0];
     var on = peakOnAt(L), start = on - PROP_D[fx], tau = t - start, tp = t - on;
     var sung = Math.max(0.4, hw.end - hw.start), sd = L.seed + 900;
@@ -1830,6 +1934,126 @@ function peakPieces(L, t, W, px, bl) {
         }
         break;
     }
+    case "shatter": {
+        // cracks run out from the hero center, sharp shards drop away
+        var cxS = W / 2, cyS = bl - 0.35 * px;
+        var cracks = [
+            [{ x: cxS, y: cyS }, { x: cxS - 0.22 * W, y: cyS - 0.22 * px }, { x: -0.06 * px, y: bl - 0.82 * px }],
+            [{ x: cxS, y: cyS }, { x: cxS + 0.2 * W, y: cyS - 0.26 * px }, { x: W + 0.08 * px, y: bl - 0.78 * px }],
+            [{ x: cxS, y: cyS }, { x: cxS - 0.18 * W, y: cyS + 0.18 * px }, { x: -0.04 * px, y: bl + 0.18 * px }],
+            [{ x: cxS, y: cyS }, { x: cxS + 0.24 * W, y: cyS + 0.16 * px }, { x: W + 0.06 * px, y: bl + 0.2 * px }],
+            [{ x: cxS - 0.14 * W, y: cyS - 0.08 * px }, { x: cxS - 0.04 * W, y: cyS + 0.16 * px }, { x: cxS + 0.1 * W, y: cyS + 0.04 * px }]
+        ];
+        if (tp < 0) {
+            put(0, cracks, M.clamp(tau / PROP_D.shatter * 0.3), true, 0.6, 0.035, 3);
+        } else {
+            put(0, cracks, 1, true, 0.9 * fade(tp - 0.6, 0.4), 0.04, 3);
+            var Shards = [];
+            for (var sk = 0; sk < 5; sk++) {
+                var sx0 = cxS + (sk - 2) * 0.18 * W + 0.05 * px * M.rs(sd, sk, 921);
+                var sy0 = cyS + 0.08 * px * M.rs(sd, sk, 922);
+                var sdx = (sk - 2) * 0.3 * px * tp;
+                var sdy = (0.2 + 0.1 * sk) * px * tp + 3.0 * px * tp * tp;
+                var spin = (sk % 2 ? 1 : -1) * (18 + 12 * sk) * tp * 8;
+                Shards = Shards.concat(place(propShape("shard"), sx0 + sdx, sy0 + sdy, spin, px * 0.8));
+            }
+            if (Shards.length) put(1, Shards, 1, false, M.clamp(1 - tp / 0.85), 0.035, 2);
+            var Sparks = [];
+            for (var spk = 0; spk < 4; spk++) {
+                var spa = -Math.PI * 0.75 + spk * Math.PI * 0.5;
+                Sparks.push([
+                    { x: cxS + 0.15 * px * Math.cos(spa), y: cyS + 0.15 * px * Math.sin(spa) },
+                    { x: cxS + 0.45 * px * Math.cos(spa), y: cyS + 0.45 * px * Math.sin(spa) }
+                ]);
+            }
+            put(2, Sparks, M.clamp(tp / 0.06), true, fade(tp, 0.2), 0.035, 4);
+        }
+        break;
+    }
+    case "snap": {
+        // a string stretched over the word snaps, both ends curl back
+        var x0 = -0.12 * px, y0 = bl - 0.38 * px, x1 = W + 0.12 * px, cxSnap = W / 2;
+        var Anchors = place([[{ x: -0.06, y: -0.12 }, { x: 0, y: 0 }, { x: -0.06, y: 0.12 }]], x0, y0, 0, px)
+            .concat(place([[{ x: 0.06, y: -0.12 }, { x: 0, y: 0 }, { x: 0.06, y: 0.12 }]], x1, y0, 0, px));
+        put(1, Anchors, 1, false, 0.75, 0.03, 2);
+        if (tp < 0) {
+            var uSnap = M.clamp(tau / PROP_D.snap);
+            var vib = uSnap > 0.6 ? 0.03 * px * Math.sin(tau * 45) * (uSnap - 0.6) / 0.4 : 0;
+            var strPts = [];
+            for (var si = 0; si <= 14; si++) {
+                var su = si / 14;
+                strPts.push({ x: x0 + (x1 - x0) * su * uSnap, y: y0 + vib * Math.sin(su * Math.PI) });
+            }
+            put(0, [strPts], 1, false, 0.85, 0.035, 3);
+        } else {
+            var retract = M.E.outCubic(M.clamp(tp / 0.22));
+            var xEndL = cxSnap - (cxSnap - x0) * 0.65 * retract;
+            var xEndR = cxSnap + (x1 - cxSnap) * 0.65 * retract;
+            var leftPts = [], rightPts = [];
+            for (var j = 0; j <= 14; j++) {
+                var sj = j / 14;
+                var lx = x0 + (xEndL - x0) * sj, ly = y0;
+                var rx = x1 - (x1 - xEndR) * sj, ry = y0;
+                if (sj > 0.45) {
+                    var cFrac = (sj - 0.45) / 0.55;
+                    var angL = retract * 3.2 * Math.PI * cFrac;
+                    var rCurl = cFrac * 0.28 * px * retract;
+                    lx += rCurl * Math.cos(angL);
+                    ly -= rCurl * Math.sin(angL);
+                    rx -= rCurl * Math.cos(angL);
+                    ry -= rCurl * Math.sin(angL);
+                }
+                leftPts.push({ x: lx, y: ly });
+                rightPts.push({ x: rx, y: ry });
+            }
+            put(0, [leftPts, rightPts], 1, false, 0.85 * fade(tp - 0.6, 0.4), 0.035, 3);
+            var wL = [{ x: cxSnap - 0.04 * px - 0.25 * px * tp, y: y0 - 0.12 * px }, { x: cxSnap - 0.04 * px - 0.25 * px * tp, y: y0 + 0.12 * px }];
+            var wR = [{ x: cxSnap + 0.04 * px + 0.25 * px * tp, y: y0 - 0.12 * px }, { x: cxSnap + 0.04 * px + 0.25 * px * tp, y: y0 + 0.12 * px }];
+            put(2, [wL, wR], 1, true, fade(tp, 0.2), 0.04, 4);
+        }
+        break;
+    }
+    case "rip": {
+        // the word tears along a jagged line, the halves slip apart, then close
+        var ncRip = hw.chars.length;
+        var midRip = ncRip > 1 ? Math.ceil(ncRip / 2) : 0.5;
+        var gxRip = W * (ncRip > 1 ? midRip / ncRip : 0.5);
+        var yTop = bl - 0.95 * px, yBot = bl + 0.18 * px;
+        var ripPts = [
+            { x: gxRip, y: yTop },
+            { x: gxRip + 0.06 * px, y: yTop + 0.22 * px },
+            { x: gxRip - 0.06 * px, y: yTop + 0.44 * px },
+            { x: gxRip + 0.07 * px, y: yTop + 0.66 * px },
+            { x: gxRip - 0.05 * px, y: yTop + 0.88 * px },
+            { x: gxRip, y: yBot }
+        ];
+        if (tp < 0) {
+            put(0, [ripPts], M.clamp(tau / PROP_D.rip), true, 0.85, 0.035, 2);
+        } else {
+            var spRip = ripSplit(L, t);
+            var shiftXL = -0.18 * px * spRip, shiftYL = -0.16 * px * spRip;
+            var shiftXR = 0.18 * px * spRip, shiftYR = 0.16 * px * spRip;
+            var edgeL = ripPts.map(function (p) { return { x: p.x + shiftXL, y: p.y + shiftYL }; });
+            var edgeR = ripPts.map(function (p) { return { x: p.x + shiftXR, y: p.y + shiftYR }; });
+            put(0, [edgeL], 1, true, 0.85 * fade(tp - sung - 0.4, 0.3), 0.035, 2);
+            put(1, [edgeR], 1, true, 0.85 * fade(tp - sung - 0.4, 0.3), 0.035, 2);
+            if (spRip > 0.05) {
+                var Fibers = [];
+                for (var fi = 1; fi < ripPts.length - 1; fi++) {
+                    Fibers.push([edgeL[fi], edgeR[fi]]);
+                }
+                put(2, Fibers, 1, false, 0.6 * spRip, 0.02, 1);
+            }
+            if (tp < 0.25) {
+                var Flecks = [
+                    [{ x: gxRip - 0.05 * px - 0.2 * px * tp, y: yTop + 0.1 * px }, { x: gxRip - 0.15 * px - 0.3 * px * tp, y: yTop + 0.05 * px }],
+                    [{ x: gxRip + 0.05 * px + 0.2 * px * tp, y: yBot - 0.1 * px }, { x: gxRip + 0.15 * px + 0.3 * px * tp, y: yBot - 0.05 * px }]
+                ];
+                put(3, Flecks, 1, true, fade(tp, 0.25), 0.03, 3);
+            }
+        }
+        break;
+    }
     }
     return out;
 }
@@ -1958,6 +2182,15 @@ function letterState(L, t, wi, ci) {
         // each letter hops as the roll passes under it
         var p = rollAt(L, t);
         if (p > 0 && p < 1) { var d = (p - (ci + 0.5) / nc) * nc; st.dy -= 0.16 * Math.exp(-d * d * 1.5); }
+    } else if (L.pile.fx === "rip") {
+        var sp = ripSplit(L, t);
+        if (sp > 0.001) {
+            var left = (nc > 1 ? ci < Math.ceil(nc / 2) : true);
+            var dir = left ? -1 : 1;
+            st.dx += dir * 0.18 * sp;
+            st.dy += dir * 0.16 * sp;
+            st.rot += dir * 3.0 * sp;
+        }
     }
     return st;
 }

@@ -664,7 +664,7 @@ Item {
                             // The props with their own motion (a balloon, a sticky note, a paper plane, a
                             // tape roll, a vine, a jack-in-the-box, a folding paper, a hand with a sticker):
                             // Stage.peakPieces places up to four pieces in this word's own box
-                            readonly property bool propFx: peakFx !== "" && Stage.PROP_FX.indexOf(peakFx) >= 0
+                            readonly property bool propFx: peakFx !== "" && (Stage.PROP_FX.indexOf(peakFx) >= 0 || (peakFx in Stage.PROP_D))
                             readonly property var pieces: propFx ? Stage.peakPieces(lineItem.line, lineItem.t, wordItem.width, wordItem.px, wordItem.bl) : []
                             Repeater {
                                 model: wordItem.propFx ? 4 : 0

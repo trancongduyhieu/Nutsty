@@ -448,6 +448,81 @@ test("stuck plane keeps clear of the next word", () => {
     for (const dt of [0.3, 1, 2]) assert.ok(maxX(pcs(L, on + dt)[0]) < PW_ + 0.5 * PX, "tail over the next word " + dt);
 });
 
+test("rough set entry has doodles, rush, and peaks", () => {
+    assert.deepStrictEqual(Array.from(K.SETS.rough.doodles), ["bolt", "crack", "spike", "cross", "bang"]);
+    assert.deepStrictEqual(Array.from(K.SETS.rough.rush), ["bolt", "crack", "spike", "bang"]);
+    assert.deepStrictEqual(Array.from(K.SETS.rough.peaks), ["shatter", "snap", "rip", "spot", "rays", "ink", "stamp"]);
+});
+
+test("rough doodles: bolt, crack, spike finite at several sizes", () => {
+    for (const kind of ["bolt", "crack", "spike"]) {
+        for (const [w, h] of [[12, 12], [24, 24], [48, 48], [120, 60]]) {
+            const S = K.markShape(kind, 888, w, h);
+            assert.ok(S.length > 0, kind + " has no strokes at " + w + "x" + h);
+            for (const st of S) {
+                assert.ok(st.length > 1, kind + " stroke too short");
+                for (const p of st) {
+                    assert.ok(isFinite(p.x) && isFinite(p.y), kind + " non-finite point");
+                    assert.ok(p.x >= -w * 0.5 && p.x <= w * 1.5, kind + " x out of bounds: " + p.x);
+                    assert.ok(p.y >= -h * 0.5 && p.y <= h * 1.5, kind + " y out of bounds: " + p.y);
+                }
+            }
+        }
+    }
+});
+
+test("rough peaks: nothing before start, something on cue, four finite pieces", () => {
+    for (const fx of ["shatter", "snap", "rip"]) {
+        const { L } = peakWith(fx);
+        const on = K.peakOnAt(L), start = on - K.PROP_D[fx];
+        assert.ok(start >= L.enterAt - 1e-9, fx + " starts before its line");
+        const before = pcs(L, start - 0.05);
+        assert.strictEqual(before.length, 4);
+        assert.ok(before.every(pc => !drawn(pc)), fx + " draws before start");
+        assert.ok(pcs(L, on + 0.1).some(drawn), fx + " draws nothing on cue");
+        for (let t = L.enterAt - 0.5; t < L.pile.exitAt + 1; t += 0.03) {
+            const P = pcs(L, t);
+            assert.strictEqual(P.length, 4);
+            finiteDeep(P, fx);
+            finiteDeep(K.peakState(L, t), fx + " state");
+            L.words[L.heroWi].chars.forEach((c, ci) => finiteDeep(K.letterState(L, t, L.heroWi, ci), fx + " letter"));
+        }
+    }
+});
+
+test("shatter: cracks spread, shards drop", () => {
+    const { L } = peakWith("shatter");
+    const on = K.peakOnAt(L);
+    assert.ok(drawn(pcs(L, on + 0.05)[0]), "cracks not drawn");
+    const y0 = meanY(pcs(L, on + 0.1)[1]);
+    const y1 = meanY(pcs(L, on + 0.35)[1]);
+    assert.ok(y1 > y0 + PX * 0.2, "shards do not drop: " + y0 + " vs " + y1);
+    assert.ok(Math.abs(K.peakState(L, on + 0.05).heroDy) > 0.04, "word does not shake");
+});
+
+test("snap: string snaps and both ends curl back", () => {
+    const { L } = peakWith("snap");
+    const on = K.peakOnAt(L), start = on - K.PROP_D.snap;
+    assert.ok(drawn(pcs(L, start + 0.3)[0]), "string not drawn before snap");
+    assert.ok(drawn(pcs(L, on + 0.1)[0]), "curls not drawn after snap");
+    assert.ok(Math.abs(K.peakState(L, on + 0.05).heroDy) > 0.02, "word does not twang");
+});
+
+test("rip: letters slip apart then close", () => {
+    const { L } = peakWith("rip");
+    const on = K.peakOnAt(L);
+    assert.ok(drawn(pcs(L, on)[0]), "incision not drawn");
+    const nc = L.words[L.heroWi].chars.length;
+    const l0 = K.letterState(L, on + 0.2, L.heroWi, 0);
+    const l1 = K.letterState(L, on + 0.2, L.heroWi, nc - 1);
+    assert.ok(l0.dy < -0.05, "left letter not slipped up: " + l0.dy);
+    assert.ok(l1.dy > 0.05, "right letter not slipped down: " + l1.dy);
+    const closed = K.letterState(L, on + 2.0, L.heroWi, 0);
+    assert.strictEqual(K.ripSplit(L, on + 2.0), 0, "ripSplit not 0");
+    assert.ok(Math.abs(closed.dx) < 0.01, "letters dx does not close: " + closed.dx);
+    assert.ok(Math.abs(closed.dy) < 0.05, "letters dy does not close: " + closed.dy);
+});
+
 test("familyOf on real names", () => {
     assert.strictEqual(K.familyOf("Pop"), "pop");
     assert.strictEqual(K.familyOf("Hip-Hop/Rap"), "street");
