@@ -3045,18 +3045,18 @@ Rectangle {
                 Item {
                     id: appUpdateRowItem
                     Layout.fillWidth: true
-                    Layout.preferredHeight: (root.isDownloadingUpdate || root.updateProgress > 0.0) ? 76 : 56
+                    Layout.preferredHeight: appUpdateText.implicitHeight + 10 + 28
                     Layout.topMargin: 4
                     Layout.bottomMargin: 16
 
                     Behavior on Layout.preferredHeight { NumberAnimation { duration: 160 } }
 
+                    // Text on top, the four buttons on their own line below: they never squeeze the text
                     Column {
+                        id: appUpdateText
                         anchors.left: parent.left
-                        anchors.right: updateActionsRow.left
-                        anchors.rightMargin: 12
-                        anchors.verticalCenter: (root.isDownloadingUpdate || root.updateProgress > 0.0) ? undefined : parent.verticalCenter
-                        anchors.top: (root.isDownloadingUpdate || root.updateProgress > 0.0) ? parent.top : undefined
+                        anchors.right: parent.right
+                        anchors.top: parent.top
                         spacing: 4
 
                         Row {
@@ -3133,9 +3133,9 @@ Rectangle {
                     // Action Buttons (Update Now / Check for Updates / View GitHub)
                     Row {
                         id: updateActionsRow
-                        anchors.right: parent.right
-                        anchors.verticalCenter: (root.isDownloadingUpdate || root.updateProgress > 0.0) ? undefined : parent.verticalCenter
-                        anchors.top: (root.isDownloadingUpdate || root.updateProgress > 0.0) ? parent.top : undefined
+                        anchors.left: parent.left
+                        anchors.top: appUpdateText.bottom
+                        anchors.topMargin: 10
                         spacing: 8
 
                         // 1. Direct Update / Restart Button
