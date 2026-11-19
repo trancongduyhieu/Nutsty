@@ -91,7 +91,8 @@ var PROP_D = {
     disco: 0.8, eq: 0.6, laser: 0.6,
     calm_leaf: 0.8, droplet: 0.6, moonrise: 0.7,
     classic_vinyl: 0.8, vinyl: 0.8, classic_smoke: 0.7, smoke: 0.7, horn: 0.7,
-    flash: 0.6, focus: 0.7, sakura: 0.8
+    flash: 0.6, focus: 0.7, sakura: 0.8,
+    sunrise: 0.8, flock: 0.8, folk_sprout: 0.7, sprout: 0.7
 };
 // a prop lands no sooner than this after its line starts coming in, so the line is whole by then
 var PROP_SETTLE = 0.6;
@@ -134,7 +135,11 @@ var SETS = {
         rush: ["star4", "speed", "sweat", "anger"],
         peaks: ["flash", "focus", "sakura"].concat(SHARED_PEAKS)
     },
-    folk: { doodles: DOODLES, rush: RUSH_KINDS, peaks: SHARED_PEAKS }
+    folk: {
+        doodles: ["sun", "sprout", "bird", "hill", "star"],
+        rush: ["sun", "sprout", "bird", "hill"],
+        peaks: ["sunrise", "flock", "folk_sprout"].concat(SHARED_PEAKS)
+    }
 };
 // How the words of a line sit: level, a zigzag (one up, one down), stairs climbing, or an arc
 var STAGGER_ORDER = ["zig", "stairs", "arc", "zig"];
@@ -1888,6 +1893,179 @@ function markShape(kind, sd, w, h) {
         S.push([{ x: w * 0.84, y: h * 0.84 }, { x: w * 0.94, y: h * 0.92 }]);
         break;
     }
+    case "sun": {
+        // a warm folk sun with circular center, radiating sunbeams and gentle inner warmth arc
+        var scx = w * 0.50, scy = h * 0.50;
+        var rSun = Math.min(w, h) * 0.26;
+        // Central sun disc
+        S.push(ellipsePts(scx, scy, rSun, rSun, 0, 2 * Math.PI, 22));
+
+        // Radiating sunbeams
+        var numRays = 8;
+        var aRay0 = M.r(sd, 1, 951) * 0.5;
+        for (i = 0; i < numRays; i++) {
+            var aRay = aRay0 + i * (2 * Math.PI / numRays);
+            var isLong = (i % 2 === 0);
+            var rIn = rSun * 1.22;
+            var rOut = rSun * (isLong ? 1.75 : 1.48);
+            var rx0 = scx + rIn * Math.cos(aRay), ry0 = scy + rIn * Math.sin(aRay);
+            var rx1 = scx + rOut * Math.cos(aRay), ry1 = scy + rOut * Math.sin(aRay);
+            S.push([{ x: rx0, y: ry0 }, { x: rx1, y: ry1 }]);
+        }
+
+        // Inner warmth spiral / crescent arc
+        S.push(ellipsePts(scx, scy, rSun * 0.55, rSun * 0.55, -Math.PI * 0.2, Math.PI * 1.1, 14));
+        break;
+    }
+    case "sprout": {
+        // an organic young botanical sprout: soil ground line, curved stem, and two opening leaves
+        var groundY = h * 0.86;
+        var stemBaseX = w * 0.50;
+        var stemTipX = w * 0.50 + w * 0.04 * M.rs(sd, 1, 955);
+        var stemTipY = h * 0.38;
+
+        // Ground base line with slight soil mound
+        S.push([
+            { x: w * 0.18, y: groundY },
+            { x: w * 0.40, y: groundY - h * 0.04 },
+            { x: w * 0.60, y: groundY - h * 0.04 },
+            { x: w * 0.82, y: groundY }
+        ]);
+
+        // Tender curved stem
+        var Stem = [];
+        for (i = 0; i <= 14; i++) {
+            u = i / 14;
+            var stx = stemBaseX + (stemTipX - stemBaseX) * u - w * 0.08 * Math.sin(u * Math.PI);
+            var sty = groundY + (stemTipY - groundY) * u;
+            Stem.push({ x: stx, y: sty });
+        }
+        S.push(Stem);
+
+        // Left cotyledon leaf
+        var LeftLeaf = [{ x: stemTipX, y: stemTipY }];
+        for (i = 1; i <= 12; i++) {
+            u = i / 12;
+            var alx = stemTipX - w * 0.32 * Math.sin(u * Math.PI) - w * 0.06 * (1 - u);
+            var aly = stemTipY - h * 0.18 * (1 - Math.cos(u * Math.PI)) + h * 0.04 * u;
+            LeftLeaf.push({ x: alx, y: aly });
+        }
+        LeftLeaf.push({ x: stemTipX, y: stemTipY });
+        S.push(LeftLeaf);
+
+        // Right cotyledon leaf
+        var RightLeaf = [{ x: stemTipX, y: stemTipY }];
+        for (i = 1; i <= 12; i++) {
+            u = i / 12;
+            var arx = stemTipX + w * 0.34 * Math.sin(u * Math.PI) + w * 0.05 * (1 - u);
+            var ary = stemTipY - h * 0.22 * (1 - Math.cos(u * Math.PI)) + h * 0.03 * u;
+            RightLeaf.push({ x: arx, y: ary });
+        }
+        RightLeaf.push({ x: stemTipX, y: stemTipY });
+        S.push(RightLeaf);
+
+        // Center budding tip
+        S.push([
+            { x: stemTipX, y: stemTipY },
+            { x: stemTipX, y: stemTipY - h * 0.10 }
+        ]);
+        break;
+    }
+    case "bird": {
+        // a soaring folk songbird in flight: arched sweeping wings, slender body and forked tail
+        var bHeadX = w * 0.50, bHeadY = h * 0.30;
+        var bBodyX = w * 0.50, bBodyY = h * 0.56;
+        var bTailL = { x: w * 0.44, y: h * 0.84 };
+        var bTailR = { x: w * 0.56, y: h * 0.84 };
+        var bTailMid = { x: w * 0.50, y: h * 0.72 };
+
+        // Left wing sweep
+        var LWing = [{ x: bBodyX, y: bBodyY }];
+        for (i = 1; i <= 14; i++) {
+            u = i / 14;
+            var lwx = bBodyX - w * 0.38 * u;
+            var lwy = bBodyY - h * 0.38 * Math.sin(u * Math.PI * 0.85);
+            LWing.push({ x: lwx, y: lwy });
+        }
+        var lTip = LWing[LWing.length - 1];
+        // Lower contour of left wing back to body
+        for (i = 1; i <= 10; i++) {
+            u = i / 10;
+            var llwx = lTip.x + (bBodyX - lTip.x) * u + w * 0.05 * Math.sin(u * Math.PI);
+            var llwy = lTip.y + (bBodyY + h * 0.08 - lTip.y) * u + h * 0.06 * Math.sin(u * Math.PI);
+            LWing.push({ x: llwx, y: llwy });
+        }
+        S.push(LWing);
+
+        // Right wing sweep
+        var RWing = [{ x: bBodyX, y: bBodyY }];
+        for (i = 1; i <= 14; i++) {
+            u = i / 14;
+            var rwx = bBodyX + w * 0.38 * u;
+            var rwy = bBodyY - h * 0.38 * Math.sin(u * Math.PI * 0.85);
+            RWing.push({ x: rwx, y: rwy });
+        }
+        var rTip = RWing[RWing.length - 1];
+        // Lower contour of right wing back to body
+        for (i = 1; i <= 10; i++) {
+            u = i / 10;
+            var rlwx = rTip.x + (bBodyX - rTip.x) * u - w * 0.05 * Math.sin(u * Math.PI);
+            var rlwy = rTip.y + (bBodyY + h * 0.08 - rTip.y) * u + h * 0.06 * Math.sin(u * Math.PI);
+            RWing.push({ x: rlwx, y: rlwy });
+        }
+        S.push(RWing);
+
+        // Bird head, torso and swallow tail contour
+        S.push([
+            { x: bHeadX, y: bHeadY - h * 0.06 }, // Beak tip
+            { x: bHeadX - w * 0.06, y: bHeadY + h * 0.04 },
+            { x: bBodyX - w * 0.05, y: bBodyY + h * 0.10 },
+            bTailL,
+            bTailMid,
+            bTailR,
+            { x: bBodyX + w * 0.05, y: bBodyY + h * 0.10 },
+            { x: bHeadX + w * 0.06, y: bHeadY + h * 0.04 },
+            { x: bHeadX, y: bHeadY - h * 0.06 }
+        ]);
+        break;
+    }
+    case "hill": {
+        // rolling country/folk hills: overlapping curved horizon slopes and rustic fence accents
+        var ForeHill = [];
+        for (i = 0; i <= 24; i++) {
+            u = i / 24;
+            var hx = w * (0.04 + 0.92 * u);
+            var hy = h * (0.84 - 0.36 * Math.sin(u * Math.PI * 0.92) + 0.06 * Math.sin(u * Math.PI * 2.2));
+            ForeHill.push({ x: hx, y: hy });
+        }
+        S.push(ForeHill);
+
+        var BackHill = [];
+        for (i = 0; i <= 20; i++) {
+            u = i / 20;
+            var bx = w * (0.22 + 0.74 * u);
+            var by = h * (0.64 - 0.28 * Math.sin(u * Math.PI * 0.95));
+            BackHill.push({ x: bx, y: by });
+        }
+        S.push(BackHill);
+
+        // Rustic countryside post fence
+        var post1X = w * 0.26, post1Y = h * 0.60;
+        var post2X = w * 0.36, post2Y = h * 0.54;
+        S.push([
+            { x: post1X, y: post1Y },
+            { x: post1X, y: post1Y + h * 0.16 }
+        ]);
+        S.push([
+            { x: post2X, y: post2Y },
+            { x: post2X, y: post2Y + h * 0.16 }
+        ]);
+        S.push([
+            { x: post1X - w * 0.03, y: post1Y + h * 0.06 },
+            { x: post2X + w * 0.03, y: post2Y + h * 0.06 }
+        ]);
+        break;
+    }
     case "wrap":
     case "ring": {
         var th0 = -2.2 + 0.6 * M.rs(sd, 1, 803);
@@ -2412,6 +2590,28 @@ function peakState(L, t) {
                 st.heroS = 1 + 0.03 * Math.cos(tp * 4) * Math.exp(-tp * 1.0);
             }
             break;
+        case "sunrise":
+            if (tp >= 0) {
+                st.heroS = 1 + 0.07 * Math.exp(-6 * tp) * Math.sin(16 * tp);
+                st.heroDy = -0.06 * Math.exp(-5 * tp) * Math.cos(14 * tp);
+                st.heroRot = 0.8 * Math.exp(-6 * tp) * Math.sin(12 * tp);
+            }
+            break;
+        case "flock":
+            if (tp >= 0) {
+                st.heroDy = -0.05 * Math.sin(tp * 8) * Math.exp(-tp * 0.8);
+                st.heroRot = -1.0 * Math.sin(tp * 6) * Math.exp(-tp * 0.8);
+                st.heroS = 1 + 0.04 * Math.cos(tp * 7) * Math.exp(-tp * 0.9);
+            }
+            break;
+        case "folk_sprout":
+        case "sprout":
+            if (tp >= 0) {
+                st.heroS = 1 + 0.09 * Math.exp(-7 * tp) * Math.cos(18 * tp);
+                st.heroDy = 0.05 * Math.exp(-7 * tp) * Math.sin(16 * tp);
+                st.heroRot = 1.0 * Math.exp(-6 * tp) * Math.sin(14 * tp);
+            }
+            break;
         }
     }
     return st;
@@ -2685,6 +2885,73 @@ function propShape(kind) {
                 { x: 0, y: 0.45 }
             ],
             [{ x: 0, y: 0.35 }, { x: 0, y: -0.12 }]
+        ];
+    case "sunrise":
+        return [
+            // Semicircular sun disc above baseline
+            ellipsePts(0, 0, 0.44, 0.44, Math.PI, 2 * Math.PI, 22),
+            ellipsePts(0, 0, 0.26, 0.26, Math.PI, 2 * Math.PI, 16),
+            // Horizon baseline
+            [{ x: -0.58, y: 0 }, { x: 0.58, y: 0 }],
+            // Radial sunbeam spikes
+            [{ x: -0.42 * 1.3, y: -0.15 * 1.3 }, { x: -0.42 * 1.65, y: -0.15 * 1.65 }],
+            [{ x: -0.32 * 1.3, y: -0.32 * 1.3 }, { x: -0.32 * 1.65, y: -0.32 * 1.65 }],
+            [{ x: 0, y: -0.44 * 1.3 }, { x: 0, y: -0.44 * 1.65 }],
+            [{ x: 0.32 * 1.3, y: -0.32 * 1.3 }, { x: 0.32 * 1.65, y: -0.32 * 1.65 }],
+            [{ x: 0.42 * 1.3, y: -0.15 * 1.3 }, { x: 0.42 * 1.65, y: -0.15 * 1.65 }]
+        ];
+    case "flock":
+        return [
+            // Outstretched folk bird in flight
+            [
+                { x: -0.48, y: -0.20 },
+                { x: -0.22, y: -0.04 },
+                { x: 0, y: 0 },
+                { x: 0.22, y: -0.04 },
+                { x: 0.48, y: -0.20 }
+            ],
+            // Lower wing and body
+            [
+                { x: -0.48, y: -0.20 },
+                { x: -0.20, y: 0.08 },
+                { x: 0, y: 0.22 },
+                { x: 0.20, y: 0.08 },
+                { x: 0.48, y: -0.20 }
+            ],
+            // Head and swallow tail
+            [
+                { x: 0, y: -0.14 },
+                { x: 0, y: 0.28 },
+                { x: -0.08, y: 0.40 }
+            ],
+            [
+                { x: 0, y: 0.28 },
+                { x: 0.08, y: 0.40 }
+            ]
+        ];
+    case "folk_sprout":
+    case "sprout":
+        return [
+            // Central stem
+            [{ x: 0, y: 0.50 }, { x: 0, y: 0 }],
+            // Left cotyledon leaf
+            [
+                { x: 0, y: 0 },
+                { x: -0.22, y: -0.12 },
+                { x: -0.38, y: -0.22 },
+                { x: -0.32, y: -0.04 },
+                { x: 0, y: 0 }
+            ],
+            // Right cotyledon leaf
+            [
+                { x: 0, y: 0 },
+                { x: 0.22, y: -0.12 },
+                { x: 0.38, y: -0.22 },
+                { x: 0.32, y: -0.04 },
+                { x: 0, y: 0 }
+            ],
+            // Seedling base
+            [{ x: -0.12, y: 0.48 }, { x: 0.12, y: 0.48 }]
         ];
     }
     return [];
@@ -4089,6 +4356,231 @@ function peakPieces(L, t, W, px, bl) {
             }
             put(3, Pollen, 1, true, 0.82 * fade(tp - sung - 0.2, 0.3), 0.028, 4);
         }
+        break;
+    }
+    case "sunrise": {
+        // the sun rises behind the word, rays open
+        var sunriseFade = fade(tp - sung - 0.45, 0.35);
+        var cxSun = W * 0.5;
+
+        // Position: rising from below baseline to crest behind the hero word
+        var sunStartY = bl + 0.60 * px;
+        var sunLandY = bl - 0.32 * px;
+
+        var curSunY, curSunS;
+        if (tp < 0) {
+            var uSun = M.clamp(tau / PROP_D.sunrise);
+            curSunY = sunStartY + (sunLandY - sunStartY) * M.E.outCubic(uSun);
+            curSunS = px * (0.45 + 0.40 * M.E.outCubic(uSun));
+        } else {
+            curSunY = sunLandY + 0.02 * px * Math.sin(tp * 2.5);
+            curSunS = px * (0.85 + 0.04 * Math.sin(tp * 3));
+        }
+
+        // Piece 0: Sun disc cresting behind the hero word (z: 1)
+        var SunShape = place(propShape("sunrise"), cxSun, curSunY, 0, curSunS);
+        put(0, SunShape, 1, false, 0.95 * sunriseFade, 0.035, 1);
+
+        // Piece 1: Fan of radiating sunbeams spreading open on cue (z: 1, accent ink)
+        if (tp >= 0) {
+            var rIn = curSunS * 0.55;
+            var rOut = curSunS * (1.10 + 0.30 * M.E.outCubic(M.clamp(tp / 0.25)));
+            var Rays = [];
+            for (var ri = 0; ri < 7; ri++) {
+                var ra = Math.PI + (ri / 6) * Math.PI;
+                var rx0 = cxSun + rIn * Math.cos(ra), ry0 = curSunY + rIn * Math.sin(ra);
+                var rx1 = cxSun + rOut * Math.cos(ra), ry1 = curSunY + rOut * Math.sin(ra);
+                Rays.push([{ x: rx0, y: ry0 }, { x: rx1, y: ry1 }]);
+            }
+            put(1, Rays, 1, true, 0.90 * fade(tp - sung - 0.2, 0.3), 0.035, 1);
+        }
+
+        // Piece 2: Horizon line and dawn landscape contour behind word (z: 1)
+        var horizY = bl + 0.08 * px;
+        var Horizon = [
+            [{ x: cxSun - W * 0.55, y: horizY }, { x: cxSun + W * 0.55, y: horizY }],
+            bezier(
+                { x: cxSun - W * 0.55, y: horizY },
+                { x: cxSun - 0.2 * W, y: horizY - 0.08 * px },
+                { x: cxSun + 0.2 * W, y: horizY - 0.08 * px },
+                { x: cxSun + W * 0.55, y: horizY },
+                16
+            )
+        ];
+        put(2, Horizon, 1, false, 0.88 * sunriseFade, 0.032, 1);
+
+        // Piece 3: Morning solar flare sparkles / dawn glints over the hero word on cue (z: 3, accent ink)
+        if (tp >= 0) {
+            var DawnGlints = [];
+            var gOff = [
+                { dx: -0.32 * W, dy: -0.42 * px, phase: 0.03 },
+                { dx: 0.30 * W, dy: -0.38 * px, phase: 0.07 },
+                { dx: 0.0, dy: -0.65 * px, phase: 0.01 }
+            ];
+            for (var gi = 0; gi < gOff.length; gi++) {
+                var go = gOff[gi];
+                var gtp = tp - go.phase;
+                if (gtp > 0) {
+                    var gr = 0.08 * px * (1 - fade(gtp, 0.35));
+                    var gx = cxSun + go.dx, gy = curSunY + go.dy;
+                    DawnGlints.push([
+                        { x: gx - gr, y: gy }, { x: gx + gr, y: gy }
+                    ]);
+                    DawnGlints.push([
+                        { x: gx, y: gy - gr }, { x: gx, y: gy + gr }
+                    ]);
+                }
+            }
+            if (DawnGlints.length) put(3, DawnGlints, 1, true, 0.85 * fade(tp - sung - 0.2, 0.3), 0.028, 3);
+        }
+        break;
+    }
+    case "flock": {
+        // a few birds fly over the word
+        var flockFade = fade(tp - sung - 0.45, 0.35);
+        var cxFlock = W * 0.5;
+        var cyFlock = bl - 0.82 * px;
+
+        var leadX, leadY, leadRot;
+        if (tp < 0) {
+            var uFlock = M.clamp(tau / PROP_D.flock);
+            leadX = (cxFlock - 1.2 * px) + 1.2 * px * M.E.outQuad(uFlock);
+            leadY = (cyFlock + 0.35 * px) - 0.35 * px * M.E.outQuad(uFlock) + 0.04 * px * Math.sin(uFlock * Math.PI * 6);
+            var flap0 = Math.sin(uFlock * Math.PI * 10);
+            leadRot = -10 + 6 * flap0;
+        } else {
+            leadX = cxFlock + tp * 0.75 * px;
+            leadY = cyFlock - tp * 0.15 * px + 0.04 * px * Math.sin(tp * 14);
+            var flap1 = Math.sin(tp * 14);
+            leadRot = -8 + 6 * flap1;
+        }
+
+        // Piece 0: Lead folk bird in flight over the hero word (z: 3)
+        var LeadBird = place(propShape("flock"), leadX, leadY, leadRot, px * 0.65);
+        put(0, LeadBird, 1, false, 0.95 * flockFade, 0.035, 3);
+
+        // Piece 1: V-formation companion birds (z: 2)
+        var Companions = [];
+        var cLeft = place(propShape("flock"), leadX - 0.38 * px, leadY + 0.22 * px, leadRot + 4, px * 0.52);
+        var cRight = place(propShape("flock"), leadX - 0.42 * px, leadY - 0.18 * px, leadRot - 4, px * 0.48);
+        Companions = Companions.concat(cLeft).concat(cRight);
+        put(1, Companions, 1, false, 0.90 * flockFade, 0.032, 2);
+
+        // Piece 2: Trailing distance birds (z: 1)
+        var DistBirds = [];
+        var d1 = place(propShape("flock"), leadX - 0.75 * px, leadY + 0.10 * px, leadRot + 2, px * 0.38);
+        var d2 = place(propShape("flock"), leadX - 0.85 * px, leadY - 0.25 * px, leadRot - 3, px * 0.34);
+        DistBirds = DistBirds.concat(d1).concat(d2);
+        put(2, DistBirds, 1, false, 0.82 * flockFade, 0.026, 1);
+
+        // Piece 3: Flight wind currents and slipstream trails (z: 2, accent ink)
+        var Slipstream = [
+            bezier(
+                { x: leadX - 0.5 * px, y: leadY + 0.04 * px },
+                { x: leadX - 0.8 * px, y: leadY + 0.06 * px },
+                { x: leadX - 1.1 * px, y: leadY + 0.02 * px },
+                { x: leadX - 1.4 * px, y: leadY + 0.05 * px },
+                12
+            ),
+            bezier(
+                { x: leadX - 0.6 * px, y: leadY - 0.08 * px },
+                { x: leadX - 0.9 * px, y: leadY - 0.06 * px },
+                { x: leadX - 1.2 * px, y: leadY - 0.10 * px },
+                { x: leadX - 1.5 * px, y: leadY - 0.07 * px },
+                12
+            )
+        ];
+        put(3, Slipstream, 1, true, 0.80 * flockFade, 0.026, 2);
+        break;
+    }
+    case "folk_sprout":
+    case "sprout": {
+        // a shoot grows out of the word top and opens two leaves
+        var sproutFade = fade(tp - sung - 0.45, 0.35);
+        var cxSprout = W * 0.5;
+        var topY = bl - 0.82 * px;
+
+        var curStemH, tipY, leavesOpen;
+        if (tp < 0) {
+            var uSprout = M.clamp(tau / PROP_D.folk_sprout);
+            curStemH = (0.55 * px) * M.E.outCubic(uSprout);
+            tipY = topY - curStemH;
+            leavesOpen = 0;
+        } else {
+            curStemH = 0.55 * px;
+            tipY = topY - curStemH;
+            leavesOpen = M.E.outBack(M.clamp(tp / 0.22), 2.2);
+        }
+
+        // Piece 0: Shoot stem growing upward from hero word top (z: 2)
+        var ShootStem = [
+            [
+                { x: cxSprout, y: topY },
+                { x: cxSprout - 0.03 * px, y: topY - curStemH * 0.5 },
+                { x: cxSprout + 0.02 * px, y: tipY }
+            ]
+        ];
+        put(0, ShootStem, 1, false, 0.95 * sproutFade, 0.036, 2);
+
+        // Piece 1: Two opening cotyledon leaves unfurling on cue (z: 3, accent ink)
+        if (tp >= 0 && leavesOpen > 0.01) {
+            var lSize = px * 0.42 * Math.min(1.0, leavesOpen);
+            var lRot = 35 * leavesOpen;
+            var Leaves = [];
+            // Left leaf
+            var LeftLeaf = [
+                { x: cxSprout, y: tipY },
+                { x: cxSprout - lSize * 0.65, y: tipY - lSize * 0.25 },
+                { x: cxSprout - lSize * 1.15, y: tipY - lSize * 0.65 * (lRot / 35) },
+                { x: cxSprout - lSize * 0.85, y: tipY + lSize * 0.10 },
+                { x: cxSprout, y: tipY }
+            ];
+            // Right leaf
+            var RightLeaf = [
+                { x: cxSprout, y: tipY },
+                { x: cxSprout + lSize * 0.65, y: tipY - lSize * 0.25 },
+                { x: cxSprout + lSize * 1.15, y: tipY - lSize * 0.65 * (lRot / 35) },
+                { x: cxSprout + lSize * 0.85, y: tipY + lSize * 0.10 },
+                { x: cxSprout, y: tipY }
+            ];
+            // Central bud tip
+            var Bud = [
+                { x: cxSprout, y: tipY },
+                { x: cxSprout, y: tipY - 0.12 * px * Math.min(1.0, leavesOpen) }
+            ];
+            Leaves.push(LeftLeaf);
+            Leaves.push(RightLeaf);
+            Leaves.push(Bud);
+            put(1, Leaves, 1, true, 0.95 * sproutFade, 0.035, 3);
+        }
+
+        // Piece 2: Dewdrop sparkles and morning pollen on cue (z: 4, accent ink)
+        if (tp >= 0) {
+            var Dewdrops = [];
+            var dOff = [
+                { dx: -0.42 * px, dy: -0.22 * px, phase: 0.04 },
+                { dx: 0.42 * px, dy: -0.22 * px, phase: 0.06 },
+                { dx: 0.0, dy: -0.15 * px, phase: 0.02 }
+            ];
+            for (var di = 0; di < dOff.length; di++) {
+                var dof = dOff[di];
+                var dtp = tp - dof.phase;
+                if (dtp > 0) {
+                    var dr = 0.04 * px * (1 - fade(dtp, 0.35));
+                    var dx = cxSprout + dof.dx, dy = tipY + dof.dy;
+                    Dewdrops.push(ellipsePts(dx, dy, dr, dr, 0, 2 * Math.PI, 10));
+                    Dewdrops.push([{ x: dx - dr * 1.5, y: dy }, { x: dx + dr * 1.5, y: dy }]);
+                }
+            }
+            if (Dewdrops.length) put(2, Dewdrops, 1, true, 0.88 * fade(tp - sung - 0.2, 0.3), 0.028, 4);
+        }
+
+        // Piece 3: Seedling base anchor mound on hero word top (z: 2)
+        var BaseAnchor = [
+            [{ x: cxSprout - 0.18 * px, y: topY }, { x: cxSprout + 0.18 * px, y: topY }],
+            [{ x: cxSprout - 0.12 * px, y: topY - 0.04 * px }, { x: cxSprout, y: topY }, { x: cxSprout + 0.12 * px, y: topY - 0.04 * px }]
+        ];
+        put(3, BaseAnchor, 1, false, 0.88 * sproutFade, 0.032, 2);
         break;
     }
     }
