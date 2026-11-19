@@ -58,10 +58,7 @@ if "%NEED_INSTALL%"=="1" (
 )
 
 :run_app
-:: Ensure ultra-lightweight Rust tray indicator on Windows
-if exist "bin\nutsty-daemon.exe" (
-    start "" /b "bin\nutsty-daemon.exe"
-)
+:: Port 17890 is served by auth_server inside launcher_win.py (see start_daemons)
 if exist "bin\\nutsty-tray.exe" (
     start "" /b "bin\\nutsty-tray.exe"
 )

@@ -30,6 +30,40 @@ Scope {
         readonly property bool liteMode: liteModePreference === "on" || (liteModePreference === "auto" && softwareRendering)
         readonly property bool isWindowEffectivelyActive: win.visible && (typeof win.minimized !== "undefined" ? !win.minimized : true) && win.isWindowActive
 
+        // Settings > "When you close the window": "widget" shows the 216x216 desktop widget,
+        // "background" shows nothing but the taskbar and tray icons while the music plays on
+        property string closeBehavior: "widget"
+        // The widget's own X hid it for this background stretch; reset when the window comes back
+        property bool widgetDismissed: false
+        // Closed or minimized. On Windows close only minimizes (keeps the taskbar button, issue #4)
+        readonly property bool inBackground: !win.visible || (typeof win.minimized !== "undefined" && win.minimized)
+        readonly property bool closeKeepsTaskbarButton: Qt.platform.os === "windows" && typeof win.showMinimized === "function"
+
+        function sendToBackground() {
+            if (win.closeKeepsTaskbarButton) win.showMinimized();
+            else win.visible = false;
+        }
+
+        function quitNutsty() {
+            win.sendOfflineSignal();
+            if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && typeof __NutstyBridge.quitApp === "function") {
+                __NutstyBridge.quitApp();
+            } else {
+                Qt.quit();
+            }
+        }
+
+        function syncDesktopMusicWidget() {
+            if (typeof desktopMusicWidget === "undefined" || !desktopMusicWidget) return;
+            var show = win.inBackground && win.closeBehavior === "widget" && !win.widgetDismissed;
+            if (desktopMusicWidget.visible === show) return;
+            desktopMusicWidget.visible = show;
+            if (show && typeof desktopMusicWidget.show === "function") desktopMusicWidget.show();
+            if (!show && typeof desktopMusicWidget.hide === "function") desktopMusicWidget.hide();
+        }
+        onCloseBehaviorChanged: win.syncDesktopMusicWidget()
+        onWidgetDismissedChanged: win.syncDesktopMusicWidget()
+
         Connections {
             target: Qt.application
             function onStateChanged() {
@@ -60,7 +94,7 @@ Scope {
         }
 
         onClosed: {
-            win.visible = false;
+            win.sendToBackground();
         }
 
         Timer {
@@ -87,16 +121,14 @@ Scope {
             }
         }
 
-        onVisibleChanged: {
-            if (win.visible) {
+        onInBackgroundChanged: {
+            if (!win.inBackground) {
                 unfocusedPurgeTimer.stop();
                 win.triggerUserActiveBoost();
                 // the friends feed polled slowly while hidden: show it fresh instead of up to 20 s old
                 win.fetchFriendsNotesFast();
-                if (typeof desktopMusicWidget !== "undefined" && desktopMusicWidget) {
-                    desktopMusicWidget.visible = false;
-                    if (typeof desktopMusicWidget.hide === "function") desktopMusicWidget.hide();
-                }
+                win.widgetDismissed = false;
+                win.syncDesktopMusicWidget();
                 if (!statusProcess.running) {
                     statusProcess.command = [win.appDir + "/bin/nutsty-bridge", "status"];
                     statusProcess.running = true;
@@ -104,10 +136,7 @@ Scope {
                 Qt.callLater(function() { if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) ytNowPlayingView.updateActiveLyric(true); });
             } else {
                 unfocusedPurgeTimer.restart();
-                if (typeof desktopMusicWidget !== "undefined" && desktopMusicWidget) {
-                    desktopMusicWidget.visible = true;
-                    if (typeof desktopMusicWidget.show === "function") desktopMusicWidget.show();
-                }
+                win.syncDesktopMusicWidget();
                 var purgeXhr = new XMLHttpRequest();
                 purgeXhr.open("GET", (win.localApiUrl || "http://127.0.0.1:17890") + "/api/system/purge_ram", true);
                 try { purgeXhr.send(); } catch(e) {}
@@ -163,6 +192,8 @@ Scope {
     }
     property bool syncHistoryToGoogle: true
     property bool desktopLyricsEnabled: true
+    // Desktop lyrics on screen (not covered by other apps), so worth a 25 FPS clock
+    readonly property bool desktopLyricsLive: desktopLyricsEnabled && !desktopLyrics.occluded
     property bool taskbarLyricsEnabled: Qt.platform.os === "windows"
     property string taskbarLyricsPlacement: "above" // "above" | "taskbar"
     property string taskbarLyricsAlign: "center"      // "center" | "left" | "right"
@@ -1010,6 +1041,9 @@ Scope {
                         win.fetchCurrentUserProfile();
                         win.fetchFriendsDataFast();
                         win.fetchFriendsNotesFast();
+                    } else {
+                        // signed out: no Nutsty name is coming, the card can use the fallback
+                        win.markIdentitySettled();
                     }
                 } catch(e) {}
             }
@@ -1298,9 +1332,29 @@ Scope {
         running: true
         onTriggered: win.decideWelcome()
     }
-    function decideWelcome() {
+    // True once the Nutsty profile answered (or the user is known to be signed out). Until then
+    // getCurrentUserName() is a placeholder (Google name or "Guest"), so a welcome card opened
+    // earlier would show that name and then swap to the real one in front of the user.
+    property bool identitySettled: false
+    function markIdentitySettled() {
+        if (win.identitySettled) return;
+        win.identitySettled = true;
+        if (welcomeIdentityTimer.running) Qt.callLater(win.decideWelcome);
+    }
+    // Cap on that wait, so a slow or offline relay never keeps the home hidden for long
+    Timer {
+        id: welcomeIdentityTimer
+        interval: 4000
+        onTriggered: win.decideWelcome(true)
+    }
+    function decideWelcome(force) {
         if (win.welcomeDecided) return;
+        if (win.listenerCardStampedAt <= 0 && !win.identitySettled && force !== true) {
+            if (!welcomeIdentityTimer.running) welcomeIdentityTimer.start();
+            return;
+        }
         welcomeDecisionTimer.stop();
+        welcomeIdentityTimer.stop();
         win.welcomeDecided = true;
         // with a card to hand out, the home stays hidden under it until the card leaves
         if (win.listenerCardStampedAt > 0) {
@@ -1474,6 +1528,9 @@ Scope {
                                 }
                             } else if (res.action === "open_spotify_import") {
                                 win.visible = true;
+                                if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && typeof __NutstyBridge.restoreWindow === "function") {
+                                    __NutstyBridge.restoreWindow(win);
+                                }
                                 spotifyImportModal.openModal();
                             }
                         }
@@ -2002,7 +2059,7 @@ Scope {
     Timer {
         id: smoothProgressTimer
         // Lite mode: every tick repaints the whole window, so 4 FPS there too
-        interval: ((win.isWindowEffectivelyActive || win.desktopLyricsEnabled) && !win.liteMode) ? 40 : 250
+        interval: ((win.isWindowEffectivelyActive || win.desktopLyricsLive) && !win.liteMode) ? 40 : 250
         repeat: true
         running: (win.visible || win.desktopLyricsEnabled) && win.isPlaying
                  && ((!win.isLoadingAudio && win.lastSyncTimestamp > 0) || (win.isLoadingAudio && win.mixActive !== null))
@@ -2516,11 +2573,11 @@ Scope {
                         win.sendOfflineSignal();
                         Qt.quit();
                     } else {
-                        win.visible = false;
+                        win.sendToBackground();
                     }
                 }
                 onMinimizeWindowRequested: {
-                    win.visible = false;
+                    win.sendToBackground();
                 }
                 onMaximizeWindowRequested: {
                     if (win.visibility === 4) {
@@ -3536,6 +3593,7 @@ Scope {
             scrollEdgeFadeEnabled: Theme.scrollEdgeFadeEnabled
             liteMode: win.liteModePreference
             liteModeAutoActive: win.softwareRendering
+            closeBehavior: win.closeBehavior
             autoMixEnabled: win.autoMixEnabled
             cacheLimitMb: win.cacheLimitMb
             cacheUsage: win.cacheUsage
@@ -3606,6 +3664,10 @@ Scope {
             }
             onSelectLiteModeRequested: mode => {
                 win.liteModePreference = mode;
+                win.saveSettings();
+            }
+            onSelectCloseBehaviorRequested: mode => {
+                win.closeBehavior = mode;
                 win.saveSettings();
             }
             onSelectCrossfadeSecondsRequested: secs => {
@@ -4307,6 +4369,7 @@ Scope {
             if (obj.crossfadeEnabled !== undefined) win.crossfadeEnabled = !!obj.crossfadeEnabled;
             if (obj.scrollEdgeFadeEnabled !== undefined) Theme.scrollEdgeFadeEnabled = !!obj.scrollEdgeFadeEnabled;
             if (["auto", "on", "off"].indexOf(obj.liteMode) >= 0) win.liteModePreference = obj.liteMode;
+            if (["widget", "background"].indexOf(obj.closeBehavior) >= 0) win.closeBehavior = obj.closeBehavior;
             if (obj.cacheLimitMb !== undefined) win.cacheLimitMb = [1024, 1536, 2048].indexOf(parseInt(obj.cacheLimitMb)) >= 0 ? parseInt(obj.cacheLimitMb) : 1536;
             if (obj.crossfadeSeconds !== undefined) win.crossfadeSeconds = Math.max(2, Math.min(12, parseInt(obj.crossfadeSeconds) || 6));
             if (obj.autoMixEnabled !== undefined) win.autoMixEnabled = !!obj.autoMixEnabled;
@@ -4364,6 +4427,7 @@ Scope {
             crossfadeSeconds: win.crossfadeSeconds,
             scrollEdgeFadeEnabled: Theme.scrollEdgeFadeEnabled,
             liteMode: win.liteModePreference,
+            closeBehavior: win.closeBehavior,
             cacheLimitMb: win.cacheLimitMb,
             autoMixEnabled: win.autoMixEnabled,
             liquidGlassPreset: win.liquidGlassPreset,
@@ -5544,7 +5608,7 @@ Scope {
             Qt.callLater(function() { if (ytNowPlayingView) ytNowPlayingView.updateActiveLyric(true); });
         }
         function closeWindow() {
-            win.visible = false;
+            win.sendToBackground();
         }
         function toggle() {
             win.visible = !win.visible;
@@ -5988,11 +6052,10 @@ Scope {
             if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.restoreWindow) {
                 __NutstyBridge.restoreWindow(win);
             }
-            if (typeof desktopMusicWidget !== "undefined" && desktopMusicWidget) {
-                desktopMusicWidget.visible = false;
-                if (typeof desktopMusicWidget.hide === "function") desktopMusicWidget.hide();
-            }
+            win.syncDesktopMusicWidget();
         }
+        onHideWidgetRequested: win.widgetDismissed = true
+        onQuitRequested: win.quitNutsty()
         onSavePositionRequested: (newX, newY) => {
             win.widgetX = newX;
             win.widgetY = newY;

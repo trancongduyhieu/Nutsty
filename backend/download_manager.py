@@ -752,7 +752,7 @@ class DownloadManager:
                 try:
                     subprocess.run([
                         rust_bin, "add", audio_path, title or "", artist or "", video_id or "", image or ""
-                    ], check=True, timeout=2)
+                    ], check=True, timeout=2, **pc.get_daemon_popen_kwargs())
                     return
                 except Exception as e:
                     print(f"[DownloadManager] rust add_track error: {e}", file=sys.stderr)
@@ -770,7 +770,7 @@ class DownloadManager:
         def do_rescan():
             if os.path.exists(rust_bin) and (sys.platform == "win32" or os.access(rust_bin, os.X_OK)):
                 try:
-                    subprocess.run([rust_bin, "scan"], timeout=5)
+                    subprocess.run([rust_bin, "scan"], timeout=5, **pc.get_daemon_popen_kwargs())
                     return
                 except Exception:
                     pass

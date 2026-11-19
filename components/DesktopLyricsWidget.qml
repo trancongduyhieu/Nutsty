@@ -19,6 +19,12 @@ PanelWindow {
     property int lyricsPreset: 2 // 1: Cinematic Serif, 2: Apple Music 5-Line Fluid Sync, 3: Minimalist Slide-Up Motion Blur, 4: Motion Typography
     property int customX: -1
     property int customY: -1
+    // Windows: the bridge sets this while other apps fully cover the lyrics box, and the
+    // preset views unload so nothing animates for nobody. Wayland compositors already stop
+    // frame callbacks for hidden surfaces, so it stays false there.
+    property bool occluded: false
+    // Keep the box (and its click region) the same size while the views are unloaded.
+    property real lastViewHeight: 300
 
     signal positionChanged(int newX, int newY)
     signal playPauseRequested()
@@ -175,7 +181,8 @@ PanelWindow {
         x: (root.customX >= 0) ? root.customX : root.defaultX
         y: (root.customY >= 0) ? root.customY : root.defaultY
         width: Math.min(root.currentPresetMaxWidth, Math.max(120, root.width - containerBox.x))
-        height: (root.lyricsPreset === 1)
+        onHeightChanged: if (!root.occluded) root.lastViewHeight = height
+        height: root.occluded ? root.lastViewHeight : (root.lyricsPreset === 1)
             ? 120
             : ((root.lyricsPreset === 3)
                 ? (minimalistViewLoader.item && minimalistViewLoader.item.implicitHeight > 0 ? minimalistViewLoader.item.implicitHeight : 140)
@@ -271,7 +278,7 @@ PanelWindow {
         Loader {
             id: gachaViewLoader
             anchors.fill: parent
-            active: root.lyricsPreset === 1
+            active: root.lyricsPreset === 1 && !root.occluded
             visible: containerBox.hasSyncedLyrics
             sourceComponent: GachaAnimeLyricsView {
                 activeLyrics: root.activeLyrics
@@ -294,7 +301,7 @@ PanelWindow {
         Loader {
             id: appleMusicViewLoader
             anchors.fill: parent
-            active: root.lyricsPreset === 2
+            active: root.lyricsPreset === 2 && !root.occluded
             visible: containerBox.hasSyncedLyrics
             sourceComponent: AppleMusicDesktopLyrics {
                 activeLyrics: root.activeLyrics
@@ -317,7 +324,7 @@ PanelWindow {
         Loader {
             id: minimalistViewLoader
             anchors.fill: parent
-            active: root.lyricsPreset === 3
+            active: root.lyricsPreset === 3 && !root.occluded
             sourceComponent: MinimalistLyricsView {
                 activeLyrics: root.activeLyrics
                 currentTime: root.currentTime
@@ -338,7 +345,7 @@ PanelWindow {
         Loader {
             id: animeMVViewLoader
             anchors.fill: parent
-            active: root.lyricsPreset === 4
+            active: root.lyricsPreset === 4 && !root.occluded
             sourceComponent: AnimeMVKineticLyrics {
                 activeLyrics: root.activeLyrics
                 currentTime: root.currentTime

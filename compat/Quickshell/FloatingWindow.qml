@@ -22,6 +22,17 @@ Window {
 
     property bool maximized: root.visibility === Window.Maximized
     property bool fullscreen: root.visibility === Window.FullScreen
+    readonly property bool minimized: root.visibility === Window.Minimized
+
+    // Windows keeps a minimized Qt Quick window exposed, so it goes on re-rendering every
+    // progress/lyric tick (10-20% of a core on the CPU renderer while music plays). Opacity 0
+    // makes the scene graph skip the whole tree; `visible: false` would fire every view's
+    // onVisibleChanged on restore (wiping a half-written note, re-fetching lyrics).
+    Binding {
+        target: root.contentItem
+        property: "opacity"
+        value: root.minimized ? 0.0 : 1.0
+    }
 
     onMaximizedChanged: {
         if (maximized && root.visibility !== Window.Maximized) {
@@ -32,7 +43,10 @@ Window {
     }
 
     signal closed()
+    // Alt+F4 / taskbar "Close window": the shell decides (minimize to the taskbar), so a
+    // plain close never drops the taskbar button while music keeps playing
     onClosing: closeEvent => {
+        closeEvent.accepted = false;
         root.closed();
     }
 

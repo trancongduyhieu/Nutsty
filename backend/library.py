@@ -9,7 +9,9 @@ import json
 import time
 import subprocess
 import glob
-HOME = os.path.expanduser("~")
+# ffprobe/ffmpeg are console programs: keep them from flashing a window on Windows
+_NO_WINDOW = {"creationflags": 0x08000000} if sys.platform == "win32" else {}
+HOME =os.path.expanduser("~")
 SIMP_DIR = os.path.join(HOME, "Music", "SimpMusic", "Tracks")
 LOCAL_DIR = os.path.join(HOME, "Music", "Nutsty", "Tracks") if os.path.exists(os.path.join(HOME, "Music", "Nutsty", "Tracks")) else SIMP_DIR
 DOWNLOADS_DIR = os.path.join(HOME, "Music", "Downloads_Phone")
@@ -21,7 +23,7 @@ def get_duration(file_path):
             "ffprobe", "-v", "error", "-show_entries", "format=duration",
             "-of", "default=noprint_wrappers=1:nokey=1", file_path
         ]
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=2, **_NO_WINDOW)
         val = float(res.stdout.strip())
         m = int(val // 60)
         s = int(val % 60)
@@ -43,7 +45,7 @@ def get_file_metadata(file_path):
             "ffprobe", "-v", "quiet", "-print_format", "json",
             "-show_format", file_path
         ]
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=2, **_NO_WINDOW)
         if res.returncode == 0 and res.stdout:
             data = json.loads(res.stdout).get("format", {})
             dur = float(data.get("duration", 0))
@@ -88,7 +90,7 @@ def extract_embedded_cover(file_path):
 
     try:
         cmd = ["ffmpeg", "-y", "-i", file_path, "-an", "-frames:v", "1", "-update", "1", out_thumb]
-        res = subprocess.run(cmd, capture_output=True, timeout=3)
+        res = subprocess.run(cmd, capture_output=True, timeout=3, **_NO_WINDOW)
         if res.returncode == 0 and os.path.exists(out_thumb) and os.path.getsize(out_thumb) > 1000:
             return out_thumb
     except Exception:

@@ -193,6 +193,9 @@ function fetchCurrentUserProfile(win) {
                 }
             } catch(e) {}
         }
+        // answered or failed: either way the welcome card stops waiting for a name
+        if (xhr.readyState === XMLHttpRequest.DONE && typeof win.markIdentitySettled === "function")
+            win.markIdentitySettled();
     };
     xhr.send();
 }

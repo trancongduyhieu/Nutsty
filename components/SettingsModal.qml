@@ -32,6 +32,7 @@ Rectangle {
     property bool scrollEdgeFadeEnabled: true
     // "auto" | "on" | "off"; liteModeAutoActive says whether Auto currently resolves to on (no GPU)
     property string liteMode: "auto"
+    property string closeBehavior: "widget"
     property bool liteModeAutoActive: false
     property int crossfadeSeconds: 6
     property bool autoMixEnabled: false
@@ -337,6 +338,7 @@ Rectangle {
     signal toggleCrossfadeRequested(bool enabled)
     signal toggleScrollEdgeFadeRequested(bool enabled)
     signal selectLiteModeRequested(string mode)
+    signal selectCloseBehaviorRequested(string mode)
     signal selectCrossfadeSecondsRequested(int seconds)
     signal toggleAutoMixRequested(bool enabled)
     signal refreshCacheUsageRequested()
@@ -2597,6 +2599,114 @@ Rectangle {
                                             if (root.liteMode === parent.modelData) return;
                                             root.liteMode = parent.modelData;
                                             root.selectLiteModeRequested(parent.modelData);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // =============================================================
+                // When the window closes: mini player on the desktop, or music only
+                // =============================================================
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 46
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: closeBehaviorChips.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Khi đóng cửa sổ", "When you close the window")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            width: parent.width
+                            text: root.closeBehavior === "background"
+                                  ? I18n.tr("Không hiện gì, nhạc vẫn phát. Bấm icon Nutsty để mở lại", "Nothing stays on screen and the music keeps playing. Click the Nutsty icon to open it again")
+                                  : I18n.tr("Hiện trình phát nhỏ trên màn hình nền, nhạc vẫn phát", "A small player stays on the desktop and the music keeps playing")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    // Segmented selector, same look as the Lite mode picker above
+                    Rectangle {
+                        id: closeBehaviorChips
+                        readonly property var choices: ["widget", "background"]
+                        readonly property real segW: 108
+                        readonly property int selIndex: Math.max(0, choices.indexOf(root.closeBehavior))
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: segW * choices.length + 6
+                        height: 32
+                        radius: 16
+                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
+
+                        Rectangle {
+                            x: 3 + closeBehaviorChips.selIndex * closeBehaviorChips.segW
+                            y: 3
+                            width: closeBehaviorChips.segW
+                            height: parent.height - 6
+                            radius: height / 2
+                            color: root.accentColor
+                            Behavior on x { NumberAnimation { duration: 340; easing.type: Easing.OutCubic } }
+                        }
+
+                        Row {
+                            x: 3
+                            y: 3
+                            Repeater {
+                                model: closeBehaviorChips.choices
+                                delegate: Item {
+                                    required property string modelData
+                                    required property int index
+                                    readonly property bool selected: index === closeBehaviorChips.selIndex
+                                    width: closeBehaviorChips.segW
+                                    height: closeBehaviorChips.height - 6
+
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: height / 2
+                                        color: root.accentColor
+                                        opacity: !parent.selected && closeSegMouse.containsMouse ? 0.16 : 0
+                                        Behavior on opacity { NumberAnimation { duration: 150 } }
+                                    }
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: parent.modelData === "widget" ? I18n.tr("Trình phát nhỏ", "Mini player")
+                                              : I18n.tr("Chỉ phát nhạc", "Music only")
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 12
+                                        font.weight: parent.selected ? Font.DemiBold : Font.Normal
+                                        color: "#ffffff"
+                                        opacity: parent.selected ? 1.0 : 0.72
+                                        Behavior on opacity { NumberAnimation { duration: 200 } }
+                                    }
+
+                                    MouseArea {
+                                        id: closeSegMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            if (root.closeBehavior === parent.modelData) return;
+                                            root.closeBehavior = parent.modelData;
+                                            root.selectCloseBehaviorRequested(parent.modelData);
                                         }
                                     }
                                 }

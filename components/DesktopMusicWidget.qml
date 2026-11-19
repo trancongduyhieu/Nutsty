@@ -23,6 +23,12 @@ PanelWindow {
     signal seekRequested(real position)
     signal openFullAppRequested()
     signal savePositionRequested(real newX, real newY)
+    // The X in the top-right corner: hide just this widget (music plays on) or quit Nutsty
+    signal hideWidgetRequested()
+    signal quitRequested()
+
+    property bool closeChoiceOpen: false
+    onVisibleChanged: if (!visible) closeChoiceOpen = false
 
     readonly property bool isWindows: Qt.platform.os === "windows"
 
@@ -242,11 +248,14 @@ PanelWindow {
 
             property point dragStartPos: Qt.point(0, 0)
             property bool isDraggingWindow: false
+            // A click that wobbles a pixel or two must stay a click, not nudge the window
+            property bool dragThresholdPassed: false
 
             onPressed: mouse => {
                 if (root.isWindows) {
                     dragStartPos = Qt.point(mouse.x, mouse.y);
                     isDraggingWindow = true;
+                    dragThresholdPassed = false;
                 }
             }
 
@@ -254,6 +263,10 @@ PanelWindow {
                 if (root.isWindows && isDraggingWindow && pressed) {
                     var dx = mouse.x - dragStartPos.x;
                     var dy = mouse.y - dragStartPos.y;
+                    if (!dragThresholdPassed) {
+                        if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+                        dragThresholdPassed = true;
+                    }
                     var curX = (typeof root["x"] !== "undefined") ? Number(root["x"]) : 0;
                     var curY = (typeof root["y"] !== "undefined") ? Number(root["y"]) : 0;
                     var newX = Math.max(12, Math.min(Screen.width - root.width - 12, curX + dx));
@@ -362,6 +375,46 @@ PanelWindow {
                 cursorShape: Qt.PointingHandCursor
                 preventStealing: true
                 onClicked: root.openFullAppRequested()
+            }
+        }
+
+        // =====================================================================
+        // TOP-RIGHT: Close button. Always on screen (new users never find the tray's ^),
+        // brighter while the pointer is over the card
+        // =====================================================================
+        HoverHandler { id: cardH }
+
+        Rectangle {
+            id: closeBtn
+            z: 50
+            anchors.top: parent.top
+            anchors.topMargin: 12
+            anchors.right: parent.right
+            anchors.rightMargin: 12
+            width: 28
+            height: 28
+            radius: 14
+            visible: !root.closeChoiceOpen
+            color: Qt.rgba(root.colHighlight.r, root.colHighlight.g, root.colHighlight.b, closeH.hovered ? 0.32 : 0.16)
+            border.width: 1
+            border.color: Qt.rgba(root.colHighlight.r, root.colHighlight.g, root.colHighlight.b, closeH.hovered ? 0.55 : 0.30)
+            opacity: (cardH.hovered || closeH.hovered) ? 1.0 : 0.6
+            Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+            Behavior on color { ColorAnimation { duration: 140 } }
+            HoverHandler { id: closeH }
+
+            AppIcon {
+                anchors.centerIn: parent
+                source: "../assets/icons/window-close-symbolic.svg"
+                iconSize: 12
+                color: "#ffffff"
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                preventStealing: true
+                onClicked: root.closeChoiceOpen = true
             }
         }
 
@@ -576,6 +629,123 @@ PanelWindow {
                     onClicked: root.nextClicked()
                 }
             }
+        }
+
+        // =====================================================================
+        // Close choice, drawn inside the card (no popup window): hide the widget or quit.
+        // Clicking the dimmed card outside the buttons goes back
+        // =====================================================================
+        Rectangle {
+            id: closeChoice
+            z: 100
+            anchors.fill: parent
+            radius: 28
+            color: Qt.rgba(0.03, 0.03, 0.05, 0.86)
+            border.width: 1
+            border.color: Qt.rgba(root.colHighlight.r, root.colHighlight.g, root.colHighlight.b, 0.25)
+            opacity: root.closeChoiceOpen ? 1.0 : 0.0
+            visible: opacity > 0.01
+            Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+
+            MouseArea {
+                anchors.fill: parent
+                enabled: root.closeChoiceOpen
+                onClicked: root.closeChoiceOpen = false
+            }
+
+            Column {
+                anchors.centerIn: parent
+                width: parent.width - 36
+                spacing: 8
+
+                ChoiceButton {
+                    iconSource: "../assets/icons/eye-slash-symbolic.svg"
+                    label: I18n.tr("Ẩn trình phát nhỏ", "Hide mini player")
+                    tint: root.colHighlight
+                    onActivated: {
+                        root.closeChoiceOpen = false;
+                        root.hideWidgetRequested();
+                    }
+                }
+
+                Text {
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    text: I18n.tr("Nhạc vẫn phát", "Music keeps playing")
+                    font.family: "Inter, sans-serif"
+                    font.pixelSize: 10
+                    color: Qt.rgba(1, 1, 1, 0.62)
+                }
+
+                Item { width: 1; height: 2 }
+
+                // Muted Rose: the destructive choice
+                ChoiceButton {
+                    iconSource: "../assets/icons/window-close-symbolic.svg"
+                    label: I18n.tr("Thoát Nutsty", "Quit Nutsty")
+                    tint: Qt.rgba(244 / 255, 63 / 255, 94 / 255, 1)
+                    onActivated: {
+                        root.closeChoiceOpen = false;
+                        root.quitRequested();
+                    }
+                }
+
+                Text {
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    text: I18n.tr("Quay lại", "Back")
+                    font.family: "Inter, sans-serif"
+                    font.pixelSize: 11
+                    font.weight: backH.hovered ? Font.DemiBold : Font.Normal
+                    color: backH.hovered ? "#ffffff" : Qt.rgba(1, 1, 1, 0.62)
+                    topPadding: 4
+                    HoverHandler { id: backH; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: root.closeChoiceOpen = false }
+                }
+            }
+        }
+    }
+
+    component ChoiceButton: Rectangle {
+        id: choiceBtn
+        property url iconSource
+        property string label
+        property color tint
+        signal activated()
+
+        width: parent ? parent.width : 160
+        height: 34
+        radius: 8
+        color: Qt.rgba(tint.r, tint.g, tint.b, choiceH.hovered ? 0.24 : 0.12)
+        border.width: 1
+        border.color: Qt.rgba(tint.r, tint.g, tint.b, choiceH.hovered ? 0.45 : 0.25)
+        Behavior on color { ColorAnimation { duration: 120 } }
+        HoverHandler { id: choiceH }
+
+        Row {
+            anchors.centerIn: parent
+            spacing: 8
+            AppIcon {
+                anchors.verticalCenter: parent.verticalCenter
+                source: choiceBtn.iconSource
+                iconSize: 12
+                color: "#ffffff"
+            }
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: choiceBtn.label
+                font.family: "Inter, sans-serif"
+                font.pixelSize: 12
+                font.weight: Font.DemiBold
+                color: "#ffffff"
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            preventStealing: true
+            onClicked: choiceBtn.activated()
         }
     }
 }

@@ -408,7 +408,9 @@ def extract_song_palette(img_src: str) -> dict:
                 stderr=subprocess.PIPE,
                 text=True,
                 timeout=4,
-                check=False
+                check=False,
+                # Runs on every track change: without CREATE_NO_WINDOW a console flashes up on Windows
+                creationflags=0x08000000 if pc.IS_WINDOWS else 0
             )
             if proc.returncode == 0 and proc.stdout.strip():
                 parsed = json.loads(proc.stdout.strip())

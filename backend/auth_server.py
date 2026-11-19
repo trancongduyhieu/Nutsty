@@ -336,9 +336,29 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
                 pass
             self._send_json({"success": success, "platform": sys.platform}, 200)
         else:
-            self.send_response(404)
-            self._send_cors_headers()
+            self._dispatch_fallback("GET", "")
+
+    def _dispatch_fallback(self, method, body):
+        """Routes only route_dispatcher knows (comments, listening/profile, ...), so this
+        in-process server answers everything nutsty-daemon + its Python worker would."""
+        try:
+            try:
+                from . import route_dispatcher
+            except (ImportError, ValueError):
+                import route_dispatcher
+            parsed = urlparse(self.path)
+            res = route_dispatcher.dispatch_request(method, parsed.path, parse_qs(parsed.query), body)
+            payload = (res.get("body") or "").encode("utf-8")
+            self.send_response(res.get("status", 200))
+            for k, v in (res.get("headers") or {}).items():
+                self.send_header(k, v)
+            self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
+            self.wfile.write(payload)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            pass
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
 
     def do_POST(self):
         if self.path.startswith("/api/playlists/"):
@@ -422,9 +442,7 @@ class AuthWebhookHandler(BaseHTTPRequestHandler):
         elif self.path == "/api/friends/remove":
             social_routes.handle_post_friend_remove(self, self._read_post_json())
         else:
-            self.send_response(404)
-            self._send_cors_headers()
-            self.end_headers()
+            self._dispatch_fallback("POST", self._read_post_body())
 
     def log_message(self, format, *args):
         # Silence default stderr logging

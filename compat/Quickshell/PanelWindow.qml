@@ -25,8 +25,28 @@ Window {
 
     property PanelAnchors anchors: PanelAnchors {}
 
-    function updateMask() {
+    // A Win32 window region set before the first frame makes the D3D swapchain drop
+    // its alpha: the whole panel paints as a solid black/white box. Clip only once a
+    // frame has been presented (the bridge flips regionReady from frameSwapped), and
+    // drop the region (not an empty one) while hidden.
+    property bool regionReady: false
+    onRegionReadyChanged: if (regionReady) updateMask()
+
+    function showPanel() {
+        root.show();
+        root.lower();
         if (typeof __NutstyBridge === "undefined") return;
+        if (typeof __NutstyBridge.pinWindowToDesktopBottom === "function")
+            __NutstyBridge.pinWindowToDesktopBottom(root);
+        if (typeof __NutstyBridge.armWindowRegion === "function")
+            __NutstyBridge.armWindowRegion(root);
+        // Sets `occluded` on panels that declare it while other apps cover them.
+        if (typeof __NutstyBridge.watchOcclusion === "function")
+            __NutstyBridge.watchOcclusion(root);
+    }
+
+    function updateMask() {
+        if (typeof __NutstyBridge === "undefined" || !root.regionReady) return;
         if (!mask || !mask.item) {
             __NutstyBridge.clearWindowMask(root);
         } else {
@@ -43,16 +63,14 @@ Window {
     onMaskChanged: updateMask()
     onVisibleChanged: {
         if (visible) {
-            root.show();
-            root.lower();
-            if (typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.pinWindowToDesktopBottom === "function") {
-                __NutstyBridge.pinWindowToDesktopBottom(root);
-            }
-            updateMask();
-            Qt.callLater(updateMask);
+            root.showPanel();
         } else {
-            if (typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.clearWindowMask === "function") {
-                __NutstyBridge.clearWindowMask(root);
+            root.regionReady = false;
+            if (typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.removeWindowRegion === "function") {
+                __NutstyBridge.removeWindowRegion(root);
+            }
+            if (typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.unwatchOcclusion === "function") {
+                __NutstyBridge.unwatchOcclusion(root);
             }
         }
     }
@@ -71,19 +89,5 @@ Window {
         function onVisibleChanged() { if (mask && mask.item) root.updateMask(); }
     }
 
-    Component.onCompleted: {
-        updateMask();
-        Qt.callLater(updateMask);
-        if (visible) {
-            root.show();
-            root.lower();
-            if (typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.pinWindowToDesktopBottom === "function") {
-                __NutstyBridge.pinWindowToDesktopBottom(root);
-            }
-        } else {
-            if (typeof __NutstyBridge !== "undefined" && typeof __NutstyBridge.clearWindowMask === "function") {
-                __NutstyBridge.clearWindowMask(root);
-            }
-        }
-    }
+    Component.onCompleted: if (visible) root.showPanel()
 }

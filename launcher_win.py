@@ -174,6 +174,20 @@ sys.path.insert(0, os.path.join(APP_ROOT, "backend"))
 import platform_compat as pc
 pc.configure_windows_ssl()
 
+# The backend now runs inside this console-less GUI process, so every console program it
+# or a library (yt-dlp -> ffmpeg/node, nutsty-bridge, ffprobe) starts would open a cmd window
+# that flashes on each track change. Default to CREATE_NO_WINDOW unless a caller chose flags.
+if pc.IS_WINDOWS:
+    _CREATE_NO_WINDOW = 0x08000000
+    _orig_popen_init = subprocess.Popen.__init__
+
+    def _popen_init_no_console(self, *args, **kwargs):
+        if not kwargs.get("creationflags"):
+            kwargs["creationflags"] = _CREATE_NO_WINDOW
+        _orig_popen_init(self, *args, **kwargs)
+
+    subprocess.Popen.__init__ = _popen_init_no_console
+
 sys_argv_lock = threading.Lock()
 
 BACKEND_MAP = {
@@ -266,14 +280,14 @@ check_cli_dispatch()
 
 # Detect Qt bindings (PySide6 or PyQt6)
 try:
-    from PySide6.QtCore import QObject, Signal, Property, Slot, QUrl, QTimer, QThread, QRect, QAbstractNativeEventFilter
+    from PySide6.QtCore import QObject, Qt, Signal, Property, Slot, QUrl, QTimer, QThread, QRect, QAbstractNativeEventFilter
     from PySide6.QtGui import QGuiApplication, QIcon, QWindow, QRegion
     from PySide6.QtQml import QQmlApplicationEngine, qmlRegisterType, QmlAttached
     from PySide6.QtQuick import QQuickWindow
     IS_PYSIDE = True
 except ImportError:
     try:
-        from PyQt6.QtCore import QObject, pyqtSignal as Signal, pyqtProperty as Property, pyqtSlot as Slot, QUrl, QTimer, QThread, QRect, QAbstractNativeEventFilter
+        from PyQt6.QtCore import QObject, Qt, pyqtSignal as Signal, pyqtProperty as Property, pyqtSlot as Slot, QUrl, QTimer, QThread, QRect, QAbstractNativeEventFilter
         from PyQt6.QtGui import QGuiApplication, QIcon, QWindow, QRegion
         from PyQt6.QtQml import QQmlApplicationEngine, qmlRegisterType
         from PyQt6.QtQuick import QQuickWindow
@@ -484,6 +498,69 @@ def trim_working_set():
             pass
 
 
+def panel_box_covered(hwnd):
+    """True when every pixel of `hwnd`'s clip region (or rect) sits under other visible
+    windows above it in z-order. DWM keeps composing covered windows, and Qt never learns
+    it is hidden, so a bottom-pinned panel otherwise animates for nobody."""
+    if not pc.IS_WINDOWS or not hwnd:
+        return False
+    u32, gdi = ctypes.windll.user32, ctypes.windll.gdi32
+    HWND, HRGN = wintypes.HWND, wintypes.HANDLE
+    u32.GetWindow.restype = HWND
+    u32.GetWindow.argtypes = [HWND, wintypes.UINT]
+    u32.GetTopWindow.restype = HWND
+    u32.GetTopWindow.argtypes = [HWND]
+    u32.GetWindowRgn.argtypes = [HWND, HRGN]
+    u32.GetWindowLongPtrW.restype = ctypes.c_ssize_t
+    u32.GetWindowLongPtrW.argtypes = [HWND, ctypes.c_int]
+    gdi.CreateRectRgn.restype = HRGN
+    gdi.CombineRgn.argtypes = [HRGN, HRGN, HRGN, ctypes.c_int]
+    gdi.OffsetRgn.argtypes = [HRGN, ctypes.c_int, ctypes.c_int]
+    gdi.DeleteObject.argtypes = [HRGN]
+    NULLREGION, ERROR, RGN_DIFF = 1, 0, 4
+    WS_EX_TRANSPARENT = 0x20
+    me = ctypes.c_void_p(hwnd).value
+
+    rect = wintypes.RECT()
+    if not u32.GetWindowRect(HWND(me), ctypes.byref(rect)):
+        return False
+    target = gdi.CreateRectRgn(0, 0, 0, 0)
+    try:
+        kind = u32.GetWindowRgn(HWND(me), target)
+        if kind == ERROR:  # no clip region: the whole window counts
+            gdi.DeleteObject(target)
+            target = gdi.CreateRectRgn(rect.left, rect.top, rect.right, rect.bottom)
+        elif kind == NULLREGION:
+            return False
+        else:
+            gdi.OffsetRgn(target, rect.left, rect.top)
+
+        dwm = ctypes.windll.dwmapi
+        h = u32.GetTopWindow(None)
+        guard = 0
+        while h and ctypes.c_void_p(h).value != me and guard < 4096:
+            guard += 1
+            hw = HWND(h)
+            if u32.IsWindowVisible(hw) and not u32.IsIconic(hw) \
+                    and not (u32.GetWindowLongPtrW(hw, -20) & WS_EX_TRANSPARENT):
+                cloaked = ctypes.c_int(0)
+                dwm.DwmGetWindowAttribute(hw, 14, ctypes.byref(cloaked), 4)  # DWMWA_CLOAKED
+                r = wintypes.RECT()
+                # Visible frame only; GetWindowRect includes the invisible resize borders.
+                if dwm.DwmGetWindowAttribute(hw, 9, ctypes.byref(r), ctypes.sizeof(r)) != 0:
+                    u32.GetWindowRect(hw, ctypes.byref(r))
+                if not cloaked.value and r.right > r.left and r.bottom > r.top:
+                    other = gdi.CreateRectRgn(r.left, r.top, r.right, r.bottom)
+                    left = gdi.CombineRgn(target, target, other, RGN_DIFF)
+                    gdi.DeleteObject(other)
+                    if left == NULLREGION:
+                        return True
+            h = u32.GetWindow(h, 2)  # GW_HWNDNEXT
+        return False
+    finally:
+        gdi.DeleteObject(target)
+
+
 class NutstyBridge(QObject):
     processFinished = Signal(int, str, str, int)
     openSettingsRequested = Signal(int)
@@ -644,6 +721,14 @@ class NutstyBridge(QObject):
         self._cb_id = 0
         self._cb_lock = threading.Lock()
         self.processFinished.connect(self._onProcessFinished)
+        # frameSwapped fires on the scene-graph render thread; hop to the GUI thread.
+        self._panelFirstFrame.connect(self._onPanelFirstFrame, Qt.ConnectionType.QueuedConnection)
+        # Desktop panels sit at the bottom of the z-order; DWM composes them even when
+        # every pixel is behind other apps, so we poll coverage and let QML pause.
+        self._occlusionWatched = []  # [win_obj, covered_streak]
+        self._occlusionTimer = QTimer(self)
+        self._occlusionTimer.setInterval(500)
+        self._occlusionTimer.timeout.connect(self._pollOcclusion)
 
     @Slot(int, str, str, int)
     def _onProcessFinished(self, cb_id, out, err, code):
@@ -692,6 +777,12 @@ class NutstyBridge(QObject):
                 _nutsty_daemon_proc.terminate()
             except Exception:
                 pass
+        # Same as the tray's Quit: mpv runs detached, so stop it or the music outlives the app
+        try:
+            import player_daemon
+            player_daemon.handle_cli(["stop"])
+        except Exception:
+            pass
         try:
             from PySide6.QtCore import QCoreApplication
             QCoreApplication.quit()
@@ -829,6 +920,82 @@ class NutstyBridge(QObject):
         except Exception as e:
             sys.stderr.write(f"setWindowMaskRect error: {e}\n")
 
+    _panelFirstFrame = Signal(QObject)
+
+    @Slot(QObject)
+    def armWindowRegion(self, win_obj):
+        """Let a desktop panel clip itself only after its first presented frame. A window
+        region set before that makes the D3D11 swapchain lose alpha (solid black/white box)."""
+        try:
+            def _on_swap():
+                win_obj.frameSwapped.disconnect(_on_swap)
+                self._panelFirstFrame.emit(win_obj)
+            win_obj.frameSwapped.connect(_on_swap, Qt.ConnectionType.DirectConnection)
+            win_obj.requestUpdate()
+        except Exception as e:
+            sys.stderr.write(f"armWindowRegion error: {e}\n")
+
+    @Slot(QObject)
+    def _onPanelFirstFrame(self, win_obj):
+        try:
+            if win_obj.isVisible():
+                win_obj.setProperty("regionReady", True)
+        except Exception as e:
+            sys.stderr.write(f"_onPanelFirstFrame error: {e}\n")
+
+    @Slot(QObject)
+    def watchOcclusion(self, win_obj):
+        """Start reporting `occluded` on a desktop panel (QML pauses its animations)."""
+        if not pc.IS_WINDOWS or win_obj is None:
+            return
+        wid = int(win_obj.winId())
+        if not any(int(e[0].winId()) == wid for e in self._occlusionWatched):
+            self._occlusionWatched.append([win_obj, 0])
+        if not self._occlusionTimer.isActive():
+            self._occlusionTimer.start()
+
+    @Slot(QObject)
+    def unwatchOcclusion(self, win_obj):
+        try:
+            wid = int(win_obj.winId()) if win_obj is not None else 0
+            self._occlusionWatched = [e for e in self._occlusionWatched if int(e[0].winId()) != wid]
+            if win_obj is not None:
+                win_obj.setProperty("occluded", False)
+        except Exception:
+            pass
+        if not self._occlusionWatched:
+            self._occlusionTimer.stop()
+
+    @Slot()
+    def _pollOcclusion(self):
+        for entry in list(self._occlusionWatched):
+            win_obj = entry[0]
+            try:
+                if not win_obj.isVisible():
+                    continue
+                covered = panel_box_covered(int(win_obj.winId()))
+            except Exception as e:
+                sys.stderr.write(f"occlusion poll error: {e}\n")
+                covered = False
+            # Pause only after ~1.5 s fully covered (alt-tab flicker), resume at once.
+            entry[1] = entry[1] + 1 if covered else 0
+            want = entry[1] >= 3
+            if bool(win_obj.property("occluded")) != want:
+                win_obj.setProperty("occluded", want)
+
+    @Slot(QObject)
+    def removeWindowRegion(self, win_obj):
+        """Drop the clip entirely (NULL region) and stop hit-testing a stale rect."""
+        try:
+            if win_obj and hasattr(win_obj, "winId") and pc.IS_WINDOWS:
+                hwnd = int(win_obj.winId())
+                native_filter.clear_mask(hwnd)
+                if hwnd > 0:
+                    import ctypes
+                    ctypes.windll.user32.SetWindowRgn(hwnd, None, True)
+        except Exception as e:
+            sys.stderr.write(f"removeWindowRegion error: {e}\n")
+
     @Slot(QObject)
     def clearWindowMask(self, win_obj):
         try:
@@ -924,9 +1091,11 @@ class NutstyBridge(QObject):
                     SWP_NOSIZE = 0x0001
                     SWP_NOMOVE = 0x0002
                     SWP_NOACTIVATE = 0x0010
+                    # The exstyle change above only takes effect (no stale cached frame) with SWP_FRAMECHANGED
+                    SWP_FRAMECHANGED = 0x0020
                     user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
                     user32.SetWindowPos.restype = wintypes.BOOL
-                    user32.SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE)
+                    user32.SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_FRAMECHANGED)
         except Exception as e:
             sys.stderr.write(f"pinWindowToDesktopBottom error: {e}\n")
 
@@ -1296,7 +1465,10 @@ def start_daemons():
     """Start resident backend daemons (nutsty-daemon native Rust or auth_server HTTP daemon, palette_extractor)."""
     global _nutsty_daemon_proc
     daemon_exe = os.path.join(APP_ROOT, "bin", "nutsty-daemon.exe")
-    if os.path.isfile(daemon_exe):
+    # Off by default: the daemon forwards most routes to a second Nutsty.exe
+    # (route_dispatcher --serve, ~35 MB) that re-imports the backend this process already
+    # holds. auth_server below serves the same routes in-process. NUTSTY_RUST_DAEMON=1 opts in.
+    if os.environ.get("NUTSTY_RUST_DAEMON") == "1" and os.path.isfile(daemon_exe):
         try:
             import socket
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -1765,9 +1937,10 @@ def main():
         tray_icon.setContextMenu(tray_menu)
 
         def _on_tray_activated(reason):
-            if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            # One left click opens the window (what new users try first); right click keeps the menu
+            if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
                 _open_full_window()
-            elif reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.Context):
+            elif reason == QSystemTrayIcon.ActivationReason.Context:
                 tray_menu.popup(QCursor.pos())
                 tray_menu.activateWindow()
 
