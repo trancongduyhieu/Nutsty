@@ -23,11 +23,16 @@ Số phiên bản có dạng `A.B.C`, ví dụ `1.2.0`:
     - **Anime, nhạc phim**: ngôi sao bốn cánh lóe sáng, giọt mồ hôi, dấu giận, vệt tập trung kiểu truyện tranh, cánh hoa anh đào bay qua.
     - **Dân ca, đồng quê**: mặt trời mọc sau chữ, đàn chim bay qua, mầm cây mọc ra từ chữ.
     - Bài ballad tình cảm vẫn giữ bộ hình vẽ ngọt ngào như cũ, kể cả khi ban nhạc chơi rock. Khi không có mạng, Nutsty đoán theo lời và nhịp hát.
-  - **Công tắc "Câu nào cũng là cao trào"**: Chọn mẫu 8 trong Cài đặt sẽ thấy công tắc này. Bật lên thì câu nào cũng đứng riêng và có một bất ngờ lớn, không phải chờ đoạn bài chậm lại. Hợp khi bạn muốn xem hết các kiểu hiệu ứng hoặc quay video.
+  - **Bảng tùy chỉnh riêng cho mẫu 8**: Bấm nút "Tùy chỉnh" trên thẻ mẫu 8 trong Cài đặt để mở một bảng có khung xem trước lớn. Ở đó bạn chọn được:
+    - **Bộ hiệu ứng**: Để Tự động thì Nutsty chọn theo thể loại bài hát, và nút Tự động ghi luôn bộ đang được chọn. Muốn thì ép hẳn một trong 8 bộ: Ngọt ngào, Rock, Rap, Nhảy, Êm dịu, Jazz, Anime, Dân ca. Rê chuột lên từng bộ để đọc nó vẽ những gì.
+    - **Câu cao trào**: Tự nhiên (chỉ khi bài chậm lại), Nhiều (thường xuyên hơn nhưng không hai câu liền nhau) hoặc Mọi câu.
+    - **Hình vẽ**: Ít, Vừa hoặc Nhiều hình vẽ quanh chữ.
+    - **Chất phim cũ**: Bật hoặc tắt hạt nhiễu và vết xước.
+  - **Biết ngay mẫu 8 đang dùng bộ nào**: Góc khung xem trước của mẫu 8 ghi tên bộ hiệu ứng hợp với bài đang phát.
 - **Mẫu 7: Sân khấu chữ**: Lời hiện thành từng chồng tối đa ba câu, từ quan trọng nhất to và mang màu của hình nền. Mỗi câu một kiểu chữ và một góc máy riêng, có hạt phim cũ, vết xước và sợi tóc máy chiếu, chữ viết tay và chữ bút dạ. Lời bè trong ngoặc đứng riêng một cột bên cạnh. Từ tục bị che dưới một thanh đen nhấp nháy. Khi bài nghỉ lâu có chấm chờ chạy dần. Câu rời đi bằng cách bay lên, bị gạch ngang, bị lem hoặc bị vẽ đè.
 - **Mẫu 6: Biến hóa chuyển động**: Từng chữ cái chuyển động theo tâm trạng của bài (sôi động, êm, nhiễu hay xoay vòng), mỗi câu một kiểu chuyển động mới.
 - **Mẫu 5: Biểu cảm Mochy**: Từ được hát to sẽ phóng lớn, các câu xếp chồng lên nhau. Từng chữ hiện ra lần lượt, hơi mờ rồi rõ dần, chữ cái nhấc lên khi được hát và có vệt sáng màu đuổi theo lời.
-- **Xem trước mẫu ngay trên thẻ chọn**: Mỗi thẻ trong danh sách mẫu lời bài hát giờ chạy thật theo bài đang phát. Khi chưa phát gì, thẻ chạy một bài mẫu có sẵn để bạn thấy trước mẫu trông thế nào.
+- **Xem trước mẫu ngay trên thẻ chọn**: Mỗi thẻ trong danh sách mẫu lời bài hát hiện lời trên chính hình nền của bạn, kể cả hình nền video. Thẻ đang chọn và thẻ bạn rê chuột vào sẽ chạy thật theo bài đang phát, các thẻ còn lại đứng yên ở một khung hình để máy chạy nhẹ trên cả Linux và Windows. Khi chưa phát gì, thẻ dùng một bài mẫu có sẵn.
 - **Mẫu Apple Music đẹp hơn**: Lời trượt mượt vào giữa, câu dài tự xuống dòng, câu xa mờ dần như ống kính máy ảnh, có bóng đổ nhẹ và lời bè nở ra ngay dưới câu chính.
 - **Vòng tua nhạc quanh ảnh bìa**: Ở bảng bên của mẫu Mochy, vòng quanh ảnh bìa cho biết bài đang ở đâu và kéo được để tua.
 
