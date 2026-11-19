@@ -650,7 +650,7 @@ test("disco: disco ball lowers on cord, turns, light flecks radiate", () => {
 test("eq: equalizer bars jump behind word with singing", () => {
     const { L } = peakWith("eq");
     const on = K.peakOnAt(L), start = on - K.PROP_D.eq;
-    assert.ok(drawn(pcs(L, start + 0.2)[0]), "eq frame not drawn before on");
+    assert.ok(drawn(pcs(L, start + 0.2)[1]), "eq bars not rising before on");
     assert.ok(drawn(pcs(L, on + 0.1)[1]), "eq bars not drawn jumping on cue");
     assert.ok(drawn(pcs(L, on + 0.1)[2]), "eq peak caps not drawn on cue");
     assert.ok(Math.abs(K.peakState(L, on + 0.05).heroDy) > 0.01, "word does not react to eq bass");
@@ -736,18 +736,18 @@ test("moonrise: crescent rises behind word", () => {
     const y0 = meanY(pcs(L, start + 0.1)[0]);
     const y1 = meanY(pcs(L, on)[0]);
     assert.ok(y1 < y0 - PX * 0.5, "moon does not rise: " + y0 + " vs " + y1);
-    assert.ok(drawn(pcs(L, on + 0.1)[1]), "halo not drawn on cue");
+    assert.ok(drawn(pcs(L, on + 0.3)[2]), "stars not out on cue");
     assert.ok(Math.abs(K.peakState(L, on + 0.05).heroDy) > 0.01, "word does not react to moonrise");
 });
 
 test("classic set entry has doodles, rush, and peaks", () => {
-    assert.deepStrictEqual(Array.from(K.SETS.classic.doodles), ["note", "notes", "smoke", "vinyl", "swing"]);
+    assert.deepStrictEqual(Array.from(K.SETS.classic.doodles), ["note", "notes", "smoke", "vinyl", "mic"]);
     assert.deepStrictEqual(Array.from(K.SETS.classic.rush), ["note", "notes", "smoke", "vinyl"]);
     assert.deepStrictEqual(Array.from(K.SETS.classic.peaks), ["classic_vinyl", "classic_smoke", "horn", "spot", "rays", "ink", "stamp"]);
 });
 
 test("classic doodles: note, notes, smoke, vinyl, swing finite at several sizes", () => {
-    for (const kind of ["note", "notes", "smoke", "vinyl", "swing"]) {
+    for (const kind of ["note", "notes", "smoke", "vinyl", "mic"]) {
         for (const [w, h] of [[12, 12], [24, 24], [48, 48], [120, 60]]) {
             const S = K.markShape(kind, 888, w, h);
             assert.ok(S.length > 0, kind + " has no strokes at " + w + "x" + h);
@@ -791,7 +791,7 @@ test("classic_vinyl: record rolls in, stops behind word, spins", () => {
     const x0 = p0.reduce((a, q) => a + q.x, 0) / p0.length;
     const x1 = p1.reduce((a, q) => a + q.x, 0) / p1.length;
     assert.ok(x1 > x0 + PX * 0.5, "disc does not roll in: " + x0 + " vs " + x1);
-    assert.strictEqual(pcs(L, on + 0.1)[0].z, 1, "disc not behind word");
+    assert.strictEqual(pcs(L, on + 0.1)[0].z < 0, true, "disc not behind the letters");
     assert.ok(drawn(pcs(L, on + 0.1)[0]), "disc not drawn on cue");
     assert.ok(drawn(pcs(L, on + 0.1)[1]), "sheen arcs not drawn on cue");
     assert.ok(Math.abs(K.peakState(L, on + 0.05).heroS - 1) > 0.01, "word does not react to vinyl stop");
@@ -956,7 +956,7 @@ test("sunrise: the sun rises behind the word, rays open", () => {
     const y0 = meanY(pcs(L, start + 0.1)[0]);
     const y1 = meanY(pcs(L, on)[0]);
     assert.ok(y1 < y0 - PX * 0.2, "sun does not rise: " + y0 + " vs " + y1);
-    assert.strictEqual(pcs(L, on + 0.1)[0].z, 1, "sun not behind word");
+    assert.strictEqual(pcs(L, on + 0.1)[0].z < 0, true, "sun not behind the letters");
     assert.ok(drawn(pcs(L, on + 0.05)[1]), "rays not drawn opening on cue");
     assert.ok(drawn(pcs(L, on + 0.05)[2]), "horizon not drawn on cue");
     assert.ok(Math.abs(K.peakState(L, on + 0.05).heroDy) > 0.005, "word does not react to sunrise");

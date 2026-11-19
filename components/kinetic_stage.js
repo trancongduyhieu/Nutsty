@@ -126,7 +126,7 @@ var SETS = {
         peaks: ["calm_leaf", "droplet", "moonrise"].concat(SHARED_PEAKS)
     },
     classic: {
-        doodles: ["note", "notes", "smoke", "vinyl", "swing"],
+        doodles: ["note", "notes", "smoke", "vinyl", "mic"],
         rush: ["note", "notes", "smoke", "vinyl"],
         peaks: ["classic_vinyl", "classic_smoke", "horn"].concat(SHARED_PEAKS)
     },
@@ -1228,29 +1228,34 @@ function markShape(kind, sd, w, h) {
         break;
     }
     case "crack": {
-        // branching fracture lines radiating across the box
-        var cx0 = w * (0.48 + 0.08 * M.rs(sd, 1, 841));
-        var cx1 = w * (0.4 + 0.08 * M.rs(sd, 2, 842));
-        var cx2 = w * (0.58 + 0.08 * M.rs(sd, 3, 843));
-        var cx3 = w * (0.36 + 0.08 * M.rs(sd, 4, 844));
-        var cx4 = w * (0.44 + 0.08 * M.rs(sd, 5, 845));
-        S.push([
-            { x: cx0, y: h * 0.06 },
-            { x: cx1, y: h * 0.28 },
-            { x: cx2, y: h * 0.55 },
-            { x: cx3, y: h * 0.78 },
-            { x: cx4, y: h * 0.94 }
-        ]);
-        S.push([
-            { x: cx1, y: h * 0.28 },
-            { x: w * (0.2 + 0.06 * M.rs(sd, 6, 846)), y: h * (0.42 + 0.05 * M.rs(sd, 7, 847)) },
-            { x: w * (0.1 + 0.05 * M.rs(sd, 8, 848)), y: h * 0.48 }
-        ]);
-        S.push([
-            { x: cx2, y: h * 0.55 },
-            { x: w * (0.78 + 0.06 * M.rs(sd, 9, 849)), y: h * (0.68 + 0.05 * M.rs(sd, 10, 850)) },
-            { x: w * (0.92 + 0.05 * M.rs(sd, 11, 851)), y: h * 0.82 }
-        ]);
+        // glass hit: a small impact star, then jagged fractures running out with little forks
+        var ccx = w * (0.46 + 0.06 * M.rs(sd, 1, 841)), ccy = h * (0.44 + 0.06 * M.rs(sd, 2, 842));
+        var arms = 5;
+        for (n = 0; n < arms; n++) {
+            var ca = -Math.PI / 2 + n * 2 * Math.PI / arms + 0.35 * M.rs(sd, n, 843);
+            var clen = 0.5 * (0.75 + 0.35 * M.r(sd, n, 844));
+            pts = [{ x: ccx, y: ccy }];
+            var segs = 4;
+            for (i = 1; i <= segs; i++) {
+                u = i / segs;
+                var off = (i % 2 ? 1 : -1) * 0.09 * (1 - 0.5 * u) * (0.6 + 0.6 * M.r(sd, n * 7 + i, 845));
+                var ra = ca + off;
+                pts.push({ x: ccx + Math.cos(ra) * w * clen * u, y: ccy + Math.sin(ra) * h * clen * u });
+            }
+            S.push(pts);
+            // a fork off the second joint
+            if (M.r(sd, n, 846) < 0.7) {
+                var fp = pts[2], fa = ca + (M.r(sd, n, 847) < 0.5 ? 0.7 : -0.7);
+                S.push([fp, { x: fp.x + Math.cos(fa) * w * 0.13, y: fp.y + Math.sin(fa) * h * 0.13 }]);
+            }
+        }
+        // the dented ring round the hit point
+        pts = [];
+        for (i = 0; i <= 10; i++) {
+            var ka = i / 10 * 2 * Math.PI, kr = (i % 2 ? 0.06 : 0.09);
+            pts.push({ x: ccx + Math.cos(ka) * w * kr, y: ccy + Math.sin(ka) * h * kr });
+        }
+        S.push(pts);
         break;
     }
     case "spike": {
@@ -1397,21 +1402,18 @@ function markShape(kind, sd, w, h) {
         break;
     }
     case "beam": {
-        // stage spotlight beams fanning out from apex with crossing strobe rays
-        var apexX = w * (0.16 + 0.04 * M.rs(sd, 1, 895));
-        var apexY = h * (0.14 + 0.04 * M.rs(sd, 2, 896));
-        var bEnd1 = { x: w * (0.58 + 0.04 * M.rs(sd, 3, 897)), y: h * 0.92 };
-        var bEnd2 = { x: w * 0.92, y: h * (0.58 + 0.04 * M.rs(sd, 4, 898)) };
-        S.push([{ x: apexX, y: apexY }, bEnd1, bEnd2, { x: apexX, y: apexY }]);
-        var bMid = { x: (bEnd1.x + bEnd2.x) * 0.5, y: (bEnd1.y + bEnd2.y) * 0.5 };
-        S.push([{ x: apexX, y: apexY }, bMid]);
-        var ringP1 = { x: apexX + (bEnd1.x - apexX) * 0.5, y: apexY + (bEnd1.y - apexY) * 0.5 };
-        var ringP2 = { x: apexX + (bEnd2.x - apexX) * 0.5, y: apexY + (bEnd2.y - apexY) * 0.5 };
-        S.push([ringP1, ringP2]);
-        S.push([
-            { x: w * 0.08, y: h * 0.75 },
-            { x: w * 0.88, y: h * 0.28 }
-        ]);
+        // a stage light: lamp head top left, a cone of light opening down to the right, dashes inside
+        var lx = w * 0.2, ly = h * 0.16;
+        S.push(ellipsePts(lx, ly, w * 0.11, h * 0.08, 0, 2 * Math.PI, 18));
+        S.push([{ x: lx - w * 0.04, y: ly - h * 0.1 }, { x: lx - w * 0.1, y: ly - h * 0.17 }]);
+        var ex0 = { x: w * 0.5, y: h * 0.95 }, ex1 = { x: w * 0.95, y: h * 0.62 };
+        S.push([{ x: lx + w * 0.02, y: ly + h * 0.08 }, ex0]);
+        S.push([{ x: lx + w * 0.1, y: ly + h * 0.01 }, ex1]);
+        for (i = 1; i <= 3; i++) {
+            u = 0.35 + i * 0.15;
+            var bx = lx + (0.5 * (ex0.x + ex1.x) - lx) * u, by = ly + (0.5 * (ex0.y + ex1.y) - ly) * u;
+            S.push([{ x: bx - w * 0.04, y: by - h * 0.03 }, { x: bx + w * 0.04, y: by + h * 0.03 }]);
+        }
         break;
     }
     case "grid": {
@@ -1438,55 +1440,15 @@ function markShape(kind, sd, w, h) {
         break;
     }
     case "cloud": {
-        // a soft serene cloud with puffy curved lobes and a flat base with gentle curls
-        var baseY = h * 0.74;
-        var cloudPts = [];
-        cloudPts.push({ x: w * 0.84, y: baseY });
-        cloudPts.push({ x: w * 0.16, y: baseY });
-        for (i = 0; i <= 8; i++) {
-            u = i / 8;
-            var aL = Math.PI * 0.5 + u * Math.PI * 0.82;
-            cloudPts.push({
-                x: w * 0.24 + w * 0.14 * Math.cos(aL),
-                y: h * 0.60 + h * 0.16 * Math.sin(aL)
-            });
-        }
-        for (i = 0; i <= 10; i++) {
-            u = i / 10;
-            var aTL = Math.PI * 1.15 + u * Math.PI * 0.82;
-            cloudPts.push({
-                x: w * 0.40 + w * 0.18 * Math.cos(aTL),
-                y: h * 0.42 + h * 0.19 * Math.sin(aTL)
-            });
-        }
-        for (i = 0; i <= 10; i++) {
-            u = i / 10;
-            var aTR = Math.PI * 1.25 + u * Math.PI * 0.88;
-            cloudPts.push({
-                x: w * 0.62 + w * 0.19 * Math.cos(aTR),
-                y: h * 0.44 + h * 0.20 * Math.sin(aTR)
-            });
-        }
-        for (i = 0; i <= 8; i++) {
-            u = i / 8;
-            var aR = -Math.PI * 0.32 + u * Math.PI * 0.82;
-            cloudPts.push({
-                x: w * 0.76 + w * 0.13 * Math.cos(aR),
-                y: h * 0.60 + h * 0.15 * Math.sin(aR)
-            });
-        }
-        cloudPts.push({ x: w * 0.84, y: baseY });
-        S.push(cloudPts);
-
-        var Swirl = [];
-        for (i = 0; i <= 10; i++) {
-            u = i / 10;
-            Swirl.push({
-                x: w * (0.36 + 0.28 * u),
-                y: h * 0.62 - h * 0.06 * Math.sin(u * Math.PI)
-            });
-        }
-        S.push(Swirl);
+        // a puffy cloud: three bumps over a flat underside, one curl inside
+        pts = [{ x: w * 0.12, y: h * 0.72 }];
+        pts = pts.concat(ellipsePts(w * 0.24, h * 0.58, w * 0.14, h * 0.16, Math.PI * 0.85, Math.PI * 1.75, 8));
+        pts = pts.concat(ellipsePts(w * 0.48, h * 0.42, w * 0.2, h * 0.24, Math.PI * 1.0, Math.PI * 1.95, 10));
+        pts = pts.concat(ellipsePts(w * 0.74, h * 0.56, w * 0.15, h * 0.17, Math.PI * 1.25, Math.PI * 2.2, 8));
+        pts.push({ x: w * 0.86, y: h * 0.72 });
+        pts.push({ x: w * 0.12, y: h * 0.72 });
+        S.push(pts);
+        S.push(ellipsePts(w * 0.44, h * 0.5, w * 0.08, h * 0.07, Math.PI * 1.1, Math.PI * 1.8, 6));
         break;
     }
     case "drop": {
@@ -1754,36 +1716,14 @@ function markShape(kind, sd, w, h) {
         ]);
         break;
     }
-    case "swing": {
-        // jazz swing motif: dynamic sweeping rhythm curves with syncopated bounce accents
-        var SwingArc = [];
-        for (i = 0; i <= 20; i++) {
-            u = i / 20;
-            var swx = w * (0.16 + 0.68 * u);
-            var swy = h * (0.72 + 0.16 * Math.sin(u * Math.PI * 1.5) - 0.58 * (u * u));
-            SwingArc.push({ x: swx, y: swy });
-        }
-        S.push(SwingArc);
-
-        var SwingWave = [];
-        for (i = 0; i <= 16; i++) {
-            u = i / 16;
-            var wvx = w * (0.24 + 0.56 * u);
-            var wvy = h * (0.46 - 0.16 * Math.sin(u * Math.PI) - 0.08 * u);
-            SwingWave.push({ x: wvx, y: wvy });
-        }
-        S.push(SwingWave);
-
-        // Syncopated accents
-        S.push([
-            { x: w * 0.32, y: h * 0.34 },
-            { x: w * 0.40, y: h * 0.24 }
-        ]);
-        S.push([
-            { x: w * 0.62, y: h * 0.22 },
-            { x: w * 0.72, y: h * 0.14 }
-        ]);
-        S.push(ellipsePts(w * 0.52, h * 0.26, Math.min(w, h) * 0.05, Math.min(w, h) * 0.05, 0, 2 * Math.PI, 10));
+    case "mic": {
+        // a vintage jazz mic: a rounded head with grille lines on a short stand and base
+        var mcx = w * 0.5, mcy = h * 0.32, mrx = w * 0.17, mry = h * 0.22;
+        S.push(ellipsePts(mcx, mcy, mrx, mry, 0, 2 * Math.PI, 24));
+        for (i = -1; i <= 1; i++) S.push([{ x: mcx - mrx * 0.8, y: mcy + i * mry * 0.42 }, { x: mcx + mrx * 0.8, y: mcy + i * mry * 0.42 }]);
+        S.push(ellipsePts(mcx, mcy + mry * 0.2, mrx * 1.35, mry * 1.05, Math.PI * 0.05, Math.PI * 0.95, 10));
+        S.push([{ x: mcx, y: mcy + mry * 1.25 }, { x: mcx, y: h * 0.88 }]);
+        S.push([{ x: mcx - w * 0.16, y: h * 0.9 }, { x: mcx + w * 0.16, y: h * 0.9 }]);
         break;
     }
     case "star4": {
@@ -1806,91 +1746,32 @@ function markShape(kind, sd, w, h) {
         break;
     }
     case "sweat": {
-        // an anime sweat drop (teardrop) with shiny highlight arc and side splash ticks
-        var swApexX = w * 0.42;
-        var swApexY = h * 0.14;
-        var swBulbX = w * 0.52;
-        var swBulbY = h * 0.62;
-        var swR = Math.min(w, h) * 0.25;
-
-        var sddx = swBulbX - swApexX, sddy = swBulbY - swApexY;
-        var sdDist = Math.sqrt(sddx * sddx + sddy * sddy);
-        var sdAng = Math.atan2(sddy, sddx);
-        var sdAlpha = Math.asin(Math.min(0.99, swR / Math.max(swR, sdDist)));
-        var sdA0 = sdAng - Math.PI / 2 + sdAlpha;
-        var sdA1 = sdAng + Math.PI / 2 - sdAlpha;
-
-        var dropPts = [{ x: swApexX, y: swApexY }];
-        for (i = 0; i <= 16; i++) {
-            var da = sdA1 - (i / 16) * (sdA1 - sdA0);
-            dropPts.push({ x: swBulbX + swR * Math.cos(da), y: swBulbY + swR * Math.sin(da) });
-        }
-        dropPts.push({ x: swApexX, y: swApexY });
-        S.push(dropPts);
-
-        // Specular highlight crescent inside the drop
-        S.push(ellipsePts(swBulbX - swR * 0.35, swBulbY - swR * 0.10, swR * 0.42, swR * 0.42, Math.PI * 0.8, Math.PI * 1.4, 8));
-
-        // Side splash ticks
-        S.push([
-            { x: w * 0.18, y: h * 0.42 },
-            { x: w * 0.10, y: h * 0.54 }
-        ]);
-        S.push([
-            { x: w * 0.22, y: h * 0.66 },
-            { x: w * 0.14, y: h * 0.78 }
-        ]);
+        // a manga sweat drop: a fat teardrop leaning right, a glint, two little flick lines
+        var sd0 = place([(function () {
+            var c = [{ x: 0, y: -0.5 }];
+            for (var k = 0; k <= 16; k++) { var a = -0.15 * Math.PI + k / 16 * 1.3 * Math.PI; c.push({ x: 0.3 * Math.cos(a), y: 0.16 + 0.3 * Math.sin(a) }); }
+            c.push({ x: 0, y: -0.5 });
+            return c;
+        })()], w * 0.56, h * 0.48, 18, Math.min(w, h) * 0.95)[0];
+        S.push(sd0);
+        S.push(place([[{ x: -0.16, y: 0.08 }, { x: -0.13, y: 0.24 }]], w * 0.56, h * 0.48, 18, Math.min(w, h) * 0.95)[0]);
+        S.push([{ x: w * 0.12, y: h * 0.36 }, { x: w * 0.22, y: h * 0.42 }]);
+        S.push([{ x: w * 0.12, y: h * 0.56 }, { x: w * 0.22, y: h * 0.56 }]);
         break;
     }
     case "anger": {
-        // iconic anime 4-curved bulging vein pop symbol (ikari mark)
-        var aLeft = w * 0.16, aRight = w * 0.84;
-        var aTop = h * 0.16, aBot = h * 0.84;
-
-        // Top horizontal curve bulging upward
-        var topCurve = [];
-        for (i = 0; i <= 12; i++) {
-            u = i / 12;
-            var tcx = aLeft + (aRight - aLeft) * u;
-            var tcy = h * 0.36 - h * 0.09 * Math.sin(u * Math.PI);
-            topCurve.push({ x: tcx, y: tcy });
+        // the manga anger mark: four short arcs bowing in toward a cross-shaped gap, open between them
+        var ar = Math.min(w, h) * 0.5, acx = w / 2, acy = h / 2;
+        for (n = 0; n < 4; n++) {
+            var qa = Math.PI / 4 + n * Math.PI / 2;
+            var ox = acx + Math.cos(qa) * ar * 1.98, oy = acy + Math.sin(qa) * ar * 1.98;
+            pts = [];
+            for (i = 0; i <= 10; i++) {
+                var ta = qa + Math.PI + (i / 10 - 0.5) * Math.PI * 0.26;
+                pts.push({ x: ox + Math.cos(ta) * ar * 1.35, y: oy + Math.sin(ta) * ar * 1.35 });
+            }
+            S.push(pts);
         }
-        S.push(topCurve);
-
-        // Bottom horizontal curve bulging downward
-        var botCurve = [];
-        for (i = 0; i <= 12; i++) {
-            u = i / 12;
-            var bcx = aLeft + (aRight - aLeft) * u;
-            var bcy = h * 0.64 + h * 0.09 * Math.sin(u * Math.PI);
-            botCurve.push({ x: bcx, y: bcy });
-        }
-        S.push(botCurve);
-
-        // Left vertical curve bulging leftward
-        var leftCurve = [];
-        for (i = 0; i <= 12; i++) {
-            u = i / 12;
-            var lcy = aTop + (aBot - aTop) * u;
-            var lcx = w * 0.36 - w * 0.09 * Math.sin(u * Math.PI);
-            leftCurve.push({ x: lcx, y: lcy });
-        }
-        S.push(leftCurve);
-
-        // Right vertical curve bulging rightward
-        var rightCurve = [];
-        for (i = 0; i <= 12; i++) {
-            u = i / 12;
-            var rcy = aTop + (aBot - aTop) * u;
-            var rcx = w * 0.64 + w * 0.09 * Math.sin(u * Math.PI);
-            rightCurve.push({ x: rcx, y: rcy });
-        }
-        S.push(rightCurve);
-
-        // Corner vein tick accents
-        S.push([{ x: w * 0.84, y: h * 0.16 }, { x: w * 0.94, y: h * 0.08 }]);
-        S.push([{ x: w * 0.16, y: h * 0.84 }, { x: w * 0.06, y: h * 0.92 }]);
-        S.push([{ x: w * 0.84, y: h * 0.84 }, { x: w * 0.94, y: h * 0.92 }]);
         break;
     }
     case "sun": {
@@ -1918,152 +1799,56 @@ function markShape(kind, sd, w, h) {
         break;
     }
     case "sprout": {
-        // an organic young botanical sprout: soil ground line, curved stem, and two opening leaves
-        var groundY = h * 0.86;
-        var stemBaseX = w * 0.50;
-        var stemTipX = w * 0.50 + w * 0.04 * M.rs(sd, 1, 955);
-        var stemTipY = h * 0.38;
-
-        // Ground base line with slight soil mound
-        S.push([
-            { x: w * 0.18, y: groundY },
-            { x: w * 0.40, y: groundY - h * 0.04 },
-            { x: w * 0.60, y: groundY - h * 0.04 },
-            { x: w * 0.82, y: groundY }
-        ]);
-
-        // Tender curved stem
-        var Stem = [];
-        for (i = 0; i <= 14; i++) {
-            u = i / 14;
-            var stx = stemBaseX + (stemTipX - stemBaseX) * u - w * 0.08 * Math.sin(u * Math.PI);
-            var sty = groundY + (stemTipY - groundY) * u;
-            Stem.push({ x: stx, y: sty });
+        // a shoot: a curved stem out of a soil line, two leaves opening left and right
+        var gx = w * 0.5, gy = h * 0.86;
+        S.push([{ x: w * 0.2, y: gy }, { x: w * 0.42, y: gy + h * 0.02 }, { x: w * 0.62, y: gy - h * 0.01 }, { x: w * 0.8, y: gy }]);
+        pts = [];
+        for (i = 0; i <= 10; i++) { u = i / 10; pts.push({ x: gx + w * 0.05 * Math.sin(u * Math.PI), y: gy - h * 0.5 * u }); }
+        S.push(pts);
+        var tip = pts[pts.length - 1];
+        function leaf(dir) {
+            var L1 = [], L2 = [], ex = tip.x + dir * w * 0.34, ey = tip.y - h * 0.16;
+            for (var k = 0; k <= 8; k++) {
+                var v = k / 8, bx = tip.x + (ex - tip.x) * v, by = tip.y + (ey - tip.y) * v, bulge = Math.sin(v * Math.PI) * h * 0.11;
+                L1.push({ x: bx, y: by - bulge }); L2.push({ x: bx, y: by + bulge });
+            }
+            return L1.concat(L2.reverse());
         }
-        S.push(Stem);
-
-        // Left cotyledon leaf
-        var LeftLeaf = [{ x: stemTipX, y: stemTipY }];
-        for (i = 1; i <= 12; i++) {
-            u = i / 12;
-            var alx = stemTipX - w * 0.32 * Math.sin(u * Math.PI) - w * 0.06 * (1 - u);
-            var aly = stemTipY - h * 0.18 * (1 - Math.cos(u * Math.PI)) + h * 0.04 * u;
-            LeftLeaf.push({ x: alx, y: aly });
-        }
-        LeftLeaf.push({ x: stemTipX, y: stemTipY });
-        S.push(LeftLeaf);
-
-        // Right cotyledon leaf
-        var RightLeaf = [{ x: stemTipX, y: stemTipY }];
-        for (i = 1; i <= 12; i++) {
-            u = i / 12;
-            var arx = stemTipX + w * 0.34 * Math.sin(u * Math.PI) + w * 0.05 * (1 - u);
-            var ary = stemTipY - h * 0.22 * (1 - Math.cos(u * Math.PI)) + h * 0.03 * u;
-            RightLeaf.push({ x: arx, y: ary });
-        }
-        RightLeaf.push({ x: stemTipX, y: stemTipY });
-        S.push(RightLeaf);
-
-        // Center budding tip
-        S.push([
-            { x: stemTipX, y: stemTipY },
-            { x: stemTipX, y: stemTipY - h * 0.10 }
-        ]);
+        S.push(leaf(-1));
+        S.push(leaf(1));
         break;
     }
     case "bird": {
-        // a soaring folk songbird in flight: arched sweeping wings, slender body and forked tail
-        var bHeadX = w * 0.50, bHeadY = h * 0.30;
-        var bBodyX = w * 0.50, bBodyY = h * 0.56;
-        var bTailL = { x: w * 0.44, y: h * 0.84 };
-        var bTailR = { x: w * 0.56, y: h * 0.84 };
-        var bTailMid = { x: w * 0.50, y: h * 0.72 };
-
-        // Left wing sweep
-        var LWing = [{ x: bBodyX, y: bBodyY }];
-        for (i = 1; i <= 14; i++) {
-            u = i / 14;
-            var lwx = bBodyX - w * 0.38 * u;
-            var lwy = bBodyY - h * 0.38 * Math.sin(u * Math.PI * 0.85);
-            LWing.push({ x: lwx, y: lwy });
+        // two gulls in flight, each two curved wings meeting at a point
+        function gull(cx, cy, s) {
+            var g = [];
+            for (var k = 0; k <= 8; k++) { var v = k / 8; g.push({ x: cx - s + s * v, y: cy - s * 0.45 * Math.sin(v * Math.PI) + s * 0.25 * v }); }
+            for (k = 1; k <= 8; k++) { v = k / 8; g.push({ x: cx + s * v, y: cy + s * 0.25 * (1 - v) - s * 0.45 * Math.sin(v * Math.PI) }); }
+            return g;
         }
-        var lTip = LWing[LWing.length - 1];
-        // Lower contour of left wing back to body
-        for (i = 1; i <= 10; i++) {
-            u = i / 10;
-            var llwx = lTip.x + (bBodyX - lTip.x) * u + w * 0.05 * Math.sin(u * Math.PI);
-            var llwy = lTip.y + (bBodyY + h * 0.08 - lTip.y) * u + h * 0.06 * Math.sin(u * Math.PI);
-            LWing.push({ x: llwx, y: llwy });
-        }
-        S.push(LWing);
-
-        // Right wing sweep
-        var RWing = [{ x: bBodyX, y: bBodyY }];
-        for (i = 1; i <= 14; i++) {
-            u = i / 14;
-            var rwx = bBodyX + w * 0.38 * u;
-            var rwy = bBodyY - h * 0.38 * Math.sin(u * Math.PI * 0.85);
-            RWing.push({ x: rwx, y: rwy });
-        }
-        var rTip = RWing[RWing.length - 1];
-        // Lower contour of right wing back to body
-        for (i = 1; i <= 10; i++) {
-            u = i / 10;
-            var rlwx = rTip.x + (bBodyX - rTip.x) * u - w * 0.05 * Math.sin(u * Math.PI);
-            var rlwy = rTip.y + (bBodyY + h * 0.08 - rTip.y) * u + h * 0.06 * Math.sin(u * Math.PI);
-            RWing.push({ x: rlwx, y: rlwy });
-        }
-        S.push(RWing);
-
-        // Bird head, torso and swallow tail contour
-        S.push([
-            { x: bHeadX, y: bHeadY - h * 0.06 }, // Beak tip
-            { x: bHeadX - w * 0.06, y: bHeadY + h * 0.04 },
-            { x: bBodyX - w * 0.05, y: bBodyY + h * 0.10 },
-            bTailL,
-            bTailMid,
-            bTailR,
-            { x: bBodyX + w * 0.05, y: bBodyY + h * 0.10 },
-            { x: bHeadX + w * 0.06, y: bHeadY + h * 0.04 },
-            { x: bHeadX, y: bHeadY - h * 0.06 }
-        ]);
+        S.push(gull(w * 0.38, h * 0.5, w * 0.3));
+        S.push(gull(w * 0.8, h * 0.24, w * 0.15));
         break;
     }
     case "hill": {
-        // rolling country/folk hills: overlapping curved horizon slopes and rustic fence accents
-        var ForeHill = [];
-        for (i = 0; i <= 24; i++) {
-            u = i / 24;
-            var hx = w * (0.04 + 0.92 * u);
-            var hy = h * (0.84 - 0.36 * Math.sin(u * Math.PI * 0.92) + 0.06 * Math.sin(u * Math.PI * 2.2));
-            ForeHill.push({ x: hx, y: hy });
+        // two low rolling hills running off the edges; the far one hides behind the near one,
+        // a small tree stands on the near crest
+        function hy(x, x0, x1, top) {
+            if (x <= x0 || x >= x1) return h * 0.86;
+            return h * 0.86 - top * (0.5 - 0.5 * Math.cos(2 * Math.PI * (x - x0) / (x1 - x0)));
         }
-        S.push(ForeHill);
-
-        var BackHill = [];
-        for (i = 0; i <= 20; i++) {
-            u = i / 20;
-            var bx = w * (0.22 + 0.74 * u);
-            var by = h * (0.64 - 0.28 * Math.sin(u * Math.PI * 0.95));
-            BackHill.push({ x: bx, y: by });
+        var nearP = [], farP = [];
+        for (i = 0; i <= 32; i++) {
+            var hx = w * i / 32, yn = hy(hx, -w * 0.3, w * 0.9, h * 0.36), yf = hy(hx, w * 0.3, w * 1.5, h * 0.3);
+            nearP.push({ x: hx, y: yn });
+            if (yf < yn - 0.5) farP.push({ x: hx, y: yf });
+            else if (farP.length) { farP.push({ x: hx, y: yn }); S.push(farP); farP = []; }
         }
-        S.push(BackHill);
-
-        // Rustic countryside post fence
-        var post1X = w * 0.26, post1Y = h * 0.60;
-        var post2X = w * 0.36, post2Y = h * 0.54;
-        S.push([
-            { x: post1X, y: post1Y },
-            { x: post1X, y: post1Y + h * 0.16 }
-        ]);
-        S.push([
-            { x: post2X, y: post2Y },
-            { x: post2X, y: post2Y + h * 0.16 }
-        ]);
-        S.push([
-            { x: post1X - w * 0.03, y: post1Y + h * 0.06 },
-            { x: post2X + w * 0.03, y: post2Y + h * 0.06 }
-        ]);
+        if (farP.length > 1) S.push(farP);
+        S.push(nearP);
+        var tx = w * 0.3, ty = h * 0.51;
+        S.push([{ x: tx, y: ty }, { x: tx, y: ty - h * 0.09 }]);
+        S.push(ellipsePts(tx, ty - h * 0.15, w * 0.05, h * 0.065, 0, 2 * Math.PI, 14));
         break;
     }
     case "wrap":
@@ -2802,28 +2587,20 @@ function propShape(kind) {
             [{ x: -0.10, y: 0.0 }, { x: -0.14, y: 0.22 }],
             ellipsePts(0, 0.15, 0.08, 0.08, 0, 2 * Math.PI, 10)
         ];
-    case "moonrise":
-        return [
-            ellipsePts(0, 0, 0.46, 0.46, -Math.PI * 0.44, Math.PI * 0.44, 20),
-            ellipsePts(-0.16, 0, 0.42, 0.42, -Math.PI * 0.44, Math.PI * 0.44, 20),
-            [{ x: 0.46 * Math.cos(-Math.PI * 0.44), y: 0.46 * Math.sin(-Math.PI * 0.44) },
-             { x: -0.16 + 0.42 * Math.cos(-Math.PI * 0.44), y: 0.42 * Math.sin(-Math.PI * 0.44) }],
-            [{ x: 0.46 * Math.cos(Math.PI * 0.44), y: 0.46 * Math.sin(Math.PI * 0.44) },
-             { x: -0.16 + 0.42 * Math.cos(Math.PI * 0.44), y: 0.42 * Math.sin(Math.PI * 0.44) }]
-        ];
+    case "moonrise": {
+        // a fat crescent opening right: the outer rim round the left, the inner rim back
+        var Cr = ellipsePts(0, 0, 0.5, 0.5, Math.PI * 0.3, Math.PI * 1.7, 26);
+        return [Cr.concat(ellipsePts(0.213, 0, 0.413, 0.413, 2 * Math.PI - 1.373, 1.373, 22))];
+    }
     case "classic_vinyl":
     case "vinyl":
+        // rim, two broken grooves (so the spin shows), the label and the spindle hole
         return [
-            ellipsePts(0, 0, 0.48, 0.48, 0, 2 * Math.PI, 28),
-            ellipsePts(0, 0, 0.40, 0.40, 0, 2 * Math.PI, 24),
-            ellipsePts(0, 0, 0.32, 0.32, 0, 2 * Math.PI, 20),
-            ellipsePts(0, 0, 0.24, 0.24, 0, 2 * Math.PI, 18),
-            ellipsePts(0, 0, 0.16, 0.16, 0, 2 * Math.PI, 16),
-            ellipsePts(0, 0, 0.04, 0.04, 0, 2 * Math.PI, 10),
-            [{ x: -0.36, y: -0.22 }, { x: -0.18, y: -0.11 }],
-            [{ x: 0.36, y: 0.22 }, { x: 0.18, y: 0.11 }],
-            [{ x: -0.22, y: 0.36 }, { x: -0.11, y: 0.18 }],
-            [{ x: 0.22, y: -0.36 }, { x: 0.11, y: -0.18 }]
+            ellipsePts(0, 0, 0.48, 0.48, 0, 2 * Math.PI, 30),
+            ellipsePts(0, 0, 0.38, 0.38, 0.4, 2 * Math.PI - 0.5, 24),
+            ellipsePts(0, 0, 0.29, 0.29, 2.2, 2 * Math.PI + 1.6, 20),
+            ellipsePts(0, 0, 0.15, 0.15, 0, 2 * Math.PI, 16),
+            ellipsePts(0, 0, 0.03, 0.03, 0, 2 * Math.PI, 8)
         ];
     case "classic_smoke":
     case "smoke":
@@ -2834,22 +2611,18 @@ function propShape(kind) {
             ellipsePts(-0.06, -0.48, 0.10, 0.07, 0, Math.PI * 1.6, 12)
         ];
     case "horn":
+        // a trumpet side on, mouthpiece left, bell flaring right to x = 0.56
         return [
-            // Leadpipe / mouthpiece tubing
-            [{ x: -0.52, y: 0.08 }, { x: -0.24, y: 0.08 }],
-            [{ x: -0.55, y: 0.03 }, { x: -0.52, y: 0.08 }, { x: -0.55, y: 0.13 }, { x: -0.55, y: 0.03 }],
-            // Valve casing block
-            [{ x: -0.28, y: -0.04 }, { x: -0.14, y: -0.04 }, { x: -0.14, y: 0.18 }, { x: -0.28, y: 0.18 }, { x: -0.28, y: -0.04 }],
-            // Three valve pistons
-            [{ x: -0.25, y: -0.12 }, { x: -0.25, y: -0.04 }],
-            [{ x: -0.21, y: -0.12 }, { x: -0.21, y: -0.04 }],
-            [{ x: -0.17, y: -0.12 }, { x: -0.17, y: -0.04 }],
-            // Flared horn bell top and bottom contours
-            bezier({ x: -0.14, y: 0.04 }, { x: 0.04, y: 0.02 }, { x: 0.16, y: -0.10 }, { x: 0.30, y: -0.32 }, 16),
-            bezier({ x: -0.14, y: 0.12 }, { x: 0.04, y: 0.14 }, { x: 0.16, y: 0.26 }, { x: 0.30, y: 0.48 }, 16),
-            // Bell opening rim
-            ellipsePts(0.30, 0.08, 0.07, 0.40, 0, 2 * Math.PI, 22),
-            ellipsePts(0.26, 0.08, 0.04, 0.26, 0, 2 * Math.PI, 16)
+            [{ x: -0.62, y: -0.05 }, { x: -0.57, y: 0 }, { x: -0.62, y: 0.05 }],
+            [{ x: -0.57, y: -0.025 }, { x: -0.2, y: -0.025 }], [{ x: -0.57, y: 0.025 }, { x: -0.2, y: 0.025 }],
+            [{ x: -0.2, y: -0.08 }, { x: -0.02, y: -0.08 }, { x: -0.02, y: 0.1 }, { x: -0.2, y: 0.1 }, { x: -0.2, y: -0.08 }],
+            [{ x: -0.165, y: -0.08 }, { x: -0.165, y: -0.17 }], [{ x: -0.19, y: -0.17 }, { x: -0.14, y: -0.17 }],
+            [{ x: -0.11, y: -0.08 }, { x: -0.11, y: -0.17 }], [{ x: -0.135, y: -0.17 }, { x: -0.085, y: -0.17 }],
+            [{ x: -0.055, y: -0.08 }, { x: -0.055, y: -0.17 }], [{ x: -0.08, y: -0.17 }, { x: -0.03, y: -0.17 }],
+            bezier({ x: -0.18, y: 0.1 }, { x: -0.2, y: 0.24 }, { x: 0.02, y: 0.24 }, { x: 0.02, y: 0.1 }, 12),
+            bezier({ x: -0.02, y: -0.025 }, { x: 0.3, y: -0.03 }, { x: 0.46, y: -0.08 }, { x: 0.56, y: -0.24 }, 16),
+            bezier({ x: -0.02, y: 0.025 }, { x: 0.3, y: 0.03 }, { x: 0.46, y: 0.08 }, { x: 0.56, y: 0.24 }, 16),
+            ellipsePts(0.56, 0, 0.05, 0.24, 0, 2 * Math.PI, 20)
         ];
     case "flash":
         return [
@@ -2887,18 +2660,10 @@ function propShape(kind) {
             [{ x: 0, y: 0.35 }, { x: 0, y: -0.12 }]
         ];
     case "sunrise":
+        // the top half of the sun, an inner rim, cut flat at the horizon (y = 0)
         return [
-            // Semicircular sun disc above baseline
-            ellipsePts(0, 0, 0.44, 0.44, Math.PI, 2 * Math.PI, 22),
-            ellipsePts(0, 0, 0.26, 0.26, Math.PI, 2 * Math.PI, 16),
-            // Horizon baseline
-            [{ x: -0.58, y: 0 }, { x: 0.58, y: 0 }],
-            // Radial sunbeam spikes
-            [{ x: -0.42 * 1.3, y: -0.15 * 1.3 }, { x: -0.42 * 1.65, y: -0.15 * 1.65 }],
-            [{ x: -0.32 * 1.3, y: -0.32 * 1.3 }, { x: -0.32 * 1.65, y: -0.32 * 1.65 }],
-            [{ x: 0, y: -0.44 * 1.3 }, { x: 0, y: -0.44 * 1.65 }],
-            [{ x: 0.32 * 1.3, y: -0.32 * 1.3 }, { x: 0.32 * 1.65, y: -0.32 * 1.65 }],
-            [{ x: 0.42 * 1.3, y: -0.15 * 1.3 }, { x: 0.42 * 1.65, y: -0.15 * 1.65 }]
+            ellipsePts(0, 0, 0.5, 0.5, Math.PI, 2 * Math.PI, 26),
+            ellipsePts(0, 0, 0.36, 0.36, Math.PI * 1.12, Math.PI * 1.88, 18)
         ];
     case "flock":
         return [
@@ -3144,81 +2909,119 @@ function peakPieces(L, t, W, px, bl) {
         break;
     }
     case "shatter": {
-        // cracks run out from the hero center, sharp shards drop away
-        var cxS = W / 2, cyS = bl - 0.35 * px;
-        var cracks = [
-            [{ x: cxS, y: cyS }, { x: cxS - 0.22 * W, y: cyS - 0.22 * px }, { x: -0.06 * px, y: bl - 0.82 * px }],
-            [{ x: cxS, y: cyS }, { x: cxS + 0.2 * W, y: cyS - 0.26 * px }, { x: W + 0.08 * px, y: bl - 0.78 * px }],
-            [{ x: cxS, y: cyS }, { x: cxS - 0.18 * W, y: cyS + 0.18 * px }, { x: -0.04 * px, y: bl + 0.18 * px }],
-            [{ x: cxS, y: cyS }, { x: cxS + 0.24 * W, y: cyS + 0.16 * px }, { x: W + 0.06 * px, y: bl + 0.2 * px }],
-            [{ x: cxS - 0.14 * W, y: cyS - 0.08 * px }, { x: cxS - 0.04 * W, y: cyS + 0.16 * px }, { x: cxS + 0.1 * W, y: cyS + 0.04 * px }]
-        ];
+        // the hero hits like a stone through glass: a cracked pane behind the word with arms running
+        // well past its edges and two broken rings, shards break off the rim and tumble away
+        var ix = W * 0.58, iy = bl - 0.42 * px, rxS = W * 0.5 + 0.95 * px, ryS = 1.2 * px;
+        var nArm = 9, arms = [];
+        for (var ak = 0; ak < nArm; ak++) {
+            var aa = (ak + 0.5 + 0.35 * M.rs(sd, ak, 921)) / nArm * 2 * Math.PI;
+            var reach = 0.8 + 0.2 * M.r(sd, ak, 922), arm = [];
+            for (var ai = 0; ai <= 5; ai++) {
+                var av = ai / 5, jit = ai > 0 && ai < 5 ? 0.07 * px * M.rs(sd, ak * 7 + ai, 923) : 0;
+                arm.push({ x: ix + Math.cos(aa) * rxS * reach * av - Math.sin(aa) * jit,
+                           y: iy + Math.sin(aa) * ryS * reach * av + Math.cos(aa) * jit });
+            }
+            arms.push(arm);
+        }
+        function armAt(k, v) { var A = arms[k % nArm], f = v * 5, i0 = Math.min(4, Math.floor(f)), fr = f - i0;
+            return { x: A[i0].x + (A[i0 + 1].x - A[i0].x) * fr, y: A[i0].y + (A[i0 + 1].y - A[i0].y) * fr }; }
+        var crackFade = fade(tp - 0.75, 0.35);
         if (tp < 0) {
-            put(0, cracks, M.clamp(tau / PROP_D.shatter * 0.3), true, 0.6, 0.035, 3);
+            // a hairline star at the impact point just before the hit
+            if (tp > -0.2) put(0, arms, 0.1 * M.clamp((tp + 0.2) / 0.2), true, 0.7, 0.03, -1);
         } else {
-            put(0, cracks, 1, true, 0.9 * fade(tp - 0.6, 0.4), 0.04, 3);
+            var grow = M.E.outCubic(M.clamp(tp / 0.14)), Pane = arms.slice();
+            if (tp > 0.05) {
+                // two broken rings, every third span missing
+                [0.42, 0.78].forEach(function (rv, ri) {
+                    for (var k = 0; k < nArm; k++) {
+                        if ((k + ri) % 3 === 2) continue;
+                        var a0 = armAt(k, rv), a1 = armAt(k + 1, rv * (0.95 + 0.1 * M.r(sd, k, 924)));
+                        var mid = { x: (a0.x + a1.x) / 2 + 0.05 * px * M.rs(sd, k + ri * 9, 925), y: (a0.y + a1.y) / 2 + 0.05 * px * M.rs(sd, k + ri * 9, 926) };
+                        Pane.push([a0, mid, a1]);
+                    }
+                });
+            }
+            put(0, Pane, grow, true, 0.8 * crackFade, 0.032, -1);
+            // shards break off the outer ring and tumble down and out
             var Shards = [];
-            for (var sk = 0; sk < 5; sk++) {
-                var sx0 = cxS + (sk - 2) * 0.18 * W + 0.05 * px * M.rs(sd, sk, 921);
-                var sy0 = cyS + 0.08 * px * M.rs(sd, sk, 922);
-                var sdx = (sk - 2) * 0.3 * px * tp;
-                var sdy = (0.2 + 0.1 * sk) * px * tp + 3.0 * px * tp * tp;
-                var spin = (sk % 2 ? 1 : -1) * (18 + 12 * sk) * tp * 8;
-                Shards = Shards.concat(place(propShape("shard"), sx0 + sdx, sy0 + sdy, spin, px * 0.8));
+            for (var sk = 0; sk < 7; sk++) {
+                var sa = (sk + 0.5) / 7 * Math.PI * 1.15 - 0.075 * Math.PI;
+                var sx0 = ix + Math.cos(sa) * rxS * 0.95, sy0 = iy + Math.sin(sa) * ryS * 0.7;
+                var dir = sx0 < ix ? -1 : 1, q = Math.max(0, tp - 0.04);
+                var ssz = px * (0.9 + 0.5 * M.r(sd, sk, 927));
+                Shards = Shards.concat(place(propShape("shard"), sx0 + dir * (0.5 + 0.4 * M.r(sd, sk, 928)) * px * q,
+                                             sy0 - 0.6 * px * q + 4.2 * px * q * q,
+                                             dir * (200 + 160 * M.r(sd, sk, 929)) * q + 40 * M.rs(sd, sk, 930), ssz));
             }
-            if (Shards.length) put(1, Shards, 1, false, M.clamp(1 - tp / 0.85), 0.035, 2);
-            var Sparks = [];
-            for (var spk = 0; spk < 4; spk++) {
-                var spa = -Math.PI * 0.75 + spk * Math.PI * 0.5;
-                Sparks.push([
-                    { x: cxS + 0.15 * px * Math.cos(spa), y: cyS + 0.15 * px * Math.sin(spa) },
-                    { x: cxS + 0.45 * px * Math.cos(spa), y: cyS + 0.45 * px * Math.sin(spa) }
-                ]);
+            put(1, Shards, 1, false, 0.95 * fade(tp - 0.45, 0.4), 0.035, 3);
+            // the hit: short flicks bursting out of the impact point
+            var Sp = [];
+            for (var spk = 0; spk < 8; spk++) {
+                var spa = spk / 8 * 2 * Math.PI + 0.2, r0 = (0.18 + 0.9 * M.E.outQuad(M.clamp(tp / 0.2))) * px;
+                Sp.push([{ x: ix + r0 * Math.cos(spa), y: iy + r0 * Math.sin(spa) * 0.8 },
+                         { x: ix + (r0 + 0.22 * px) * Math.cos(spa), y: iy + (r0 + 0.22 * px) * Math.sin(spa) * 0.8 }]);
             }
-            put(2, Sparks, M.clamp(tp / 0.06), true, fade(tp, 0.2), 0.035, 4);
+            put(2, Sp, 1, true, fade(tp - 0.08, 0.14), 0.04, 4);
         }
         break;
     }
     case "snap": {
-        // a string stretched over the word snaps, both ends curl back
-        var x0 = -0.12 * px, y0 = bl - 0.38 * px, x1 = W + 0.12 * px, cxSnap = W / 2;
-        var Anchors = place([[{ x: -0.06, y: -0.12 }, { x: 0, y: 0 }, { x: -0.06, y: 0.12 }]], x0, y0, 0, px)
-            .concat(place([[{ x: 0.06, y: -0.12 }, { x: 0, y: 0 }, { x: 0.06, y: 0.12 }]], x1, y0, 0, px));
-        put(1, Anchors, 1, false, 0.75, 0.03, 2);
+        // a guitar string pegged above the word pulls taut and hums, then snaps over the hero:
+        // both halves whip back toward their pegs and coil up
+        var ySn = bl - 1.38 * px, x0 = -0.45 * px, x1 = W + 0.45 * px, xBrk = W / 2;
+        var snapFade = fade(tp - 0.75, 0.35);
+        var Pegs = [];
+        [x0, x1].forEach(function (xp) {
+            Pegs.push(ellipsePts(xp, ySn, 0.08 * px, 0.08 * px, 0, 2 * Math.PI, 12));
+            Pegs.push([{ x: xp, y: ySn + 0.08 * px }, { x: xp, y: ySn + 0.3 * px }]);
+        });
+        put(1, Pegs, M.clamp(tau / 0.15), false, 0.85 * snapFade, 0.035, 3);
         if (tp < 0) {
-            var uSnap = M.clamp(tau / PROP_D.snap);
-            var vib = uSnap > 0.6 ? 0.03 * px * Math.sin(tau * 45) * (uSnap - 0.6) / 0.4 : 0;
-            var strPts = [];
-            for (var si = 0; si <= 14; si++) {
-                var su = si / 14;
-                strPts.push({ x: x0 + (x1 - x0) * su * uSnap, y: y0 + vib * Math.sin(su * Math.PI) });
+            // drawn across peg to peg, then plucked: it hums wider and faster up to the snap
+            var uSn = M.clamp(tau / (PROP_D.snap * 0.45)), hum = M.clamp((tau - PROP_D.snap * 0.45) / (PROP_D.snap * 0.55));
+            var amp = 0.12 * px * hum * hum, Str = [];
+            for (var si = 0; si <= 24; si++) {
+                var su = si / 24;
+                Str.push({ x: x0 + (x1 - x0) * su, y: ySn + amp * Math.sin(su * Math.PI) * Math.sin(tau * (30 + 30 * hum)) });
             }
-            put(0, [strPts], 1, false, 0.85, 0.035, 3);
-        } else {
-            var retract = M.E.outCubic(M.clamp(tp / 0.22));
-            var xEndL = cxSnap - (cxSnap - x0) * 0.65 * retract;
-            var xEndR = cxSnap + (x1 - cxSnap) * 0.65 * retract;
-            var leftPts = [], rightPts = [];
-            for (var j = 0; j <= 14; j++) {
-                var sj = j / 14;
-                var lx = x0 + (xEndL - x0) * sj, ly = y0;
-                var rx = x1 - (x1 - xEndR) * sj, ry = y0;
-                if (sj > 0.45) {
-                    var cFrac = (sj - 0.45) / 0.55;
-                    var angL = retract * 3.2 * Math.PI * cFrac;
-                    var rCurl = cFrac * 0.28 * px * retract;
-                    lx += rCurl * Math.cos(angL);
-                    ly -= rCurl * Math.sin(angL);
-                    rx -= rCurl * Math.cos(angL);
-                    ry -= rCurl * Math.sin(angL);
+            put(0, [Str], uSn, false, 0.9, 0.035, 3);
+            if (hum > 0.6) {
+                // the strand frays at the middle just before it goes
+                var Fr = [];
+                for (var fk = 0; fk < 3; fk++) {
+                    var fa = -Math.PI / 2 + (fk - 1) * 0.6;
+                    Fr.push([{ x: xBrk, y: ySn }, { x: xBrk + 0.16 * px * Math.cos(fa), y: ySn + 0.16 * px * Math.sin(fa) }]);
                 }
-                leftPts.push({ x: lx, y: ly });
-                rightPts.push({ x: rx, y: ry });
+                put(2, Fr, 1, true, (hum - 0.6) / 0.4, 0.03, 4);
             }
-            put(0, [leftPts, rightPts], 1, false, 0.85 * fade(tp - 0.6, 0.4), 0.035, 3);
-            var wL = [{ x: cxSnap - 0.04 * px - 0.25 * px * tp, y: y0 - 0.12 * px }, { x: cxSnap - 0.04 * px - 0.25 * px * tp, y: y0 + 0.12 * px }];
-            var wR = [{ x: cxSnap + 0.04 * px + 0.25 * px * tp, y: y0 - 0.12 * px }, { x: cxSnap + 0.04 * px + 0.25 * px * tp, y: y0 + 0.12 * px }];
-            put(2, [wL, wR], 1, true, fade(tp, 0.2), 0.04, 4);
+        } else {
+            var rec = M.E.outCubic(M.clamp(tp / 0.28)), whip = Math.sin(Math.PI * M.clamp(tp / 0.4)) * Math.exp(-2.5 * tp);
+            var halves = [];
+            [[x0, 1], [x1, -1]].forEach(function (hs) {
+                var xp = hs[0], dir = hs[1], len = Math.abs(xBrk - xp), H = [];
+                for (var j = 0; j <= 24; j++) {
+                    var sj = j / 24, along = len * (1 - 0.55 * rec) * sj, hx = xp + dir * along, hy = ySn;
+                    hy -= 0.45 * px * whip * Math.sin(Math.PI * sj * 0.8);
+                    if (sj > 0.55) {
+                        // the loose end coils back on itself
+                        var cf = (sj - 0.55) / 0.45, ang = rec * 2.4 * Math.PI * cf, rc = 0.24 * px * rec * cf;
+                        hx += dir * (rc * Math.sin(ang) - rc * ang * 0.15);
+                        hy -= rc * (1 - Math.cos(ang));
+                    }
+                    H.push({ x: hx, y: hy });
+                }
+                halves.push(H);
+            });
+            put(0, halves, 1, false, 0.9 * snapFade, 0.035, 3);
+            // the break: a star of flicks where it went
+            var Bk = [];
+            for (var bk = 0; bk < 7; bk++) {
+                var ba = bk / 7 * 2 * Math.PI - Math.PI / 2, b0 = (0.1 + 0.5 * M.E.outQuad(M.clamp(tp / 0.18))) * px;
+                Bk.push([{ x: xBrk + b0 * Math.cos(ba), y: ySn + b0 * Math.sin(ba) * 0.7 },
+                         { x: xBrk + (b0 + 0.2 * px) * Math.cos(ba), y: ySn + (b0 + 0.2 * px) * Math.sin(ba) * 0.7 }]);
+            }
+            put(2, Bk, 1, true, fade(tp - 0.06, 0.16), 0.04, 4);
         }
         break;
     }
@@ -3288,7 +3091,7 @@ function peakPieces(L, t, W, px, bl) {
             var canFade = fade(tp - spraySung - 0.2, 0.35);
             put(0, place(propShape("spray"), canX, canY, canRot, px * 0.72), 1, false, 0.9 * canFade, 0.035, 3);
 
-            // Piece 1: Sprayed graffiti bubble tag behind the word (z: 1)
+            // Piece 1: Sprayed graffiti bubble tag behind the word (z: -1, behind the letters)
             var tagProg = M.clamp(tp / 0.22);
             var Tag = [];
             var padX = 0.12 * px, tagTop = bl - 0.9 * px, tagBot = bl + 0.12 * px;
@@ -3314,7 +3117,7 @@ function peakPieces(L, t, W, px, bl) {
                 { x: wL - 0.06 * px, y: bl + 0.08 * px },
                 { x: wR + 0.06 * px, y: bl + 0.05 * px }
             ]);
-            put(1, Tag, tagProg, true, 0.8 * fade(tp - spraySung - 0.4, 0.4), 0.045, 1);
+            put(1, Tag, tagProg, true, 0.8 * fade(tp - spraySung - 0.4, 0.4), 0.045, -1);
 
             // Piece 2: Paint drips running down below the baseline (z: 1)
             var Drips = [];
@@ -3536,64 +3339,30 @@ function peakPieces(L, t, W, px, bl) {
         break;
     }
     case "eq": {
-        // equalizer bars behind the word jump with the singing
+        // a row of LED equalizer bars stands behind the word, wider than it, and jumps with the
+        // singing; the tall middle bars rise clear above the letters, peak dashes ride on top
         var eqFade = fade(tp - sung - 0.5, 0.4);
-        var nBars = 9;
-        var eqX0 = -0.06 * px;
-        var eqX1 = W + 0.06 * px;
-        var eqBaseY = bl + 0.06 * px;
-        var maxBarH = 1.05 * px;
-        var bWidth = Math.min(0.08 * px, (eqX1 - eqX0) / (nBars * 2.0));
-
-        // Piece 0: Equalizer baseline rack and frequency boundary ticks (z: 1)
-        var Frame = [
-            [{ x: eqX0 - 0.04 * px, y: eqBaseY }, { x: eqX1 + 0.04 * px, y: eqBaseY }],
-            [{ x: eqX0, y: eqBaseY - 0.08 * px }, { x: eqX0, y: eqBaseY + 0.04 * px }],
-            [{ x: eqX1, y: eqBaseY - 0.08 * px }, { x: eqX1, y: eqBaseY + 0.04 * px }]
-        ];
-        put(0, Frame, 1, false, 0.8 * eqFade, 0.03, 1);
-
-        // Piece 1: Equalizer bars jumping dynamically behind the word (z: 1)
-        var BarStrokes = [];
-        var PeakHold = [];
-        var WaveLine = [];
-
+        var eqX0 = -1.1 * px, eqX1 = W + 1.1 * px, eqBaseY = bl + 0.1 * px, rung = 0.17 * px;
+        var nBars = Math.max(7, Math.round((eqX1 - eqX0) / (0.34 * px))), bHalf = 0.11 * px;
+        var BarStrokes = [], PeakHold = [], grow = M.E.outCubic(M.clamp(tau / PROP_D.eq));
         for (var bi = 0; bi < nBars; bi++) {
-            var bx = eqX0 + (eqX1 - eqX0) * (bi + 0.5) / nBars;
-            var barH;
-            if (tp < 0) {
-                var uEq = M.clamp(tau / PROP_D.eq);
-                barH = maxBarH * (0.12 + 0.08 * Math.sin(tau * 12 + bi * 1.5)) * uEq;
-            } else {
-                var bFreq = 14 + 4 * M.rs(sd, bi, 941);
-                var jump = Math.abs(Math.sin(tp * bFreq + bi * 1.6) * Math.cos(tp * 7.5 + bi * 0.8));
-                barH = maxBarH * (0.28 + 0.72 * jump);
+            var bv = (bi + 0.5) / nBars, bx = eqX0 + (eqX1 - eqX0) * bv;
+            var env = 0.45 + 0.55 * Math.sin(Math.PI * bv), lvl;
+            if (tp < 0) lvl = grow * (0.25 + 0.15 * Math.sin(tau * 11 + bi * 1.3));
+            else {
+                var jump = Math.abs(Math.sin(tp * (13 + 4 * M.r(sd, bi, 941)) + bi * 1.7) * Math.cos(tp * 6.5 + bi * 0.9));
+                lvl = 0.35 + 0.65 * jump;
             }
-            var nRungs = 6;
-            for (var ri = 0; ri < nRungs; ri++) {
-                var rungY = eqBaseY - (ri + 0.5) * (maxBarH / nRungs);
-                if (rungY >= eqBaseY - barH) {
-                    BarStrokes.push([
-                        { x: bx - bWidth, y: rungY },
-                        { x: bx + bWidth, y: rungY }
-                    ]);
-                }
+            var barH = 2.1 * px * env * lvl, nOn = Math.max(1, Math.floor(barH / rung));
+            for (var ri = 0; ri < nOn; ri++) {
+                var ry = eqBaseY - (ri + 0.5) * rung;
+                BarStrokes.push([{ x: bx - bHalf, y: ry }, { x: bx + bHalf, y: ry }]);
             }
-            // Piece 2: Peak hold indicator dash floating above the bar
-            var peakY = eqBaseY - barH - 0.06 * px;
-            PeakHold.push([
-                { x: bx - bWidth * 1.1, y: peakY },
-                { x: bx + bWidth * 1.1, y: peakY }
-            ]);
-            WaveLine.push({ x: bx, y: peakY });
+            var peakY = eqBaseY - (nOn + 0.9) * rung;
+            PeakHold.push([{ x: bx - bHalf, y: peakY }, { x: bx + bHalf, y: peakY }]);
         }
-        put(1, BarStrokes, 1, true, 0.9 * eqFade, 0.038, 1);
-        put(2, PeakHold, 1, true, 0.95 * eqFade, 0.035, 1);
-
-        // Piece 3: Beat audio waveform connecting the bar peaks across the top (z: 1)
-        if (WaveLine.length > 1) {
-            put(3, [WaveLine], 1, false, 0.7 * eqFade, 0.025, 1);
-        }
+        put(1, BarStrokes, 1, true, 0.75 * eqFade, 0.07, -1, true);
+        if (tp >= 0) put(2, PeakHold, 1, false, 0.85 * eqFade, 0.04, -1, true);
         break;
     }
     case "laser": {
@@ -3770,14 +3539,14 @@ function peakPieces(L, t, W, px, bl) {
                 put(0, Splash, 1, true, fade(tp, 0.42), 0.035, 3);
             }
 
-            // Piece 1: Primary ripple expanding under the word (z: 1)
+            // Piece 1: Primary ripple expanding under the word (z: -1, behind the letters)
             var uRip1 = M.clamp(tp / 0.55);
             var rx1 = (0.15 + 1.25 * M.E.outCubic(uRip1)) * px;
             var ry1 = rx1 * 0.26;
             var Rip1 = [ellipsePts(cxDrop, yLand, rx1, ry1, 0, 2 * Math.PI, 28)];
-            put(1, Rip1, 1, true, (1 - uRip1 * uRip1) * 0.95 * dropFade, 0.038, 1);
+            put(1, Rip1, 1, true, (1 - uRip1 * uRip1) * 0.95 * dropFade, 0.038, -1);
 
-            // Piece 2: Secondary and tertiary ripples lagging behind (z: 1)
+            // Piece 2: Secondary and tertiary ripples lagging behind (z: -1, behind the letters)
             var SubRipples = [];
             var tp2 = tp - 0.08;
             if (tp2 > 0) {
@@ -3793,7 +3562,7 @@ function peakPieces(L, t, W, px, bl) {
                 var ry3 = rx3 * 0.26;
                 SubRipples.push(ellipsePts(cxDrop, yLand, rx3, ry3, 0, 2 * Math.PI, 20));
             }
-            if (SubRipples.length) put(2, SubRipples, 1, false, 0.85 * dropFade, 0.028, 1);
+            if (SubRipples.length) put(2, SubRipples, 1, false, 0.85 * dropFade, 0.028, -1);
 
             // Piece 3: Splash flecks scattering upward on impact (z: 4)
             if (tp < 0.28) {
@@ -3812,45 +3581,31 @@ function peakPieces(L, t, W, px, bl) {
         break;
     }
     case "moonrise": {
-        // a crescent rises behind the word
+        // a crescent rises from behind the word and hangs over its upper right, stars come out
         var moonFade = fade(tp - sung - 0.5, 0.4);
-        var cxMoon = W * 0.5 + 0.12 * px;
-        var startY = bl + 0.45 * px;
-        var restY = bl - 1.25 * px;
-
+        var cxMoon = W * 0.5 + 0.35 * px, startY = bl - 0.2 * px, restY = bl - 1.6 * px;
         var cyMoon, sMoon;
         if (tp < 0) {
             var uMoon = M.clamp(tau / PROP_D.moonrise);
             cyMoon = startY + (restY - startY) * M.E.outCubic(uMoon);
-            sMoon = px * (0.65 + 0.25 * uMoon);
+            sMoon = px * (0.9 + 0.25 * uMoon);
         } else {
-            var floatY = 0.03 * px * Math.sin(tp * 3.5);
-            cyMoon = restY + floatY;
-            sMoon = px * 0.90;
+            cyMoon = restY + 0.03 * px * Math.sin(tp * 3.5);
+            sMoon = px * 1.15;
         }
-
-        // Piece 0: The crescent moon shape rising behind hero word (z: 1)
-        var Moon = place(propShape("moonrise"), cxMoon, cyMoon, -12 + 3 * Math.sin(tp * 2), sMoon);
-        put(0, Moon, 1, false, 0.95 * moonFade, 0.036, 1);
-
-        // Piece 1: Lunar aura / halo rings encircling the crescent (z: 1)
-        var rHalo1 = sMoon * 0.62 * (1 + 0.04 * Math.sin(tp * 4));
-        var rHalo2 = sMoon * 0.92 * (1 + 0.05 * Math.cos(tp * 3.5));
-        var Halo = [
-            ellipsePts(cxMoon, cyMoon, rHalo1, rHalo1, 0, 2 * Math.PI, 24),
-            ellipsePts(cxMoon, cyMoon, rHalo2, rHalo2, 0, 2 * Math.PI, 28)
-        ];
-        put(1, Halo, 1, true, 0.8 * moonFade, 0.025, 1);
+        // Piece 0: the crescent, behind the letters while it climbs past them
+        var Moon = place(propShape("moonrise"), cxMoon, cyMoon, -18 + 3 * Math.sin(tp * 2), sMoon);
+        put(0, Moon, 1, true, 0.95 * moonFade, 0.04, -1);
 
         // Piece 2: Night stars & sparkles twinkling around the moon (z: 2)
         if (tp >= -0.2) {
             var starProg = M.clamp((tau - PROP_D.moonrise * 0.6) / (PROP_D.moonrise * 0.4));
             var Stars = [];
             var starCoords = [
-                { dx: -0.72, dy: -0.38, sz: 0.12 },
-                { dx: 0.68, dy: -0.42, sz: 0.10 },
-                { dx: -0.58, dy: 0.52, sz: 0.09 },
-                { dx: 0.54, dy: 0.48, sz: 0.08 }
+                { dx: -0.95, dy: -0.3, sz: 0.11 },
+                { dx: 0.85, dy: -0.45, sz: 0.1 },
+                { dx: -0.7, dy: 0.35, sz: 0.08 },
+                { dx: 0.95, dy: 0.25, sz: 0.08 }
             ];
             for (var sti = 0; sti < starCoords.length; sti++) {
                 var sc = starCoords[sti];
@@ -3890,10 +3645,10 @@ function peakPieces(L, t, W, px, bl) {
         // a record rolls in, stops behind the word, spins
         var vinylFade = fade(tp - sung - 0.5, 0.4);
         var landX = W * 0.5;
-        var landY = bl - 0.48 * px;
-        var startX = -2.2 * px;
-        var rDisc = px * 0.72;
-        var sDisc = px * 1.5;
+        var landY = bl - 0.7 * px;
+        var startX = -2.6 * px;
+        var sDisc = px * 2.1;
+        var rDisc = sDisc * 0.48;
 
         var cxDisc, cyDisc, discRot;
         if (tp < 0) {
@@ -3908,11 +3663,11 @@ function peakPieces(L, t, W, px, bl) {
             discRot = ((landX - startX) / rDisc) * (180 / Math.PI) + tp * 360;
         }
 
-        // Piece 0: The vinyl record disc (placed behind hero word z: 1)
+        // Piece 0: The vinyl record disc (behind the letters, z: -1)
         var DiscShape = place(propShape("classic_vinyl"), cxDisc, cyDisc, discRot, sDisc);
-        put(0, DiscShape, 1, false, 0.95 * vinylFade, 0.035, 1);
+        put(0, DiscShape, 1, false, 0.7 * vinylFade, 0.035, -1);
 
-        // Piece 1: Rotating groove sheen arcs (z: 1)
+        // Piece 1: Rotating groove sheen arcs (z: -1, behind the letters)
         var radRot = discRot * Math.PI / 180;
         var Sheen = [
             ellipsePts(cxDisc, cyDisc, rDisc * 0.75, rDisc * 0.75, radRot - 0.28, radRot + 0.28, 14),
@@ -3920,7 +3675,7 @@ function peakPieces(L, t, W, px, bl) {
             ellipsePts(cxDisc, cyDisc, rDisc * 0.52, rDisc * 0.52, radRot + Math.PI * 0.5 - 0.24, radRot + Math.PI * 0.5 + 0.24, 12),
             ellipsePts(cxDisc, cyDisc, rDisc * 0.52, rDisc * 0.52, radRot - Math.PI * 0.5 - 0.24, radRot - Math.PI * 0.5 + 0.24, 12)
         ];
-        put(1, Sheen, 1, true, 0.85 * vinylFade, 0.032, 1);
+        put(1, Sheen, 1, true, 0.85 * vinylFade, 0.032, -1);
 
         // Piece 2: Tonearm swinging in and dropping on the spinning record (z: 2)
         if (tp >= -0.15) {
@@ -3964,221 +3719,125 @@ function peakPieces(L, t, W, px, bl) {
     }
     case "classic_smoke":
     case "smoke": {
-        // a curl of smoke rises off the word
+        // three ribbons of smoke curl up off the top of the word, each ending in a little curl,
+        // and smoke rings drift up above them; none of it crosses the letters
         var smokeFade = fade(tp - sung - 0.5, 0.4);
-        var cxSmoke = W * 0.5;
-        var baseSmokeY = bl - 0.15 * px;
-
-        var yLift, sway;
-        if (tp < 0) {
-            var uSmoke = M.clamp(tau / PROP_D.classic_smoke);
-            yLift = -0.42 * px * (uSmoke * uSmoke);
-            sway = 0.04 * px * Math.sin(uSmoke * Math.PI * 3);
-        } else {
-            yLift = -0.42 * px - 0.12 * px * Math.sin(tp * 3);
-            sway = 0.07 * px * Math.sin(tp * 3.5);
-        }
-
-        // Piece 0: Main plume of curling smoke wafting off the hero word (z: 1)
-        var sSmoke = px * (0.85 + 0.15 * (tp < 0 ? M.clamp(tau / PROP_D.classic_smoke) : 1));
-        var SmokePlume = place(propShape("classic_smoke"), cxSmoke + sway, baseSmokeY + yLift, 3 * Math.sin(tp * 2.5), sSmoke);
-        put(0, SmokePlume, 1, false, 0.92 * smokeFade, 0.035, 1);
-
-        // Piece 1: Atmospheric smoke rings / expanding vapor loops wafting above (z: 2)
-        if (tp >= -0.1) {
+        var cxSmoke = W * 0.5, topY = bl - 0.98 * px;
+        var growS = M.E.outCubic(M.clamp(tau / PROP_D.classic_smoke));
+        var Ribbons = [];
+        [[0.28, 0], [0.52, 1], [0.76, 2]].forEach(function (rb) {
+            var bxR = W * rb[0], k = rb[1], len = (1.0 + 0.35 * (k % 2)) * px * growS * (0.75 + 0.25 * Math.min(1, Math.max(0, tp + 0.3)));
+            if (len < 0.05 * px) return;
+            var R = [], ex = 0, ey = 0, last = null;
+            for (var j = 0; j <= 18; j++) {
+                var u = j / 18, ampR = 0.14 * px * u;
+                ex = bxR + ampR * Math.sin(u * 2.4 * Math.PI - t * 3.2 + k * 1.7);
+                ey = topY - 0.05 * px - u * len;
+                R.push({ x: ex, y: ey });
+            }
+            // the curl at the top end
+            last = R[R.length - 1];
+            var dirC = k % 2 ? -1 : 1, rc = 0.11 * px * growS;
+            for (var c = 1; c <= 10; c++) {
+                var ca = c / 10 * 1.6 * Math.PI, rr = rc * (1 - 0.5 * c / 10);
+                R.push({ x: last.x + dirC * (rc - rr * Math.cos(ca)), y: last.y - rr * Math.sin(ca) });
+            }
+            Ribbons.push(R);
+        });
+        put(0, Ribbons, 1, false, 0.85 * smokeFade, 0.035, 3);
+        // smoke rings, one after another, rising and widening above the ribbons
+        if (tp >= 0) {
             var Rings = [];
             for (var ri = 0; ri < 3; ri++) {
-                var rDelay = ri * 0.18;
-                var rtp = tp - rDelay;
-                if (rtp > 0) {
-                    var uRing = M.clamp(rtp / 0.65);
-                    var ringY = baseSmokeY - 0.65 * px - uRing * 0.85 * px;
-                    var ringX = cxSmoke + 0.20 * px * Math.sin(rtp * 3 + ri * 2);
-                    var rxRing = (0.10 + 0.28 * M.E.outCubic(uRing)) * px;
-                    var ryRing = rxRing * 0.42;
-                    Rings.push(ellipsePts(ringX, ringY, rxRing, ryRing, 0, 2 * Math.PI, 18));
-                }
+                var rtp = tp - ri * 0.22;
+                if (rtp <= 0) continue;
+                var uRing = M.clamp(rtp / 0.9);
+                var rxRing = (0.12 + 0.26 * M.E.outCubic(uRing)) * px;
+                Rings.push(ellipsePts(cxSmoke + 0.25 * px * Math.sin(rtp * 2.5 + ri * 2), topY - 1.25 * px - uRing * 0.9 * px,
+                                      rxRing, rxRing * 0.4, 0, 2 * Math.PI, 18));
             }
-            if (Rings.length) put(1, Rings, 1, true, 0.82 * smokeFade, 0.028, 2);
+            if (Rings.length) put(1, Rings, 1, true, 0.8 * smokeFade, 0.03, 3);
         }
-
-        // Piece 2: Fine wisps & tendrils drifting off individual hero letters (z: 3)
-        var Tendrils = [];
-        var hwLen = hw.text ? hw.text.length : 3;
-        for (var ti = 0; ti < Math.min(4, hwLen); ti++) {
-            var txPos = W * (0.2 + 0.6 * (ti / Math.max(1, hwLen - 1)));
-            var tProg = tp < 0 ? M.clamp((tau - ti * 0.1) / (PROP_D.classic_smoke * 0.6)) : 1;
-            if (tProg > 0.05) {
-                var tWisp = [];
-                for (var tj = 0; tj <= 10; tj++) {
-                    var tu = tj / 10;
-                    var twx = txPos + 0.08 * px * Math.sin(tu * Math.PI * 2 + tp * 4 + ti);
-                    var twy = (bl - 0.72 * px) - tu * 0.45 * px * tProg;
-                    tWisp.push({ x: twx, y: twy });
-                }
-                Tendrils.push(tWisp);
-            }
-        }
-        if (Tendrils.length) put(2, Tendrils, 1, false, 0.78 * smokeFade, 0.026, 3);
-
-        // Piece 3: Soft ambient vapor mist floating along word baseline (z: 1)
-        var Mist = [
-            bezier({ x: cxSmoke - 0.55 * px, y: bl - 0.05 * px },
-                   { x: cxSmoke - 0.18 * px, y: bl - 0.12 * px + 0.03 * px * Math.sin(tp * 3) },
-                   { x: cxSmoke + 0.18 * px, y: bl - 0.12 * px - 0.03 * px * Math.sin(tp * 3) },
-                   { x: cxSmoke + 0.55 * px, y: bl - 0.05 * px }, 16)
-        ];
-        put(3, Mist, 1, true, 0.65 * smokeFade, 0.03, 1);
         break;
     }
     case "horn": {
-        // a horn pokes in and blows notes over the word
+        // a trumpet slides in from the left, tilted up, its bell just short of the word, and blows:
+        // sound arcs open from the bell and notes sail over the top of the word
         var hornFade = fade(tp - sung - 0.45, 0.35);
-        var targetHornX = -0.15 * px;
-        var hornY = bl - 0.75 * px;
-        var startHornX = -1.45 * px;
-
+        var sHorn = px * 1.3, tiltH = -14, hornY = bl - 0.95 * px;
+        var targetHornX = -0.32 * px - 0.52 * sHorn, startHornX = -2.6 * px;
         var curHornX;
-        if (tp < 0) {
-            var uHorn = M.clamp(tau / PROP_D.horn);
-            curHornX = startHornX + (targetHornX - startHornX) * M.E.outBack(uHorn, 1.4);
-        } else {
-            var recoil = -0.06 * px * Math.exp(-6 * tp) * Math.sin(20 * tp);
-            curHornX = targetHornX + recoil;
-        }
-
-        // Piece 0: The brass horn instrument (z: 3)
-        var HornShape = place(propShape("horn"), curHornX, hornY, 12, px * 0.82);
-        put(0, HornShape, 1, false, 0.95 * hornFade, 0.038, 3);
-
-        // Piece 1: Sound vibration blast cone waves bursting from bell mouth (z: 2)
+        if (tp < 0) curHornX = startHornX + (targetHornX - startHornX) * M.E.outBack(M.clamp(tau / PROP_D.horn), 1.4);
+        else curHornX = targetHornX - 0.08 * px * Math.exp(-6 * tp) * Math.sin(20 * tp);
+        put(0, place(propShape("horn"), curHornX, hornY, tiltH, sHorn), 1, false, 0.95 * hornFade, 0.038, 3);
         if (tp >= 0) {
-            var bellMouthX = curHornX + 0.24 * px;
-            var bellMouthY = hornY + 0.06 * px;
+            var mouth = place([[{ x: 0.56, y: 0 }]], curHornX, hornY, tiltH, sHorn)[0][0];
+            var ta = tiltH * Math.PI / 180;
             var Blast = [];
             for (var bi = 0; bi < 3; bi++) {
-                var bDelay = bi * 0.08;
-                var btp = tp - bDelay;
-                if (btp > 0) {
-                    var uBlast = M.clamp(btp / 0.45);
-                    var rBlast = (0.15 + 0.75 * M.E.outCubic(uBlast)) * px;
-                    var blastAng0 = -0.55, blastAng1 = 0.55;
-                    Blast.push(ellipsePts(bellMouthX, bellMouthY, rBlast, rBlast * 0.85, blastAng0, blastAng1, 14));
-                }
+                var btp = tp - bi * 0.1;
+                if (btp <= 0) continue;
+                var rBlast = (0.15 + 0.6 * M.E.outCubic(M.clamp(btp / 0.45))) * px;
+                Blast.push(ellipsePts(mouth.x, mouth.y, rBlast, rBlast, ta - 0.5, ta + 0.5, 12));
             }
-            if (Blast.length) put(1, Blast, 1, true, 0.88 * fade(tp - sung - 0.2, 0.3), 0.034, 2);
-
-            // Piece 2: Musical notes blown out across and over the hero word (z: 4)
-            var Notes = [];
-            var noteDefs = [
-                { delay: 0.02, speed: 1.1, yOff: -0.25, type: "eighth" },
-                { delay: 0.10, speed: 0.95, yOff: -0.48, type: "beamed" },
-                { delay: 0.18, speed: 0.82, yOff: -0.15, type: "quarter" }
-            ];
-            for (var ni = 0; ni < noteDefs.length; ni++) {
-                var nd = noteDefs[ni];
-                var ntp = tp - nd.delay;
-                if (ntp > 0) {
-                    var uNote = M.clamp(ntp / 0.65);
-                    var travelX = bellMouthX + 0.12 * px + (W * 0.95) * M.E.outCubic(uNote) * nd.speed;
-                    var bobY = 0.06 * px * Math.sin(ntp * 12 + ni * 2);
-                    var curNy = hornY + nd.yOff * px + bobY;
-                    var nsz = px * 0.22;
-
-                    if (nd.type === "beamed") {
-                        // Mini beamed eighth pair
-                        var b1x = travelX, b1y = curNy;
-                        var b2x = travelX + nsz * 1.1, b2y = curNy - nsz * 0.2;
-                        Notes.push(ellipsePts(b1x, b1y, nsz * 0.32, nsz * 0.22, -0.3, 2 * Math.PI - 0.3, 10));
-                        Notes.push(ellipsePts(b2x, b2y, nsz * 0.32, nsz * 0.22, -0.3, 2 * Math.PI - 0.3, 10));
-                        Notes.push([{ x: b1x + nsz * 0.24, y: b1y }, { x: b1x + nsz * 0.24, y: b1y - nsz * 0.9 }]);
-                        Notes.push([{ x: b2x + nsz * 0.24, y: b2y }, { x: b2x + nsz * 0.24, y: b2y - nsz * 0.9 }]);
-                        Notes.push([{ x: b1x + nsz * 0.24, y: b1y - nsz * 0.9 }, { x: b2x + nsz * 0.24, y: b2y - nsz * 0.9 }]);
-                    } else if (nd.type === "eighth") {
-                        // Mini single eighth note with flag
-                        Notes.push(ellipsePts(travelX, curNy, nsz * 0.35, nsz * 0.24, -0.3, 2 * Math.PI - 0.3, 10));
-                        var nStemX = travelX + nsz * 0.26;
-                        Notes.push([{ x: nStemX, y: curNy }, { x: nStemX, y: curNy - nsz * 0.95 }]);
-                        Notes.push([{ x: nStemX, y: curNy - nsz * 0.95 }, { x: nStemX + nsz * 0.35, y: curNy - nsz * 0.65 }, { x: nStemX + nsz * 0.2, y: curNy - nsz * 0.35 }]);
-                    } else {
-                        // Quarter note
-                        Notes.push(ellipsePts(travelX, curNy, nsz * 0.35, nsz * 0.24, -0.3, 2 * Math.PI - 0.3, 10));
-                        Notes.push([{ x: travelX + nsz * 0.26, y: curNy }, { x: travelX + nsz * 0.26, y: curNy - nsz * 0.95 }]);
-                        Notes.push([{ x: travelX - nsz * 0.15, y: curNy + nsz * 0.1 }, { x: travelX + nsz * 0.15, y: curNy - nsz * 0.1 }]);
-                    }
-                }
+            if (Blast.length) put(1, Blast, 1, true, 0.85 * fade(tp - sung - 0.2, 0.3), 0.034, 3);
+            // notes sail out of the bell and over the top of the word
+            var Notes = [], lane = Math.min(mouth.y, bl - 1.3 * px);
+            for (var ni = 0; ni < 3; ni++) {
+                var ntp = tp - ni * 0.12;
+                if (ntp <= 0) continue;
+                var uN = M.E.outCubic(M.clamp(ntp / 0.8));
+                var nx = mouth.x + 0.2 * px + (W + 0.4 * px) * uN * (1 - 0.18 * ni);
+                var ny = lane - (0.15 + 0.2 * ni) * px * uN + M.lerp(mouth.y - lane, 0, M.clamp(uN * 3)) + 0.06 * px * Math.sin(ntp * 10 + ni * 2);
+                Notes = Notes.concat(place(markShape(ni === 1 ? "notes" : "note", sd + ni, 1, 1).map(function (st) { return st.map(function (q) { return { x: q.x - 0.5, y: q.y - 0.5 }; }); }), nx, ny, -8 + 10 * Math.sin(ntp * 6 + ni), px * 0.42));
             }
             if (Notes.length) put(2, Notes, 1, true, 0.95 * fade(tp - sung - 0.25, 0.35), 0.035, 4);
-
-            // Piece 3: Brass sparkle glint on horn bell rim (z: 4)
-            var glintPhase = tp * 6;
-            var gx = bellMouthX + 0.05 * px;
-            var gy = bellMouthY - 0.16 * px;
-            var Glint = [
-                [{ x: gx - 0.10 * px, y: gy }, { x: gx + 0.10 * px, y: gy }],
-                [{ x: gx, y: gy - 0.10 * px }, { x: gx, y: gy + 0.10 * px }]
-            ];
-            put(3, Glint, 1, true, 0.9 * fade(tp - sung - 0.2, 0.3), 0.035, 4);
+            var Glint = place([[{ x: -0.1, y: 0 }, { x: 0.1, y: 0 }], [{ x: 0, y: -0.1 }, { x: 0, y: 0.1 }]], mouth.x - 0.05 * px, mouth.y - 0.36 * px, 0, px);
+            put(3, Glint, 1, true, 0.9 * fade(tp - 0.25, 0.25), 0.035, 4);
         }
         break;
     }
     case "flash": {
-        // a four-point star flashes on the hero with glints
+        // an anime glint: a four-point star pops on the word's top right corner and spins,
+        // a shine sweeps across behind the letters, small stars wink round the word
         var flashFade = fade(tp - sung - 0.4, 0.35);
-        var cxFlash = W * 0.5;
-        var cyFlash = bl - 0.38 * px;
-
+        var cxFlash = W + 0.05 * px, cyFlash = bl - 1.15 * px;
         var sFlash, rotFlash;
         if (tp < 0) {
             var uFlash = M.clamp(tau / PROP_D.flash);
-            sFlash = px * (0.15 + 0.45 * M.E.outCubic(uFlash));
-            rotFlash = uFlash * 90;
+            sFlash = px * 0.55 * M.E.outBack(uFlash, 1.6);
+            rotFlash = -45 + uFlash * 45;
         } else {
-            sFlash = px * (0.95 + 0.35 * Math.exp(-8 * tp));
-            rotFlash = 90 + tp * 35;
+            sFlash = px * (1.1 + 0.4 * Math.exp(-7 * tp) * Math.cos(14 * tp));
+            rotFlash = 12 * Math.sin(tp * 3);
         }
-
-        // Piece 0: The main 4-point star flash (z: 2)
-        var StarShape = place(propShape("flash"), cxFlash, cyFlash, rotFlash, sFlash);
-        put(0, StarShape, 1, false, 0.95 * flashFade, 0.038, 2);
-
-        // Piece 1: Radiating cardinal and diagonal glint beams (z: 3, accent ink)
+        put(0, place(propShape("flash"), cxFlash, cyFlash, rotFlash, sFlash), 1, true, 0.95 * flashFade, 0.04, 3);
         if (tp >= 0) {
-            var bLen = px * (0.8 + 1.2 * M.E.outCubic(M.clamp(tp / 0.25)));
-            var Glints = [
-                // Cardinal spikes
-                [{ x: cxFlash - bLen, y: cyFlash }, { x: cxFlash + bLen, y: cyFlash }],
-                [{ x: cxFlash, y: cyFlash - bLen * 0.85 }, { x: cxFlash, y: cyFlash + bLen * 0.85 }],
-                // Diagonal needles
-                [{ x: cxFlash - bLen * 0.45, y: cyFlash - bLen * 0.38 }, { x: cxFlash + bLen * 0.45, y: cyFlash + bLen * 0.38 }],
-                [{ x: cxFlash - bLen * 0.45, y: cyFlash + bLen * 0.38 }, { x: cxFlash + bLen * 0.45, y: cyFlash - bLen * 0.38 }]
-            ];
-            put(1, Glints, 1, true, 0.90 * fade(tp - sung - 0.2, 0.3), 0.035, 3);
-
-            // Piece 2: Secondary orbital diamond sparkles popping around the hero word (z: 4)
-            var Sparkles = [];
-            var sparkOffsets = [
-                { dx: -0.38 * W, dy: -0.42 * px, phase: 0.02 },
-                { dx: 0.36 * W, dy: -0.36 * px, phase: 0.08 },
-                { dx: -0.22 * W, dy: 0.32 * px, phase: 0.14 },
-                { dx: 0.28 * W, dy: 0.35 * px, phase: 0.06 }
-            ];
-            for (var si = 0; si < sparkOffsets.length; si++) {
-                var so = sparkOffsets[si];
-                var stp = tp - so.phase;
-                if (stp > 0) {
-                    var sS = px * 0.32 * (1 - fade(stp, 0.35));
-                    var spRot = stp * 60;
-                    Sparkles = Sparkles.concat(place(propShape("flash"), cxFlash + so.dx, cyFlash + so.dy, spRot, sS));
-                }
+            // needles flick out of the star
+            var bLen = px * (0.3 + 0.6 * M.E.outCubic(M.clamp(tp / 0.2)));
+            var Glints = [];
+            for (var gk = 0; gk < 4; gk++) {
+                var ga = Math.PI / 4 + gk * Math.PI / 2;
+                Glints.push([{ x: cxFlash + 0.35 * px * Math.cos(ga), y: cyFlash + 0.35 * px * Math.sin(ga) },
+                             { x: cxFlash + (0.35 * px + bLen) * Math.cos(ga), y: cyFlash + (0.35 * px + bLen) * Math.sin(ga) }]);
             }
-            if (Sparkles.length) put(2, Sparkles, 1, true, 0.85 * flashFade, 0.03, 4);
-
-            // Piece 3: Expanding diamond aura ring (z: 1)
-            var uRing = M.clamp(tp / 0.45);
-            var rRing = (0.2 + 0.95 * M.E.outCubic(uRing)) * px;
-            var Ring = [ellipsePts(cxFlash, cyFlash, rRing, rRing * 0.75, 0, 2 * Math.PI, 20)];
-            put(3, Ring, 1, false, 0.75 * fade(tp - 0.45, 0.25), 0.028, 1);
+            put(1, Glints, 1, false, 0.9 * fade(tp - 0.15, 0.25), 0.03, 3);
+            // small stars wink in one after another, clear of the letters
+            var Sparkles = [], spots = [[-0.45 * px, bl - 1.05 * px, 0.04], [W * 0.3, bl - 1.5 * px, 0.12], [W + 0.5 * px, bl - 0.2 * px, 0.2]];
+            for (var si = 0; si < spots.length; si++) {
+                var stp = tp - spots[si][2];
+                if (stp <= 0) continue;
+                var sS = px * 0.42 * Math.sin(Math.PI * M.clamp(stp / 0.6));
+                if (sS > 0.02 * px) Sparkles = Sparkles.concat(place([star4Pts(0.5, 0.12)], spots[si][0], spots[si][1], stp * 90, sS));
+            }
+            if (Sparkles.length) put(2, Sparkles, 1, true, 0.9 * flashFade, 0.03, 3);
+            // the shine: two thin diagonals sweep left to right behind the letters
+            var sw = M.clamp(tp / 0.32);
+            if (sw < 1) {
+                var sx = -0.4 * px + (W + 0.8 * px) * sw;
+                put(3, [[{ x: sx, y: bl + 0.15 * px }, { x: sx + 0.5 * px, y: bl - 1.0 * px }],
+                        [{ x: sx + 0.22 * px, y: bl + 0.15 * px }, { x: sx + 0.5 * px, y: bl - 0.5 * px }]], 1, true, 0.7 * Math.sin(Math.PI * sw), 0.05, -1);
+            }
         }
         break;
     }
@@ -4271,10 +3930,10 @@ function peakPieces(L, t, W, px, bl) {
         var cySakura = bl - 0.35 * px;
 
         // Start at top-left above hero word; drift down and across to lower-right
-        var startSakuraX = cxSakura - 1.2 * px;
-        var startSakuraY = cySakura - 1.3 * px;
-        var landSakuraX = cxSakura + 0.20 * px;
-        var landSakuraY = cySakura + 0.12 * px;
+        var startSakuraX = cxSakura - W * 0.5 - 1.0 * px;
+        var startSakuraY = bl - 2.3 * px;
+        var landSakuraX = cxSakura + 0.2 * W;
+        var landSakuraY = bl - 1.08 * px;
 
         var mainX, mainY, mainRot;
         if (tp < 0) {
@@ -4283,22 +3942,22 @@ function peakPieces(L, t, W, px, bl) {
             mainY = startSakuraY + (landSakuraY - startSakuraY) * M.E.outCubic(uSakura);
             mainRot = -30 + uSakura * 75 + 15 * Math.sin(uSakura * Math.PI * 4);
         } else {
-            mainX = landSakuraX + tp * 0.35 * px + 0.06 * px * Math.sin(tp * 3.5);
-            mainY = landSakuraY + tp * 0.28 * px;
+            mainX = landSakuraX + 0.06 * px * Math.sin(tp * 3.5);
+            mainY = landSakuraY - 0.03 * px * Math.abs(Math.sin(tp * 4));
             mainRot = 45 + tp * 40 + 15 * Math.sin(tp * 4);
         }
 
         // Piece 0: Main fluttering hero sakura petal (z: 3)
-        var MainPetal = place(propShape("sakura"), mainX, mainY, mainRot, px * 0.72);
+        var MainPetal = place(propShape("sakura"), mainX, mainY, mainRot, px * 0.8);
         put(0, MainPetal, 1, false, 0.95 * sakuraFade, 0.035, 3);
 
-        // Piece 1: Companion swarm of sakura petals drifting at various depths (z: 1)
+        // Piece 1: Companion swarm of sakura petals drifting at various depths (z: -1, behind the letters)
         var Companions = [];
         var petalConfigs = [
-            { offX: -0.55 * px, offY: -0.35 * px, s: 0.52, rotOff: 20, speedX: 0.28, speedY: 0.22, delay: 0.05 },
-            { offX: 0.45 * px, offY: -0.48 * px, s: 0.46, rotOff: -35, speedX: 0.32, speedY: 0.26, delay: 0.12 },
-            { offX: -0.25 * px, offY: 0.38 * px, s: 0.50, rotOff: 50, speedX: 0.25, speedY: 0.20, delay: 0.18 },
-            { offX: 0.65 * px, offY: 0.25 * px, s: 0.42, rotOff: -15, speedX: 0.30, speedY: 0.24, delay: 0.08 }
+            { offX: -0.9 * px, offY: -0.35 * px, s: 0.6, rotOff: 20, speedX: 0.9, speedY: 0.5, delay: 0.05 },
+            { offX: 0.6 * px, offY: -0.6 * px, s: 0.5, rotOff: -35, speedX: 1.1, speedY: 0.45, delay: 0.12 },
+            { offX: -0.4 * px, offY: 1.25 * px, s: 0.55, rotOff: 50, speedX: 0.8, speedY: 0.55, delay: 0.18 },
+            { offX: W * 0.5 + 0.7 * px, offY: 0.6 * px, s: 0.48, rotOff: -15, speedX: 1.0, speedY: 0.5, delay: 0.08 }
         ];
         for (var pi = 0; pi < petalConfigs.length; pi++) {
             var pcg = petalConfigs[pi];
@@ -4319,22 +3978,22 @@ function peakPieces(L, t, W, px, bl) {
                 Companions = Companions.concat(place(propShape("sakura"), pxX, pxY, pxRot, px * pcg.s));
             }
         }
-        if (Companions.length) put(1, Companions, 1, false, 0.88 * sakuraFade, 0.03, 1);
+        if (Companions.length) put(1, Companions, 1, false, 0.88 * sakuraFade, 0.03, -1);
 
         // Piece 2: Gentle wind breeze slipstream trails (z: 2, accent ink)
         var Breeze = [];
         for (var bi = 0; bi < 3; bi++) {
-            var bY = cySakura + (bi - 1) * 0.32 * px;
+            var bY = bl - 1.75 * px + (bi - 1) * 0.28 * px, bx0 = -0.8 * px + bi * 0.35 * px;
             var bWisp = bezier(
-                { x: cxSakura - 0.85 * px, y: bY - 0.15 * px },
-                { x: cxSakura - 0.25 * px, y: bY + 0.08 * px * Math.sin(tp * 3 + bi) },
-                { x: cxSakura + 0.25 * px, y: bY - 0.08 * px * Math.sin(tp * 3 + bi) },
-                { x: cxSakura + 0.85 * px, y: bY + 0.15 * px },
+                { x: bx0, y: bY - 0.1 * px },
+                { x: bx0 + 0.5 * px, y: bY + 0.08 * px * Math.sin(tp * 3 + bi) },
+                { x: bx0 + 1.0 * px, y: bY - 0.08 * px * Math.sin(tp * 3 + bi) },
+                { x: bx0 + 1.5 * px, y: bY + 0.1 * px },
                 16
             );
             Breeze.push(bWisp);
         }
-        put(2, Breeze, 1, true, 0.75 * sakuraFade, 0.026, 2);
+        put(2, Breeze, 1, true, 0.55 * sakuraFade, 0.026, 2);
 
         // Piece 3: Floating petal settle & subtle pollen sparkles on the hero word (z: 4)
         if (tp >= 0) {
@@ -4364,58 +4023,58 @@ function peakPieces(L, t, W, px, bl) {
         var cxSun = W * 0.5;
 
         // Position: rising from below baseline to crest behind the hero word
-        var sunStartY = bl + 0.60 * px;
-        var sunLandY = bl - 0.32 * px;
+        var sunStartY = bl + 0.6 * px;
+        var sunLandY = bl - 0.3 * px;
 
         var curSunY, curSunS;
         if (tp < 0) {
             var uSun = M.clamp(tau / PROP_D.sunrise);
             curSunY = sunStartY + (sunLandY - sunStartY) * M.E.outCubic(uSun);
-            curSunS = px * (0.45 + 0.40 * M.E.outCubic(uSun));
+            curSunS = px * (1.4 + 0.6 * M.E.outCubic(uSun));
         } else {
             curSunY = sunLandY + 0.02 * px * Math.sin(tp * 2.5);
-            curSunS = px * (0.85 + 0.04 * Math.sin(tp * 3));
+            curSunS = px * (2.0 + 0.04 * Math.sin(tp * 3));
         }
 
-        // Piece 0: Sun disc cresting behind the hero word (z: 1)
+        // Piece 0: Sun disc cresting behind the hero word (z: -1, behind the letters)
         var SunShape = place(propShape("sunrise"), cxSun, curSunY, 0, curSunS);
-        put(0, SunShape, 1, false, 0.95 * sunriseFade, 0.035, 1);
+        put(0, SunShape, 1, false, 0.95 * sunriseFade, 0.035, -1);
 
         // Piece 1: Fan of radiating sunbeams spreading open on cue (z: 1, accent ink)
         if (tp >= 0) {
-            var rIn = curSunS * 0.55;
-            var rOut = curSunS * (1.10 + 0.30 * M.E.outCubic(M.clamp(tp / 0.25)));
+            var rIn = curSunS * 0.6;
+            var rOut = curSunS * (0.62 + 0.3 * M.E.outCubic(M.clamp(tp / 0.25)));
             var Rays = [];
             for (var ri = 0; ri < 7; ri++) {
-                var ra = Math.PI + (ri / 6) * Math.PI;
+                var ra = Math.PI * 1.08 + (ri / 6) * Math.PI * 0.84;
                 var rx0 = cxSun + rIn * Math.cos(ra), ry0 = curSunY + rIn * Math.sin(ra);
                 var rx1 = cxSun + rOut * Math.cos(ra), ry1 = curSunY + rOut * Math.sin(ra);
                 Rays.push([{ x: rx0, y: ry0 }, { x: rx1, y: ry1 }]);
             }
-            put(1, Rays, 1, true, 0.90 * fade(tp - sung - 0.2, 0.3), 0.035, 1);
+            put(1, Rays, 1, true, 0.90 * fade(tp - sung - 0.2, 0.3), 0.035, -1);
         }
 
-        // Piece 2: Horizon line and dawn landscape contour behind word (z: 1)
+        // Piece 2: Horizon line and dawn landscape contour behind word (z: -1, behind the letters)
         var horizY = bl + 0.08 * px;
         var Horizon = [
-            [{ x: cxSun - W * 0.55, y: horizY }, { x: cxSun + W * 0.55, y: horizY }],
+            [{ x: cxSun - W * 0.5 - 1.1 * px, y: horizY }, { x: cxSun + W * 0.5 + 1.1 * px, y: horizY }],
             bezier(
-                { x: cxSun - W * 0.55, y: horizY },
-                { x: cxSun - 0.2 * W, y: horizY - 0.08 * px },
-                { x: cxSun + 0.2 * W, y: horizY - 0.08 * px },
-                { x: cxSun + W * 0.55, y: horizY },
+                { x: cxSun - W * 0.5 - 0.9 * px, y: horizY + 0.16 * px },
+                { x: cxSun - 0.3 * W, y: horizY + 0.1 * px },
+                { x: cxSun + 0.3 * W, y: horizY + 0.22 * px },
+                { x: cxSun + W * 0.5 + 0.9 * px, y: horizY + 0.16 * px },
                 16
             )
         ];
-        put(2, Horizon, 1, false, 0.88 * sunriseFade, 0.032, 1);
+        put(2, Horizon, 1, false, 0.88 * sunriseFade, 0.032, -1);
 
         // Piece 3: Morning solar flare sparkles / dawn glints over the hero word on cue (z: 3, accent ink)
         if (tp >= 0) {
             var DawnGlints = [];
             var gOff = [
-                { dx: -0.32 * W, dy: -0.42 * px, phase: 0.03 },
-                { dx: 0.30 * W, dy: -0.38 * px, phase: 0.07 },
-                { dx: 0.0, dy: -0.65 * px, phase: 0.01 }
+                { dx: -W * 0.5 - 0.7 * px, dy: -0.75 * px, phase: 0.03 },
+                { dx: W * 0.5 + 0.7 * px, dy: -0.85 * px, phase: 0.07 },
+                { dx: 0.0, dy: -2.1 * px, phase: 0.01 }
             ];
             for (var gi = 0; gi < gOff.length; gi++) {
                 var go = gOff[gi];
@@ -4439,12 +4098,12 @@ function peakPieces(L, t, W, px, bl) {
         // a few birds fly over the word
         var flockFade = fade(tp - sung - 0.45, 0.35);
         var cxFlock = W * 0.5;
-        var cyFlock = bl - 0.82 * px;
+        var cyFlock = bl - 1.7 * px;
 
         var leadX, leadY, leadRot;
         if (tp < 0) {
             var uFlock = M.clamp(tau / PROP_D.flock);
-            leadX = (cxFlock - 1.2 * px) + 1.2 * px * M.E.outQuad(uFlock);
+            leadX = (cxFlock - W * 0.5 - 1.2 * px) + (W * 0.5 + 1.2 * px) * M.E.outQuad(uFlock);
             leadY = (cyFlock + 0.35 * px) - 0.35 * px * M.E.outQuad(uFlock) + 0.04 * px * Math.sin(uFlock * Math.PI * 6);
             var flap0 = Math.sin(uFlock * Math.PI * 10);
             leadRot = -10 + 6 * flap0;
@@ -4471,7 +4130,7 @@ function peakPieces(L, t, W, px, bl) {
         var d1 = place(propShape("flock"), leadX - 0.75 * px, leadY + 0.10 * px, leadRot + 2, px * 0.38);
         var d2 = place(propShape("flock"), leadX - 0.85 * px, leadY - 0.25 * px, leadRot - 3, px * 0.34);
         DistBirds = DistBirds.concat(d1).concat(d2);
-        put(2, DistBirds, 1, false, 0.82 * flockFade, 0.026, 1);
+        put(2, DistBirds, 1, false, 0.82 * flockFade, 0.026, 3);
 
         // Piece 3: Flight wind currents and slipstream trails (z: 2, accent ink)
         var Slipstream = [
