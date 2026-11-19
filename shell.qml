@@ -3724,7 +3724,7 @@ Scope {
             onOpenWhatsNewRequested: whatsNewModalLoader.ensure().openModal(win.updateReleaseNotes)
             onCheckUpdateRequested: win.checkForUpdates(true, true)
             onOpenUpdateUrlRequested: win.openExternalUrl(win.updateUrl)
-            onStartDirectUpdateRequested: win.openUpdateModal()
+            onStartDirectUpdateRequested: { settingsModal.visible = false; win.openUpdateModal(); }
             onApplyUpdateRequested: win.applyUpdateAndRestart()
             onSpotifyImportRequested: {
                 spotifyImportModal.openModal();
