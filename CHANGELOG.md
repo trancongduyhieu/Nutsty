@@ -14,6 +14,16 @@ Số phiên bản có dạng `A.B.C`, ví dụ `1.2.0`:
   - **Câu cao trào**: Khi một câu chậm lại sau mấy câu hát nhanh, câu đó đứng riêng một mình và nhận một bất ngờ lớn. Có 13 kiểu khác nhau: bóng đèn rơi xuống rồi sáng lên, đèn sân khấu rọi xuống, tia truyện tranh tỏa ra, mực loang kín chữ, con dấu đóng mạnh, quả bóng bay buộc vào chữ rồi nổ thành pháo giấy, tờ giấy nhớ bay vào dán lên, máy bay giấy lượn vào cắm vào góc chữ, cuộn băng dính lăn qua dán gạch chân, dây leo mọc quanh chữ rồi nở hoa, lò xo bật ra tách đôi chữ, tờ giấy gấp mở ra từng nếp, và bàn tay vẽ thò vào dán sticker. Mỗi bài thường có vài câu như vậy, và hai câu cao trào liền nhau không bao giờ trùng kiểu.
   - **Câu dồn dập**: Câu hát nhanh được gạch dưới từng chữ, có vệt tốc độ và khung hình giật theo nhịp.
   - **Câu xếp chồng**: Hai hoặc ba câu liền nhau được nối với nhau bằng mũi tên, ngoặc nhọn, chữ "vs", đường lượn, khung giấy kẻ ô, số thứ tự 1 2 3, bậc thang hay nét gạch nháp.
+  - **Mỗi kiểu nhạc một bộ hình vẽ riêng**: Mẫu 8 nhận ra bài đang phát thuộc kiểu nhạc nào dựa vào thể loại của nghệ sĩ, lời bài hát và nhịp hát, rồi chọn hình vẽ và bất ngờ hợp với bài:
+    - **Rock, metal**: tia sét, vết nứt, chữ vỡ thành mảnh, dây đàn đứt, chữ bị xé đôi.
+    - **Rap, hip-hop**: vương miện, sơn chảy, bình xịt vẽ graffiti sau chữ, micro rơi xuống nảy lên, băng dính dán chéo.
+    - **Nhạc nhảy, điện tử**: sóng âm, quả cầu disco hạ xuống, cột âm lượng nhảy theo tiếng hát, tia laser quét qua chữ.
+    - **Nhạc êm, không lời**: mây, giọt nước loang thành vòng, chiếc lá rơi đáp lên chữ, vầng trăng lên sau chữ.
+    - **Jazz, blues, soul**: nốt nhạc, đĩa than lăn vào rồi quay, làn khói bay lên, kèn thổi ra nốt nhạc.
+    - **Anime, nhạc phim**: ngôi sao bốn cánh lóe sáng, giọt mồ hôi, dấu giận, vệt tập trung kiểu truyện tranh, cánh hoa anh đào bay qua.
+    - **Dân ca, đồng quê**: mặt trời mọc sau chữ, đàn chim bay qua, mầm cây mọc ra từ chữ.
+    - Bài ballad tình cảm vẫn giữ bộ hình vẽ ngọt ngào như cũ, kể cả khi ban nhạc chơi rock. Khi không có mạng, Nutsty đoán theo lời và nhịp hát.
+  - **Công tắc "Câu nào cũng là cao trào"**: Chọn mẫu 8 trong Cài đặt sẽ thấy công tắc này. Bật lên thì câu nào cũng đứng riêng và có một bất ngờ lớn, không phải chờ đoạn bài chậm lại. Hợp khi bạn muốn xem hết các kiểu hiệu ứng hoặc quay video.
 - **Mẫu 7: Sân khấu chữ**: Lời hiện thành từng chồng tối đa ba câu, từ quan trọng nhất to và mang màu của hình nền. Mỗi câu một kiểu chữ và một góc máy riêng, có hạt phim cũ, vết xước và sợi tóc máy chiếu, chữ viết tay và chữ bút dạ. Lời bè trong ngoặc đứng riêng một cột bên cạnh. Từ tục bị che dưới một thanh đen nhấp nháy. Khi bài nghỉ lâu có chấm chờ chạy dần. Câu rời đi bằng cách bay lên, bị gạch ngang, bị lem hoặc bị vẽ đè.
 - **Mẫu 6: Biến hóa chuyển động**: Từng chữ cái chuyển động theo tâm trạng của bài (sôi động, êm, nhiễu hay xoay vòng), mỗi câu một kiểu chuyển động mới.
 - **Mẫu 5: Biểu cảm Mochy**: Từ được hát to sẽ phóng lớn, các câu xếp chồng lên nhau. Từng chữ hiện ra lần lượt, hơi mờ rồi rõ dần, chữ cái nhấc lên khi được hát và có vệt sáng màu đuổi theo lời.
