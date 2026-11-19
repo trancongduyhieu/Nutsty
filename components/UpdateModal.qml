@@ -89,9 +89,9 @@ Item {
     }
     ParallelAnimation {
         id: ringFwd
-        NumberAnimation { target: ringMotion; property: "a"; to: 1; duration: 760 * root.motion; easing.type: Easing.InCubic }
+        NumberAnimation { target: ringMotion; property: "a"; to: 1; duration: 800 * root.motion; easing.type: Easing.Linear }
         SequentialAnimation {
-            PauseAnimation { duration: 320 * root.motion }
+            PauseAnimation { duration: 260 * root.motion }
             NumberAnimation { target: ringMotion; property: "b"; to: 1; duration: 900 * root.motion; easing.type: Easing.OutBack; easing.overshoot: 2.4 }
         }
     }
@@ -158,15 +158,16 @@ Item {
     readonly property bool sizePending: (phase === "available" || phase === "planning") && !sizeKnown
     readonly property real savedPercent: (isDelta && shownPlan.full_bytes > 0)
         ? Math.max(0, Math.min(99, Math.round(100 * (1 - shownPlan.download_bytes / shownPlan.full_bytes)))) : 0
-    readonly property string sizeText: {
-        if (isDelta) {
-            if (shownPlan.changed === 0) return I18n.tr("Không cần tải gì, chỉ cần khởi động lại", "Nothing to download, just restart");
-            return I18n.tr("Chỉ tải " + formatBytes(shownPlan.download_bytes) + (savedPercent >= 10 ? ", nhẹ hơn " + savedPercent + "%" : ""),
-                           "Only " + formatBytes(shownPlan.download_bytes) + (savedPercent >= 10 ? ", " + savedPercent + "% lighter" : ""));
-        }
-        if (planSettled && packageBytes > 0) return I18n.tr("Dung lượng tải: " + formatBytes(packageBytes), "Download size: " + formatBytes(packageBytes));
-        return "";
-    }
+    readonly property bool nothingToDownload: isDelta && shownPlan.changed === 0
+    readonly property string sizeText: nothingToDownload ? I18n.tr("Không cần tải gì, chỉ cần khởi động lại", "Nothing to download, just restart") : ""
+    // The figure that rolls on its reels: the delta size if we have it, else the whole package, else a placeholder that spins
+    readonly property string sizeFigure: isDelta ? formatBytes(shownPlan.download_bytes)
+                                      : ((planSettled && packageBytes > 0) ? formatBytes(packageBytes) : "00.0 MB")
+    readonly property string sizeNumber: sizeFigure.split(" ")[0]
+    readonly property string sizeUnit: sizeFigure.split(" ")[1] || ""
+    readonly property string sizeTail: (isDelta && !nothingToDownload && savedPercent >= 10)
+        ? I18n.tr(", nhẹ hơn " + savedPercent + "%", ", " + savedPercent + "% lighter") : ""
+    readonly property bool showSizeRow: (phase === "available" || phase === "planning") && !nothingToDownload
 
     // Two fixed lines under the version: what matters now, then the detail. Both are always one line,
     // so the layout below never moves when the phase changes.
@@ -237,12 +238,12 @@ Item {
                 required property int index
                 readonly property bool isEnter: index === 1
                 readonly property real p: isEnter ? ringMotion.b : ringMotion.a
-                readonly property real cx: isEnter ? (-110 + 134 * p) : (dialog.width - 24 - 300 * p)
-                readonly property real cy: isEnter ? (dialog.height + 110 - 126 * p) : (16 - 260 * p)
+                readonly property real cx: isEnter ? (-110 + 134 * p) : (dialog.width - 24 - (dialog.width - 48) * 1.1 * p)
+                readonly property real cy: isEnter ? (dialog.height + 110 - 126 * p) : (16 + (dialog.height - 32) * 1.1 * p)
                 width: 210; height: 210
                 x: cx - width / 2
                 y: cy - height / 2
-                scale: 1 + (isEnter ? 0.82 : 0.8) * p
+                scale: 1 + 0.82 * p
                 opacity: isEnter ? Math.min(1, p * 3) : Math.max(0, 1 - p)
                 visible: opacity > 0.01
                 z: 3
@@ -383,7 +384,7 @@ Item {
                     spacing: 8
                     Rectangle {
                         id: waitDot
-                        visible: root.phase === "checking" || root.sizePending
+                        visible: root.phase === "checking"
                         Layout.preferredWidth: 8; Layout.preferredHeight: 8
                         radius: 4
                         color: root.accentColor
@@ -397,10 +398,35 @@ Item {
                     Text {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 22
+                        visible: !root.showSizeRow
                         text: root.statusMain
                         font.family: Theme.fontFamily; font.pixelSize: 16; font.bold: true
                         color: root.phase === "error" ? Qt.rgba(244 / 255, 63 / 255, 94 / 255, 1) : Theme.textPrimary
                         elide: Text.ElideRight
+                    }
+                    // "Cần tải 40.0 MB, nhẹ hơn 89%": the figure is a slot-machine reel until the real size is known
+                    Row {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 22
+                        visible: root.showSizeRow
+                        Text {
+                            text: I18n.tr("Cần tải ", "Download ")
+                            font.family: Theme.fontFamily; font.pixelSize: 16; font.bold: true
+                            color: Theme.textPrimary
+                        }
+                        Odometer {
+                            text: root.sizeNumber
+                            pixelSize: 16
+                            color: Theme.textPrimary
+                            spinning: !root.sizeKnown
+                            down: true
+                            liteMode: root.liteMode
+                        }
+                        Text {
+                            text: " " + root.sizeUnit + root.sizeTail
+                            font.family: Theme.fontFamily; font.pixelSize: 16; font.bold: true
+                            color: Theme.textPrimary
+                        }
                     }
                 }
                 Text {

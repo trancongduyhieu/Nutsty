@@ -400,7 +400,9 @@ Scope {
     // Test flag (open_settings?mock=1): the update dialog runs a fake plan and download, no network
     property bool updateDemo: false
     property real demoProgress: 0
-    readonly property bool updatePolling: isDownloadingUpdate || (updateState && updateState.status === "planning")
+    // False until the backend has acknowledged "start", so an early poll cannot answer with the old "planned" state
+    property bool updateStartAcked: false
+    readonly property bool updatePolling: !updateDemo && (updateState && updateState.status === "planning" || (isDownloadingUpdate && updateStartAcked))
     property string updateStatusMessage: ""
     property real lastNowPlayingSyncTime: 0
     property bool isFetchingNotesFast: false
@@ -1926,12 +1928,19 @@ Scope {
         if (win.updateDemo) {
             win.demoProgress = 0;
             win.isDownloadingUpdate = true;
+            win.updateState = ({ status: "downloading", mode: "delta", plan: win.demoPlanInfo, progress: 0, percent: 0,
+                                 bytes_done: 0, bytes_total: win.demoPlanInfo.download_bytes, speed: 0, eta: -1 });
             demoTickTimer.restart();
             return;
         }
         if (win.isDownloadingUpdate) return;
         win.isDownloadingUpdate = true;
+        win.updateStartAcked = false;
         win.updateDownloadProgress = 0.0;
+        // Show "downloading" at once, from the plan we already know, instead of waiting for the first poll
+        var pl = win.updateState && win.updateState.plan ? win.updateState.plan : null;
+        win.updateState = ({ status: "downloading", mode: (win.updateState && win.updateState.mode) || "full", plan: pl,
+                             progress: 0, percent: 0, bytes_done: 0, bytes_total: pl ? pl.download_bytes : 0 });
         win.updateStatusMessage = I18n.tr("Đang chuẩn bị tải bản cập nhật...", "Preparing update download...");
 
         var xhr = new XMLHttpRequest();
@@ -1940,6 +1949,7 @@ Scope {
         xhr.onreadystatechange = function() {
             if (xhr.readyState === XMLHttpRequest.DONE) {
                 if (xhr.status === 200) {
+                    win.updateStartAcked = true;
                     updateStatusPollTimer.restart();
                 } else {
                     win.isDownloadingUpdate = false;

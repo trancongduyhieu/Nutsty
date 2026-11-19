@@ -162,63 +162,6 @@ Item {
 
     // ---- building blocks ----------------------------------------------------------------------
 
-    // Odometer: each digit rolls up through 0..9 to its value, the higher places a touch later
-    component Odometer: Row {
-        id: odo
-        property string text: "0"
-        property int pixelSize: 52
-        property int gen: 0
-        property real roll: 1
-        onGenChanged: { roll = 0; rollAnim.restart(); }
-        Component.onCompleted: { roll = 0; rollAnim.restart(); }
-        NumberAnimation {
-            id: rollAnim
-            target: odo; property: "roll"; from: 0; to: 1
-            duration: root.liteMode ? 1 : 1400
-            easing.type: Easing.BezierSpline; easing.bezierCurve: [0.2, 0, 0, 1, 1, 1]
-        }
-        Repeater {
-            model: odo.text.split("")
-            delegate: Item {
-                id: digit
-                required property string modelData
-                required property int index
-                readonly property bool isDigit: /[0-9]/.test(modelData)
-                readonly property real lag: (odo.text.length - 1 - index) * 0.08
-                readonly property real t: Math.max(0, Math.min(1, (odo.roll - lag) / (1 - lag)))
-                width: probe.implicitWidth
-                height: probe.implicitHeight
-                clip: true
-                Text {
-                    id: probe
-                    visible: !digit.isDigit
-                    text: digit.isDigit ? "0" : digit.modelData
-                    color: root.ink
-                    font.family: Theme.fontFamily
-                    font.pixelSize: odo.pixelSize
-                    font.weight: Font.Bold
-                    font.letterSpacing: -odo.pixelSize * 0.045
-                    font.features: { "tnum": 1 }
-                }
-                Column {
-                    visible: digit.isDigit
-                    // one full lap plus the digit, so even a 0 rolls
-                    y: -(digit.isDigit ? (10 + parseInt(digit.modelData)) * digit.t : 0) * digit.height
-                    Repeater {
-                        model: 20
-                        Text {
-                            required property int index
-                            height: digit.height
-                            text: index % 10
-                            color: root.ink
-                            font: probe.font
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     component Chevron: Item {
         property bool open: false
         width: 18; height: 18
@@ -692,10 +635,10 @@ Item {
                     Row {
                         Layout.topMargin: 2
                         readonly property int minutes: (root.stats && root.stats.total_minutes) || 0
-                        Odometer { text: String(Math.floor(parent.minutes / 60)); gen: root.generation }
+                        Odometer { text: String(Math.floor(parent.minutes / 60)); gen: root.generation; color: root.ink; liteMode: root.liteMode }
                         Label { anchors.bottom: parent.bottom; anchors.bottomMargin: 10; text: I18n.tr("g", "h"); size: 22; Layout.fillWidth: false }
                         Item { width: 14; height: 1 }
-                        Odometer { text: String(parent.minutes % 60).padStart(2, "0"); gen: root.generation }
+                        Odometer { text: String(parent.minutes % 60).padStart(2, "0"); gen: root.generation; color: root.ink; liteMode: root.liteMode }
                         Label { anchors.bottom: parent.bottom; anchors.bottomMargin: 10; text: I18n.tr("p", "m"); size: 22; Layout.fillWidth: false }
                     }
                     Rectangle { Layout.fillWidth: true; Layout.topMargin: 10; Layout.preferredHeight: 1; color: root.grid }

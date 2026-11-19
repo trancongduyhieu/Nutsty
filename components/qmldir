@@ -108,6 +108,7 @@ ListenerCard 1.0 ListenerCard.qml
 ListeningTracker 1.0 ListeningTracker.qml
 ProfileView 1.0 ProfileView.qml
 ProfilePage 1.0 ProfilePage.qml
+Odometer 1.0 Odometer.qml
 StatsPage 1.0 StatsPage.qml
 DotGrid 1.0 DotGrid.qml
 RecapStory 1.0 RecapStory.qml
