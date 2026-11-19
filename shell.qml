@@ -397,6 +397,9 @@ Scope {
     // Latest /api/update/status (phase, bytes, speed, plan); the update dialog draws from it
     property var updateState: ({})
     property real updatePackageBytes: 0
+    // Test flag (open_settings?mock=1): the update dialog runs a fake plan and download, no network
+    property bool updateDemo: false
+    property real demoProgress: 0
     readonly property bool updatePolling: isDownloadingUpdate || (updateState && updateState.status === "planning")
     property string updateStatusMessage: ""
     property real lastNowPlayingSyncTime: 0
@@ -1478,6 +1481,35 @@ Scope {
     }
 
     Timer {
+        id: demoPlanTimer
+        interval: 1800
+        onTriggered: win.updateState = ({ status: "planned", mode: "delta", plan: win.demoPlanInfo })
+    }
+
+    Timer {
+        id: demoTickTimer
+        interval: 120
+        repeat: true
+        onTriggered: {
+            win.demoProgress = Math.min(1, win.demoProgress + 0.012 + Math.random() * 0.012);
+            var total = win.demoPlanInfo.download_bytes;
+            var done = win.demoProgress * total;
+            if (win.demoProgress >= 1) {
+                demoTickTimer.stop();
+                win.isDownloadingUpdate = false;
+                win.updateDownloadProgress = 1.0;
+                win.updateState = ({ status: "ready", mode: "delta", plan: win.demoPlanInfo, progress: 1, percent: 100 });
+                return;
+            }
+            win.updateDownloadProgress = win.demoProgress;
+            win.updateState = ({ status: "downloading", mode: "delta", plan: win.demoPlanInfo,
+                                 progress: win.demoProgress, percent: Math.floor(win.demoProgress * 100),
+                                 bytes_done: done, bytes_total: total, speed: 5400000,
+                                 eta: Math.round((total - done) / 5400000) });
+        }
+    }
+
+    Timer {
         id: updateStatusPollTimer
         interval: 400
         repeat: true
@@ -1525,7 +1557,11 @@ Scope {
                             if (res.action === "open_settings") {
                                 win.visible = true;
                                 if (res.mock_update) {
+                                    win.updateDemo = true;
                                     win.hasAppUpdate = true;
+                                    win.updatePackageBytes = 399087882;
+                                    win.updateReleaseNotes = win.updateReleaseNotes || "- **Cập nhật chỉ tải phần thay đổi**: Chỉ tải những tệp khác bản bạn đang dùng.\n- **Hộp thoại cập nhật mới**: Vòng chữ xoay quanh số phiên bản, tốc độ và thời gian còn lại.\n- **Giữ nguyên trình phát mpv**: Không đổi giữa các bản.";
+                                    win.openUpdateModal();
                                     win.latestVersion = res.latest_version || "v1.0.4.1";
                                     win.appVersion = res.current_version || "1.0.4.1";
                                     win.updateUrl = res.release_url || "https://github.com/trancongduyhieu/Nutsty/releases";
@@ -1844,7 +1880,13 @@ Scope {
     }
 
     // Ask the backend how much of the new version really has to be downloaded
+    function demoPlan() {
+        win.updateState = ({ status: "planning" });
+        demoPlanTimer.restart();
+    }
+
     function planUpdate() {
+        if (win.updateDemo) { win.demoPlan(); return; }
         if (win.isDownloadingUpdate) return;
         var xhr = new XMLHttpRequest();
         xhr.open("POST", (win.localApiUrl || "http://127.0.0.1:17890") + "/api/update/plan", true);
@@ -1860,6 +1902,12 @@ Scope {
     }
 
     function cancelDirectUpdate() {
+        if (win.updateDemo) {
+            demoTickTimer.stop();
+            win.isDownloadingUpdate = false;
+            win.demoPlan();
+            return;
+        }
         var xhr = new XMLHttpRequest();
         xhr.open("POST", (win.localApiUrl || "http://127.0.0.1:17890") + "/api/update/cancel", true);
         xhr.setRequestHeader("Content-Type", "application/json");
@@ -1870,7 +1918,15 @@ Scope {
         updateModalLoader.ensure().openModal();
     }
 
+    readonly property var demoPlanInfo: ({ download_bytes: 41943040, full_bytes: 399087882, changed: 210, total: 3965 })
+
     function startDirectUpdate() {
+        if (win.updateDemo) {
+            win.demoProgress = 0;
+            win.isDownloadingUpdate = true;
+            demoTickTimer.restart();
+            return;
+        }
         if (win.isDownloadingUpdate) return;
         win.isDownloadingUpdate = true;
         win.updateDownloadProgress = 0.0;
@@ -1896,6 +1952,10 @@ Scope {
     }
 
     function applyUpdateAndRestart() {
+        if (win.updateDemo) {
+            win.showToast(I18n.tr("Chế độ xem thử: không khởi động lại thật", "Demo mode: no real restart"), "update");
+            return;
+        }
         win.showToast(I18n.tr("Đang áp dụng bản cập nhật...", "Applying update..."), "update");
         var appPath = "";
         if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && typeof __NutstyBridge.getAppDir === "function") {
