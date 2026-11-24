@@ -110,6 +110,8 @@ if [ ! -f "$DIR/library.json" ] || [ "$1" == "--rescan" ]; then
         python3 "$DIR/backend/library.py"
     fi
 fi
+# Re-make any library cover thumbnails that went missing from the cache (quiet, in the background)
+python3 "$DIR/backend/library.py" heal >/dev/null 2>&1 &
 
 # Memory allocator tuning: prevent jemalloc from using 2MB Transparent Huge Pages
 # and aggressively return unused dirty memory to the OS (vital for CachyOS/Arch Linux)

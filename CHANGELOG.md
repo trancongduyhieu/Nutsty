@@ -13,6 +13,23 @@ Số phiên bản có dạng `A.B.C`, ví dụ `1.2.0`:
 - **Hẹn giờ ngủ mới, rộng và dễ dùng hơn**: Bấm nút mặt trăng ở màn Đang phát, hẹn giờ ngủ giờ mở thành một trang riêng thay cho ô nhỏ chật chội trước đây. Chọn số giờ và số phút bằng hai nút cộng trừ (cuộn chuột để chỉnh từng phút), rồi bấm "Bắt đầu hẹn giờ". Khi đang hẹn giờ, một vòng tròn đếm ngược cạn dần cho bạn thấy còn bao lâu nữa nhạc tắt. Nút "Dừng khi hết bài này" vẫn còn ngay bên dưới.
 - **Chọn cách nhạc nhỏ dần trước khi tắt**: Không (nhạc dừng ngay khi hết giờ), 10 giây cuối (nhạc nhỏ dần trong 10 giây cuối), hoặc Suốt hẹn giờ (nhạc nhỏ dần đều từ lúc bắt đầu tới lúc tắt, trong lúc đó không chỉnh được âm lượng). Hủy hẹn giờ thì âm lượng trở lại như cũ.
 
+### Changed
+- **Bảng bên phải gọn và thoáng hơn**: Bảng Lời, Bình luận và Phát tiếp theo bên phải giờ chỉ còn một kiểu. Ảnh bìa nằm trên cùng, viền ảnh tan dần vào một quầng màu của bài thay vì cắt thẳng. Ba chữ Lời, Bình luận, Tiếp theo to và đậm ở đáy bảng dùng để chuyển tab. Nút đóng là một dấu X mảnh, xoay nhẹ khi rê chuột.
+- **Chọn kiểu bảng trong Cài đặt đổi thành một công tắc**: Ba lựa chọn kiểu bảng cũ được thay bằng công tắc "Nghiêng danh sách Phát tiếp theo". Bật lên thì các bài sắp phát xếp nghiêng như đang lơ lửng, tắt thì đứng thẳng. Mặc định là tắt.
+- **Thông báo về lời bài hát rõ ràng hơn**: Khi đang tìm lời, bạn thấy một hình nhỏ đổi dáng liên tục cùng dòng "Đang tìm lời bài hát…". Khi bài không có lời chạy theo nhạc, một biểu tượng lời bài hát hiện ra cùng dòng "Chưa có lời bài hát".
+
+### Fixed
+- **Không còn báo "Chưa có lời" rồi lời lại hiện ra**: Lúc mới đổi bài, bảng bên phải có khi báo chưa có lời bài hát trong khi lời đã có hoặc đang được tìm, một lúc sau lời lại hiện ra đè lên. Giờ dòng này chỉ hiện khi đã tìm xong mà thật sự không có lời.
+- **Viền ảnh bìa luôn mờ mịn**: Viền ảnh bìa ở bảng bên phải có lúc mờ lúc không, nhất là với bài nghe lần đầu, sau khi ẩn rồi mở lại cửa sổ, hay vừa mở app đã bấm phát (khi đó còn hiện một khối màu vuông cạnh cứng). Bấm sang một cửa sổ khác cũng làm ảnh bìa hiện thành khung vuông cứng cho tới khi bấm lại vào Nutsty. Phía sau ảnh bìa cũng không còn hiện thêm một bản ảnh bìa mờ nữa, chỉ còn một vệt sáng theo màu của bài, và vệt sáng này không còn loang rộng sang bên trái làm mép trái nhòe và ngả màu hơn hẳn các mép khác. Giờ viền lúc nào cũng tan dần vào quầng màu của bài, và quầng màu hiện ra từ từ thay vì giật vào sau một giây. Trong lúc ảnh đang tải cũng không còn hiện một khối xám vuông nữa. Một số bài trong thư viện bị mất ảnh bìa gốc vì trình dọn bộ nhớ đệm xóa nhầm, nên phải dùng tạm ảnh YouTube có khung viền cứng. Giờ ảnh bìa của thư viện không bị dọn nữa, và ảnh nào đã mất sẽ được tạo lại khi mở app.
+- **Bình luận tải lại khi mở lại tab**: Nếu lần trước không tải được bình luận, đóng rồi mở lại tab Bình luận giờ sẽ tải lại đúng như thông báo lỗi hướng dẫn, thay vì cứ hiện mãi lỗi cũ.
+- **Chuyển bài nhanh không còn rối**: Trước đây bấm bài tiếp theo liên tục thì thanh thời gian có lúc hiện thời gian của bài trước, bài trước có lúc tự phát lại một chút, và bấm Tiếp khi bài sắp hết có thể nhảy qua luôn hai bài. Giờ bài mới chỉ bắt đầu chạy khi nó thật sự phát, và mỗi lần bấm chỉ chuyển đúng một bài.
+- **Lời bài hát đúng bài khi chuyển nhanh**: Đổi bài liên tục đôi khi làm Nutsty tìm nhầm lời hoặc không tìm thấy lời. Giờ lời luôn được tìm theo đúng bài đang phát.
+- **Màu giao diện theo đúng bài đang phát**: Chuyển bài nhanh có lúc làm màu nhấn của bài trước đè lên bài sau. Giờ màu luôn theo bài cuối cùng bạn chọn.
+- **Nghe Cùng khớp nhau hơn**:
+  - Ngay sau khi người mở phòng đổi bài, bạn bè không còn bị tua tới chỗ sai hay bị dừng nhầm vì lệnh của bài trước tới muộn.
+  - Tạm dừng rồi phát lại nhiều lần, hai bên vẫn dừng và phát tiếp ở cùng một chỗ thay vì lệch dần.
+  - Hai máy có đồng hồ chạy lệch nhau vài giây, ví dụ một máy Linux và một máy Windows, giờ vẫn nghe khớp nhau.
+
 ## [2.3.1] - 2026-11-19
 
 ### Added

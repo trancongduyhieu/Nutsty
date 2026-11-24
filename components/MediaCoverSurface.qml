@@ -19,6 +19,9 @@ Item {
     property bool isPlaying: false
     property bool autoCropBlackBars: true
     property bool showShadow: true
+    // false: nothing is drawn until the cover arrives (no charcoal box or audio icon), for hosts
+    // that put their own backdrop behind it, such as the feathered cover in the Mochy panel
+    property bool showPlaceholder: true
     property string overrideImage: ""
     // URL of the static cover currently shown (used e.g. for glow colour sampling)
     readonly property alias coverSource: bigCoverImg.source
@@ -244,7 +247,7 @@ Item {
         id: coverSurface
         anchors.fill: parent
         radius: root.radius
-        color: "#202024"
+        color: root.showPlaceholder ? "#202024" : "transparent"
         z: 1
 
         // Static Cover Image
@@ -269,7 +272,8 @@ Item {
             asynchronous: true
             sourceSize: Qt.size(1200, 1200)
             useInitialsFallback: false
-            fallbackIcon: "../assets/icons/media-optical-audio-symbolic.svg"
+            placeholderColor: root.showPlaceholder ? "#202024" : "transparent"
+            fallbackIcon: root.showPlaceholder ? "../assets/icons/media-optical-audio-symbolic.svg" : ""
             fallbackIconSize: 48
             fallbackIconColor: Theme.textMuted
             onStatusChanged: {
@@ -352,7 +356,7 @@ Item {
         // Fallback Audio Icon when image not ready
         Rectangle {
             anchors.fill: parent
-            visible: bigCoverImg.status !== Image.Ready && (!root.animatedCoverEnabled || root.effectiveAnimatedUrl === "")
+            visible: root.showPlaceholder && bigCoverImg.status !== Image.Ready && (!root.animatedCoverEnabled || root.effectiveAnimatedUrl === "")
             color: Qt.rgba(0.08, 0.08, 0.10, 0.85)
             AppIcon {
                 anchors.centerIn: parent

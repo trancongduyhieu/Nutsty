@@ -53,13 +53,15 @@ ManageFriendsModal 1.0 ManageFriendsModal.qml
 MarqueeText 1.0 MarqueeText.qml
 MinimalistLyricsView 1.0 MinimalistLyricsView.qml
 MochySidePanel 1.0 MochySidePanel.qml
+LiveTuner 1.0 LiveTuner.qml
+StrokeClose 1.0 StrokeClose.qml
+OutlineType 1.0 OutlineType.qml
 MochyCommentsView 1.0 MochyCommentsView.qml
 ScrollEdgeFade 1.0 ScrollEdgeFade.qml
 CommentRow 1.0 CommentRow.qml
 PanelRimBorder 1.0 PanelRimBorder.qml
 NowPlayingControls 1.0 NowPlayingControls.qml
 NowPlayingActionRow 1.0 NowPlayingActionRow.qml
-CoverSeekRing 1.0 CoverSeekRing.qml
 NotificationCenter 1.0 NotificationCenter.qml
 NotificationStore 1.0 NotificationStore.qml
 NavArrowButton 1.0 NavArrowButton.qml

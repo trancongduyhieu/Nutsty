@@ -2229,8 +2229,14 @@ Scope {
     property bool isNowPlayingOpen: false
     property alias showAmberolDetails: win.isNowPlayingOpen
     property bool isMochySidePanelOpen: false
+    property bool upNextTunerOpen: false
+    property bool coverTunerOpen: false
     property string mochyActiveTab: "lyrics" // "lyrics" | "queue" | "comments"
     property int mochyPanelStyle: 2 // 1: Flush Split-Rail, 2: Bento Glass Island (User Choice)
+    // Preview of the frameless right panel: every tab and the tab buttons share the Up Next lean
+    // Right panel look (preview): "classic" framed, "tilt" leaning plane, "type" giant outline type
+    // Playing Next list leans in perspective; off keeps it straight
+    property bool upNextTilt: false
     onIsNowPlayingOpenChanged: {
         if (win.isNowPlayingOpen) {
             win.isMochySidePanelOpen = false;
@@ -3130,6 +3136,53 @@ Scope {
                     }
                 }
 
+                // Live tuner for the Up Next lean; opened with `ipc call nutsty toggleUpNextTuner`
+                LiveTuner {
+                    target: mochySidePanel
+                    accentColor: win.accentColor
+                    title: I18n.tr("Chỉnh độ nghiêng Phát tiếp theo", "Tune the Up Next lean")
+                    defaults: ({ upNextRotY: 16, upNextRotX: 0, upNextRotZ: 0, upNextPerspective: 780, upNextPivotX: 0.42, upNextPivotY: 0.61 })
+                    rows: [
+                        { label: I18n.tr("Xoay ngang (mép trái lùi xa)", "Turn sideways (left edge recedes)"), prop: "upNextRotY", from: -45, to: 45 },
+                        { label: I18n.tr("Ngả trước sau (dương: đầu trên lùi xa)", "Tip back (positive: top recedes)"), prop: "upNextRotX", from: -30, to: 30 },
+                        { label: I18n.tr("Xoay phẳng trên màn hình", "Roll in the screen plane"), prop: "upNextRotZ", from: -15, to: 15 },
+                        { label: I18n.tr("Khoảng cách nhìn (nhỏ: phối cảnh mạnh)", "Viewing distance (small: stronger perspective)"), prop: "upNextPerspective", from: 300, to: 3000, step: 10, digits: 0 },
+                        { label: I18n.tr("Điểm tựa ngang (0 trái, 1 phải)", "Pivot across (0 left, 1 right)"), prop: "upNextPivotX", from: 0, to: 1, step: 0.01, digits: 2 },
+                        { label: I18n.tr("Tầm mắt (0 đỉnh, 1 đáy danh sách)", "Eye height (0 top, 1 bottom of list)"), prop: "upNextPivotY", from: 0, to: 1, step: 0.01, digits: 2 }
+                    ]
+                    visible: win.upNextTunerOpen && mochySidePanel.visible
+                    anchors.top: parent.top
+                    anchors.topMargin: 16
+                    anchors.right: mochySidePanel.left
+                    anchors.rightMargin: 16
+                    z: 50
+                }
+                // Live tuner for the big type cover; opened with `ipc call nutsty toggleCoverTuner`
+                LiveTuner {
+                    target: mochySidePanel
+                    accentColor: win.accentColor
+                    title: I18n.tr("Chỉnh bìa kiểu Chữ lớn", "Tune the Big type cover")
+                    defaults: ({ coverTop: -10, coverLeft: -22, coverRight: -13, coverLength: 0.99, coverFeather: 59, coverFadeStart: 0.62, coverLyricsAt: 0.94, auraSpill: 30, auraStrength: 0.71 })
+                    rows: [
+                        { label: I18n.tr("Mép trên (âm: đẩy lên)", "Top edge (negative: up)"), prop: "coverTop", from: -200, to: 200, step: 1, digits: 0 },
+                        { label: I18n.tr("Mép trái (âm: tràn ra ngoài)", "Left edge (negative: spill out)"), prop: "coverLeft", from: -300, to: 200, step: 1, digits: 0 },
+                        { label: I18n.tr("Mép phải (âm: tràn ra ngoài)", "Right edge (negative: spill out)"), prop: "coverRight", from: -100, to: 200, step: 1, digits: 0 },
+                        { label: I18n.tr("Độ dài (so với bề ngang bảng)", "Length (times the panel width)"), prop: "coverLength", from: 0.5, to: 2.0, step: 0.01, digits: 2 },
+                        { label: I18n.tr("Độ mờ ba mép trên, trái, phải", "Blur on the top and side edges"), prop: "coverFeather", from: 0, to: 160, step: 1, digits: 0 },
+                        { label: I18n.tr("Đáy bắt đầu mờ (0 đỉnh, 1 đáy bìa)", "Bottom fade starts (0 top, 1 bottom)"), prop: "coverFadeStart", from: 0.1, to: 0.98, step: 0.01, digits: 2 },
+                        { label: I18n.tr("Lời bắt đầu (0 đỉnh, 1 đáy bìa)", "Lyrics start (0 top, 1 bottom)"), prop: "coverLyricsAt", from: 0.3, to: 1.2, step: 0.01, digits: 2 },
+                        { label: I18n.tr("Quầng tỏa ra ngoài bảng", "Glow spread past the panel"), prop: "auraSpill", from: 0, to: 400, step: 1, digits: 0 },
+                        { label: I18n.tr("Độ đậm quầng tỏa", "Glow strength"), prop: "auraStrength", from: 0, to: 1, step: 0.01, digits: 2 }
+                    ]
+                    visible: win.coverTunerOpen && mochySidePanel.visible
+                    // Far left of the window, clear of the cover and its glow
+                    anchors.top: parent.top
+                    anchors.topMargin: 16
+                    anchors.left: parent.left
+                    anchors.leftMargin: 16
+                    z: 50
+                }
+
                 // 2. Mochy Signature Side Panel (Poster & Expressive Typography)
                 MochySidePanel {
                     id: mochySidePanel
@@ -3138,7 +3191,7 @@ Scope {
                     anchors.right: parent.right
                     // Same top and bottom edges as the browsing area on the left, so both columns line up
                     anchors.rightMargin: win.mochyPanelStyle === 1 ? 0 : 8
-                    panelStyle: win.mochyPanelStyle
+                    upNextTilt: win.upNextTilt
                     // Fixed width + transform slide: content never re-lays out per frame (no FBO realloc / cover reflow)
                     width: targetPanelWidth
                     property real revealProgress: (win.isMochySidePanelOpen && !win.isNowPlayingOpen) ? 1.0 : 0.0
@@ -3154,7 +3207,6 @@ Scope {
                     transform: Translate { x: (1.0 - mochySidePanel.revealProgress) * (mochySidePanel.width + 24) }
                     visible: revealProgress > 0.001 && !win.isNowPlayingOpen
                     opacity: Math.max(0.0, Math.min(1.0, revealProgress))
-                    layoutDependency: revealProgress
                     enabled: win.isMochySidePanelOpen && !win.isNowPlayingOpen
                     z: 10
 
@@ -3173,7 +3225,6 @@ Scope {
                     activeLyrics: win.activeLyrics
                     isLoadingLyrics: (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) ? ytNowPlayingView.isLoadingLyrics : false
                     resolvedSquareImage: win.currentResolvedCover
-                    backgroundSourceItem: masterBackdropStack
 
                     isLiked: win.isCurrentTrackLiked
 
@@ -3715,6 +3766,7 @@ Scope {
             crossfadeEnabled: win.crossfadeEnabled
             crossfadeSeconds: win.crossfadeSeconds
             scrollEdgeFadeEnabled: Theme.scrollEdgeFadeEnabled
+            upNextTilt: win.upNextTilt
             liteMode: win.liteModePreference
             liteModeAutoActive: win.softwareRendering
             closeBehavior: win.closeBehavior
@@ -3790,6 +3842,10 @@ Scope {
             }
             onToggleScrollEdgeFadeRequested: enabled => {
                 Theme.scrollEdgeFadeEnabled = enabled;
+                win.saveSettings();
+            }
+            onToggleUpNextTiltRequested: enabled => {
+                win.upNextTilt = enabled;
                 win.saveSettings();
             }
             onSelectLiteModeRequested: mode => {
@@ -4506,6 +4562,7 @@ Scope {
             if (obj.crossfadeEnabled !== undefined) win.crossfadeEnabled = !!obj.crossfadeEnabled;
             if (obj.scrollEdgeFadeEnabled !== undefined) Theme.scrollEdgeFadeEnabled = !!obj.scrollEdgeFadeEnabled;
             if (["auto", "on", "off"].indexOf(obj.liteMode) >= 0) win.liteModePreference = obj.liteMode;
+            if (typeof obj.upNextTilt === "boolean") win.upNextTilt = obj.upNextTilt;
             if (["widget", "background"].indexOf(obj.closeBehavior) >= 0) win.closeBehavior = obj.closeBehavior;
             if (obj.cacheLimitMb !== undefined) win.cacheLimitMb = [1024, 1536, 2048].indexOf(parseInt(obj.cacheLimitMb)) >= 0 ? parseInt(obj.cacheLimitMb) : 1536;
             if (obj.crossfadeSeconds !== undefined) win.crossfadeSeconds = Math.max(2, Math.min(12, parseInt(obj.crossfadeSeconds) || 6));
@@ -4565,6 +4622,7 @@ Scope {
             crossfadeSeconds: win.crossfadeSeconds,
             scrollEdgeFadeEnabled: Theme.scrollEdgeFadeEnabled,
             liteMode: win.liteModePreference,
+            upNextTilt: win.upNextTilt,
             closeBehavior: win.closeBehavior,
             cacheLimitMb: win.cacheLimitMb,
             autoMixEnabled: win.autoMixEnabled,
@@ -5427,6 +5485,9 @@ Scope {
         function testPlayCustomPlaylist() { frostifyIpc.testPlayCustomPlaylist(); }
         function setNowPlayingTab(tab: string) { frostifyIpc.setNowPlayingTab(tab); }
         function setMochyTab(tab: string) { frostifyIpc.setMochyTab(tab); }
+        function toggleUpNextTuner() { frostifyIpc.toggleUpNextTuner(); }
+        function toggleCoverTuner() { frostifyIpc.toggleCoverTuner(); }
+        function setUpNextTilt(on: bool) { frostifyIpc.setUpNextTilt(on); }
         function expandSpotifySettings() { frostifyIpc.expandSpotifySettings(); }
         function testSpotifyConnected(spdc: string) { frostifyIpc.testSpotifyConnected(spdc); }
         function testSpotifyDisconnected() { frostifyIpc.testSpotifyDisconnected(); }
@@ -5535,6 +5596,18 @@ Scope {
             win.mochyActiveTab = tab;
             win.isMochySidePanelOpen = true;
             if (win.isNowPlayingOpen) win.isNowPlayingOpen = false;
+        }
+        function setUpNextTilt(on: bool) {
+            win.upNextTilt = on;
+            win.saveSettings();
+        }
+        function toggleUpNextTuner() {
+            win.upNextTunerOpen = !win.upNextTunerOpen;
+            if (win.upNextTunerOpen) setMochyTab("queue");
+        }
+        function toggleCoverTuner() {
+            win.coverTunerOpen = !win.coverTunerOpen;
+            if (win.coverTunerOpen) setMochyTab("lyrics");
         }
         function toggleMoodIsland() {
             if (typeof topHeader !== "undefined" && topHeader) {

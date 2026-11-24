@@ -21,15 +21,44 @@ Item {
     // Last real playback position from mpv and when it was read (ms); drives the per-frame lyric clock
     property real syncTime: 0.0
     property double syncStamp: 0
-    property Item backgroundSourceItem: null
-    property int panelStyle: 1 // 1: Flush Split-Rail, 2: Bento Glass Island
     property string activeTab: "lyrics" // "lyrics" | "queue" | "comments"
     property bool isLoggedIn: false
     // Corner radius declared once; everything nested derives from it (R_inner = R_outer - inset)
     readonly property real panelRadius: 24
     readonly property real dockInset: 8
+    // Up Next lean, as a full perspective: turn about the vertical axis (rotY), tip forward or
+    // back (rotX), roll in the screen plane (rotZ), viewing distance in px (smaller = stronger
+    // perspective), and the pivot as fractions of the list (pivotY is the viewer's eye height).
+    // Writable so UpNextTiltTuner can adjust them live.
+    property real upNextRotY: 16
+    property real upNextRotX: 0
+    property real upNextRotZ: 0
+    property real upNextPerspective: 780
+    property real upNextPivotX: 0.42
+    property real upNextPivotY: 0.61
+
+    // origin * perspective * Rx * Ry * Rz * -origin. The perspective row turns depth into w and
+    // drops z, so the result is a flat 2D projective transform: the scene graph and hit testing
+    // agree on where every row is drawn.
+    function upNextMatrix(w, h, px, py) {
+        var ox = w * (px === undefined ? upNextPivotX : px), oy = h * (py === undefined ? upNextPivotY : py);
+        var d2r = Math.PI / 180;
+        var ax = -upNextRotY * d2r, bx = upNextRotX * d2r, cz = upNextRotZ * d2r;
+        var ry = Qt.matrix4x4(Math.cos(ax), 0, Math.sin(ax), 0,  0, 1, 0, 0,  -Math.sin(ax), 0, Math.cos(ax), 0,  0, 0, 0, 1);
+        var rx = Qt.matrix4x4(1, 0, 0, 0,  0, Math.cos(bx), -Math.sin(bx), 0,  0, Math.sin(bx), Math.cos(bx), 0,  0, 0, 0, 1);
+        var rz = Qt.matrix4x4(Math.cos(cz), -Math.sin(cz), 0, 0,  Math.sin(cz), Math.cos(cz), 0, 0,  0, 0, 1, 0,  0, 0, 0, 1);
+        var dist = Math.max(100, upNextPerspective);
+        var persp = Qt.matrix4x4(1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 0, 0,  0, 0, -1 / dist, 1);
+        var toO = Qt.matrix4x4(1, 0, 0, -ox,  0, 1, 0, -oy,  0, 0, 1, 0,  0, 0, 0, 1);
+        var back = Qt.matrix4x4(1, 0, 0, ox,  0, 1, 0, oy,  0, 0, 1, 0,  0, 0, 0, 1);
+        return back.times(persp).times(rx).times(ry).times(rz).times(toO);
+    }
+    readonly property bool liteMode: typeof win !== "undefined" && win && Boolean(win.liteMode)
+    // No frame: every tab floats on the wallpaper, the tab buttons are big words and the cover's
+    // outer edges dissolve into a blur
+    // Playing Next list leans in perspective (upNextMatrix); off keeps it straight
+    property bool upNextTilt: false
     property var currentTracks: []
-    property real layoutDependency: 0.0 // Driven by host slide progress so LiquidGlass re-samples its backdrop offset
     readonly property real targetPanelWidth: Math.max(380, Math.min(460, Math.round((parent ? parent.width : 1200) * 0.34)))
 
     // Performance Gating (Zero-overhead: disables all shaders, FBOs, and lyric updates when hidden, closed, or in another app)
@@ -126,6 +155,21 @@ Item {
     // so it is seen even when the lyrics come from cache in the same instant
     readonly property int kTitleHoldMs: 1600
 
+    // "No lyrics" is only said once nothing came back: no lyrics, not searching, and it stayed that
+    // way for a moment after the song changed. Without the wait it flashed during the title hold
+    // and in the gap before the lookup starts, then the lyrics arrived on top of it.
+    property bool lyricsMissingConfirmed: false
+    readonly property bool lyricsMissingNow: !root.hasSyncedLyrics && !root.isLoadingLyrics && root.trackKey !== ""
+    onLyricsMissingNowChanged: {
+        root.lyricsMissingConfirmed = false;
+        if (root.lyricsMissingNow) lyricsMissingTimer.restart(); else lyricsMissingTimer.stop();
+    }
+    Timer {
+        id: lyricsMissingTimer
+        interval: 2500
+        onTriggered: root.lyricsMissingConfirmed = root.lyricsMissingNow
+    }
+
     NumberAnimation {
         id: titleFoundAnim
         target: root; property: "titleFound"; duration: 820
@@ -165,6 +209,8 @@ Item {
         titleHold.restart();
     }
     onTrackKeyChanged: {
+        root.lyricsMissingConfirmed = false;
+        if (root.lyricsMissingNow) lyricsMissingTimer.restart();
         trackSwapAnim.stop();
         // the old lyrics clear a moment before the key turns: don't let the old title rise while it fades
         titleFoundAnim.stop();
@@ -208,7 +254,15 @@ Item {
     // Animated covers follow the app's setting (Settings > animated cover / canvas source)
     property bool animatedCoverEnabled: (typeof win !== "undefined" && win) ? win.animatedCoverEnabled : true
     property string canvasPreference: (typeof win !== "undefined" && win) ? win.canvasPreference : "apple_first"
-    readonly property string coverImageUrl: {
+    // Set when the cover cannot be opened (e.g. a cached thumbnail file that was cleaned up); the
+    // panel then falls back to the video's YouTube thumbnail instead of showing nothing
+    property bool coverUrlFailed: false
+    readonly property string coverFallbackUrl: (root.currentTrack && root.currentTrack.videoId)
+        ? "https://i.ytimg.com/vi/" + root.currentTrack.videoId + "/hqdefault.jpg" : ""
+    onCoverImageUrlPrimaryChanged: root.coverUrlFailed = false
+    readonly property string coverImageUrl: (root.coverUrlFailed && root.coverFallbackUrl !== "")
+        ? root.coverFallbackUrl : root.coverImageUrlPrimary
+    readonly property string coverImageUrlPrimary: {
         if (root.resolvedSquareImage !== "") {
             var r = root.resolvedSquareImage;
             return (r.startsWith("/") && !r.startsWith("file://")) ? ("file://" + r) : r;
@@ -421,6 +475,13 @@ Item {
         rebuildSchedule();
         if (root.isPanelRenderable) updateLyricState();
     }
+    // Cover effects (feather, fade, glow, aura) are each the item's own layer.effect running the
+    // cover_feather shader. There is no separate mask item: masks kept as their own layers went
+    // stale when the panel was hidden or the window recreated, and the cover then drew unmasked as
+    // a hard-edged box over the whole panel. They follow whether the panel is on screen, not
+    // isPanelRenderable: that also drops while the window is shown but not focused (just opened,
+    // reopened, another window clicked), and the cover then drew as a hard box until focused.
+    readonly property bool fxOn: root.visible && root.opacity > 0.01 && !root.liteMode
     onIsPanelRenderableChanged: {
         if (isPanelRenderable) {
             root.animClock = root.currentTime;
@@ -464,45 +525,99 @@ Item {
         return scales;
     }
 
-    // -------------------------------------------------------------------------
-    // OPTION 1: FLUSH SPLIT-RAIL ELEVATION SHADOW (Behind panel, casting leftward)
-    // -------------------------------------------------------------------------
-    Rectangle {
-        id: splitElevationShadow
-        visible: root.isPanelRenderable && root.panelStyle === 1
-        anchors.right: parent.left
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        width: 32
-        z: -1
-        gradient: Gradient {
-            orientation: Gradient.Horizontal
-            GradientStop { position: 0.0; color: "transparent" }
-            GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.55) }
+    // Big type look: the cover's square edges dissolve into its own blur instead of ending hard
+    readonly property bool coverFeathered: root.fxOn
+    // Big type look: the cover runs the full panel width and dissolves downward into the lyrics;
+    // a blurred copy spills past the panel's own edges so no frame line shows (coverAura)
+    property real auraSpill: 30
+    property real auraStrength: 0.71
+    // Big type cover box, live-tunable (LiveTuner in shell.qml): px offsets from the panel's top,
+    // left and right edges (negative reaches outside), length as a multiple of the panel width,
+    // edge blur in px, where the bottom fade starts and where the lyrics start (fractions of the cover)
+    property real coverTop: -10
+    property real coverLeft: -22
+    property real coverRight: -13
+    property real coverLength: 0.99
+    property real coverFeather: 59
+    property real coverFadeStart: 0.62
+    property real coverLyricsAt: 0.94
+    // The cover's edge is clear for its outer px and turns solid over a band as wide as a 64px
+    // blur, centred a little inside coverFeather, so the image scatters out instead of ending in a line
+    readonly property real featherSpread: 32
+    readonly property real featherMid: root.coverFeather + 20
+    readonly property real featherIn: root.featherMid - root.featherSpread
+    readonly property real featherOut: root.featherMid + root.featherSpread
+    // The blurred copy behind ends where the sharp cover does: it only softens the edge band and
+    // never shows past it, where it read as a second, blurred cover behind the poster
+    readonly property real glowIn: root.featherIn + 8
+    readonly property real glowOut: root.featherOut
+
+    // Big type look: the cover's blurred light spreads out past the panel's left and top edges and
+    // fades into whatever is behind, so the cover has no box around it. It sits outside
+    // panelContainer because that layer clips to the panel's bounds.
+    Item {
+        id: coverAura
+        // Follows the cover box, reaching auraSpill further out on the left. The page clips at the
+        // panel's top and right, so the light must be gone by those lines: the box starts at the
+        // panel top, ends at its right edge, and the mask keeps a margin wider than its own blur
+        // on every side, so the blurred mask reaches zero before any edge and never cuts a line.
+        readonly property real pad: 80
+        x: root.coverLeft - root.auraSpill - pad
+        y: 0
+        width: root.width - x
+        height: Math.round(root.coverTop + root.width * root.coverLength * 1.3) + pad
+        visible: root.coverFeathered && root.fxOn && opacity > 0.01
+        // fades in when its image arrives, so the blur never pops in a moment after the cover
+        opacity: (root.activeTab === "lyrics" && auraSrc.status === Image.Ready) ? 1.0 : 0.0
+        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+
+        // Opaque in the cover's middle, thinning to nothing at the far left, top, right and bottom
+        layer.enabled: root.fxOn
+        layer.effect: ShaderEffect {
+            readonly property real w: Math.max(1, coverAura.width)
+            readonly property real h: Math.max(1, coverAura.height)
+            readonly property real inL: coverAura.pad + root.auraSpill * 0.3
+            property point u_left: Qt.point((inL - 64) / w, (inL + 64) / w)
+            property point u_right: Qt.point((coverAura.pad - 64) / w, (coverAura.pad + 64) / w)
+            property point u_top: Qt.point((coverAura.pad - 64) / h, (coverAura.pad + 64) / h)
+            property point u_bottom: Qt.point(0, (h - coverAura.pad - 0.45 * (h - coverAura.pad)) / h)
+            fragmentShader: Qt.resolvedUrl("../assets/shaders/cover_feather.frag.qsb")
+        }
+
+        Image {
+            id: auraSrc
+            anchors.fill: parent
+            // A few pixels only: the aura is the cover's colours as light, with no shapes left in it,
+            // so it never reads as a second, blurred cover behind the sharp one
+            sourceSize: Qt.size(6, 6)
+            source: root.coverImageUrl
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            cache: true
+            visible: false
+            onStatusChanged: if (status === Image.Error && !root.coverUrlFailed && String(source) === root.coverImageUrlPrimary) root.coverUrlFailed = true
+        }
+        MultiEffect {
+            anchors.fill: parent
+            source: auraSrc
+            blurEnabled: true
+            blur: 1.0
+            blurMax: 64
+            saturation: 0.8
+            brightness: -0.05
+            autoPaddingEnabled: false
+            // half: the light stays a faint haze with a dark gap around the cover
+            opacity: root.auraStrength * 0.5
         }
     }
 
-    // -------------------------------------------------------------------------
-    // OPTION 2: BENTO GLASS ISLAND DIFFUSE SHADOW (Behind card, diffuse ambient)
-    // -------------------------------------------------------------------------
-    Rectangle {
-        id: bentoShadowLayer
-        visible: root.isPanelRenderable && root.panelStyle === 2
-        // Soft, low, offset downward: sits the island on the window instead of outlining it
+    // Big type look: the cover lives here instead of inside panelContainer, so the text shadow that
+    // layer casts does not draw a dark box around the cover's soft edges
+    Item {
+        id: coverHost
         anchors.fill: parent
-        anchors.topMargin: 10
-        anchors.bottomMargin: -6
-        anchors.leftMargin: 6
-        anchors.rightMargin: 6
-        radius: root.panelRadius
-        color: Qt.rgba(0, 0, 0, 0.22)
-        z: -1
-        layer.enabled: root.isPanelRenderable && root.panelStyle === 2
-        layer.effect: MultiEffect {
-            blurEnabled: true
-            blur: 1.0
-            blurMax: 32
-        }
+        opacity: lyricsView.opacity
+        visible: opacity > 0.01
     }
 
     // -------------------------------------------------------------------------
@@ -511,44 +626,15 @@ Item {
     Item {
         id: panelContainer
         anchors.fill: parent
-        layer.enabled: root.isPanelRenderable
-        // SDF corner clip (rounded_clip.frag): anti-aliased edge with no dark fringe,
-        // which the old MultiEffect mask left at all four corners
-        layer.effect: ShaderEffect {
-            readonly property real leftR: root.panelStyle === 1 ? 0 : root.panelRadius
-            property vector2d u_resolution: Qt.vector2d(Math.max(1, width), Math.max(1, height))
-            property vector4d u_radii: Qt.vector4d(leftR, root.panelRadius, root.panelRadius, leftR)
-            fragmentShader: Qt.resolvedUrl("../assets/shaders/rounded_clip.frag.qsb")
-        }
-
-        // =====================================================================
-        // LAYER A: LIQUID GLASS BACKDROP
-        // One see-through glass material behind every tab (lyrics, comments, up next),
-        // tinted dark enough for long text.
-        // =====================================================================
-        Item {
-            id: backdropWrapper
-            anchors.fill: parent
-
-            // Base deep dark tone, shown while the glass is not rendering
-            Rectangle {
-                anchors.fill: parent
-                color: root.panelStyle === 1 ? "#0e0f14" : "#0a0b10"
-            }
-
-            LiquidGlass {
-                id: panelLiquidBackdrop
-                anchors.fill: parent
-                visible: root.isPanelRenderable
-                extraDependency: root.layoutDependency
-                backgroundSourceItem: root.backgroundSourceItem
-                radius: root.panelStyle === 1 ? 0 : root.panelRadius
-                displacement: 12.0
-                bevelWidth: 16.0
-                blurRadius: 0.85
-                tintColor: Qt.rgba(0.06, 0.07, 0.10, 0.74)
-                isFlowActive: false
-            }
+        // Nothing to clip: the layer carries the shadow that keeps floating text readable. Off in
+        // Lite mode, where the text goes without it.
+        layer.enabled: root.isPanelRenderable && !root.liteMode
+        layer.smooth: true
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Qt.rgba(0, 0, 0, 0.75)
+            shadowBlur: 0.55
+            shadowVerticalOffset: 3
         }
 
         // =====================================================================
@@ -572,48 +658,19 @@ Item {
             // =====================================================================
             Item {
                 id: circleCover
+            // Lives in coverHost, outside panelContainer, so that layer's text shadow does not
+            // draw a dark box around the cover's soft edges
+            parent: coverHost
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            height: Math.round(width * 0.88)
+            anchors.topMargin: root.coverTop
+            anchors.leftMargin: root.coverLeft
+            anchors.rightMargin: root.coverRight
+            height: Math.round(root.width * root.coverLength)
             z: 2
 
             readonly property real cw: width
-
-            // Mathematical Exact Parabolic Curve from (x=1.0W, y=0.4567W) to (x=0.0W, y=0.8526W)
-            // Quadratic Bezier: P0 = (1.0W, 0.4567W), P1 = (0.50W, 0.9150W), P2 = (0.0W, 0.8526W)
-            // 8x MSAA GPU analytical rendering (preferredRendererType: Shape.CurveRenderer + layer.samples: 8)
-            Shape {
-                id: circleArcMask
-                anchors.fill: parent
-                visible: false
-                layer.enabled: root.isPanelRenderable
-                layer.samples: 8
-                layer.smooth: true
-                preferredRendererType: Shape.CurveRenderer
-
-                ShapePath {
-                    fillColor: "#ffffff"
-                    strokeColor: "transparent"
-                    strokeWidth: 0
-                    startX: 0
-                    startY: 0
-
-                    PathLine { x: circleCover.cw; y: 0 }
-                    PathLine { x: circleCover.cw; y: circleCover.cw * 0.4567 }
-                    // A true circle (Mochy's CircleCover): centre (0.13 W, -0.28 W), radius 1.14 W.
-                    // It meets the right edge at 0.4567 W and the left at 0.8526 W, and the seek
-                    // ring below runs on exactly this circle.
-                    PathArc {
-                        x: 0
-                        y: circleCover.cw * 0.8526
-                        radiusX: circleCover.cw * 1.14
-                        radiusY: circleCover.cw * 1.14
-                        direction: PathArc.Clockwise
-                    }
-                    PathLine { x: 0; y: 0 }
-                }
-            }
 
             // Cover glow: instead of a dark drop shadow under the arc, the artwork spills its own light
             // downward. A heavily blurred, saturated copy sits behind the sharp cover and extends past
@@ -625,63 +682,65 @@ Item {
                 anchors.right: parent.right
                 height: parent.height + glowSpill
                 readonly property real glowSpill: Math.round(circleCover.cw * 0.60)
-                visible: root.isPanelRenderable
+                visible: root.fxOn
+                // Every edge fades: the sides and top softly (the box runs past the panel edge, which
+                // would otherwise clip it into a hard line), the bottom from halfway down so the
+                // lyrics underneath stay readable.
+                layer.enabled: root.fxOn
+                layer.effect: ShaderEffect {
+                    readonly property real w: Math.max(1, coverGlow.width)
+                    readonly property real h: Math.max(1, coverGlow.height)
+                    property point u_left: Qt.point(root.glowIn / w, root.glowOut / w)
+                    property point u_right: Qt.point(root.glowIn / w, root.glowOut / w)
+                    property point u_top: Qt.point(root.glowIn / h, root.glowOut / h)
+                    // gone a little below the cover, so only a faint light reaches the lyrics
+                    property point u_bottom: Qt.point(0.45, 0.8)
+                    fragmentShader: Qt.resolvedUrl("../assets/shaders/cover_feather.frag.qsb")
+                }
 
+                // Cropped exactly like the sharp cover (its box, not the taller glow box), so the
+                // blur under the edge band is the same picture and never a second, zoomed-in cover
                 Image {
                     id: coverGlowSrc
                     sourceSize: Qt.size(128, 128)
-                    anchors.fill: parent
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    height: circleCover.height
                     source: root.coverImageUrl
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                     cache: true
                     visible: false
-                    layer.enabled: coverGlow.visible
-                }
-                Item {
-                    id: coverGlowMask
-                    anchors.fill: parent
-                    visible: false
-                    layer.enabled: coverGlow.visible
-                    Rectangle {
-                        anchors.fill: parent
-                        gradient: Gradient {
-                            GradientStop { position: 0.0; color: "#ffffffff" }
-                            GradientStop { position: 0.52; color: "#ffffffff" }
-                            GradientStop { position: 0.72; color: "#b3ffffff" }
-                            GradientStop { position: 1.0; color: "#00ffffff" }
-                        }
-                    }
                 }
                 MultiEffect {
-                    anchors.fill: parent
+                    anchors.fill: coverGlowSrc
                     source: coverGlowSrc
                     blurEnabled: true
                     blur: 1.0
                     blurMax: 64
                     saturation: 0.9
-                    brightness: 0.12
-                    maskEnabled: true
-                    maskSource: coverGlowMask
-                    // MultiEffect maps mask alpha through smoothstep(t*(1+s)-s, t*(1+s)). Only t=0.5, s=1
-                    // gives smoothstep(0, 1): a real fade. t=0 makes any alpha > 0 fully opaque, so the
-                    // glow ended in a hard edge at the bottom of this item.
-                    maskThresholdMin: 0.5
-                    maskSpreadAtMin: 1.0
+                    brightness: 0.0
                     autoPaddingEnabled: false
-                    opacity: 0.85
+                    opacity: coverGlowSrc.status === Image.Ready ? 0.85 : 0.0
+                    Behavior on opacity { NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
                 }
             }
 
-            // Cover Image: 100% Crystal Sharp, bounded strictly within the antialiased parabolic curve
+            // Big type look: the sharp cover thins out over a wide band at its top and sides, showing
+            // the blurred glow behind it, and fades top to bottom into the lyrics below
             Item {
                 id: sharpImageContainer
                 anchors.fill: parent
-                layer.enabled: root.isPanelRenderable
-                layer.effect: MultiEffect {
-                    maskEnabled: true
-                    maskSource: circleArcMask
-                    autoPaddingEnabled: false
+                layer.enabled: root.fxOn
+                layer.effect: ShaderEffect {
+                    readonly property real w: Math.max(1, sharpImageContainer.width)
+                    readonly property real h: Math.max(1, sharpImageContainer.height)
+                    property point u_left: Qt.point(root.featherIn / w, root.featherOut / w)
+                    property point u_right: Qt.point(root.featherIn / w, root.featherOut / w)
+                    property point u_top: Qt.point(root.featherIn / h, root.featherOut / h)
+                    property point u_bottom: Qt.point(0, 1 - root.coverFadeStart)
+                    fragmentShader: Qt.resolvedUrl("../assets/shaders/cover_feather.frag.qsb")
                 }
 
                 // 1. Album artwork: the shared cover surface, so a song with an Apple Music animated
@@ -694,21 +753,11 @@ Item {
                     radius: 0
                     showShadow: false
                     borderWidth: 0
+                    showPlaceholder: false
                     overrideImage: root.coverImageUrl
                     isPlaying: root.isPlaying
                     animatedCoverEnabled: root.animatedCoverEnabled
                     canvasPreference: root.canvasPreference
-                }
-
-                // 2. Mochy Soft Vignette along the lower rim
-                Rectangle {
-                    anchors.fill: parent
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: "transparent" }
-                        GradientStop { position: 0.60; color: "transparent" }
-                        GradientStop { position: 0.85; color: Qt.rgba(0, 0, 0, 0.06) }
-                        GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.14) }
-                    }
                 }
             }
 
@@ -723,61 +772,15 @@ Item {
             }
         }
 
-        // Seek bar on the cover's rim (Mochy CoverRing): thin on the edge, springs out on hover,
-        // press or song start; drag along the curve to scrub
-        CoverSeekRing {
-            id: seekRing
-            anchors.fill: parent
-            z: 6
-            cx: circleCover.cw * 0.13
-            cy: -circleCover.cw * 0.28
-            r: circleCover.cw * 1.14
-            live: root.isPanelRenderable && root.activeTab === "lyrics"
-            visible: root.isPanelRenderable
-            position: root.currentTime
-            duration: root.totalDuration
-            syncTime: root.syncTime
-            syncStamp: root.syncStamp
-            isPlaying: root.isPlaying
-            trackKey: root.currentTrack ? String(root.currentTrack.videoId || root.currentTrack.path || root.currentTrack.title || "") : ""
-            onSeekRequested: seconds => root.seekRequested(seconds)
-        }
-
-        // Top-Right Close Button (Glass Capsule Circle)
-        Item {
+        // Close mark: two thin accent strokes lying on the cover
+        StrokeClose {
             id: closeBtn
             anchors.top: parent.top
             anchors.right: parent.right
             anchors.margins: 16
-            width: 32
-            height: 32
             z: 20
-
-            HoverHandler { id: closeH }
-            scale: closeH.hovered ? 1.08 : 1.0
-            Behavior on scale { NumberAnimation { duration: 120 } }
-
-            Rectangle {
-                anchors.fill: parent
-                radius: 16
-                color: closeH.hovered ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.48)
-                border.color: Qt.rgba(1, 1, 1, 0.20)
-                border.width: 1
-                Behavior on color { ColorAnimation { duration: 120 } }
-
-                AppIcon {
-                    anchors.centerIn: parent
-                    source: "../assets/icons/window-close-symbolic.svg"
-                    iconSize: 12
-                    color: "#ffffff"
-                }
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.closeRequested()
-            }
+            accentColor: root.accentColor
+            onClicked: root.closeRequested()
         }
 
         // =====================================================================
@@ -859,10 +862,9 @@ Item {
         // =====================================================================
         Item {
             id: expressiveCanvas
-            // The bar coming out past the rim moves the words down with it (Mochy RingPush 34)
-            transform: Translate { y: seekRing.expand * 34 }
             anchors.top: parent.top
-            anchors.topMargin: Math.round(circleCover.cw * 0.88 + 10)
+            // the lyrics start where the cover is mostly faded out
+            anchors.topMargin: Math.round(root.coverTop + circleCover.height * root.coverLyricsAt)
             anchors.bottom: posterCredits.top
             anchors.bottomMargin: 12
             anchors.left: parent.left
@@ -1397,36 +1399,56 @@ Item {
                     }
                 }
 
-                // While lyrics are being fetched: spinning, morphing shape instead of "no lyrics"
-                Row {
+                // Material 3 empty states under the title (as in the Swiftify reference): while
+                // searching, the morphing shape loader over a quiet line; with nothing found, the
+                // shared EmptyState, a lyrics symbol on a tonal puffy badge that springs in.
+                Item {
                     id: statusRow
                     anchors.left: parent.left
-                    // right under the title as first set, so the seek ring's push never lands it on the credits
-                    y: titleFlow.implicitHeight + 16
-                    spacing: 10
-                    opacity: Math.max(0, 1 - root.titleFound * 3)
+                    anchors.right: parent.right
+                    // right under the title as first set, so it never lands on the credits
+                    y: titleFlow.implicitHeight + 28
+                    height: root.isLoadingLyrics ? loadingCol.implicitHeight : noLyricsState.implicitHeight
+                    // Found lyrics hide it at once, even while the title is still held big; "no lyrics"
+                    // waits until the search has really ended (see lyricsMissingConfirmed)
+                    opacity: (root.hasSyncedLyrics || (!root.isLoadingLyrics && !root.lyricsMissingConfirmed))
+                        ? 0.0 : Math.max(0, 1 - root.titleFound * 3)
+                    Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                     visible: opacity > 0.01
 
-                    ShapeLoader {
-                        anchors.verticalCenter: parent.verticalCenter
+                    Column {
+                        id: loadingCol
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        spacing: 14
                         visible: root.isLoadingLyrics
-                        size: 22
-                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.9)
+
+                        ShapeLoader {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            size: 36
+                            running: loadingCol.visible && statusRow.visible
+                            color: root.accentColor
+                        }
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: I18n.tr("Đang tìm lời bài hát…", "Finding lyrics…")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.weight: Font.Medium
+                            color: root.mochyInkSoft
+                        }
                     }
-                    AppIcon {
-                        anchors.verticalCenter: parent.verticalCenter
+
+                    EmptyState {
+                        id: noLyricsState
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: Math.min(parent.width, 320)
                         visible: !root.isLoadingLyrics
-                        source: "../assets/icons/view-lyrics-symbolic.svg"
-                        iconSize: 14
-                        color: root.mochyInkDim
-                    }
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: root.isLoadingLyrics ? I18n.tr("Đang tìm lời bài hát...", "Finding lyrics...")
-                                                   : I18n.tr("Chưa có lời đồng bộ", "No synchronized lyrics")
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 12
-                        color: root.mochyInkSoft
+                        shape: "puffy"
+                        badgeSize: 72
+                        icon: "../assets/icons/material/ms-lyrics-fill.svg"
+                        accentColor: root.accentColor
+                        title: I18n.tr("Chưa có lời bài hát", "Lyrics unavailable")
+                        description: I18n.tr("Bài này chưa có lời chạy theo nhạc", "This song has no synced lyrics yet")
                     }
                 }
             }
@@ -1445,382 +1467,356 @@ Item {
             Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
             Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
 
-            // Header (Title, Track count, Close button)
+            // No header and no panel behind it: the songs float on the wallpaper as one leaning
+            // column, pinned at its right edge with the left edge receding toward the middle of
+            // the window. The exact lean comes from upNextMatrix().
             Item {
-                id: queueHeader
+                id: queueStage
                 anchors.top: parent.top
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                anchors.topMargin: 16
-                height: 48
-                z: 20
-
-                Text {
-                    anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: I18n.tr("Phát tiếp theo", "Playing Next")
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 16
-                    font.bold: true
-                    color: "#ffffff"
-                }
-
-                // Close Button (Glass Capsule Circle)
-                Item {
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 30
-                    height: 30
-
-                    HoverHandler { id: qCloseH }
-                    scale: qCloseH.hovered ? 1.08 : 1.0
-                    Behavior on scale { NumberAnimation { duration: 120 } }
-
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: 15
-                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, qCloseH.hovered ? 0.28 : 0.14)
-                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.30)
-                        border.width: 1
-                        Behavior on color { ColorAnimation { duration: 120 } }
-
-                        AppIcon {
-                            anchors.centerIn: parent
-                            source: "../assets/icons/window-close-symbolic.svg"
-                            iconSize: 12
-                            color: "#ffffff"
-                        }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.closeRequested()
-                    }
-                }
-            }
-
-            // Up Next List
-            ListView {
-                id: queueListView
-                anchors.top: queueHeader.bottom
                 anchors.bottom: parent.bottom
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.topMargin: 8
-                anchors.leftMargin: 12
-                anchors.rightMargin: 12
-                anchors.bottomMargin: actionDock.height + actionDock.anchors.bottomMargin + root.dockInset
-                clip: true
-                spacing: 4
-                boundsBehavior: Flickable.StopAtBounds
-                model: root.upNextTracks
+                anchors.topMargin: 28
+                anchors.leftMargin: 20
+                anchors.rightMargin: 18
+                anchors.bottomMargin: actionDock.height + actionDock.anchors.bottomMargin + root.dockInset + 8
 
-                header: Column {
-                    width: queueListView.width
-                    spacing: 8
-                    bottomPadding: 6
+                // Leans only when the Settings switch is on; straight otherwise
+                transform: Matrix4x4 {
+                    matrix: !root.upNextTilt ? Qt.matrix4x4() : root.upNextMatrix(queueStage.width, queueStage.height)
+                }
 
-                    // Now Playing Header Label
-                    Text {
+                ListView {
+                    id: queueListView
+                    anchors.fill: parent
+                    clip: true
+                    spacing: 2
+                    boundsBehavior: Flickable.StopAtBounds
+                    model: root.upNextTracks
+
+                    // The song playing now heads the column, lifted off the page as an accent card
+                    header: Item {
+                        width: queueListView.width
+                        height: root.currentTrack !== null ? 78 : 0
                         visible: root.currentTrack !== null
-                        text: I18n.tr("ĐANG PHÁT", "NOW PLAYING")
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 11
-                        font.bold: true
-                        font.letterSpacing: 0.8
-                        color: root.accentColor
-                        leftPadding: 4
-                    }
 
-                    // Current Playing Track Card
-                    Item {
-                        id: currentPlayingCard
-                        visible: root.currentTrack !== null
-                        width: parent.width
-                        height: 56
+                        Item {
+                            id: liftedCard
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            // Room on the far side for the card to grow into without being clipped
+                            anchors.leftMargin: 32
+                            anchors.top: parent.top
+                            anchors.topMargin: 6
+                            height: 60
+                            // Wider than the rows and nearer the viewer: grows from the pinned edge
+                            transformOrigin: Item.Right
+                            scale: curCardHover.hovered ? 1.08 : 1.06
+                            Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutExpo } }
 
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: 12
-                            color: Qt.rgba(1, 1, 1, 0.04)
-                            border.color: curCardHover.hovered 
-                                ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45) 
-                                : Qt.rgba(1, 1, 1, 0.10)
-                            border.width: 1
-                            Behavior on border.color { ColorAnimation { duration: 150 } }
-                        }
+                            readonly property bool lightAccent: (0.2126 * root.accentColor.r + 0.7152 * root.accentColor.g + 0.0722 * root.accentColor.b) > 0.55
+                            readonly property color inkColor: lightAccent ? "#121212" : "#ffffff"
+                            readonly property color inkSoft: lightAccent ? Qt.rgba(0.07, 0.07, 0.07, 0.72) : Qt.rgba(1, 1, 1, 0.78)
 
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.margins: 8
-                            spacing: 12
+                            // Contact shadow: offset down and soft, so the card reads as raised
+                            Rectangle {
+                                anchors.fill: parent
+                                anchors.topMargin: 8
+                                anchors.bottomMargin: -8
+                                anchors.leftMargin: 6
+                                anchors.rightMargin: 6
+                                radius: 14
+                                color: Qt.rgba(0, 0, 0, 0.45)
+                                layer.enabled: !root.liteMode && root.activeTab === "queue"
+                                layer.effect: MultiEffect { blurEnabled: true; blur: 1.0; blurMax: 24 }
+                            }
 
-                            // Artwork with live playing equalizer bars
-                            Item {
-                                Layout.preferredWidth: 40
-                                Layout.preferredHeight: 40
-
-                                RoundedImage {
-                                    anchors.fill: parent
-                                    radius: 6
-                                    source: root.coverImageUrl
-                                    fillMode: Image.PreserveAspectCrop
-                                    fallbackIcon: "../assets/icons/folder-music-symbolic.svg"
-                                    fallbackIconSize: 18
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 14
+                                border.width: 1
+                                border.color: Qt.rgba(1, 1, 1, 0.30)
+                                gradient: Gradient {
+                                    orientation: Gradient.Horizontal
+                                    GradientStop { position: 0.0; color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.78) }
+                                    GradientStop { position: 1.0; color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.94) }
                                 }
+                            }
 
-                                Rectangle {
-                                    anchors.fill: parent
-                                    radius: 8
-                                    color: Qt.rgba(0, 0, 0, 0.50)
-                                    visible: root.isPlaying
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 10
+                                anchors.rightMargin: 8
+                                spacing: 12
+                                z: 2
 
-                                    Row {
-                                        anchors.centerIn: parent
-                                        spacing: 2.5
-                                        Repeater {
-                                            model: 3
-                                            Rectangle {
-                                                width: 3
-                                                height: 8 + (index % 2) * 6
-                                                radius: 1.5
-                                                color: root.accentColor
-                                                SequentialAnimation on height {
-                                                    running: root.isPlaying && root.visible && root.activeTab === "queue"
-                                                    loops: Animation.Infinite
-                                                    NumberAnimation { from: 5; to: 16; duration: 280 + index * 110; easing.type: Easing.InOutQuad }
-                                                    NumberAnimation { from: 16; to: 5; duration: 280 + index * 110; easing.type: Easing.InOutQuad }
+                                Item {
+                                    Layout.preferredWidth: 42
+                                    Layout.preferredHeight: 42
+
+                                    RoundedImage {
+                                        anchors.fill: parent
+                                        radius: 8
+                                        source: root.coverImageUrl
+                                        fillMode: Image.PreserveAspectCrop
+                                        fallbackIcon: "../assets/icons/folder-music-symbolic.svg"
+                                        fallbackIconSize: 18
+                                    }
+
+                                    // Live bars over the cover while the song plays
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: 8
+                                        color: Qt.rgba(0, 0, 0, 0.45)
+                                        visible: root.isPlaying
+
+                                        Row {
+                                            anchors.centerIn: parent
+                                            spacing: 2.5
+                                            Repeater {
+                                                model: 3
+                                                Rectangle {
+                                                    required property int index
+                                                    width: 3
+                                                    height: 8 + (index % 2) * 6
+                                                    radius: 1.5
+                                                    color: "#ffffff"
+                                                    SequentialAnimation on height {
+                                                        running: root.isPlaying && root.visible && root.activeTab === "queue" && !root.liteMode
+                                                        loops: Animation.Infinite
+                                                        NumberAnimation { from: 5; to: 16; duration: 280 + index * 110; easing.type: Easing.InOutQuad }
+                                                        NumberAnimation { from: 16; to: 5; duration: 280 + index * 110; easing.type: Easing.InOutQuad }
+                                                    }
                                                 }
                                             }
                                         }
                                     }
                                 }
-                            }
 
-                            // Info (Title, Artist)
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 2
-
-                                Text {
+                                ColumnLayout {
                                     Layout.fillWidth: true
-                                    text: root.currentTrack ? (root.currentTrack.title || root.currentTrack.name || I18n.tr("Bài hát Nutsty", "Nutsty Track")) : ""
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 13
-                                    font.bold: true
-                                    color: "#ffffff"
-                                    elide: Text.ElideRight
+                                    spacing: 2
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: root.currentTrack ? (root.currentTrack.title || root.currentTrack.name || I18n.tr("Bài hát Nutsty", "Nutsty Track")) : ""
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 14
+                                        font.weight: Font.Bold
+                                        color: liftedCard.inkColor
+                                        elide: Text.ElideRight
+                                    }
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: root.currentTrack ? (root.currentTrack.artist || root.currentTrack.artists || I18n.tr("Nghệ sĩ chưa rõ", "Unknown Artist")) : ""
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 11
+                                        color: liftedCard.inkSoft
+                                        elide: Text.ElideRight
+                                    }
                                 }
 
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: root.currentTrack ? (root.currentTrack.artist || root.currentTrack.artists || I18n.tr("Nghệ sĩ chưa rõ", "Unknown Artist")) : ""
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 11
-                                    color: Qt.rgba(1, 1, 1, 0.75)
-                                    elide: Text.ElideRight
-                                }
-                            }
+                                Item {
+                                    Layout.preferredWidth: 30
+                                    Layout.preferredHeight: 30
+                                    Layout.alignment: Qt.AlignVCenter
+                                    z: 10
 
-                            // 3-Dots Action Button (Isolated from row-click)
-                            Item {
-                                Layout.preferredWidth: 32
-                                Layout.preferredHeight: 32
-                                Layout.alignment: Qt.AlignVCenter
-                                z: 10
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: 8
+                                        color: curMoreH.hovered ? Qt.rgba(1, 1, 1, 0.22) : "transparent"
+                                        Behavior on color { ColorAnimation { duration: 120 } }
+                                    }
 
-                                Rectangle {
-                                    anchors.fill: parent
-                                    radius: 16
-                                    color: curMoreH.hovered ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
-                                    Behavior on color { ColorAnimation { duration: 120 } }
-                                }
+                                    AppIcon {
+                                        anchors.centerIn: parent
+                                        source: "../assets/icons/view-more-symbolic.svg"
+                                        iconSize: 18
+                                        color: liftedCard.inkColor
+                                    }
 
-                                AppIcon {
-                                    anchors.centerIn: parent
-                                    source: "../assets/icons/view-more-symbolic.svg"
-                                    iconSize: 18
-                                    color: curMoreH.hovered ? "#ffffff" : Qt.rgba(1, 1, 1, 0.75)
-                                    Behavior on color { ColorAnimation { duration: 120 } }
-                                }
+                                    HoverHandler { id: curMoreH }
 
-                                HoverHandler { id: curMoreH }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                    onClicked: mouse => {
-                                        mouse.accepted = true;
-                                        var pt = mapToItem(null, mouse.x, mouse.y);
-                                        root.trackContextMenuRequested(root.currentTrack, pt.x, pt.y);
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                        onClicked: mouse => {
+                                            mouse.accepted = true;
+                                            var pt = mapToItem(null, mouse.x, mouse.y);
+                                            root.trackContextMenuRequested(root.currentTrack, pt.x, pt.y);
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        HoverHandler { id: curCardHover }
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            z: 1
-                            onClicked: root.openDetailsRequested()
-                        }
-                    }
-
-                    // Up Next Section Label
-                    Item {
-                        width: parent.width
-                        height: 28
-                        visible: root.upNextTracks.length > 0
-
-                        Text {
-                            anchors.bottom: parent.bottom
-                            anchors.bottomMargin: 4
-                            leftPadding: 4
-                            text: I18n.tr("DANH SÁCH TIẾP THEO", "UP NEXT")
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 11
-                            font.bold: true
-                            font.letterSpacing: 0.8
-                            color: Qt.rgba(1, 1, 1, 0.72)
-                        }
-                    }
-                }
-
-                delegate: Item {
-                    id: queueItem
-                    required property int index
-                    required property var modelData
-
-                    width: queueListView.width
-                    height: 52
-
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: 12
-                        color: rowHover.hovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.08) : "transparent"
-                        Behavior on color { ColorAnimation { duration: 120 } }
-                    }
-
-                    RowLayout {
-                        // Above the row-wide play MouseArea (z: 1): otherwise it swallowed the three-dot
-                        // button's click and played the track instead of opening the menu.
-                        z: 2
-                        anchors.fill: parent
-                        anchors.leftMargin: 8
-                        anchors.rightMargin: 10
-                        spacing: 10
-
-                        Item {
-                            Layout.preferredWidth: 40
-                            Layout.preferredHeight: 40
-
-                            RoundedImage {
-                                anchors.fill: parent
-                                radius: 6
-                                source: {
-                                    var trk = queueItem.modelData;
-                                    if (!trk) return "";
-                                    var s = trk.image || trk.artUrl || trk.cover || trk.thumbnail || "";
-                                    if (!s && trk.videoId) {
-                                        s = "https://i.ytimg.com/vi/" + trk.videoId + "/hqdefault.jpg";
-                                    }
-                                    if (s.indexOf("i.ytimg.com") !== -1) s = s.split("?")[0];
-                                    return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
-                                }
-                                fillMode: Image.PreserveAspectCrop
-                                fallbackIcon: "../assets/icons/media-optical-audio-symbolic.svg"
-                                fallbackIconSize: 18
-                            }
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 2
-
-                            Text {
-                                Layout.fillWidth: true
-                                text: queueItem.modelData ? (queueItem.modelData.title || queueItem.modelData.name || I18n.tr("Bài hát", "Track")) : ""
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 13
-                                font.weight: Font.Medium
-                                color: rowHover.hovered ? "#ffffff" : Qt.rgba(1, 1, 1, 0.90)
-                                elide: Text.ElideRight
-                            }
-
-                            Text {
-                                Layout.fillWidth: true
-                                text: queueItem.modelData ? (queueItem.modelData.artist || queueItem.modelData.artists || I18n.tr("Nghệ sĩ chưa rõ", "Unknown Artist")) : ""
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 11
-                                color: Qt.rgba(1, 1, 1, 0.72)
-                                elide: Text.ElideRight
-                            }
-                        }
-
-                        // 3-Dots Action Button (Dedicated click target with high z-index)
-                        Item {
-                            Layout.preferredWidth: 32
-                            Layout.preferredHeight: 32
-                            Layout.alignment: Qt.AlignVCenter
-                            z: 10
-
-                            Rectangle {
-                                anchors.fill: parent
-                                radius: 16
-                                color: moreHover.hovered ? Qt.rgba(1, 1, 1, 0.14) : "transparent"
-                                Behavior on color { ColorAnimation { duration: 120 } }
-                            }
-
-                            AppIcon {
-                                anchors.centerIn: parent
-                                source: "../assets/icons/view-more-symbolic.svg"
-                                iconSize: 18
-                                color: moreHover.hovered ? "#ffffff" : Qt.rgba(1, 1, 1, 0.75)
-                                Behavior on color { ColorAnimation { duration: 120 } }
-                            }
-
-                            HoverHandler { id: moreHover }
-
+                            HoverHandler { id: curCardHover }
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
                                 acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                z: 1
                                 onClicked: mouse => {
-                                    mouse.accepted = true;
-                                    var pt = mapToItem(null, mouse.x, mouse.y);
-                                    root.trackContextMenuRequested(queueItem.modelData, pt.x, pt.y);
+                                    if (mouse.button === Qt.RightButton) {
+                                        var pt = mapToItem(null, mouse.x, mouse.y);
+                                        root.trackContextMenuRequested(root.currentTrack, pt.x, pt.y);
+                                    } else {
+                                        root.openDetailsRequested();
+                                    }
                                 }
                             }
                         }
                     }
 
-                    HoverHandler { id: rowHover }
+                    delegate: Item {
+                        id: queueItem
+                        required property int index
+                        required property var modelData
 
-                    MouseArea {
-                        anchors.fill: parent
-                        acceptedButtons: Qt.LeftButton | Qt.RightButton
-                        cursorShape: Qt.PointingHandCursor
-                        z: 1
-                        onClicked: mouse => {
-                            if (mouse.button === Qt.RightButton) {
-                                var pt = mapToItem(null, mouse.x, mouse.y);
-                                root.trackContextMenuRequested(queueItem.modelData, pt.x, pt.y);
-                            } else {
-                                root.trackPlayRequested(queueItem.modelData, queueItem.index);
+                        width: queueListView.width
+                        height: 50
+                        z: rowHover.hovered ? 5 : 0
+
+                        // A hovered row steps a little out of the page, toward the pinned edge.
+                        // Inset on the far side so the grown row stays inside the list's clip.
+                        Item {
+                            id: rowBody
+                            anchors.fill: parent
+                            anchors.leftMargin: 20
+                            transformOrigin: Item.Right
+                            scale: rowHover.hovered ? 1.035 : 1.0
+                            Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutExpo } }
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 12
+                                color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, rowHover.hovered ? 0.22 : 0.0)
+                                border.width: 1
+                                border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, rowHover.hovered ? 0.45 : 0.0)
+                                Behavior on color { ColorAnimation { duration: 160 } }
+                                Behavior on border.color { ColorAnimation { duration: 160 } }
+                            }
+
+                            RowLayout {
+                                // Above the row-wide play MouseArea (z: 1) so the three-dot button gets its click
+                                z: 2
+                                anchors.fill: parent
+                                anchors.leftMargin: 10
+                                anchors.rightMargin: 8
+                                spacing: 12
+
+                                Item {
+                                    Layout.preferredWidth: 36
+                                    Layout.preferredHeight: 36
+
+                                    RoundedImage {
+                                        anchors.fill: parent
+                                        radius: 6
+                                        source: {
+                                            var trk = queueItem.modelData;
+                                            if (!trk) return "";
+                                            var s = trk.image || trk.artUrl || trk.cover || trk.thumbnail || "";
+                                            if (!s && trk.videoId) {
+                                                s = "https://i.ytimg.com/vi/" + trk.videoId + "/hqdefault.jpg";
+                                            }
+                                            if (s.indexOf("i.ytimg.com") !== -1) s = s.split("?")[0];
+                                            return (s.startsWith("/") && !s.startsWith("file://")) ? ("file://" + s) : s;
+                                        }
+                                        fillMode: Image.PreserveAspectCrop
+                                        fallbackIcon: "../assets/icons/media-optical-audio-symbolic.svg"
+                                        fallbackIconSize: 16
+                                    }
+                                }
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 1
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: queueItem.modelData ? (queueItem.modelData.title || queueItem.modelData.name || I18n.tr("Bài hát", "Track")) : ""
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 13
+                                        font.weight: Font.DemiBold
+                                        color: "#ffffff"
+                                        elide: Text.ElideRight
+                                    }
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: queueItem.modelData ? (queueItem.modelData.artist || queueItem.modelData.artists || I18n.tr("Nghệ sĩ chưa rõ", "Unknown Artist")) : ""
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 11
+                                        color: Qt.rgba(1, 1, 1, 0.74)
+                                        elide: Text.ElideRight
+                                    }
+                                }
+
+                                // Menu button: hidden until the row is pointed at; right-click opens it too
+                                Item {
+                                    Layout.preferredWidth: 30
+                                    Layout.preferredHeight: 30
+                                    Layout.alignment: Qt.AlignVCenter
+                                    z: 10
+                                    opacity: rowHover.hovered ? 1.0 : 0.0
+                                    enabled: rowHover.hovered
+                                    Behavior on opacity { NumberAnimation { duration: 140 } }
+
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: 8
+                                        color: moreHover.hovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45) : "transparent"
+                                        Behavior on color { ColorAnimation { duration: 120 } }
+                                    }
+
+                                    AppIcon {
+                                        anchors.centerIn: parent
+                                        source: "../assets/icons/view-more-symbolic.svg"
+                                        iconSize: 18
+                                        color: "#ffffff"
+                                    }
+
+                                    HoverHandler { id: moreHover }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                        onClicked: mouse => {
+                                            mouse.accepted = true;
+                                            var pt = mapToItem(null, mouse.x, mouse.y);
+                                            root.trackContextMenuRequested(queueItem.modelData, pt.x, pt.y);
+                                        }
+                                    }
+                                }
+                            }
+
+                            HoverHandler { id: rowHover }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                cursorShape: Qt.PointingHandCursor
+                                z: 1
+                                onClicked: mouse => {
+                                    if (mouse.button === Qt.RightButton) {
+                                        var pt = mapToItem(null, mouse.x, mouse.y);
+                                        root.trackContextMenuRequested(queueItem.modelData, pt.x, pt.y);
+                                    } else {
+                                        root.trackPlayRequested(queueItem.modelData, queueItem.index);
+                                    }
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            ScrollEdgeFade {
-                flickable: queueListView
-                when: root.isPanelRenderable && root.activeTab === "queue"
+                ScrollEdgeFade {
+                    flickable: queueListView
+                    when: root.isPanelRenderable && root.activeTab === "queue"
+                }
             }
 
             // Empty State
@@ -1880,52 +1876,10 @@ Item {
                 anchors.fill: parent
                 activeTab: root.activeTab
                 accentColor: root.accentColor
-                radius: root.panelRadius - root.dockInset
                 onLyricsClicked: root.tabRequested("lyrics")
                 onCommentsClicked: root.tabRequested(root.activeTab === "comments" ? "lyrics" : "comments")
                 onQueueClicked: root.tabRequested(root.activeTab === "queue" ? "lyrics" : "queue")
             }
         }
-    }
-
-    // -------------------------------------------------------------------------
-    // OPTION 1: FLUSH SPLIT-RAIL SHARP HAIRLINE SEAM
-    // -------------------------------------------------------------------------
-    Rectangle {
-        id: splitHairlineDivider
-        visible: root.isPanelRenderable && root.panelStyle === 1
-        anchors.left: parent.left
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        width: 1
-        z: 100
-        gradient: Gradient {
-            orientation: Gradient.Vertical
-            GradientStop { position: 0.0; color: Qt.rgba(1.0, 1.0, 1.0, 0.28) }
-            GradientStop { position: 0.35; color: Qt.rgba(1.0, 1.0, 1.0, 0.16) }
-            GradientStop { position: 1.0; color: Qt.rgba(1.0, 1.0, 1.0, 0.05) }
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // OPTION 2: BENTO GLASS ISLAND LUMINOUS PERIMETER BORDER
-    // -------------------------------------------------------------------------
-    // Single shared rim for BOTH tabs (lyrics + queue). Lives OUTSIDE the masked panelContainer layer so its
-    // own antialiased edge covers the mask edge (inside the mask the two AA edges clashed into black jaggies).
-    // A quiet 1px hairline (white 8%), like every other card in the window; the accent sheen rim
-    // made the island read as a sticker pasted on top
-    Rectangle {
-        id: panelRim
-        visible: root.isPanelRenderable
-        anchors.fill: parent
-        z: 100
-        color: "transparent"
-        antialiasing: true
-        border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.08)
-        topLeftRadius: root.panelStyle === 1 ? 0 : root.panelRadius
-        bottomLeftRadius: root.panelStyle === 1 ? 0 : root.panelRadius
-        topRightRadius: root.panelRadius
-        bottomRightRadius: root.panelRadius
     }
 }

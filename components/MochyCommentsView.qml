@@ -109,6 +109,8 @@ Item {
             root.loading = false;
             if (!data) {
                 root.errorText = I18n.tr("Không tải được bình luận", "Could not load comments");
+                // Reopening the tab tries again, as the error message promises
+                root.loadedFor = "";
                 return;
             }
             root.disabledComments = !!data.disabled;
@@ -332,35 +334,11 @@ Item {
             }
         }
 
-        Item {
+        StrokeClose {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            width: 30
-            height: 30
-            HoverHandler { id: closeH }
-            scale: closeH.hovered ? 1.08 : 1.0
-            Behavior on scale { NumberAnimation { duration: 120 } }
-
-            Rectangle {
-                anchors.fill: parent
-                radius: 15
-                color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, closeH.hovered ? 0.28 : 0.14)
-                border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.30)
-                border.width: 1
-                Behavior on color { ColorAnimation { duration: 120 } }
-
-                AppIcon {
-                    anchors.centerIn: parent
-                    source: "../assets/icons/window-close-symbolic.svg"
-                    iconSize: 12
-                    color: "#ffffff"
-                }
-            }
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.closeRequested()
-            }
+            accentColor: root.accentColor
+            onClicked: root.closeRequested()
         }
     }
 

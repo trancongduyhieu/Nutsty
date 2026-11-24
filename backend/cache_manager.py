@@ -3,10 +3,11 @@
 
 CLI (Linux subprocess and Windows in-process via handle_cli):
     cache_manager.py usage            -> {"total": bytes, "audio": .., "images": .., "lyrics": .., "other": .., "limitMb": n}
-    cache_manager.py enforce [mb]     -> trims the oldest audio/images until the cache fits the limit
-    cache_manager.py clear            -> removes audio, images and temporary data, then reports usage
+    cache_manager.py enforce [mb]     -> trims the oldest audio until the cache fits the limit
+    cache_manager.py clear            -> removes audio and temporary data, then reports usage
 
 Never touched: sign-in sessions (browser_auth*), listening history and library files
+(including the library's cover thumbnails)
 (online_tracks*, pending_history*, local_yt_mappings), tokens, and lyrics (they hold the
 user's manually picked lyric sources).
 """
@@ -25,8 +26,9 @@ except ImportError:
 
 LIMIT_CHOICES_MB = (1024, 1536, 2048)
 DEFAULT_LIMIT_MB = 1536
-# Large, re-downloadable media: evicted oldest-first by the size limit
-EVICTABLE_DIRS = ("audio_cache", "mpv_stream_cache", "thumbnails")
+# Large, re-downloadable media: evicted oldest-first by the size limit.
+# "thumbnails" holds the library's own cover art (paths saved in library.json), so it is never evicted.
+EVICTABLE_DIRS = ("audio_cache", "mpv_stream_cache")
 # Extra regenerable data removed by "clear" (not by the limit)
 CLEAR_DIRS = ("related", "moods", "beatgrid")
 CLEAR_FILES = ("stream_cache.json",)

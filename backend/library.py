@@ -98,6 +98,21 @@ def extract_embedded_cover(file_path):
 
     return ""
 
+def heal_covers():
+    """Re-make cover thumbnails that went missing from the cache (paths in library.json stay valid)."""
+    lib_json = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "library.json")
+    try:
+        with open(lib_json, "r", encoding="utf-8") as f:
+            tracks = json.load(f)
+    except Exception:
+        return 0
+    healed = 0
+    for t in tracks if isinstance(tracks, list) else []:
+        img = t.get("image", "") if isinstance(t, dict) else ""
+        if img.startswith(THUMB_DIR) and not os.path.exists(img) and extract_embedded_cover(t.get("path", "")) == img:
+            healed += 1
+    return healed
+
 def scan_library():
     tracks = []
 
@@ -510,6 +525,8 @@ def main():
         add_track(audio_path, title, artist, vid, img)
     elif len(sys.argv) > 1 and sys.argv[1] == "batch_delete" and len(sys.argv) > 2:
         batch_delete_tracks(sys.argv[2])
+    elif len(sys.argv) > 1 and sys.argv[1] == "heal":
+        print(heal_covers())
     elif len(sys.argv) > 1 and sys.argv[1] == "albums":
         print(json.dumps(get_grouped_albums(), ensure_ascii=False))
     else:

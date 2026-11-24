@@ -31,6 +31,7 @@ Rectangle {
     property bool animatedCoverEnabled: true
     property bool crossfadeEnabled: false
     property bool scrollEdgeFadeEnabled: true
+    property bool upNextTilt: false
     // "auto" | "on" | "off"; liteModeAutoActive says whether Auto currently resolves to on (no GPU)
     property string liteMode: "auto"
     property string closeBehavior: "widget"
@@ -377,6 +378,7 @@ Rectangle {
     signal toggleAnimatedCoverRequested(bool enabled)
     signal toggleCrossfadeRequested(bool enabled)
     signal toggleScrollEdgeFadeRequested(bool enabled)
+    signal toggleUpNextTiltRequested(bool enabled)
     signal selectLiteModeRequested(string mode)
     signal selectCloseBehaviorRequested(string mode)
     signal selectCrossfadeSecondsRequested(int seconds)
@@ -2817,6 +2819,72 @@ Rectangle {
                             onClicked: {
                                 root.scrollEdgeFadeEnabled = !root.scrollEdgeFadeEnabled;
                                 root.toggleScrollEdgeFadeRequested(root.scrollEdgeFadeEnabled);
+                            }
+                        }
+                    }
+                }
+
+                // =============================================================
+                // Up Next lean: the Playing Next list stands straight unless this is on
+                // =============================================================
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 46
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: toggleUpNextTilt.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Nghiêng danh sách Phát tiếp theo", "Lean the Playing Next list")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Các bài sắp phát xếp nghiêng lơ lửng thay vì đứng thẳng", "Upcoming songs float at a slant instead of standing straight")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    Rectangle {
+                        id: toggleUpNextTilt
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 44
+                        height: 24
+                        radius: 12
+                        color: root.upNextTilt ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18)
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        Rectangle {
+                            width: 18
+                            height: 18
+                            radius: 9
+                            color: "#ffffff"
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: root.upNextTilt ? parent.width - width - 3 : 3
+                            Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            preventStealing: false
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                root.upNextTilt = !root.upNextTilt;
+                                root.toggleUpNextTiltRequested(root.upNextTilt);
                             }
                         }
                     }

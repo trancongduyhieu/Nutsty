@@ -1,17 +1,13 @@
 import QtQuick
-import QtQuick.Controls.Basic
 import "."
 
-// SimpMusic-style tab bar at the bottom of the Mochy side panel: Lyrics, YouTube comments, Up Next.
-// One capsule holds the three buttons and a highlight slides to the active one. The capsule is a
-// tinted fill, not more glass, because it already sits on the panel's material.
+// Tab words at the bottom of the Mochy side panel: Lyrics, YouTube comments, Up Next. The active
+// word is filled with the accent at full size; the others are smaller outlines on the same baseline.
 Item {
     id: root
 
     property string activeTab: "lyrics"
     property color accentColor: "#ffffff"
-    // Concentric with the panel: panel radius minus the inset the host places this row at
-    property real radius: 16
 
     signal lyricsClicked()
     signal commentsClicked()
@@ -19,8 +15,6 @@ Item {
 
     readonly property var tabs: ["lyrics", "comments", "queue"]
     readonly property int activeIndex: Math.max(0, tabs.indexOf(activeTab))
-    readonly property real segment: width / 3
-    readonly property real highlightInset: 5
 
     function activate(i) {
         if (i === 0) root.lyricsClicked();
@@ -31,60 +25,71 @@ Item {
     implicitHeight: 50
     implicitWidth: 240
 
-    Rectangle {
-        anchors.fill: parent
-        radius: root.radius
-        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.10)
-        border.width: 1
-        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.20)
-    }
-
-    SlimePill {
-        id: highlight
-        y: root.highlightInset
-        height: parent.height - 2 * root.highlightInset
-        targetWidth: root.segment - 2 * root.highlightInset
-        targetX: root.activeIndex * root.segment + root.highlightInset
-        radius: root.radius - root.highlightInset
-        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.26)
-    }
+    FontLoader { id: heavyFont; source: "../assets/fonts/Montserrat-Black.ttf" }
+    readonly property string heavyFamily: (heavyFont.status === FontLoader.Ready && heavyFont.name !== "") ? heavyFont.name : "Montserrat"
+    readonly property real wordPx: 32
+    readonly property real wordSqueeze: 0.72
 
     Row {
-        anchors.fill: parent
+        id: wordRow
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 6
+        spacing: 22
 
         Repeater {
             model: [
-                { icon: "../assets/icons/material/ms-lyrics-fill.svg", tip: I18n.tr("Lời bài hát", "Lyrics") },
-                { icon: "../assets/icons/material/ms-forum.svg", tip: I18n.tr("Bình luận", "Comments") },
-                { icon: "../assets/icons/queue-music-symbolic.svg", tip: I18n.tr("Phát tiếp theo", "Playing Next") }
+                I18n.tr("LỜI", "LYRICS"),
+                I18n.tr("BÌNH LUẬN", "COMMENTS"),
+                I18n.tr("TIẾP THEO", "UP NEXT")
             ]
 
             delegate: Item {
-                id: slot
-                required property var modelData
+                id: word
+                required property string modelData
                 required property int index
-                width: root.segment
-                height: root.height
+                readonly property bool active: root.activeIndex === word.index
+                // Inactive words sit smaller on the same baseline
+                property real s: active ? 1.0 : (wordH.hovered ? 0.72 : 0.64)
+                Behavior on s { NumberAnimation { duration: 280; easing.type: Easing.OutBack } }
 
-                // The whole segment is the hit target, not just the icon
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.activate(slot.index)
+                width: Math.ceil(fill.implicitWidth * root.wordSqueeze * word.s)
+                height: Math.round(root.wordPx * 0.86)
+
+                Item {
+                    id: glyphs
+                    width: fill.implicitWidth * root.wordSqueeze
+                    height: parent.height
+                    transform: Scale { origin.x: 0; origin.y: glyphs.height; xScale: word.s; yScale: word.s }
+
+                    OutlineType {
+                        lines: [word.modelData]
+                        pixelSize: root.wordPx
+                        squeeze: root.wordSqueeze
+                        strokeWidth: 1.6
+                        strokeColor: Qt.rgba(1, 1, 1, wordH.hovered ? 0.85 : 0.6)
+                        opacity: word.active ? 0 : 1
+                        Behavior on opacity { NumberAnimation { duration: 200 } }
+                    }
+                    Text {
+                        id: fill
+                        text: word.modelData
+                        y: Math.round(root.wordPx * 0.80) - fill.baselineOffset
+                        font.family: root.heavyFamily
+                        font.pixelSize: root.wordPx
+                        font.weight: Font.Black
+                        color: root.accentColor
+                        opacity: word.active ? 1 : 0
+                        transform: Scale { xScale: root.wordSqueeze }
+                        Behavior on opacity { NumberAnimation { duration: 200 } }
+                    }
                 }
 
-                NowPlayingCtlButton {
-                    anchors.centerIn: parent
-                    size: 40
-                    plain: true
-                    toggle: true
-                    icon: slot.modelData.icon
-                    on: root.activeIndex === slot.index
-                    onClicked: root.activate(slot.index)
-                    ToolTip.visible: slotH.hovered
-                    ToolTip.text: slot.modelData.tip
-                    ToolTip.delay: 350
-                    HoverHandler { id: slotH }
+                HoverHandler { id: wordH; cursorShape: Qt.PointingHandCursor }
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -10
+                    onClicked: root.activate(word.index)
                 }
             }
         }
