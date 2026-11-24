@@ -245,6 +245,8 @@ Scope {
     property string crossfadeHandoverPath: ""
     property double crossfadeHandoverUntil: 0
     property string lastMpvPath: ""
+    property string lastMpvPathKey: ""      // track that lastMpvPath belongs to
+    property string staleStatusPath: ""     // previous song's mpv path, ignored until mpv opens the new one
     property var shuffleNextPick: null
     // AutoMix transition card state (Now Playing): the upcoming blend and the one in progress
     property var mixUpcoming: null
@@ -492,13 +494,17 @@ Scope {
                 if (!data || data.trim() === "") return;
                 try {
                     var parsed = JSON.parse(data);
+                    if (songPaletteProc.forUrl !== win.paletteRequestUrl) return;
                     if (parsed && parsed.highlightColor && parsed.highlightColor.trim() !== "") {
                         win.songAccentColor = parsed.highlightColor;
                     }
                 } catch(e) {}
             }
         }
+        property string forUrl: ""
     }
+    // Cover the last palette request was for: answers for an earlier song (fast skips) are dropped
+    property string paletteRequestUrl: ""
 
     function getTrackCoverUrl(trk) {
         if (!trk) return "";
@@ -512,13 +518,16 @@ Scope {
 
     function fetchSongPalette(imgUrl) {
         if (!imgUrl || typeof imgUrl !== "string" || imgUrl.trim() === "") {
+            win.paletteRequestUrl = "";
             win.songAccentColor = win.wallpaperAccentColor;
             return;
         }
+        win.paletteRequestUrl = imgUrl;
         var xhr = new XMLHttpRequest();
         xhr.open("GET", "http://127.0.0.1:17890/api/palette?url=" + encodeURIComponent(imgUrl));
         xhr.onreadystatechange = function() {
             if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (win.paletteRequestUrl !== imgUrl) return;
                 if (xhr.status === 200) {
                     try {
                         var parsed = JSON.parse(xhr.responseText);
@@ -530,6 +539,7 @@ Scope {
                 }
                 // Fallback to native Rust CLI process if auth_server is not reachable
                 if (!songPaletteProc.running) {
+                    songPaletteProc.forUrl = imgUrl;
                     songPaletteProc.command = [
                         win.appDir + "/bin/nutsty-bridge",
                         "palette",
@@ -1228,8 +1238,8 @@ Scope {
         repeat: false
         onTriggered: {
             if (targetListenerEmail && win.currentTrack) {
-                win.sendSocialEventFast(win.isPlaying ? "play" : "pause", targetListenerEmail);
-                win.sendSocialEventFast("seek", targetListenerEmail, { position: win.currentTime });
+                win.sendSocialEventFast(win.isPlaying ? "play" : "pause", targetListenerEmail, SocialEngine.listenSyncData(win));
+                win.sendSocialEventFast("seek", targetListenerEmail, SocialEngine.listenSyncData(win));
             }
         }
     }
@@ -2088,6 +2098,7 @@ Scope {
         if (coverUrl) {
             win.fetchSongPalette(coverUrl);
         } else {
+            win.paletteRequestUrl = "";
             win.songAccentColor = win.wallpaperAccentColor;
         }
         win.syncCurrentTrackLiked();

@@ -2,7 +2,7 @@
 //! Directly connects to MPV Unix Domain Socket / Windows Named Pipe in sub-millisecond time,
 //! completely replacing the heavy `python3 player_daemon.py status` process-thrashing bottleneck.
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::{json, Value};
 use std::env;
 use std::fs::File;
@@ -15,18 +15,6 @@ use std::os::unix::net::UnixStream;
 
 mod palette;
 
-#[derive(Debug, Serialize, Deserialize)]
-struct PlaybackState {
-    #[serde(default)]
-    state: String,
-    #[serde(default)]
-    path: String,
-    #[serde(default)]
-    target_vid: String,
-    #[serde(default)]
-    timestamp: f64,
-}
-
 #[derive(Debug, Serialize)]
 struct AudioSpecs {
     codec: String,
@@ -35,41 +23,6 @@ struct AudioSpecs {
     sample_rate: u64,
     sample_rate_str: String,
     channels: String,
-}
-
-#[derive(Debug, Serialize)]
-struct PlayerStatusOutput {
-    is_playing: bool,
-    is_paused: bool,
-    time_pos: f64,
-    duration: f64,
-    filename: String,
-    path: String,
-    media_title: String,
-    volume: f64,
-    is_loading: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    target_vid: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    audio_specs: Option<AudioSpecs>,
-}
-
-impl Default for PlayerStatusOutput {
-    fn default() -> Self {
-        Self {
-            is_playing: false,
-            is_paused: false,
-            time_pos: 0.0,
-            duration: 0.0,
-            filename: String::new(),
-            path: String::new(),
-            media_title: String::new(),
-            volume: 100.0,
-            is_loading: false,
-            target_vid: None,
-            audio_specs: None,
-        }
-    }
 }
 
 fn get_socket_path() -> PathBuf {
@@ -82,18 +35,6 @@ fn get_socket_path() -> PathBuf {
 
     let temp_dir = env::temp_dir();
     temp_dir.join(format!("nutsty_mpv{suffix}.sock"))
-}
-
-fn get_state_file_path() -> PathBuf {
-    let profile = env::var("NUTSTY_PROFILE").unwrap_or_default().trim().to_lowercase();
-    let suffix = if profile.is_empty() {
-        String::new()
-    } else {
-        format!("_{profile}")
-    };
-
-    let temp_dir = env::temp_dir();
-    temp_dir.join(format!("nutsty_playback_state{suffix}.json"))
 }
 
 fn get_abort_file_path() -> PathBuf {
@@ -298,28 +239,6 @@ fn purge_memory() {
     println!(r#"{{"success":true,"purged":true}}"#);
 }
 
-fn read_playback_state() -> Option<PlaybackState> {
-    let path = get_state_file_path();
-    let file = File::open(path).ok()?;
-    serde_json::from_reader(file).ok()
-}
-
-fn update_playback_state_playing(current_path: &str) {
-    let path = get_state_file_path();
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs_f64())
-        .unwrap_or(0.0);
-    let payload = json!({
-        "state": "playing",
-        "path": current_path,
-        "timestamp": now
-    });
-    if let Ok(content) = serde_json::to_string(&payload) {
-        let _ = std::fs::write(path, content);
-    }
-}
-
 fn parse_audio_specs_from_map(map: &serde_json::Map<String, Value>) -> AudioSpecs {
     let codec = map
         .get("audio-codec-name")
@@ -375,95 +294,10 @@ fn parse_audio_specs_from_map(map: &serde_json::Map<String, Value>) -> AudioSpec
     }
 }
 
+/// One decision for both the CLI and nutsty-daemon: the library owns the status logic
 fn handle_status() {
-    let batch = fetch_mpv_status_batch();
-    if batch.is_none() {
-        let default_status = PlayerStatusOutput::default();
-        println!("{}", serde_json::to_string(&default_status).unwrap());
-        return;
-    }
-
-    let map = batch.unwrap();
-    let pause = map.get("pause").and_then(|v| v.as_bool()).unwrap_or(true);
-    let time_pos = map.get("time-pos").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let duration = map.get("duration").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let filename = map
-        .get("filename")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let path = map
-        .get("path")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let media_title = map
-        .get("media-title")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let volume = map.get("volume").and_then(|v| v.as_f64()).unwrap_or(100.0);
-    let idle = map.get("idle-active").and_then(|v| v.as_bool()).unwrap_or(true);
-
-    let state_file = read_playback_state();
-    let raw_loading = state_file.as_ref().map(|s| s.state == "loading").unwrap_or(false);
-
-    let is_loading = if raw_loading {
-        if (!idle && (time_pos > 0.2 || duration > 0.0)) || (!path.is_empty() && !idle && !pause) {
-            update_playback_state_playing(&path);
-            false
-        } else if let Some(ref sf) = state_file {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs_f64())
-                .unwrap_or(0.0);
-            if sf.timestamp > 0.0 && (now - sf.timestamp) > 5.0 {
-                update_playback_state_playing(&path);
-                false
-            } else {
-                true
-            }
-        } else {
-            false
-        }
-    } else {
-        false
-    };
-
-    let has_file = (!path.is_empty() || !filename.is_empty()) && !idle && (!is_loading || time_pos > 0.0);
-
-    let is_playing = !pause && has_file;
-    let is_paused = pause && has_file;
-
-    let audio_specs = if has_file {
-        Some(parse_audio_specs_from_map(&map))
-    } else {
-        None
-    };
-
-    let out = PlayerStatusOutput {
-        is_playing,
-        is_paused,
-        time_pos: (time_pos * 10.0).round() / 10.0,
-        duration: (duration * 10.0).round() / 10.0,
-        filename: if has_file {
-            if !filename.is_empty() {
-                filename
-            } else {
-                path.clone()
-            }
-        } else {
-            String::new()
-        },
-        path: if has_file { path } else { String::new() },
-        media_title: if has_file { media_title } else { String::new() },
-        volume,
-        is_loading,
-        target_vid: state_file.as_ref().and_then(|s| if s.target_vid.is_empty() { None } else { Some(s.target_vid.clone()) }),
-        audio_specs,
-    };
-
-    println!("{}", serde_json::to_string(&out).unwrap());
+    let status = nutsty_bridge::get_player_status_output();
+    println!("{}", serde_json::to_string(&status).unwrap_or_else(|_| "{}".to_string()));
 }
 
 fn main() {

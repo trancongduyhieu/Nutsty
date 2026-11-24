@@ -72,9 +72,8 @@ Tài liệu đặc tả chuyên sâu về hệ thống daemon phát nhạc, giao
 ## 8. Friends 24h Notes, Listen Along & PlaybackEngine Consolidate
 - **PlaybackEngine (`components/playback_engine.js`)**: Tập trung toàn bộ logic `playOnlineTrack`, `playTrack`, `togglePlay`, `playNext`, `seekAudio`, `handlePlayerStatus` (bù trôi, sleep timer, auto-advance). `shell.qml` chỉ giữ 1-line delegates.
 - **Đồng bộ 2 chiều**: FIFO `/api/notes/events` (`join`, `leave`, `play`, `pause`, `seek`, `chat_message`) < 50ms. Drift: `expectedPos = np.position + elapsed`, nắn khi lệch > 2.0s.
-- **Bẫy lỗi**: Host khi pause vẫn phải gửi `now_playing` kèm `is_playing: false` thay vì `null`. Cờ `isSyncingFromFriend` chặn loop phản hồi ngược.
-
----
+- **Bẫy lỗi**: Host khi pause vẫn phải gửi `now_playing` kèm `is_playing: false` thay vì `null`. Cờ `isSyncingFromFriend` chặn loop phản hồi ngược. **Sự kiện kèm bài**: `play`/`pause`/`seek` gửi `listenSyncData` = `{videoId, position}`; khách bỏ qua sự kiện của bài khác (`_eventIsForOtherTrack`), pause dừng đúng vị trí host. Giờ host lệch giờ khách: `hostStampAgeSec` trừ độ lệch nhỏ nhất của 20 mẫu gần nhất (lọc min kiểu NTP).
+- **Footgun đổi bài**: mpv còn giữ bài cũ (đang pause) suốt lúc yt-dlp resolve bài mới, daemon ghi `prev_mpv_path`, bridge (`loading_verdict`) giữ loading tới khi path đổi; JS `armStaleStatusGuard` ghi `staleStatusPath`, `handlePlayerStatus` bỏ qua status của đường dẫn đó cho tới khi mpv mở file khác. Gán `totalDuration` **trước** `currentTrack` (lyric đọc đồng bộ). Test: `node scripts/test_playback_race.cjs`, `cargo test -p nutsty-bridge loading_tests`. Chi tiết: `.agents/footguns/`.
 
 ## 9. Lưu Trữ Cài Đặt (`nutsty_settings.json`) & Hiện Diện Thời Gian Thực (Presence)
 - **Cài đặt (`~/.config/noctalia/nutsty_settings.json`)**: `shell.qml` nạp qua `FileView` + timer `delayedSettingsRead` (100ms). Nút Shuffle/Repeat chỉ phát signal `toggleShuffle()` / `toggleRepeat()` để `shell.qml` xử lý và gọi `saveSettings()`.

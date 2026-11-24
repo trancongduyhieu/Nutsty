@@ -407,19 +407,13 @@ function fetchFriendsNotesFast(win) {
                                     }
 
                                     var expectedPos = Number(np.position || 0);
-                                    if (np.is_playing === true && np.timestamp) {
-                                        var nowSec = Date.now() / 1000.0;
-                                        var recordSec = (np.timestamp > 1000000000000) ? (np.timestamp / 1000.0) : Number(np.timestamp);
-                                        var elapsed = nowSec - recordSec;
-                                        if (elapsed > 0 && elapsed < (win.totalDuration || 600)) {
-                                            expectedPos += elapsed;
-                                        }
-                                    }
+                                    var npAge = np.timestamp ? hostStampAgeSec(targetUserId || targetEmail || targetName || "", np.timestamp, win.totalDuration || 600) : 0;
+                                    if (np.is_playing === true) expectedPos += npAge;
                                     if (win.isLoadingAudio) {
                                         win.pendingListenAlongSeekPosition = expectedPos;
                                     } else {
                                         var drift = Math.abs(win.currentTime - expectedPos);
-                                        if (drift > 3.5 && expectedPos >= 0) {
+                                        if (drift > DRIFT_TOLERANCE_SEC && expectedPos >= 0) {
                                             win.seekLocalOnly(expectedPos);
                                         }
                                     }
@@ -603,6 +597,55 @@ function ensureCoListenerRegistered(win, ev, showJoinToast) {
     return isNewListener;
 }
 
+// Drift beyond this between host and guest is corrected with a seek
+var DRIFT_TOLERANCE_SEC = 2.0;
+
+function _vidOf(trk) {
+    if (!trk) return "";
+    var v = String(trk.videoId || trk.id || (trk.path && String(trk.path).startsWith("ytdl://") ? String(trk.path).replace("ytdl://", "") : "") || "");
+    return v.replace(/^yt_/, "");
+}
+
+function listenSyncData(win, position) {
+    return { videoId: _vidOf(win.currentTrack), position: Number(position !== undefined ? position : win.currentTime) || 0 };
+}
+
+// play/pause/seek name the song they were sent for (older builds send none: accept those)
+function _eventIsForOtherTrack(win, ev) {
+    var evVid = ev && ev.data && ev.data.videoId ? String(ev.data.videoId).replace(/^yt_/, "") : "";
+    var myVid = _vidOf(win.currentTrack);
+    return Boolean(evVid && myVid && evVid !== myVid);
+}
+
+function _eventPositionForMe(win, ev) {
+    if (!ev || !ev.data || ev.data.position === undefined || _eventIsForOtherTrack(win, ev)) return -1;
+    if (!ev.data.videoId || win.isLoadingAudio) return -1;
+    var p = Number(ev.data.position);
+    return isNaN(p) ? -1 : p;
+}
+
+// The host stamps now_playing with its own clock, and the guest's clock can be seconds apart.
+// Each time a new stamp shows up, (guest now - stamp) = clock offset + delivery delay; the smallest
+// of the recent ones is the offset plus the shortest delay, so subtracting it removes the offset
+// (Cristian / NTP style minimum filter).
+var _hostClock = { key: "", lastStamp: 0, samples: [] };
+
+function hostStampAgeSec(hostKey, stamp, maxSec) {
+    var stampMs = Number(stamp) > 1000000000000 ? Number(stamp) : Number(stamp) * 1000.0;
+    if (!(stampMs > 0)) return 0;
+    var raw = Date.now() - stampMs;
+    if (_hostClock.key !== hostKey) _hostClock = { key: hostKey, lastStamp: 0, samples: [] };
+    if (stampMs !== _hostClock.lastStamp) {
+        _hostClock.lastStamp = stampMs;
+        _hostClock.samples.push(raw);
+        if (_hostClock.samples.length > 20) _hostClock.samples.shift();
+    }
+    var age = raw;
+    if (_hostClock.samples.length >= 3) age = raw - Math.min.apply(null, _hostClock.samples);
+    var limit = (maxSec > 0 ? maxSec : 600) * 1000;
+    return (age > 0 && age < limit) ? age / 1000.0 : 0;
+}
+
 function pollSocialEventsFast(win) {
     if (win.isPollingSocialEventsFast) return;
     var email = win.getCurrentUserEmail();
@@ -632,8 +675,8 @@ function pollSocialEventsFast(win) {
                                 win.syncNowPlaying(true);
                                 var targetSender = ev.from_email || ev.from_id || "";
                                 if (win.currentTrack && targetSender) {
-                                    win.sendSocialEventFast(win.isPlaying ? "play" : "pause", targetSender);
-                                    win.sendSocialEventFast("seek", targetSender, { position: win.currentTime });
+                                    win.sendSocialEventFast(win.isPlaying ? "play" : "pause", targetSender, listenSyncData(win));
+                                    win.sendSocialEventFast("seek", targetSender, listenSyncData(win));
                                     win.sendSocialEventFast("permission_update", targetSender, { allow_control: win.allowCoListenerControl });
                                     hostFollowupSyncTimer.targetListenerEmail = targetSender;
                                     hostFollowupSyncTimer.restart();
@@ -678,6 +721,8 @@ function pollSocialEventsFast(win) {
                                 continue;
                             }
                             win.lastLocalActionTimestamp = Date.now();
+                            // Read before the pause below clears isLoadingAudio (no seek into a song still loading)
+                            var pPos = _eventPositionForMe(win, ev);
                             if (win.isPlaying) {
                                 win.isSyncingFromFriend = true;
                                 win.isPlaying = false;
@@ -685,6 +730,10 @@ function pollSocialEventsFast(win) {
                                 Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
                                 win.syncNowPlaying(true);
                                 win.isSyncingFromFriend = false;
+                            }
+                            // Stop on the sender's spot so the next play starts both from one place
+                            if (pPos >= 0 && Math.abs(win.currentTime - pPos) > 0.3) {
+                                win.seekLocalOnly(pPos);
                             }
                             var pName = ev.from_name || I18n.tr("Bạn bè", "Friend");
                             win.showToast(I18n.tr(pName + " đã tạm dừng bài hát", pName + " paused playback"));
@@ -695,7 +744,12 @@ function pollSocialEventsFast(win) {
                                 _forceResyncUnauthorizedGuest(win, ev);
                                 continue;
                             }
+                            if (_eventIsForOtherTrack(win, ev)) continue;
                             win.lastLocalActionTimestamp = Date.now();
+                            var plPos = _eventPositionForMe(win, ev);
+                            if (plPos >= 0 && Math.abs(win.currentTime - plPos) > DRIFT_TOLERANCE_SEC) {
+                                win.seekLocalOnly(plPos);
+                            }
                             if (!win.isPlaying && win.currentTrack) {
                                 win.isSyncingFromFriend = true;
                                 win.isPlaying = true;
@@ -712,6 +766,8 @@ function pollSocialEventsFast(win) {
                                 _forceResyncUnauthorizedGuest(win, ev);
                                 continue;
                             }
+                            // A seek made on the previous song, arriving after the switch
+                            if (_eventIsForOtherTrack(win, ev)) continue;
                             var sPos = (ev.data && ev.data.position !== undefined) ? Number(ev.data.position) : (ev.position !== undefined ? Number(ev.position) : -1);
                             if (sPos >= 0) {
                                 win.lastLocalActionTimestamp = Date.now();
@@ -1079,16 +1135,12 @@ function startListeningAlong(win, friend) {
         }
         var ts = activeTrackObj.timestamp || friend.updated_at_ts || friend.last_updated || 0;
         if (ts > 0 && activeTrackObj.is_playing !== false) {
-            var nowSec = Date.now() / 1000.0;
-            var recordSec = (ts > 1000000000000) ? (ts / 1000.0) : Number(ts);
-            var elapsed = nowSec - recordSec;
-            if (elapsed > 0 && elapsed < (trk.duration || 600)) {
-                targetPos += elapsed;
-            }
+            var hostKey = friend.user_id || friend.id || (friend.user_email || friend.tag || "").toLowerCase() || friend.user_name || "";
+            targetPos += hostStampAgeSec(hostKey, ts, trk.duration || 600);
         }
 
         if (win.currentTrack && win.isSameTrack(win.currentTrack, trk)) {
-            if (targetPos > 0 && Math.abs(win.currentTime - targetPos) > 3.0) {
+            if (targetPos > 0 && Math.abs(win.currentTime - targetPos) > DRIFT_TOLERANCE_SEC) {
                 if (!win.isLoadingAudio) {
                     win.seekLocalOnly(targetPos);
                 } else {
@@ -1294,8 +1346,8 @@ function _forceResyncUnauthorizedGuest(win, ev) {
     win.sendSocialEventFast("permission_update", senderTarget, { allow_control: false });
     if (win.currentTrack) {
         win.sendSocialEventFast("track_change", senderTarget, { track: win.currentTrack });
-        win.sendSocialEventFast(win.isPlaying ? "play" : "pause", senderTarget);
-        win.sendSocialEventFast("seek", senderTarget, { position: win.currentTime });
+        win.sendSocialEventFast(win.isPlaying ? "play" : "pause", senderTarget, listenSyncData(win));
+        win.sendSocialEventFast("seek", senderTarget, listenSyncData(win));
     }
 }
 

@@ -7,6 +7,7 @@ import Quickshell
 import Quickshell.Io
 import "."
 import "lyric_lines.js" as LyricLines
+import "playback_engine.js" as PlaybackEngine
 
 Item {
     id: root
@@ -684,7 +685,10 @@ Item {
         var songPath = (track && (track.path || track.file_path || track.filePath)) ? (track.path || track.file_path || track.filePath) : "";
 
         if (songTitle !== "") {
-            var songDur = root.totalDuration > 1 ? String(Math.round(root.totalDuration)) : "";
+            // The song's own length first: the player's length can still be the previous song's
+            var ownDur = PlaybackEngine.extractTrackDuration(track);
+            var durSec = ownDur > 1 ? ownDur : root.totalDuration;
+            var songDur = durSec > 1 ? String(Math.round(durSec)) : "";
             lyricsProc.running = false;
             lyricsProc.command = [
                 "python3", "-u",

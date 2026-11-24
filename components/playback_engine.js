@@ -150,6 +150,23 @@ function dispatchPlay(win, path, title, artist, image, epoch) {
     }
 }
 
+// Until mpv opens the new song it still reports the previous file (paused by the switch, while
+// yt-dlp resolves the new stream). Those reports describe the old song: taking them as the new
+// one shows its position under the new title, sends it to co-listeners, un-pauses the old song
+// (post-load grace) and can even auto-advance past the new song. Remember the old path and ignore
+// status for it until mpv reports another file (crossfade has its own handover, see dispatchPlay).
+function armStaleStatusGuard(win, prevTrk, nextTrk) {
+    if (win.crossfadeArmed) return;
+    if (prevTrk && win.isSameTrack(prevTrk, nextTrk)) return;
+    var oldPath = win.lastMpvPath || "";
+    // Going back to the song mpv still holds: its reports are the right ones
+    if (!oldPath || (win.lastMpvPathKey && win.lastMpvPathKey === trackKeyOf(nextTrk))) {
+        win.staleStatusPath = "";
+        return;
+    }
+    win.staleStatusPath = oldPath;
+}
+
 // Repeat modes (win.repeatMode): "off" stops when the queue runs out, "all" starts the queue
 // (or a new shuffle round) again, "one" replays the current song when it ends naturally.
 // A skip pressed by the user always moves on, wrapping around like "all".
@@ -338,6 +355,12 @@ function maybeStartCrossfade(win, seekGrace) {
     return true;
 }
 
+// Listen Along payload for play/pause/seek: which song it is about and where it is, so a late
+// event for the previous song is not applied to the next one, and a pause leaves both at one spot
+function listenSyncData(win, position) {
+    return { videoId: extractTrackVideoId(win.currentTrack) || "", position: Number(position) || 0 };
+}
+
 function playOnlineTrack(win, trk, startRadio, radioProc, prewarmTimer, pollTimer) {
     if (!trk) return;
     if (win.listeningAlongFriend && !win.isSyncingFromFriend && !win.guestCanControlHost) {
@@ -404,17 +427,19 @@ function playOnlineTrack(win, trk, startRadio, radioProc, prewarmTimer, pollTime
 
     win.trackChangeTimestamp = Date.now();
     win.postLoadGraceTimestamp = Date.now();
-    win.currentTrack = trk;
-    win.currentTime = 0.0;
-    win.lastSyncTime = 0.0;
-    win.lastSyncTimestamp = Date.now();
     // AutoMix switch: the incoming song is not audible until the blend point. Stay "loading" so the
     // blend clock drives the time, and keep the length already measured for it
     var mixSwitch = isMixSwitchTo(win, trk);
     var keptDur = mixSwitch ? win.totalDuration : 0;
-    win.isLoadingAudio = mixSwitch || !hasLocalFile;
     var initDur = extractTrackDuration(trk);
+    armStaleStatusGuard(win, win.currentTrack, trk);
+    // Time and length first: currentTrack listeners (lyrics lookup) read them synchronously
+    win.currentTime = 0.0;
+    win.lastSyncTime = 0.0;
+    win.lastSyncTimestamp = Date.now();
     win.totalDuration = initDur > 0 ? initDur : (keptDur > 0 ? keptDur : 0.0);
+    win.isLoadingAudio = mixSwitch || !hasLocalFile;
+    win.currentTrack = trk;
     win.isPlaying = true;
 
     if (win.syncHistoryToGoogle) {
@@ -510,16 +535,16 @@ function playTrack(win, trk, pollTimer) {
 
     win.trackChangeTimestamp = Date.now();
     win.postLoadGraceTimestamp = Date.now();
-    win.currentTrack = trk;
+    var mixSwitch = isMixSwitchTo(win, trk);
+    var keptDur = mixSwitch ? win.totalDuration : 0;
+    var localDur = extractTrackDuration(trk);
+    armStaleStatusGuard(win, win.currentTrack, trk);
     win.currentTime = 0.0;
     win.lastSyncTime = 0.0;
     win.lastSyncTimestamp = Date.now();
-    var mixSwitch = isMixSwitchTo(win, trk);
-    var keptDur = mixSwitch ? win.totalDuration : 0;
+    win.totalDuration = localDur > 0 ? localDur : (keptDur > 0 ? keptDur : 0.0);
     win.isLoadingAudio = mixSwitch;
-    var localDur = extractTrackDuration(trk);
-    win.totalDuration = localDur > 0 ? localDur : ((trk.durationMs || 0) / 1000.0);
-    if (!(win.totalDuration > 0) && keptDur > 0) win.totalDuration = keptDur;
+    win.currentTrack = trk;
     win.isPlaying = true;
 
     if (win.syncHistoryToGoogle) {
@@ -591,15 +616,16 @@ function togglePlay(win, pollTimer) {
 
     if (!win.isSyncingFromFriend) {
         var evType = win.isPlaying ? "play" : "pause";
+        var evData = listenSyncData(win, win.currentTime);
         if (win.listeningAlongFriend && win.guestCanControlHost) {
             var hostPlayTarget = win.listeningAlongFriend.tag || win.listeningAlongFriend.user_id || win.listeningAlongFriend.user_email || "";
             if (hostPlayTarget) {
-                win.sendSocialEventFast(evType, hostPlayTarget);
+                win.sendSocialEventFast(evType, hostPlayTarget, evData);
             }
         }
         if (win.activeCoListeners && win.activeCoListeners.length > 0) {
             for (var li = 0; li < win.activeCoListeners.length; li++) {
-                win.sendSocialEventFast(evType, win.activeCoListeners[li]);
+                win.sendSocialEventFast(evType, win.activeCoListeners[li], evData);
             }
         }
     }
@@ -616,14 +642,15 @@ function triggerRapidTrackSwitch(win, targetTrack) {
     } else {
         Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
     }
-    win.currentTrack = targetTrack;
+    armStaleStatusGuard(win, win.currentTrack, targetTrack);
     win.currentTime = 0.0;
     win.lastSyncTime = 0.0;
     win.lastSyncTimestamp = Date.now();
     var initDur = extractTrackDuration(targetTrack);
     win.totalDuration = initDur > 0 ? initDur : 0.0;
-    win.isPlaying = true;
     win.isLoadingAudio = true;
+    win.currentTrack = targetTrack;
+    win.isPlaying = true;
     win.trackChangeTimestamp = Date.now();
     win.lastTrackSwitchTimestamp = Date.now();
     win.lastLocalActionTimestamp = Date.now();
@@ -754,12 +781,12 @@ function seekAudio(win, sec) {
         if (win.listeningAlongFriend && win.guestCanControlHost) {
             var hostSeekTarget = win.listeningAlongFriend.tag || win.listeningAlongFriend.user_id || win.listeningAlongFriend.user_email || "";
             if (hostSeekTarget) {
-                win.sendSocialEventFast("seek", hostSeekTarget, { position: sec });
+                win.sendSocialEventFast("seek", hostSeekTarget, listenSyncData(win, sec));
             }
         }
         if (win.activeCoListeners && win.activeCoListeners.length > 0) {
             for (var si = 0; si < win.activeCoListeners.length; si++) {
-                win.sendSocialEventFast("seek", win.activeCoListeners[si], { position: sec });
+                win.sendSocialEventFast("seek", win.activeCoListeners[si], listenSyncData(win, sec));
             }
         }
     }
@@ -1024,7 +1051,21 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
             win.crossfadeHandoverUntil = 0;
             win.crossfadeHandoverPath = "";
         }
-        if (s.path) win.lastMpvPath = s.path;
+        if (win.staleStatusPath) {
+            if (s.path === win.staleStatusPath) {
+                // Still the previous song: only the "new song never opened" timeout applies
+                if (win.isLoadingAudio && Date.now() - win.trackChangeTimestamp > 25000) {
+                    win.isLoadingAudio = false;
+                    win.isPlaying = false;
+                }
+                return;
+            }
+            if (s.path) win.staleStatusPath = "";
+        }
+        if (s.path) {
+            win.lastMpvPath = s.path;
+            win.lastMpvPathKey = trackKeyOf(win.currentTrack);
+        }
         if (s.audio_specs && typeof s.audio_specs === "object") {
             win.audioSpecs = s.audio_specs;
         }

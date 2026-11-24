@@ -741,6 +741,21 @@ def crossfade_play(file_path, title, artist, art, my_epoch, fade_at, fade_dur, i
         xf.kill_tail(TEMP_DIR, PROFILE_SUFFIX)
 
 
+def _clear_prev_mpv_path(epoch):
+    """loadfile has been sent: from here a file with the same path (cached stream URL when going back
+    to the song mpv held) is the requested one. Only touches the state of this request's epoch."""
+    try:
+        with open(PLAYBACK_STATE_FILE, "r", encoding="utf-8") as f:
+            st = json.load(f)
+        if st.get("epoch") != epoch or "prev_mpv_path" not in st:
+            return
+        st.pop("prev_mpv_path", None)
+        with open(PLAYBACK_STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(st, f)
+    except Exception:
+        pass
+
+
 def _prev_track_ident(new_path=""):
     """target_vid/path of the last state write, so pause/resume keep the track identity
     (only when the track itself is unchanged)."""
@@ -919,6 +934,13 @@ def execute_command(args):
         initial_state = "loading" if is_online else "playing"
         state_file = PLAYBACK_STATE_FILE
         state_payload = {"state": initial_state, "path": file_path, "target_vid": target_vid, "timestamp": req_ts, "epoch": my_req_id}
+        if is_online:
+            # mpv keeps the previous file (paused) while the stream resolves: the bridge must not
+            # take that file's position for the new song (nutsty-bridge loading_verdict)
+            try:
+                state_payload["prev_mpv_path"] = get_mpv_property("path") or ""
+            except Exception:
+                pass
         try:
             with open(state_file, "w", encoding="utf-8") as f:
                 json.dump(state_payload, f)
@@ -938,6 +960,8 @@ def execute_command(args):
             return
 
         send_mpv_cmd(["loadfile", stream_target, "replace"])
+        if is_online and state_payload.get("prev_mpv_path"):
+            _clear_prev_mpv_path(my_req_id)
         send_mpv_cmd(["set_property", "loop-playlist", "no"])
         send_mpv_cmd(["set_property", "loop-file", "no"])
         send_mpv_cmd(["set_property", "pause", False])
