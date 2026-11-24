@@ -20,10 +20,17 @@ QtObject {
     property double linkCodeExpiresAt: 0
     property bool linkBusy: false
     property string linkError: ""
+    // Off: this device keeps everything and syncs nothing until turned on again (backend remembers it)
+    property bool enabled: true
+    property bool detachBusy: false
+    property string detachError: ""
 
     signal remoteChanged(var changed)
     signal resumeOffered(var progress)
     signal linked(string tag)
+    signal detached(string tag)
+
+    Component.onCompleted: sync.refreshStatus()
 
     function _post(op, body, cb) {
         var xhr = new XMLHttpRequest();
@@ -42,10 +49,12 @@ QtObject {
     }
 
     function run() {
+        if (!sync.enabled) return;
         if (sync.running) { sync._again = true; return; }
         sync.running = true;
         sync._post("run", {}, function(res) {
             sync.running = false;
+            if (res.error === "disabled") { sync.enabled = false; sync.lastError = ""; return; }
             sync.lastError = res.success ? "" : (res.error || "offline");
             if (res.last_sync) sync.lastSync = res.last_sync;
             if (res.changed && (res.changed.playlists || res.changed.favorites || res.changed.liked || res.plays_added > 0)) {
@@ -65,13 +74,14 @@ QtObject {
     function refreshStatus() {
         sync._post("status", {}, function(res) {
             if (!res.success) return;
+            sync.enabled = res.enabled !== false;
             sync.pending = res.pending || 0;
             if (res.last_sync) sync.lastSync = res.last_sync;
         });
     }
 
     function reportProgress(track, position, duration, playing) {
-        if (!track) return;
+        if (!track || !sync.enabled) return;
         sync._post("progress", { track: track, position: position, duration: duration, playing: playing }, null);
     }
 
@@ -99,10 +109,36 @@ QtObject {
         sync._post("link_claim", { code: code }, function(res) {
             sync.linkBusy = false;
             if (res.success) {
+                sync.enabled = true;   // the backend turns sync on when a code is typed
                 sync.linked(res.tag || "");
                 sync.run();
             } else {
                 sync.linkError = res.error || "offline";
+            }
+        });
+    }
+
+    function setEnabled(on) {
+        sync.enabled = Boolean(on);
+        sync.lastError = "";
+        sync._post("set_enabled", { enabled: sync.enabled }, function(res) {
+            if (res.success && sync.enabled) sync.run();
+        });
+    }
+
+    // This device gets an account of its own and keeps its data; the other devices keep the old one
+    function detach() {
+        if (sync.detachBusy) return;
+        sync.detachBusy = true;
+        sync.detachError = "";
+        sync._post("detach", {}, function(res) {
+            sync.detachBusy = false;
+            if (res.success) {
+                sync.linkCode = "";
+                sync.detached(res.tag || "");
+                sync.run();
+            } else {
+                sync.detachError = res.error || "offline";
             }
         });
     }

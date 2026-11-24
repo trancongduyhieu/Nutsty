@@ -5158,6 +5158,12 @@ Scope {
             win.fetchCurrentUserProfile();
             win.showToast(I18n.tr("Đã nối máy này vào tài khoản, đang đồng bộ", "This device is linked to your account, syncing now"), "success");
         }
+        onDetached: tag => {
+            win.fetchCurrentUserProfile();
+            win.fetchFriendsDataFast();
+            win.fetchFriendsNotesFast();
+            win.showToast(I18n.tr("Máy này đã có tài khoản riêng, không còn đồng bộ với các máy kia", "This device now has its own account and no longer syncs with the others"), "success");
+        }
         onResumeOffered: p => {
             // Something is already playing here: this device's own spot will win on the next report
             if (win.isPlaying || win.listeningAlongFriend || resumeListeningToast.isShown) return;

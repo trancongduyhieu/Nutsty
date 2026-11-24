@@ -396,6 +396,7 @@ Rectangle {
     // components/AccountSync.qml, set by shell.qml (null in previews)
     property var accountSync: null
     property bool linkCodeEntry: false
+    property bool detachConfirm: false
     property double syncNowMs: Date.now()
     Timer {
         interval: 1000
@@ -410,11 +411,16 @@ Rectangle {
             root.linkCodeEntry = false;
             linkCodeInput.text = "";
         }
+        function onDetached(tag) {
+            root.detachConfirm = false;
+        }
     }
 
     function syncStatusText() {
         var a = root.accountSync;
         if (!a) return "";
+        if (!a.enabled)
+            return I18n.tr("Đang tắt: máy này chỉ dùng dữ liệu của riêng nó", "Off: this device only uses its own data");
         if (a.running) return I18n.tr("Đang đồng bộ...", "Syncing...");
         if (a.lastError === "server_outdated")
             return I18n.tr("Máy chủ Nutsty chưa được cập nhật để đồng bộ", "The Nutsty server is not updated for sync yet");
@@ -475,11 +481,14 @@ Rectangle {
         property bool busy: false
         // Another job of the same row runs: dim and ignore clicks
         property bool locked: root.playlistBackupBusy && !busy
+        // Muted Rose for a step that is hard to undo
+        property bool danger: false
         signal activated()
         height: 32
         width: pillRow.implicitWidth + 26
         radius: 16
-        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, pillMouse.containsMouse ? 0.24 : 0.14)
+        color: pill.danger ? Qt.rgba(244 / 255, 63 / 255, 94 / 255, pillMouse.containsMouse ? 0.24 : 0.14)
+                           : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, pillMouse.containsMouse ? 0.24 : 0.14)
         opacity: pill.locked ? 0.5 : 1.0
         scale: pillMouse.pressed ? 0.96 : 1.0
         Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
@@ -1516,7 +1525,7 @@ Rectangle {
                         BackupPillButton {
                             label: I18n.tr("Đồng bộ ngay", "Sync now")
                             iconSource: "../assets/icons/view-refresh-symbolic.svg"
-                            locked: false
+                            locked: root.accountSync !== null && !root.accountSync.enabled
                             busy: root.accountSync !== null && root.accountSync.running
                             onActivated: root.accountSync.run()
                         }
@@ -1709,6 +1718,189 @@ Rectangle {
                             font.pixelSize: 11
                             color: err !== "" ? "#fda4af" : Theme.textSecondary
                             wrapMode: Text.WordWrap
+                        }
+                    }
+                }
+
+                // Sync on/off for this device (off: everything stays here, turning it back on merges)
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 46
+                    visible: root.accountSync !== null
+
+                    readonly property bool on: root.accountSync !== null && root.accountSync.enabled
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: toggleAccountSync.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Đồng bộ trên máy này", "Sync on this device")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Tắt thì mọi thứ vẫn còn trên máy này nhưng không gửi đi hay nhận về. Bật lại sẽ gộp những gì đã đổi.",
+                                          "Off keeps everything on this device but sends and receives nothing. Turning it back on merges what changed.")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                            wrapMode: Text.WordWrap
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    Rectangle {
+                        id: toggleAccountSync
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 44
+                        height: 24
+                        radius: 12
+                        color: parent.on ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18)
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        Rectangle {
+                            width: 18
+                            height: 18
+                            radius: 9
+                            color: "#ffffff"
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: parent.parent.on ? parent.width - width - 3 : 3
+                            Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            preventStealing: false
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.accountSync.setEnabled(!root.accountSync.enabled)
+                        }
+                    }
+                }
+
+                // Detach: this device gets an account of its own (a code typed by mistake, a computer given away)
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 52
+                    visible: root.accountSync !== null && !root.detachConfirm
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: detachButton.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Tách máy này ra", "Detach this device")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Máy này nhận một tài khoản riêng, giữ những gì đang có và thôi đồng bộ với các máy kia",
+                                          "This device gets its own account, keeps what it has and stops syncing with the others")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                            wrapMode: Text.WordWrap
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    BackupPillButton {
+                        id: detachButton
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        danger: true
+                        label: I18n.tr("Tách ra", "Detach")
+                        iconSource: "../assets/icons/window-close-symbolic.svg"
+                        locked: root.accountSync !== null && (root.accountSync.running || root.accountSync.linkBusy)
+                        onActivated: {
+                            if (root.accountSync) root.accountSync.detachError = "";
+                            root.detachConfirm = true;
+                        }
+                    }
+                }
+
+                // Confirm the detach: say plainly what changes
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: detachConfirmColumn.implicitHeight + 24
+                    visible: root.accountSync !== null && root.detachConfirm
+                    radius: 14
+                    color: Qt.rgba(244 / 255, 63 / 255, 94 / 255, 0.10)
+                    border.color: Qt.rgba(244 / 255, 63 / 255, 94 / 255, 0.30)
+                    border.width: 1
+
+                    Column {
+                        id: detachConfirmColumn
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 12
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 10
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Tách máy này ra khỏi tài khoản?", "Detach this device from the account?")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                            wrapMode: Text.WordWrap
+                        }
+
+                        Text {
+                            width: parent.width
+                            readonly property string err: root.accountSync && root.accountSync.detachError !== ""
+                                ? root.linkErrorText(root.accountSync.detachError) : ""
+                            text: err !== "" ? err
+                                  : I18n.tr("Danh sách phát, bài đã thích và lịch sử nghe vẫn ở lại máy này. Bạn bè và ghi chú ở lại với tài khoản cũ trên các máy kia. Muốn nối lại thì dùng Thêm máy và Nhập mã như lúc đầu.",
+                                            "Playlists, liked songs and history stay on this device. Friends and notes stay with the old account on the other devices. To link again, use Add device and Enter code as before.")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: err !== "" ? "#fda4af" : Theme.textSecondary
+                            wrapMode: Text.WordWrap
+                        }
+
+                        Row {
+                            spacing: 8
+
+                            BackupPillButton {
+                                danger: true
+                                label: I18n.tr("Tách máy này", "Detach this device")
+                                iconSource: "../assets/icons/window-close-symbolic.svg"
+                                locked: false
+                                busy: root.accountSync !== null && root.accountSync.detachBusy
+                                onActivated: root.accountSync.detach()
+                            }
+
+                            BackupPillButton {
+                                label: I18n.tr("Thôi", "Cancel")
+                                iconSource: "../assets/icons/go-previous-symbolic.svg"
+                                locked: root.accountSync !== null && root.accountSync.detachBusy
+                                onActivated: root.detachConfirm = false
+                            }
                         }
                     }
                 }

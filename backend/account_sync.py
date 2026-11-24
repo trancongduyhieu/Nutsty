@@ -85,6 +85,27 @@ def _save_state(suffix, st):
     _write_atomic(_state_path(suffix), st)
 
 
+# On/off lives in its own file: a sync running while the switch flips saves the state file at its end
+def _settings_path(suffix):
+    return os.path.join(pc.get_config_dir(), f"nutsty_sync_settings{suffix}.json")
+
+
+def is_enabled(profile=""):
+    try:
+        with open(_settings_path(_suffix(profile)), "r", encoding="utf-8") as f:
+            return json.load(f).get("enabled", True) is not False
+    except Exception:
+        return True
+
+
+def set_enabled(profile, enabled):
+    """Off: this device keeps everything and stops sending and receiving. On again: the next sync merges
+    what changed on both sides meanwhile (the outbox compares against what was last synced)."""
+    on = bool(enabled)
+    _write_atomic(_settings_path(_suffix(profile)), {"enabled": on})
+    return {"success": True, "enabled": on}
+
+
 # Progress has its own small file: it is written every few minutes while a sync may be running
 def _progress_path(suffix):
     return os.path.join(pc.get_config_dir(), f"nutsty_sync_progress{suffix}.json")
@@ -504,6 +525,8 @@ def _offer(st):
 
 def sync_once(profile=""):
     suffix = _suffix(profile)
+    if not is_enabled(profile):
+        return {"success": False, "error": "disabled", "last_sync": _load_state(suffix).get("last_sync", 0)}
     with _sync_lock(suffix) as ok:
         if not ok:
             return {"success": False, "error": "busy"}
@@ -575,7 +598,7 @@ def record_progress(profile, track, position, duration, playing):
                    "position": round(float(position or 0), 1), "duration": round(float(duration or 0), 1),
                    "playing": bool(playing), "updated_at": _now_ms(), "dirty": True}
     _write_atomic(_progress_path(suffix), pf)
-    ident = crc.load_cloud_identity(suffix)
+    ident = crc.load_cloud_identity(suffix) if is_enabled(profile) else None
     sent = bool(ident) and _push_progress(st["device_id"], ident, suffix)
     return {"success": True, "sent": sent}
 
@@ -595,7 +618,7 @@ def status(profile=""):
     dirty = sum(1 for k in st["known"].values() if k.get("dirty"))
     return {"success": True, "last_sync": st.get("last_sync", 0), "pending": dirty,
             "last_error": st.get("last_error", ""), "tag": ident.get("tag", ""),
-            "device_id": st.get("device_id", "")}
+            "device_id": st.get("device_id", ""), "enabled": is_enabled(profile)}
 
 
 # ---------------------------------------------------------------------------
@@ -630,11 +653,38 @@ def claim_link_code(profile, code):
              "avatar_url": u.get("avatar_url", ""), "created_at": int(u.get("created_at") or _now_ms()),
              "custom_username": True}
     crc.save_cloud_identity(ident, suffix)
+    set_enabled(profile, True)  # typing a code means this device should sync
     return {"success": True, "tag": ident["tag"]}
 
 
+def detach_device(profile=""):
+    """Give this device an account of its own (same name), keeping its data, which goes up to the new
+    account on the next sync. The old account stays as it is for the other devices, friends and notes
+    included. Needs the server: on failure this device stays on the old account."""
+    suffix = _suffix(profile)
+    with _sync_lock(suffix) as ok:
+        if not ok:
+            return {"success": False, "error": "busy"}
+        old = crc.load_cloud_identity(suffix) or {}
+        res = crc.GLOBAL_RELAY_CLIENT.register(username=old.get("username") or "Nutsty User",
+                                               avatar_url=old.get("avatar_url") or "")
+        u = (res or {}).get("user") or {}
+        if not (res or {}).get("success") or not u.get("id") or not res.get("secret_key"):
+            return {"success": False, "error": "offline"}
+        ident = {"user_id": u["id"], "secret_key": res["secret_key"], "username": u.get("username", ""),
+                 "discriminator": u.get("discriminator", ""), "tag": u.get("tag", ""),
+                 "avatar_url": u.get("avatar_url", ""), "created_at": int(u.get("created_at") or _now_ms()),
+                 "custom_username": bool(old.get("custom_username"))}
+        crc.save_cloud_identity(ident, suffix)
+        # The new account is empty: the next sync sends everything here (see _sync_locked)
+        st = _load_state(suffix)
+        st.update({"user_id": "", "cursor": 0, "remote_progress": None, "last_error": ""})
+        _save_state(suffix, st)
+        return {"success": True, "tag": ident["tag"]}
+
+
 # ---------------------------------------------------------------------------
-# HTTP: POST /api/sync/{run,status,progress,dismiss_resume,link_code,link_claim}
+# HTTP: POST /api/sync/{run,status,progress,dismiss_resume,link_code,link_claim,set_enabled,detach}
 # ---------------------------------------------------------------------------
 
 def handle_http_path(handler, path, body):
@@ -655,6 +705,10 @@ def handle_http_path(handler, path, body):
             res = create_link_code(profile)
         elif op == "link_claim":
             res = claim_link_code(profile, body.get("code"))
+        elif op == "set_enabled":
+            res = set_enabled(profile, body.get("enabled"))
+        elif op == "detach":
+            res = detach_device(profile)
         else:
             handler._send_json({"success": False, "error": f"unknown_op: {op}"}, 404)
             return
