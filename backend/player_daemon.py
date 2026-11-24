@@ -516,10 +516,12 @@ def fade_out_and_pause(duration=5.0):
         send_mpv_cmd(["set_property", "pause", True])
         return
 
-    steps = max(10, int(duration * 20))  # 20 steps per second (50ms interval)
-    interval = duration / steps
+    # Short fades step every 50ms; long ones (a sleep timer fading along its whole length)
+    # every 500ms, so an hour-long ramp is ~7k IPC writes instead of ~72k.
+    interval = 0.05 if duration <= 60 else 0.5
+    start = time.monotonic()
 
-    for i in range(1, steps + 1):
+    while True:
         if os.path.exists(abort_file):
             try:
                 os.remove(abort_file)
@@ -528,11 +530,14 @@ def fade_out_and_pause(duration=5.0):
             send_mpv_cmd(["set_property", "volume", current_vol])
             return
 
-        t = i / steps  # 0.0 -> 1.0
+        # Progress comes from the clock, not the step count, so IPC latency cannot stretch the fade
+        t = min(1.0, (time.monotonic() - start) / duration) if duration > 0 else 1.0
         # Cosine S-curve: factor = (1 + cos(pi * t)) / 2 (starts at 1.0, ends at 0.0)
         factor = (1.0 + math.cos(math.pi * t)) / 2.0
         v = round(current_vol * factor, 1)
         send_mpv_cmd(["set_property", "volume", v])
+        if t >= 1.0:
+            break
         time.sleep(interval)
 
     # Pause playback once volume touches 0

@@ -283,6 +283,9 @@ Scope {
     property alias sleepTimerRemainingSeconds: sleepTimerController.remainingSeconds
     property alias sleepTimerMode: sleepTimerController.mode
     property alias sleepTimerFadeTriggered: sleepTimerController.fadeTriggered
+    property alias sleepTimerFade: sleepTimerController.fade
+    readonly property int sleepTimerTotalSeconds: sleepTimerController.totalSeconds
+    readonly property bool sleepTimerVolumeLocked: sleepTimerController.volumeLocked
     property string currentLanguage: I18n.locale
     property string streamingQuality: "high_opus"
     property string downloadQuality: "high_opus"
@@ -3365,12 +3368,12 @@ Scope {
                     onNowPlayingMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false, true)
                     isSleepTimerActive: win.isSleepTimerActive
                     sleepTimerRemainingSeconds: win.sleepTimerRemainingSeconds
-                    onSleepTimerRequested: anchorItem => {
-                        var sleepPopover = sleepTimerPopoverLoader.ensure();
-                        if (sleepPopover.isOpen) { sleepPopover.close(); return; }
-                        var pt = anchorItem.mapToItem(sleepPopover, 0, anchorItem.height);
-                        sleepPopover.openBelow(pt.x, pt.y);
-                    }
+                    sleepTimerTotalSeconds: win.sleepTimerTotalSeconds
+                    sleepTimerMode: win.sleepTimerMode
+                    sleepTimerFade: win.sleepTimerFade
+                    onSleepTimerStartRequested: (seconds, fade) => win.startSleepTimer(seconds, "duration", fade)
+                    onSleepTimerEndOfTrackRequested: win.startSleepTimer(0, "end_of_track")
+                    onSleepTimerCancelRequested: win.cancelSleepTimer()
                     onPlaylistSelected: pl => {
                         win.handleSelectPlaylist(pl);
                         win.isNowPlayingOpen = false;
@@ -4071,30 +4074,6 @@ Scope {
                 dlMgr: downloadManager
                 accentColor: win.accentColor
                 backgroundSourceItem: masterBackdropStack
-            }
-        }
-
-        LazyModalLoader {
-            id: sleepTimerPopoverLoader
-            anchors.fill: parent
-            z: 9999
-            sourceComponent: SleepTimerPopover {
-                accentColor: win.accentColor
-                backgroundSourceItem: masterBackdropStack
-                targetAnchorItem: bottomPlayer
-                isTimerActive: win.isSleepTimerActive
-                remainingSeconds: win.sleepTimerRemainingSeconds
-                timerMode: win.sleepTimerMode
-
-                onSetTimerRequested: (minutes) => {
-                    win.startSleepTimer(minutes * 60, "duration");
-                }
-                onSetEndOfTrackRequested: () => {
-                    win.startSleepTimer(0, "end_of_track");
-                }
-                onCancelTimerRequested: () => {
-                    win.cancelSleepTimer();
-                }
             }
         }
 
@@ -4844,14 +4823,17 @@ Scope {
     }
 
     function setVolume(vol) {
+        // A whole-timer sleep fade owns mpv's volume until it ends or is cancelled
+        if (sleepTimerController.volumeLocked) return;
         return PlaybackEngine.setVolume(win, vol);
     }
 
-    function startSleepTimer(seconds, mode) {
+    // fade: "none" | "final" | "entire" (ignored for end_of_track, which always fades its last 5 s)
+    function startSleepTimer(seconds, mode, fade) {
         if (mode === "end_of_track") {
             sleepTimerController.startEndOfTrack();
         } else {
-            sleepTimerController.startDuration(Math.round(seconds / 60));
+            sleepTimerController.startDuration(Math.round(seconds), fade);
         }
     }
 
@@ -5749,9 +5731,19 @@ Scope {
         }
         function closePlaylistSearchModal() { playlistTrackSearchModal.closeModal(); }
         function toggleSleepTimer() {
-            var sleepPopover = sleepTimerPopoverLoader.ensure();
-            if (sleepPopover.isOpen) sleepPopover.close();
-            else sleepPopover.open();
+            if (win.isNowPlayingOpen && ytNowPlayingView.activeTab === "sleep") {
+                ytNowPlayingView.activeTab = "artwork";
+                return;
+            }
+            ytNowPlayingView.activeTab = "sleep";
+            win.isNowPlayingOpen = true;
+        }
+        // fade: "none" | "final" | "entire"
+        function startSleepTimerFor(seconds: int, fade: string) {
+            win.startSleepTimer(seconds, "duration", fade);
+        }
+        function cancelSleepTimer() {
+            win.cancelSleepTimer();
         }
         function playNext() { win.playNext(); }
         function playPrev() { win.playPrev(); }

@@ -7,6 +7,12 @@ Số phiên bản có dạng `A.B.C`, ví dụ `1.2.0`:
 - **B (số thứ 2)** tăng khi có tính năng mới mà mọi thứ cũ vẫn dùng bình thường. Số thứ 3 về 0, ví dụ `2.1.3` lên `2.2.0`.
 - **A (số đầu tiên)** tăng khi có thay đổi lớn buộc bạn làm lại gì đó hoặc dữ liệu, cài đặt của bản cũ không dùng được nữa. Hai số sau về 0, ví dụ `2.4.1` lên `3.0.0`.
 
+## [Unreleased]
+
+### Added
+- **Hẹn giờ ngủ mới, rộng và dễ dùng hơn**: Bấm nút mặt trăng ở màn Đang phát, hẹn giờ ngủ giờ mở thành một trang riêng thay cho ô nhỏ chật chội trước đây. Chọn số giờ và số phút bằng hai nút cộng trừ (cuộn chuột để chỉnh từng phút), rồi bấm "Bắt đầu hẹn giờ". Khi đang hẹn giờ, một vòng tròn đếm ngược cạn dần cho bạn thấy còn bao lâu nữa nhạc tắt. Nút "Dừng khi hết bài này" vẫn còn ngay bên dưới.
+- **Chọn cách nhạc nhỏ dần trước khi tắt**: Không (nhạc dừng ngay khi hết giờ), 10 giây cuối (nhạc nhỏ dần trong 10 giây cuối), hoặc Suốt hẹn giờ (nhạc nhỏ dần đều từ lúc bắt đầu tới lúc tắt, trong lúc đó không chỉnh được âm lượng). Hủy hẹn giờ thì âm lượng trở lại như cũ.
+
 ## [2.3.1] - 2026-11-19
 
 ### Added

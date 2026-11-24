@@ -30,7 +30,7 @@ Item {
 
     // Mood chips are not shown in the Swiftify-style queue panel, so their network fetch is off
     readonly property bool moodChipsEnabled: false
-    property string activeTab: "artwork" // "artwork" | "lyrics" | "up_next"
+    property string activeTab: "artwork" // "artwork" | "lyrics" | "up_next" | "sleep"
     readonly property bool isArtworkMode: activeTab === "artwork"
     // Panel currently rendered on the right; lags activeTab during the swap cross-fade
     property string shownPanel: "lyrics"
@@ -303,10 +303,15 @@ Item {
     signal trackContextMenuRequested(var trk, real globalX, real globalY, bool isQueue)
     // The cover "more" button: same menu plus the lyrics source picker
     signal nowPlayingMenuRequested(var trk, real globalX, real globalY)
-    // Sleep timer lives in the mode switcher (Swiftify-like); the host opens the popover under it
-    signal sleepTimerRequested(Item anchorItem)
+    // Sleep timer is its own right-panel tab (Swiftify-like); the host owns the countdown
+    signal sleepTimerStartRequested(int seconds, string fade)
+    signal sleepTimerEndOfTrackRequested()
+    signal sleepTimerCancelRequested()
     property bool isSleepTimerActive: false
     property int sleepTimerRemainingSeconds: 0
+    property int sleepTimerTotalSeconds: 0
+    property string sleepTimerMode: ""
+    property string sleepTimerFade: "final"
 
     // Settings are written by a detached process, so give it a moment before the helper re-reads them.
     function refetchLyricsSoon() { lyricsRefetchTimer.restart(); }
@@ -1323,7 +1328,7 @@ Item {
                 id: tabContentStack
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                currentIndex: root.shownPanel === "up_next" ? 0 : 1
+                currentIndex: root.shownPanel === "up_next" ? 0 : (root.shownPanel === "sleep" ? 2 : 1)
 
                 // =============================================================
                 // TAB 1 VIEW: UP NEXT (Playing Queue)
@@ -1949,6 +1954,22 @@ Item {
                     }
                 }
 
+                // =============================================================
+                // TAB 3 VIEW: SLEEP TIMER
+                // =============================================================
+                SleepTimerPanel {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    accentColor: root.accentColor
+                    isActive: root.isSleepTimerActive
+                    remainingSeconds: root.sleepTimerRemainingSeconds
+                    totalSeconds: root.sleepTimerTotalSeconds
+                    mode: root.sleepTimerMode
+                    fade: root.sleepTimerFade
+                    onStartRequested: (seconds, fade) => root.sleepTimerStartRequested(seconds, fade)
+                    onEndOfTrackRequested: root.sleepTimerEndOfTrackRequested()
+                    onCancelRequested: root.sleepTimerCancelRequested()
+                }
             }
         }
     }
@@ -2026,7 +2047,8 @@ Item {
                     var m = Math.floor(sec / 60), r = sec % 60;
                     return I18n.tr("Tắt nhạc sau ", "Stops in ") + m + ":" + (r < 10 ? "0" : "") + r;
                 }
-                onClicked: root.sleepTimerRequested(sleepModeBtn)
+                active: root.activeTab === "sleep"; accent: root.accentColor
+                onClicked: root.activeTab = "sleep"
             }
         }
     }

@@ -83,7 +83,7 @@ Sidebar 1.0 Sidebar.qml
 SkeletonTrackCard 1.0 SkeletonTrackCard.qml
 SkeletonTrackRow 1.0 SkeletonTrackRow.qml
 SleepTimerController 1.0 SleepTimerController.qml
-SleepTimerPopover 1.0 SleepTimerPopover.qml
+SleepTimerPanel 1.0 SleepTimerPanel.qml
 SpotifyImportModal 1.0 SpotifyImportModal.qml
 SpringBounce 1.0 SpringBounce.qml
 SuggestTrackToast 1.0 SuggestTrackToast.qml
