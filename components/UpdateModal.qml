@@ -163,7 +163,9 @@ Item {
 
     readonly property var shownPlan: (plan && planFresh) ? plan : knownPlan
     readonly property bool isDelta: !!shownPlan && shownPlan.download_bytes >= 0 && (knownPlan !== null || updateState.mode === "delta")
-    readonly property bool sizeKnown: !minSpin && (isDelta || (planSettled && packageBytes > 0))
+    // The whole package size only once comparing is over: while it runs the real (smaller) size is still coming
+    readonly property bool fullSizeShown: planSettled && phase !== "planning" && packageBytes > 0
+    readonly property bool sizeKnown: !minSpin && (isDelta || fullSizeShown)
     // Waiting for the size: show a quiet dot only, no text that would change under the reader
     readonly property bool sizePending: (phase === "available" || phase === "planning") && !sizeKnown
     readonly property real savedPercent: (isDelta && shownPlan.full_bytes > 0)
@@ -172,7 +174,7 @@ Item {
     readonly property string sizeText: nothingToDownload ? I18n.tr("Không cần tải gì, chỉ cần khởi động lại", "Nothing to download, just restart") : ""
     // The figure that rolls on its reels: the delta size if we have it, else the whole package, else a placeholder that spins
     readonly property string sizeFigure: isDelta ? formatBytes(shownPlan.download_bytes)
-                                      : ((planSettled && packageBytes > 0) ? formatBytes(packageBytes) : "00.0 MB")
+                                      : (fullSizeShown ? formatBytes(packageBytes) : "00.0 MB")
     readonly property string sizeNumber: sizeFigure.split(" ")[0]
     readonly property string sizeUnit: sizeFigure.split(" ")[1] || ""
     readonly property bool showSizeRow: (phase === "available" || phase === "planning") && !nothingToDownload
@@ -465,7 +467,15 @@ Item {
                             font.family: Theme.fontFamily; font.pixelSize: 16; font.bold: true
                             color: Theme.textPrimary
                         }
+                        // Lite mode has no spinning reels: say it is still counting instead of a frozen 00.0
+                        Text {
+                            visible: root.liteMode && !root.sizeKnown
+                            text: I18n.tr("đang tính...", "calculating...")
+                            font.family: Theme.fontFamily; font.pixelSize: 16; font.bold: true
+                            color: Theme.textSecondary
+                        }
                         Odometer {
+                            visible: !(root.liteMode && !root.sizeKnown)
                             text: root.sizeNumber
                             pixelSize: 16
                             color: Theme.textPrimary
@@ -474,6 +484,7 @@ Item {
                             liteMode: root.liteMode
                         }
                         Text {
+                            visible: !(root.liteMode && !root.sizeKnown)
                             text: " " + root.sizeUnit
                             font.family: Theme.fontFamily; font.pixelSize: 16; font.bold: true
                             color: Theme.textPrimary
