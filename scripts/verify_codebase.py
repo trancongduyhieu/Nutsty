@@ -190,6 +190,15 @@ def verify_qml_js_contracts() -> list[str]:
         if called not in playback_funcs:
             errors.append(f"[MissingJSExport] PlaybackEngine.{called}() called in shell.qml but missing in playback_engine.js")
 
+    # Quickshell resolves component types through components/qmldir only: an unlisted file is
+    # "X is not a type" and the whole window fails to load (the compat loader does not catch it)
+    qmldir = ROOT_DIR / "components" / "qmldir"
+    if qmldir.exists():
+        listed = {ln.split()[-1] for ln in qmldir.read_text(encoding="utf-8").splitlines()
+                  if ln.strip().endswith(".qml")}
+        for f in sorted((ROOT_DIR / "components").glob("*.qml")):
+            if f.name not in listed:
+                errors.append(f"[Qmldir] components/{f.name} is not listed in components/qmldir")
     return errors
 
 

@@ -32,6 +32,147 @@ async function authenticateUser(db, userId, secretKey) {
   return user || null;
 }
 
+// Friends' notes and presence plus the caller's own note (GET /api/notes and /api/social/tick).
+async function buildNotesFeed(db, caller, userId) {
+  const now = Date.now();
+
+  // 1. Fetch caller's active note
+  const myNoteRow = await db
+    .prepare("SELECT * FROM nutsty_notes WHERE user_id = ? AND expires_at > ?")
+    .bind(userId, now)
+    .first();
+
+  let myNote = null;
+  if (myNoteRow) {
+    let parsedTrack = null;
+    try {
+      parsedTrack = myNoteRow.track ? JSON.parse(myNoteRow.track) : null;
+    } catch (_) {}
+    let myNp = myNoteRow.now_playing || caller.now_playing || "";
+    try {
+      if (typeof myNp === "string" && myNp.trim().startsWith("{")) {
+        myNp = JSON.parse(myNp);
+      }
+    } catch (_) {}
+    const noteAccent = (parsedTrack && parsedTrack.accent_color)
+      || (myNp && typeof myNp === "object" && myNp.accent_color)
+      || "";
+    myNote = {
+      id: myNoteRow.id,
+      user_id: myNoteRow.user_id,
+      user_email: myNoteRow.tag.toLowerCase(),
+      tag: myNoteRow.tag,
+      user_name: myNoteRow.username,
+      avatar_url: myNoteRow.avatar_url,
+      note_text: myNoteRow.note_text,
+      track: parsedTrack,
+      now_playing: myNp,
+      accent_color: noteAccent,
+      created_at: new Date(myNoteRow.created_at).toISOString(),
+      expires_at: new Date(myNoteRow.expires_at).toISOString(),
+      _expires_ts: myNoteRow.expires_at / 1000,
+    };
+  }
+
+  // 2. Fetch accepted friends and their notes
+  const friendsWithNotes = await db
+    .prepare(
+      `SELECT u.id as user_id, u.username, u.discriminator, u.tag, u.avatar_url, u.now_playing, u.last_active_at,
+              n.id as note_id, n.note_text, n.track as note_track, n.created_at as note_created_at, n.expires_at as note_expires_at
+       FROM nutsty_friendships f
+       JOIN nutsty_users u ON u.id = CASE WHEN f.user_id_1 = ? THEN f.user_id_2 ELSE f.user_id_1 END
+       LEFT JOIN nutsty_notes n ON n.user_id = u.id AND n.expires_at > ?
+       WHERE (f.user_id_1 = ? OR f.user_id_2 = ?) AND f.status = 'accepted'
+       ORDER BY u.last_active_at DESC`
+    )
+    .bind(userId, now, userId, userId)
+    .all();
+
+  const ONLINE_THRESHOLD_MS = 25000;
+  const notesList = (friendsWithNotes.results || []).map((row) => {
+    let trk = null;
+    if (row.note_track) {
+      try {
+        trk = JSON.parse(row.note_track);
+      } catch (_) {}
+    }
+    const isOnline = (now - (row.last_active_at || 0)) < ONLINE_THRESHOLD_MS;
+    let npVal = "";
+    if (isOnline && row.now_playing) {
+      try {
+        if (typeof row.now_playing === "string" && row.now_playing.trim().startsWith("{")) {
+          npVal = JSON.parse(row.now_playing);
+        } else {
+          npVal = row.now_playing;
+        }
+      } catch (_) {
+        npVal = row.now_playing;
+      }
+    }
+    return {
+      user_id: row.user_id,
+      user_email: row.tag ? row.tag.toLowerCase() : "",
+      user_name: row.username,
+      avatar_url: row.avatar_url || "",
+      tag: row.tag,
+      note_text: row.note_text || "",
+      track: trk,
+      created_at: row.note_created_at ? new Date(row.note_created_at).toISOString() : 0,
+      is_friend: true,
+      is_online: isOnline,
+      last_active_at: row.last_active_at || 0,
+      now_playing: npVal,
+    };
+  });
+
+  return { notes: notesList, my_note: myNote };
+}
+
+// ── Account sync (playlists, liked songs, plays, listening progress) ──────────
+// One row per item per account. Last write wins on updated_at; `seq` is a per-account change
+// counter that devices pull from (`since`). Deleted items stay as tombstones so other devices
+// learn about the delete instead of pushing the item back.
+const SYNC_KINDS = new Set(["playlist", "favorite", "liked", "play", "progress"]);
+const SYNC_MAX_ITEMS = 100;
+const SYNC_MAX_ITEM_BYTES = 1_500_000; // D1 caps a value at 2 MB
+const SYNC_PULL_LIMIT = 200;
+const SYNC_MAX_FUTURE_MS = 5 * 60 * 1000; // a device clock running ahead must not win forever
+const LINK_CODE_TTL_MS = 10 * 60 * 1000;
+const LINK_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no 0/O, 1/I/L
+
+let syncSchemaReady = false;
+
+async function ensureSyncSchema(db) {
+  if (syncSchemaReady) return;
+  await db.batch([
+    db.prepare(
+      `CREATE TABLE IF NOT EXISTS nutsty_sync_items (
+         user_id TEXT NOT NULL, kind TEXT NOT NULL, item_id TEXT NOT NULL,
+         data TEXT NOT NULL DEFAULT '', deleted INTEGER NOT NULL DEFAULT 0,
+         updated_at INTEGER NOT NULL, device_id TEXT NOT NULL DEFAULT '', seq INTEGER NOT NULL,
+         PRIMARY KEY (user_id, kind, item_id)) WITHOUT ROWID`
+    ),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_sync_user_seq ON nutsty_sync_items(user_id, seq)"),
+    db.prepare(
+      `CREATE TABLE IF NOT EXISTS nutsty_link_codes (
+         code TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL)`
+    ),
+  ]);
+  syncSchemaReady = true;
+}
+
+function newLinkCode() {
+  const bytes = new Uint8Array(6);
+  crypto.getRandomValues(bytes);
+  let out = "";
+  for (const b of bytes) out += LINK_CODE_ALPHABET[b % LINK_CODE_ALPHABET.length];
+  return out;
+}
+
+function cleanLinkCode(raw) {
+  return String(raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
 async function findAvailableDiscriminator(db, username, preferred = null) {
   const cleanUsername = username.trim();
   if (preferred && /^\d{4}$/.test(preferred)) {
@@ -73,9 +214,16 @@ async function consolidateDuplicateUserAccounts(db, keepUserId, username, avatar
   const isGenericName = !cleanName || ["user", "nutsty user", "khách", "guest"].includes(cleanName.toLowerCase());
   if (isGenericName) return;
 
+  // Only abandoned accounts: one that synced data, or was active in the last 30 days, may be
+  // another device of a real user (two laptops with the same name used to delete each other).
+  await ensureSyncSchema(db);
+  const staleBefore = Date.now() - 30 * 24 * 3600 * 1000;
   const res = await db
-    .prepare("SELECT id FROM nutsty_users WHERE id != ? AND LOWER(username) = LOWER(?)")
-    .bind(keepUserId, cleanName)
+    .prepare(
+      `SELECT id FROM nutsty_users u WHERE id != ? AND LOWER(username) = LOWER(?) AND last_active_at < ?
+         AND NOT EXISTS (SELECT 1 FROM nutsty_sync_items s WHERE s.user_id = u.id)`
+    )
+    .bind(keepUserId, cleanName, staleBefore)
     .all();
   const staleRows = res.results || [];
 
@@ -680,7 +828,7 @@ export default {
 
         const events = await db
           .prepare(
-            "SELECT id, to_user_id, from_user_id, event_type, payload, created_at FROM nutsty_events WHERE to_user_id = ? AND consumed = 0 ORDER BY created_at ASC"
+            "SELECT id, to_user_id, from_user_id, event_type, payload, created_at FROM nutsty_events WHERE to_user_id = ? AND consumed = 0 ORDER BY created_at ASC LIMIT 100"
           )
           .bind(userId)
           .all();
@@ -688,8 +836,8 @@ export default {
         const list = events.results || [];
         if (list.length > 0) {
           await db
-            .prepare("UPDATE nutsty_events SET consumed = 1 WHERE to_user_id = ? AND consumed = 0")
-            .bind(userId)
+            .prepare(`UPDATE nutsty_events SET consumed = 1 WHERE id IN (${list.map(() => "?").join(",")})`)
+            .bind(...list.map((e) => e.id))
             .run();
         }
 
@@ -825,102 +973,12 @@ export default {
         const caller = await authenticateUser(db, userId, secretKey);
         if (!caller) return errorResponse("Unauthorized", 401);
 
-        const now = Date.now();
-
-        // 1. Fetch caller's active note
-        const myNoteRow = await db
-          .prepare("SELECT * FROM nutsty_notes WHERE user_id = ? AND expires_at > ?")
-          .bind(userId, now)
-          .first();
-
-        let myNote = null;
-        if (myNoteRow) {
-          let parsedTrack = null;
-          try {
-            parsedTrack = myNoteRow.track ? JSON.parse(myNoteRow.track) : null;
-          } catch (_) {}
-          let myNp = myNoteRow.now_playing || caller.now_playing || "";
-          try {
-            if (typeof myNp === "string" && myNp.trim().startsWith("{")) {
-              myNp = JSON.parse(myNp);
-            }
-          } catch (_) {}
-          const noteAccent = (parsedTrack && parsedTrack.accent_color)
-            || (myNp && typeof myNp === "object" && myNp.accent_color)
-            || "";
-          myNote = {
-            id: myNoteRow.id,
-            user_id: myNoteRow.user_id,
-            user_email: myNoteRow.tag.toLowerCase(),
-            tag: myNoteRow.tag,
-            user_name: myNoteRow.username,
-            avatar_url: myNoteRow.avatar_url,
-            note_text: myNoteRow.note_text,
-            track: parsedTrack,
-            now_playing: myNp,
-            accent_color: noteAccent,
-            created_at: new Date(myNoteRow.created_at).toISOString(),
-            expires_at: new Date(myNoteRow.expires_at).toISOString(),
-            _expires_ts: myNoteRow.expires_at / 1000,
-          };
-        }
-
-        // 2. Fetch accepted friends and their notes
-        const friendsWithNotes = await db
-          .prepare(
-            `SELECT u.id as user_id, u.username, u.discriminator, u.tag, u.avatar_url, u.now_playing, u.last_active_at,
-                    n.id as note_id, n.note_text, n.track as note_track, n.created_at as note_created_at, n.expires_at as note_expires_at
-             FROM nutsty_friendships f
-             JOIN nutsty_users u ON u.id = CASE WHEN f.user_id_1 = ? THEN f.user_id_2 ELSE f.user_id_1 END
-             LEFT JOIN nutsty_notes n ON n.user_id = u.id AND n.expires_at > ?
-             WHERE (f.user_id_1 = ? OR f.user_id_2 = ?) AND f.status = 'accepted'
-             ORDER BY u.last_active_at DESC`
-          )
-          .bind(userId, now, userId, userId)
-          .all();
-
-        const ONLINE_THRESHOLD_MS = 25000;
-        const notesList = (friendsWithNotes.results || []).map((row) => {
-          let trk = null;
-          if (row.note_track) {
-            try {
-              trk = JSON.parse(row.note_track);
-            } catch (_) {}
-          }
-          const isOnline = (now - (row.last_active_at || 0)) < ONLINE_THRESHOLD_MS;
-          let npVal = "";
-          if (isOnline && row.now_playing) {
-            try {
-              if (typeof row.now_playing === "string" && row.now_playing.trim().startsWith("{")) {
-                npVal = JSON.parse(row.now_playing);
-              } else {
-                npVal = row.now_playing;
-              }
-            } catch (_) {
-              npVal = row.now_playing;
-            }
-          }
-          return {
-            user_id: row.user_id,
-            user_email: row.tag ? row.tag.toLowerCase() : "",
-            user_name: row.username,
-            avatar_url: row.avatar_url || "",
-            tag: row.tag,
-            note_text: row.note_text || "",
-            track: trk,
-            created_at: row.note_created_at ? new Date(row.note_created_at).toISOString() : 0,
-            is_friend: true,
-            is_online: isOnline,
-            last_active_at: row.last_active_at || 0,
-            now_playing: npVal,
-          };
-        });
-
+        const feed = await buildNotesFeed(db, caller, userId);
         return jsonResponse({
           success: true,
-          count: notesList.length,
-          notes: notesList,
-          my_note: myNote,
+          count: feed.notes.length,
+          notes: feed.notes,
+          my_note: feed.my_note,
         });
       }
 
@@ -971,6 +1029,246 @@ export default {
           .run();
 
         return jsonResponse({ success: true, event_id: eventId });
+      }
+
+      // 13b. SOCIAL TICK: presence + unread events (+ notes feed, + one friend's presence) in one
+      // request, so a client polls once instead of three times (free plan: 100k requests a day).
+      // Body: { user_id, secret_key, now_playing?, notes?: bool, watch?: friend user_id }.
+      // `now_playing` present means "update my presence"; the same value within 10 s skips the write.
+      if (path === "/api/social/tick" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const { user_id, secret_key } = body;
+
+        const caller = await authenticateUser(db, user_id, secret_key);
+        if (!caller) return errorResponse("Unauthorized", 401);
+
+        const now = Date.now();
+        if (Object.prototype.hasOwnProperty.call(body, "now_playing")) {
+          const np = body.now_playing;
+          const npStr = np && typeof np === "object" ? JSON.stringify(np) : String(np || "");
+          if (npStr !== (caller.now_playing || "") || now - (caller.last_active_at || 0) > 10000) {
+            await db
+              .prepare("UPDATE nutsty_users SET now_playing = ?, last_active_at = ? WHERE id = ?")
+              .bind(npStr, now, user_id)
+              .run();
+          }
+        }
+
+        const evRows = await db
+          .prepare(
+            "SELECT id, from_user_id, event_type, payload, created_at FROM nutsty_events WHERE to_user_id = ? AND consumed = 0 ORDER BY created_at ASC LIMIT 100"
+          )
+          .bind(user_id)
+          .all();
+        const evList = evRows.results || [];
+        if (evList.length > 0) {
+          // Mark exactly the rows read: an event sent between the two statements stays for the next tick
+          await db
+            .prepare(`UPDATE nutsty_events SET consumed = 1 WHERE id IN (${evList.map(() => "?").join(",")})`)
+            .bind(...evList.map((e) => e.id))
+            .run();
+        }
+        const events = evList.map((e) => {
+          let payloadObj = null;
+          try {
+            payloadObj = JSON.parse(e.payload);
+          } catch (_) {
+            payloadObj = e.payload;
+          }
+          return { id: e.id, from_user_id: e.from_user_id, event_type: e.event_type, payload: payloadObj, created_at: e.created_at };
+        });
+
+        const out = { success: true, events, server_time: now };
+
+        if (body.notes) {
+          const feed = await buildNotesFeed(db, caller, user_id);
+          out.notes = feed.notes;
+          out.my_note = feed.my_note;
+        }
+
+        if (body.watch) {
+          const w = await db
+            .prepare(
+              `SELECT u.id, u.username, u.tag, u.avatar_url, u.now_playing, u.last_active_at
+               FROM nutsty_friendships f
+               JOIN nutsty_users u ON u.id = CASE WHEN f.user_id_1 = ? THEN f.user_id_2 ELSE f.user_id_1 END
+               WHERE (f.user_id_1 = ? OR f.user_id_2 = ?) AND f.status = 'accepted' AND u.id = ?`
+            )
+            .bind(user_id, user_id, user_id, body.watch)
+            .first();
+          if (w) {
+            const isOnline = (now - (w.last_active_at || 0)) < 25000;
+            let npVal = "";
+            if (isOnline && w.now_playing) {
+              try {
+                npVal = String(w.now_playing).trim().startsWith("{") ? JSON.parse(w.now_playing) : w.now_playing;
+              } catch (_) {
+                npVal = w.now_playing;
+              }
+            }
+            out.watch = {
+              user_id: w.id,
+              user_email: w.tag ? w.tag.toLowerCase() : "",
+              user_name: w.username,
+              avatar_url: w.avatar_url || "",
+              tag: w.tag,
+              is_friend: true,
+              is_online: isOnline,
+              last_active_at: w.last_active_at || 0,
+              now_playing: npVal,
+            };
+          }
+        }
+
+        return jsonResponse(out);
+      }
+
+      // 14. ACCOUNT SYNC: push changed items (last write wins on updated_at)
+      if (path === "/api/sync/push" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const { user_id, secret_key, device_id, items } = body;
+        const caller = await authenticateUser(db, user_id, secret_key);
+        if (!caller) return errorResponse("Unauthorized", 401);
+        if (!Array.isArray(items) || items.length === 0) return jsonResponse({ success: true, results: [] });
+        if (items.length > SYNC_MAX_ITEMS) return errorResponse("Too many items", 413);
+        await ensureSyncSchema(db);
+
+        const now = Date.now();
+        const dev = String(device_id || "").slice(0, 64);
+        const stmts = [];
+        const results = [];
+        for (const it of items) {
+          const kind = String(it?.kind || "");
+          const itemId = String(it?.item_id || "").slice(0, 256);
+          const data = typeof it?.data === "string" ? it.data : JSON.stringify(it?.data ?? "");
+          let updatedAt = Math.floor(Number(it?.updated_at) || 0);
+          if (!SYNC_KINDS.has(kind) || !itemId || updatedAt <= 0) {
+            results.push({ kind, item_id: itemId, accepted: false, error: "invalid" });
+            continue;
+          }
+          if (data.length > SYNC_MAX_ITEM_BYTES) {
+            results.push({ kind, item_id: itemId, accepted: false, error: "too_large" });
+            continue;
+          }
+          if (updatedAt > now + SYNC_MAX_FUTURE_MS) updatedAt = now;
+          results.push({ kind, item_id: itemId, accepted: false, updated_at: updatedAt, _i: stmts.length });
+          stmts.push(
+            db
+              .prepare(
+                `INSERT INTO nutsty_sync_items (user_id, kind, item_id, data, deleted, updated_at, device_id, seq)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7,
+                         (SELECT COALESCE(MAX(seq), 0) + 1 FROM nutsty_sync_items WHERE user_id = ?1))
+                 ON CONFLICT(user_id, kind, item_id) DO UPDATE SET
+                   data = excluded.data, deleted = excluded.deleted, updated_at = excluded.updated_at,
+                   device_id = excluded.device_id, seq = excluded.seq
+                 WHERE excluded.updated_at > nutsty_sync_items.updated_at`
+              )
+              .bind(user_id, kind, itemId, it?.deleted ? "" : data, it?.deleted ? 1 : 0, updatedAt, dev)
+          );
+        }
+        const out = stmts.length ? await db.batch(stmts) : [];
+        for (const r of results) {
+          if (r._i !== undefined) {
+            r.accepted = (out[r._i]?.meta?.changes || 0) > 0;
+            delete r._i;
+          }
+        }
+        const top = await db
+          .prepare("SELECT COALESCE(MAX(seq), 0) AS seq FROM nutsty_sync_items WHERE user_id = ?")
+          .bind(user_id)
+          .first();
+        return jsonResponse({ success: true, results, seq: top?.seq || 0 });
+      }
+
+      // 15. ACCOUNT SYNC: pull items changed after `since`
+      if (path === "/api/sync/pull" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const { user_id, secret_key } = body;
+        const caller = await authenticateUser(db, user_id, secret_key);
+        if (!caller) return errorResponse("Unauthorized", 401);
+        await ensureSyncSchema(db);
+        const since = Math.max(0, Math.floor(Number(body.since) || 0));
+        const limit = Math.min(SYNC_PULL_LIMIT, Math.max(1, Math.floor(Number(body.limit) || SYNC_PULL_LIMIT)));
+        const rows = await db
+          .prepare(
+            `SELECT kind, item_id, data, deleted, updated_at, device_id, seq FROM nutsty_sync_items
+             WHERE user_id = ? AND seq > ? ORDER BY seq ASC LIMIT ?`
+          )
+          .bind(user_id, since, limit)
+          .all();
+        const items = rows.results || [];
+        const cursor = items.length ? items[items.length - 1].seq : since;
+        return jsonResponse({ success: true, items, cursor, has_more: items.length === limit });
+      }
+
+      // 16. LINK A DEVICE: the signed-in device makes a short one-time code
+      if (path === "/api/devices/link_code" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const caller = await authenticateUser(db, body.user_id, body.secret_key);
+        if (!caller) return errorResponse("Unauthorized", 401);
+        await ensureSyncSchema(db);
+        const now = Date.now();
+        await db.prepare("DELETE FROM nutsty_link_codes WHERE user_id = ? OR expires_at < ?").bind(caller.id, now).run();
+        let code = "";
+        for (let tries = 0; tries < 5 && !code; tries++) {
+          const c = newLinkCode();
+          const res = await db
+            .prepare("INSERT OR IGNORE INTO nutsty_link_codes (code, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)")
+            .bind(c, caller.id, now + LINK_CODE_TTL_MS, now)
+            .run();
+          if ((res.meta?.changes || 0) > 0) code = c;
+        }
+        if (!code) return errorResponse("Could not create a code", 503);
+        return jsonResponse({ success: true, code, expires_at: now + LINK_CODE_TTL_MS });
+      }
+
+      // 17. LINK A DEVICE: the new device trades the code for the account's identity
+      if (path === "/api/devices/link_claim" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const code = cleanLinkCode(body.code);
+        if (code.length !== 6) return errorResponse("invalid_code", 400);
+        await ensureSyncSchema(db);
+        const now = Date.now();
+        const row = await db
+          .prepare("SELECT user_id, expires_at FROM nutsty_link_codes WHERE code = ?")
+          .bind(code)
+          .first();
+        if (!row || row.expires_at < now) return errorResponse("invalid_code", 400);
+        await db.prepare("DELETE FROM nutsty_link_codes WHERE code = ?").bind(code).run();
+        const target = await db.prepare("SELECT * FROM nutsty_users WHERE id = ?").bind(row.user_id).first();
+        if (!target) return errorResponse("invalid_code", 400);
+
+        // The new device's own throwaway account goes away when nothing points at it yet
+        const old = await authenticateUser(db, body.old_user_id, body.old_secret_key);
+        if (old && old.id !== target.id) {
+          const used = await db
+            .prepare(
+              `SELECT (SELECT COUNT(*) FROM nutsty_friendships WHERE (user_id_1 = ?1 OR user_id_2 = ?1) AND status = 'accepted')
+                    + (SELECT COUNT(*) FROM nutsty_notes WHERE user_id = ?1) AS n`
+            )
+            .bind(old.id)
+            .first();
+          if (!used?.n) {
+            await db.batch([
+              db.prepare("DELETE FROM nutsty_friendships WHERE user_id_1 = ?1 OR user_id_2 = ?1").bind(old.id),
+              db.prepare("DELETE FROM nutsty_events WHERE to_user_id = ?1 OR from_user_id = ?1").bind(old.id),
+              db.prepare("DELETE FROM nutsty_sync_items WHERE user_id = ?1").bind(old.id),
+              db.prepare("DELETE FROM nutsty_users WHERE id = ?1").bind(old.id),
+            ]);
+          }
+        }
+        return jsonResponse({
+          success: true,
+          user: {
+            id: target.id,
+            username: target.username,
+            discriminator: target.discriminator,
+            tag: target.tag,
+            avatar_url: target.avatar_url || "",
+            created_at: target.created_at,
+          },
+          secret_key: target.secret_key,
+        });
       }
 
       return errorResponse("Endpoint not found", 404);

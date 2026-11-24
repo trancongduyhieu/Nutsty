@@ -226,6 +226,8 @@ def dispatch_request(method, path, query_dict, body_str):
             social_routes.handle_post_note_event(handler, req_json)
         elif clean_path == "/api/now_playing":
             social_routes.handle_post_now_playing(handler, req_json)
+        elif clean_path == "/api/social/tick":
+            social_routes.handle_post_social_tick(handler, req_json)
         elif clean_path == "/api/friends/request":
             social_routes.handle_post_friend_request(handler, req_json)
         elif clean_path == "/api/friends/respond":
@@ -234,6 +236,12 @@ def dispatch_request(method, path, query_dict, body_str):
             social_routes.handle_post_friend_remove(handler, req_json)
         elif clean_path.startswith("/api/playlists/"):
             playlist_manager.handle_http_path(handler, clean_path, req_json)
+        elif clean_path.startswith("/api/sync/"):
+            try:
+                from . import account_sync
+            except (ImportError, ValueError):
+                import account_sync
+            account_sync.handle_http_path(handler, clean_path, req_json)
         else:
             handler._send_json({"error": f"Not found: {clean_path}"}, 404)
     else:

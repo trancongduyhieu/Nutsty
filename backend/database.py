@@ -13,6 +13,7 @@ Safe Path Resolution:
 """
 
 import os
+import hashlib
 import sys
 import json
 import sqlite3
@@ -105,6 +106,10 @@ def init_db() -> None:
         if "play_id" not in cols:
             conn.execute("ALTER TABLE playback_events ADD COLUMN play_id TEXT;")
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_playback_play_id ON playback_events(play_id);")
+        # Account sync: 0 = this device has a change the cloud has not got yet
+        if "synced" not in cols:
+            conn.execute("ALTER TABLE playback_events ADD COLUMN synced INTEGER NOT NULL DEFAULT 0;")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_playback_synced ON playback_events(synced);")
     conn.close()
 
 
@@ -232,10 +237,78 @@ def upsert_play(play_id: str, track_data: Dict[str, Any], listened_seconds: floa
         ON CONFLICT(play_id) DO UPDATE SET
             listened_ms = MAX(playback_events.listened_ms, excluded.listened_ms),
             completion_rate = MAX(playback_events.completion_rate, excluded.completion_rate),
-            duration_ms = MAX(playback_events.duration_ms, excluded.duration_ms);
+            duration_ms = MAX(playback_events.duration_ms, excluded.duration_ms),
+            synced = 0;
         """, (play_id, t_id, title, artist, album, cover, duration_ms, listened_ms, completion))
     conn.close()
     return True
+
+
+# ---------------------------------------------------------------------------
+# Account sync helpers (backend/account_sync.py): plays travel between devices by play_id
+# ---------------------------------------------------------------------------
+
+_PLAY_SYNC_COLS = ("track_id", "title", "artist", "album", "cover_url", "duration_ms",
+                   "listened_ms", "completion_rate", "genre", "is_radio", "is_deep_cut", "timestamp")
+
+
+def unsynced_plays(limit: int = 100) -> List[Dict[str, Any]]:
+    """Plays this device has not sent to the cloud yet. Old rows without a play_id get a stable one."""
+    conn = get_connection()
+    with conn:
+        rows = conn.execute("SELECT id, track_id, title, timestamp FROM playback_events "
+                            "WHERE play_id IS NULL OR play_id = '' LIMIT 500;").fetchall()
+        for r in rows:
+            raw = f"{r['id']}|{r['track_id']}|{r['title']}|{r['timestamp']}".encode("utf-8", "replace")
+            conn.execute("UPDATE playback_events SET play_id = ? WHERE id = ?;",
+                         ("legacy_" + hashlib.sha1(raw).hexdigest()[:20], r["id"]))
+    rows = conn.execute(f"SELECT play_id, {', '.join(_PLAY_SYNC_COLS)} FROM playback_events "
+                        "WHERE synced = 0 AND play_id IS NOT NULL AND play_id != '' "
+                        "ORDER BY id LIMIT ?;", (int(limit),)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def mark_plays_synced(play_ids: List[str], listened: Dict[str, int]) -> None:
+    """Flag plays as sent, unless they grew while the request was in flight."""
+    if not play_ids:
+        return
+    conn = get_connection()
+    with conn:
+        for pid in play_ids:
+            conn.execute("UPDATE playback_events SET synced = 1 WHERE play_id = ? AND listened_ms <= ?;",
+                         (pid, int(listened.get(pid, 0))))
+    conn.close()
+
+
+def merge_remote_plays(plays: List[Dict[str, Any]]) -> int:
+    """Insert plays made on another device (same play_id only grows). Returns how many changed."""
+    if not plays:
+        return 0
+    changed = 0
+    conn = get_connection()
+    with conn:
+        for p in plays:
+            pid = str(p.get("play_id") or "")
+            if not pid:
+                continue
+            vals = [p.get(c) for c in _PLAY_SYNC_COLS]
+            if not vals[-1]:
+                vals[-1] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+            cur = conn.execute(f"""
+            INSERT INTO playback_events (play_id, {', '.join(_PLAY_SYNC_COLS)}, synced)
+            VALUES (?, {', '.join('?' for _ in _PLAY_SYNC_COLS)}, 1)
+            ON CONFLICT(play_id) DO UPDATE SET
+                listened_ms = MAX(playback_events.listened_ms, excluded.listened_ms),
+                completion_rate = MAX(playback_events.completion_rate, excluded.completion_rate),
+                duration_ms = MAX(playback_events.duration_ms, excluded.duration_ms)
+            WHERE excluded.listened_ms > playback_events.listened_ms;
+            """, [pid] + vals)
+            changed += cur.rowcount or 0
+        if changed:
+            conn.execute("DELETE FROM user_stats_cache;")
+    conn.close()
+    return changed
 
 
 def get_lifetime_totals() -> Dict[str, Any]:

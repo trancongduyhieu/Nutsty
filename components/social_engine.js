@@ -105,61 +105,154 @@ function sendOfflineSignal(win) {
     Quickshell.execDetached(["python3", win.appDir + "/backend/social_notes.py", "offline"]);
 }
 
+// What this device reports as now playing, or undefined when it should not report right now (a
+// guest still loading the host's song or waiting for its seek would send a stale position).
+function _presenceNowPlaying(win) {
+    var email = win.getCurrentUserEmail();
+    if (!email) return undefined;
+    if (win.listeningAlongFriend) {
+        var hostEm = String(win.listeningAlongFriend.user_email || win.listeningAlongFriend.tag || "").trim().toLowerCase();
+        if (hostEm && hostEm === String(email).trim().toLowerCase()) return undefined;
+        if (win.isLoadingAudio || win.pendingListenAlongSeekPosition > 0) return undefined;
+    }
+    var cur = win.currentTrack;
+    if (!cur) return null;
+    var rawVid = cur.videoId || cur.id || (cur.path && typeof cur.path === "string" && cur.path.startsWith("ytdl://") ? cur.path.replace("ytdl://", "") : "");
+    var vid = rawVid ? String(rawVid) : "";
+    if (vid && vid.startsWith("yt_")) vid = vid.replace(/^yt_/, "");
+    var cov = win.getTrackCoverUrl(cur);
+    var reportPos = (win.pendingListenAlongSeekPosition > 0) ? win.pendingListenAlongSeekPosition : (win.currentTime || 0);
+    return {
+        id: vid,
+        videoId: vid,
+        path: cur.path || (vid ? ("ytdl://" + vid) : ""),
+        title: cur.title || cur.name || "Track",
+        artist: cur.artist || "Artist",
+        cover: cov,
+        image: cov,
+        accent_color: win.songAccentColor ? win.songAccentColor.toString() : "",
+        position: reportPos,
+        duration: win.totalDuration || cur.duration || 0,
+        is_playing: win.isPlaying,
+        allow_control: Boolean(win.allowCoListenerControl),
+        timestamp: Date.now() / 1000.0
+    };
+}
+
+// Fields whose change makes the next tick report presence at once (position alone does not:
+// listeners extrapolate it from the timestamp, and play/pause/seek also go out as events)
+function _presenceKey(np) {
+    return np ? [np.videoId, np.is_playing, np.allow_control].join("|") : "none";
+}
+
+// Immediate presence report (song change, play/pause, a listener joined). The periodic heartbeat
+// rides on socialTick instead.
 function syncNowPlaying(win, force) {
     var now = Date.now();
     if (!force && (now - win.lastNowPlayingSyncTime < 4000)) return;
-
-    var email = win.getCurrentUserEmail();
-    var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
-    if (!email) return;
-
-    if (win.listeningAlongFriend) {
-        var hostEm = String(win.listeningAlongFriend.user_email || win.listeningAlongFriend.tag || "").trim().toLowerCase();
-        if (hostEm && hostEm === String(email).trim().toLowerCase()) {
-            return;
-        }
-        if (win.isLoadingAudio || win.pendingListenAlongSeekPosition > 0) {
-            return;
-        }
-    }
+    var npData = _presenceNowPlaying(win);
+    if (npData === undefined) return;
 
     win.lastNowPlayingSyncTime = now;
-
-    var cur = win.currentTrack;
-    var npData = null;
-    if (cur) {
-        var rawVid = cur.videoId || cur.id || (cur.path && typeof cur.path === "string" && cur.path.startsWith("ytdl://") ? cur.path.replace("ytdl://", "") : "");
-        var vid = rawVid ? String(rawVid) : "";
-        if (vid && vid.startsWith("yt_")) vid = vid.replace(/^yt_/, "");
-        var cov = win.getTrackCoverUrl(cur);
-        var reportPos = (win.pendingListenAlongSeekPosition > 0) ? win.pendingListenAlongSeekPosition : (win.currentTime || 0);
-        npData = {
-            id: vid,
-            videoId: vid,
-            path: cur.path || (vid ? ("ytdl://" + vid) : ""),
-            title: cur.title || cur.name || "Track",
-            artist: cur.artist || "Artist",
-            cover: cov,
-            image: cov,
-            accent_color: win.songAccentColor ? win.songAccentColor.toString() : "",
-            position: reportPos,
-            duration: win.totalDuration || cur.duration || 0,
-            is_playing: win.isPlaying,
-            allow_control: Boolean(win.allowCoListenerControl),
-            timestamp: Date.now() / 1000.0
-        };
-    }
+    _tick.presenceAt = now;
+    _tick.presenceKey = _presenceKey(npData);
 
     var xhr = new XMLHttpRequest();
     xhr.open("POST", (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/now_playing", true);
     xhr.setRequestHeader("Content-Type", "application/json");
     xhr.send(JSON.stringify({
-        profile: profile,
-        user_email: email,
+        profile: (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase(),
+        user_email: win.getCurrentUserEmail(),
         user_name: win.getCurrentUserName() || "",
         avatar_url: win.getCurrentUserAvatar() || "",
         now_playing: npData
     }));
+}
+
+// ---------------------------------------------------------------------------------------------
+// One social poll (POST /api/social/tick): unread events every tick, presence when it changed or
+// every PRESENCE_HEARTBEAT_MS (under the relay's 25 s online window), the notes feed every
+// notesEveryMs, and the Listen Along host's presence every tick while listening along.
+// One relay request per tick instead of three (Cloudflare free plan: 100k requests a day).
+// ---------------------------------------------------------------------------------------------
+var PRESENCE_HEARTBEAT_MS = 18000;
+var GUEST_HEARTBEAT_MS = 15000;
+var _tick = { inFlight: false, startedAt: 0, presenceAt: 0, presenceKey: "", notesAt: 0, notesHash: "", notesNow: false };
+
+function _isGuest(win) {
+    return Boolean(win.listeningAlongFriend) && (!win.activeCoListeners || win.activeCoListeners.length === 0);
+}
+
+function socialTick(win, notesEveryMs) {
+    var now = Date.now();
+    if (_tick.inFlight && now - _tick.startedAt < 15000) return;
+    var email = win.getCurrentUserEmail();
+    if (!email) return;
+
+    var body = {
+        profile: (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase(),
+        user_email: email
+    };
+    var np = _presenceNowPlaying(win);
+    var npKey = _presenceKey(np);
+    var sendPresence = np !== undefined && (npKey !== _tick.presenceKey || now - _tick.presenceAt >= PRESENCE_HEARTBEAT_MS);
+    if (sendPresence) body.now_playing = np;
+    var wantNotes = _tick.notesNow || now - _tick.notesAt >= (notesEveryMs || 20000);
+    if (wantNotes) {
+        body.notes = true;
+        body.notes_hash = _tick.notesHash;
+    }
+    var guest = _isGuest(win);
+    var hostId = guest ? String(win.listeningAlongFriend.user_id || win.listeningAlongFriend.id || "") : "";
+    if (hostId) body.watch = hostId;
+
+    // The host drops a listener it has not heard from in LISTENER_TIMEOUT_MS
+    if (guest && now - win.lastJoinHeartbeatTimestamp > GUEST_HEARTBEAT_MS) {
+        win.lastJoinHeartbeatTimestamp = now;
+        var hbTarget = win.listeningAlongFriend.tag || win.listeningAlongFriend.user_id || win.listeningAlongFriend.user_email || "";
+        if (hbTarget) win.sendSocialEventFast("join", hbTarget, { heartbeat: true });
+    }
+
+    _tick.inFlight = true;
+    _tick.startedAt = now;
+    var seqAtStart = _noteMutationSeq;
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", (win.notesApiUrl || "http://127.0.0.1:17890") + "/api/social/tick", true);
+    xhr.setRequestHeader("Content-Type", "application/json");
+    xhr.timeout = 10000;
+    xhr.onreadystatechange = function() {
+        if (xhr.readyState !== XMLHttpRequest.DONE) return;
+        _tick.inFlight = false;
+        if (xhr.status === 404) {
+            // A backend started before this build has no /api/social/tick yet: poll the old way
+            pollSocialEventsFast(win);
+            if (wantNotes) { _tick.notesAt = now; _tick.notesNow = false; fetchFriendsNotesFast(win); }
+            if (sendPresence) syncNowPlaying(win, true);
+            return;
+        }
+        if (xhr.status !== 200) return;
+        var res = null;
+        try { res = JSON.parse(xhr.responseText); } catch (e) { return; }
+        if (!res || !res.success) return;
+        if (sendPresence) {
+            _tick.presenceAt = now;
+            _tick.presenceKey = npKey;
+            win.lastNowPlayingSyncTime = now;
+        }
+        if (wantNotes && res.notes_hash !== undefined) {
+            _tick.notesAt = now;
+            _tick.notesNow = false;
+            if (!res.notes_unchanged) {
+                _tick.notesHash = res.notes_hash;
+                try { applyNotesFeed(win, res, seqAtStart, Boolean(hostId && res.watch)); } catch (e1) {}
+            }
+        }
+        try { handleSocialEvents(win, Array.isArray(res.events) ? res.events : []); } catch (e2) {}
+        if (hostId && res.watch && _isGuest(win)) {
+            try { syncWithHostPeer(win, res.watch); } catch (e3) {}
+        }
+    };
+    xhr.send(JSON.stringify(body));
 }
 
 function fetchCurrentUserProfile(win) {
@@ -346,83 +439,7 @@ function fetchFriendsNotesFast(win) {
             if (xhr.status === 200) {
                 try {
                     var parsed = JSON.parse(xhr.responseText);
-                    if (parsed && typeof parsed === "object") {
-                        if (Array.isArray(parsed.notes)) {
-                            win.friendsNotes = parsed.notes;
-                        }
-                        if (parsed.my_note !== undefined && _noteMutationsInFlight === 0 && seqAtStart === _noteMutationSeq) {
-                            win.myLatestNote = parsed.my_note;
-                        }
-
-                        if (win.listeningAlongFriend && (!win.activeCoListeners || win.activeCoListeners.length === 0)) {
-                            var nowHb = Date.now();
-                            if (nowHb - win.lastJoinHeartbeatTimestamp > 10000) {
-                                win.lastJoinHeartbeatTimestamp = nowHb;
-                                var hbTarget = win.listeningAlongFriend.tag || win.listeningAlongFriend.user_id || win.listeningAlongFriend.user_email || "";
-                                if (hbTarget) {
-                                    win.sendSocialEventFast("join", hbTarget, { heartbeat: true });
-                                }
-                            }
-                        }
-
-                        if (win.listeningAlongFriend && (!win.activeCoListeners || win.activeCoListeners.length === 0) && Array.isArray(parsed.notes)) {
-                            var targetEmail = (win.listeningAlongFriend.user_email || win.listeningAlongFriend.tag || "").toLowerCase();
-                            var targetUserId = (win.listeningAlongFriend.user_id || win.listeningAlongFriend.id || "");
-                            var targetName = win.listeningAlongFriend.user_name;
-                            var updated = parsed.notes.find(function(f) {
-                                var fEm = (f.user_email || f.tag || "").toLowerCase();
-                                var fUid = f.user_id || f.id || "";
-                                return (targetUserId && fUid && fUid === targetUserId) ||
-                                       (targetEmail && fEm === targetEmail) ||
-                                       (targetName && f.user_name === targetName);
-                            });
-                            if (updated && updated.now_playing) {
-                                var np = updated.now_playing;
-                                if (np.allow_control !== undefined) {
-                                    win.guestCanControlHost = Boolean(np.allow_control);
-                                }
-                                if (win.guestCanControlHost && ((Date.now() - win.lastTrackSwitchTimestamp < 5000) || (Date.now() - win.lastLocalActionTimestamp < 5000))) {
-                                    return;
-                                }
-                                win.listeningAlongFriend = updated;
-                                var npVid = np.videoId || np.id || "";
-                                if (npVid.startsWith("yt_")) npVid = npVid.replace(/^yt_/, "");
-                                var curVid = win.currentTrack ? (win.currentTrack.videoId || win.currentTrack.id || "") : "";
-                                if (curVid.startsWith("yt_")) curVid = curVid.replace(/^yt_/, "");
-
-                                if (npVid && npVid !== curVid) {
-                                    win.isSyncingFromFriend = true;
-                                    win.startListeningAlong(updated);
-                                    win.isSyncingFromFriend = false;
-                                } else if (npVid && curVid && npVid === curVid) {
-                                    win.isSyncingFromFriend = true;
-
-                                    if (np.is_playing === false && win.isPlaying === true) {
-                                        win.isPlaying = false;
-                                        win.isLoadingAudio = false;
-                                        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
-                                    } else if (np.is_playing === true && win.isPlaying === false) {
-                                        win.isPlaying = true;
-                                        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume", win.currentTrack.path || ""]);
-                                    }
-
-                                    var expectedPos = Number(np.position || 0);
-                                    var npAge = np.timestamp ? hostStampAgeSec(targetUserId || targetEmail || targetName || "", np.timestamp, win.totalDuration || 600) : 0;
-                                    if (np.is_playing === true) expectedPos += npAge;
-                                    if (win.isLoadingAudio) {
-                                        win.pendingListenAlongSeekPosition = expectedPos;
-                                    } else {
-                                        var drift = Math.abs(win.currentTime - expectedPos);
-                                        if (drift > DRIFT_TOLERANCE_SEC && expectedPos >= 0) {
-                                            win.seekLocalOnly(expectedPos);
-                                        }
-                                    }
-
-                                    win.isSyncingFromFriend = false;
-                                }
-                            }
-                        }
-                    }
+                    applyNotesFeed(win, parsed, seqAtStart, false);
                 } catch(e) {}
             }
         }
@@ -597,6 +614,84 @@ function ensureCoListenerRegistered(win, ev, showJoinToast) {
     return isNewListener;
 }
 
+// Applies a notes feed (friends' notes + presence, my note). Unless skipHostSync, a guest also
+// follows the Listen Along host's now_playing found in it (the tick sends that as `watch` instead).
+function applyNotesFeed(win, parsed, seqAtStart, skipHostSync) {
+    if (parsed && typeof parsed === "object") {
+        if (Array.isArray(parsed.notes)) {
+            win.friendsNotes = parsed.notes;
+        }
+        if (parsed.my_note !== undefined && _noteMutationsInFlight === 0 && seqAtStart === _noteMutationSeq) {
+            win.myLatestNote = parsed.my_note;
+        }
+
+        if (!skipHostSync && win.listeningAlongFriend && (!win.activeCoListeners || win.activeCoListeners.length === 0) && Array.isArray(parsed.notes)) {
+            var targetEmail = (win.listeningAlongFriend.user_email || win.listeningAlongFriend.tag || "").toLowerCase();
+            var targetUserId = (win.listeningAlongFriend.user_id || win.listeningAlongFriend.id || "");
+            var targetName = win.listeningAlongFriend.user_name;
+            syncWithHostPeer(win, parsed.notes.find(function(f) {
+                var fEm = (f.user_email || f.tag || "").toLowerCase();
+                var fUid = f.user_id || f.id || "";
+                return (targetUserId && fUid && fUid === targetUserId) ||
+                       (targetEmail && fEm === targetEmail) ||
+                       (targetName && f.user_name === targetName);
+            }));
+        }
+    }
+}
+
+// Guest side of Listen Along: follow the host's reported song, play state and position
+// (position moved on by the time since the host stamped it, so a slow poll still lands on time).
+function syncWithHostPeer(win, updated) {
+    if (!updated || !updated.now_playing || !win.listeningAlongFriend) return;
+    var targetEmail = (win.listeningAlongFriend.user_email || win.listeningAlongFriend.tag || "").toLowerCase();
+    var targetUserId = (win.listeningAlongFriend.user_id || win.listeningAlongFriend.id || "");
+    var targetName = win.listeningAlongFriend.user_name;
+    var np = updated.now_playing;
+    if (np.allow_control !== undefined) {
+        win.guestCanControlHost = Boolean(np.allow_control);
+    }
+    if (win.guestCanControlHost && ((Date.now() - win.lastTrackSwitchTimestamp < 5000) || (Date.now() - win.lastLocalActionTimestamp < 5000))) {
+        return;
+    }
+    win.listeningAlongFriend = updated;
+    var npVid = np.videoId || np.id || "";
+    if (npVid.startsWith("yt_")) npVid = npVid.replace(/^yt_/, "");
+    var curVid = win.currentTrack ? (win.currentTrack.videoId || win.currentTrack.id || "") : "";
+    if (curVid.startsWith("yt_")) curVid = curVid.replace(/^yt_/, "");
+
+    if (npVid && npVid !== curVid) {
+        win.isSyncingFromFriend = true;
+        win.startListeningAlong(updated);
+        win.isSyncingFromFriend = false;
+    } else if (npVid && curVid && npVid === curVid) {
+        win.isSyncingFromFriend = true;
+
+        if (np.is_playing === false && win.isPlaying === true) {
+            win.isPlaying = false;
+            win.isLoadingAudio = false;
+            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
+        } else if (np.is_playing === true && win.isPlaying === false) {
+            win.isPlaying = true;
+            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume", win.currentTrack.path || ""]);
+        }
+
+        var expectedPos = Number(np.position || 0);
+        var npAge = np.timestamp ? hostStampAgeSec(targetUserId || targetEmail || targetName || "", np.timestamp, win.totalDuration || 600) : 0;
+        if (np.is_playing === true) expectedPos += npAge;
+        if (win.isLoadingAudio) {
+            win.pendingListenAlongSeekPosition = expectedPos;
+        } else {
+            var drift = Math.abs(win.currentTime - expectedPos);
+            if (drift > DRIFT_TOLERANCE_SEC && expectedPos >= 0) {
+                win.seekLocalOnly(expectedPos);
+            }
+        }
+
+        win.isSyncingFromFriend = false;
+    }
+}
+
 // Drift beyond this between host and guest is corrected with a seek
 var DRIFT_TOLERANCE_SEC = 2.0;
 
@@ -662,211 +757,215 @@ function pollSocialEventsFast(win) {
             if (evXhr.status === 200) {
                 try {
                     var evData = JSON.parse(evXhr.responseText);
-                    var events = (evData && Array.isArray(evData.events)) ? evData.events : [];
-                    for (var i = 0; i < events.length; i++) {
-                        var ev = events[i];
-                        if (!ev) continue;
-                        _touchListener(win, ev);
-                        if (ev.event === "join") {
-                            var isNew = win.ensureCoListenerRegistered(ev, true);
-                            var isHb = (ev.data && ev.data.heartbeat === true);
-                            if (isNew || !isHb) {
-                                win.lastLocalActionTimestamp = Date.now();
-                                win.syncNowPlaying(true);
-                                var targetSender = ev.from_email || ev.from_id || "";
-                                if (win.currentTrack && targetSender) {
-                                    win.sendSocialEventFast(win.isPlaying ? "play" : "pause", targetSender, listenSyncData(win));
-                                    win.sendSocialEventFast("seek", targetSender, listenSyncData(win));
-                                    win.sendSocialEventFast("permission_update", targetSender, { allow_control: win.allowCoListenerControl });
-                                    hostFollowupSyncTimer.targetListenerEmail = targetSender;
-                                    hostFollowupSyncTimer.restart();
-                                }
-                            }
-                        } else if (ev.event === "permission_update") {
-                            if (ev.data && ev.data.allow_control !== undefined) {
-                                win.guestCanControlHost = Boolean(ev.data.allow_control);
-                                var hNamePerm = ev.from_name || I18n.tr("Host", "Host");
-                                win.showToast(win.guestCanControlHost
-                                    ? I18n.tr(hNamePerm + " đã bật quyền điều khiển chung", hNamePerm + " enabled shared control")
-                                    : I18n.tr(hNamePerm + " đã khóa quyền điều khiển chung", hNamePerm + " disabled shared control"));
-                            }
-                        } else if (ev.event === "leave" || ev.event === "kick") {
-                            var lEmail = (ev.from_email || "").trim().toLowerCase();
-                            if (lEmail) {
-                                if (win.activeCoListeners) {
-                                    win.activeCoListeners = win.activeCoListeners.filter(function(e) { return (e || "").toLowerCase() !== lEmail; });
-                                }
-                                if (win.activeCoListenersDetails) {
-                                    win.activeCoListenersDetails = win.activeCoListenersDetails.filter(function(d) { return (d.email || "").toLowerCase() !== lEmail; });
-                                }
-                                if (coListenersPopover.visible) {
-                                    coListenersPopover.openAt(win.activeCoListenersDetails);
-                                }
-                            }
-                            var fromName = ev.from_name || ev.from_email || I18n.tr("Bạn bè", "Friend");
-                            if (win.listeningAlongFriend && (((win.listeningAlongFriend.user_email || "").toLowerCase() === lEmail) || win.listeningAlongFriend.user_name === ev.from_name)) {
-                                win.listeningAlongFriend = null;
-                                var leaveMsg = (ev.event === "kick")
-                                    ? I18n.tr("Bạn đã bị mời ra khỏi phòng nghe cùng", "You were removed from the co-listening session")
-                                    : I18n.tr(fromName + " đã dừng phát cùng bạn", fromName + " stopped co-listening with you");
-                                win.notify("listen", leaveMsg);
-                            } else {
-                                win.notify("listen", I18n.tr(fromName + " đã dừng nghe cùng bạn", fromName + " stopped listening along with you"));
-                            }
-                        } else if (ev.event === "pause") {
-                            var role = sessionRole(win, ev);
-                            if (!role) continue;
-                            if (role === "listener" && !win.allowCoListenerControl) {
-                                _forceResyncUnauthorizedGuest(win, ev);
-                                continue;
-                            }
-                            win.lastLocalActionTimestamp = Date.now();
-                            // Read before the pause below clears isLoadingAudio (no seek into a song still loading)
-                            var pPos = _eventPositionForMe(win, ev);
-                            if (win.isPlaying) {
-                                win.isSyncingFromFriend = true;
-                                win.isPlaying = false;
-                                win.isLoadingAudio = false;
-                                Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
-                                win.syncNowPlaying(true);
-                                win.isSyncingFromFriend = false;
-                            }
-                            // Stop on the sender's spot so the next play starts both from one place
-                            if (pPos >= 0 && Math.abs(win.currentTime - pPos) > 0.3) {
-                                win.seekLocalOnly(pPos);
-                            }
-                            var pName = ev.from_name || I18n.tr("Bạn bè", "Friend");
-                            win.showToast(I18n.tr(pName + " đã tạm dừng bài hát", pName + " paused playback"));
-                        } else if (ev.event === "play" || ev.event === "resume") {
-                            var role = sessionRole(win, ev);
-                            if (!role) continue;
-                            if (role === "listener" && !win.allowCoListenerControl) {
-                                _forceResyncUnauthorizedGuest(win, ev);
-                                continue;
-                            }
-                            if (_eventIsForOtherTrack(win, ev)) continue;
-                            win.lastLocalActionTimestamp = Date.now();
-                            var plPos = _eventPositionForMe(win, ev);
-                            if (plPos >= 0 && Math.abs(win.currentTime - plPos) > DRIFT_TOLERANCE_SEC) {
-                                win.seekLocalOnly(plPos);
-                            }
-                            if (!win.isPlaying && win.currentTrack) {
-                                win.isSyncingFromFriend = true;
-                                win.isPlaying = true;
-                                Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume", win.currentTrack.path || ""]);
-                                win.syncNowPlaying(true);
-                                win.isSyncingFromFriend = false;
-                            }
-                            var rName = ev.from_name || I18n.tr("Bạn bè", "Friend");
-                            win.showToast(I18n.tr(rName + " đã tiếp tục phát bài hát", rName + " resumed playback"));
-                        } else if (ev.event === "seek") {
-                            var role = sessionRole(win, ev);
-                            if (!role) continue;
-                            if (role === "listener" && !win.allowCoListenerControl) {
-                                _forceResyncUnauthorizedGuest(win, ev);
-                                continue;
-                            }
-                            // A seek made on the previous song, arriving after the switch
-                            if (_eventIsForOtherTrack(win, ev)) continue;
-                            var sPos = (ev.data && ev.data.position !== undefined) ? Number(ev.data.position) : (ev.position !== undefined ? Number(ev.position) : -1);
-                            if (sPos >= 0) {
-                                win.lastLocalActionTimestamp = Date.now();
-                                win.isSyncingFromFriend = true;
-                                if (win.isLoadingAudio) {
-                                    win.pendingListenAlongSeekPosition = sPos;
-                                } else {
-                                    win.seekLocalOnly(sPos);
-                                    listenAlongSeekSafetyTimer.targetPos = sPos;
-                                    listenAlongSeekSafetyTimer.restart();
-                                }
-                                win.syncNowPlaying(true);
-                                win.isSyncingFromFriend = false;
-                                var skName = ev.from_name || I18n.tr("Bạn bè", "Friend");
-                                var timeStr = win.formatPlaybackTime(sPos);
-                                win.showToast(I18n.tr(skName + " đã tua đến " + timeStr, skName + " seeked to " + timeStr));
-                            }
-                        } else if (ev.event === "track_change") {
-                            var tcRole = sessionRole(win, ev);
-                            if (!tcRole) continue;
-                            var canAcceptTrackChange = tcRole === "host" || win.allowCoListenerControl;
-                            if (!canAcceptTrackChange) {
-                                _forceResyncUnauthorizedGuest(win, ev);
-                                continue;
-                            }
-                            if (ev.data && ev.data.track && canAcceptTrackChange) {
-                                var newTrk = ev.data.track;
-                                var newVid = newTrk.videoId || newTrk.id || "";
-                                if (newVid.startsWith("yt_")) newVid = newVid.replace(/^yt_/, "");
-                                var myVid = win.currentTrack ? (win.currentTrack.videoId || win.currentTrack.id || "") : "";
-                                if (myVid.startsWith("yt_")) myVid = myVid.replace(/^yt_/, "");
-                                if (newVid !== myVid) {
-                                    win.isSyncingFromFriend = true;
-                                    win.pendingListenAlongSeekPosition = 0;
-                                    win.lastTrackSwitchTimestamp = Date.now();
-                                    win.lastLocalActionTimestamp = Date.now();
-                                    if ((newTrk.path && newTrk.path.startsWith("ytdl://")) || newTrk.videoId) {
-                                        win.playOnlineTrack(newTrk, false);
-                                    } else {
-                                        win.playTrack(newTrk);
-                                    }
-                                    win.syncNowPlaying(true);
-                                    win.isSyncingFromFriend = false;
-                                    var tcName = ev.from_name || I18n.tr("Bạn bè", "Friend");
-                                    win.showToast(I18n.tr(tcName + " đã chuyển bài hát", tcName + " changed track"));
-                                }
-                            }
-                        } else if (ev.event === "track_suggest") {
-                            if (ev.data && ev.data.track) {
-                                var sFrom = ev.from_name || I18n.tr("Bạn bè", "Friend");
-                                var sAvatar = ev.from_avatar || "";
-                                if (!sAvatar && win.friendsNotes && Array.isArray(win.friendsNotes)) {
-                                    var matchS = win.friendsNotes.find(function(n) {
-                                        return (ev.from_email && n.user_email && n.user_email.toLowerCase() === ev.from_email.toLowerCase()) ||
-                                               (n.user_name && n.user_name === sFrom);
-                                    });
-                                    if (matchS) sAvatar = matchS.avatar_url || "";
-                                }
-                                var sTitle = ev.data.track.title || ev.data.track.name || "";
-                                win.notificationStore.add("listen", I18n.tr(sFrom + " gợi ý bài " + sTitle, sFrom + " suggested " + sTitle));
-                                suggestTrackToast.showSuggestion(sFrom, sAvatar, ev.data.track);
-                            }
-                        } else if (ev.event === "listen_invite") {
-                            handleListenInvite(win, ev);
-                        } else if (ev.event === "chat_message") {
-                            var cFrom = ev.from_name || I18n.tr("Bạn bè", "Friend");
-                            var cAvatar = ev.from_avatar || "";
-                            var cText = (ev.data && ev.data.text) ? ev.data.text : (ev.data && ev.data.message ? ev.data.message : "");
-                            var cMsgId = (ev.data && ev.data.msg_id) ? String(ev.data.msg_id) : "";
-                            if (!cAvatar && win.friendsNotes && Array.isArray(win.friendsNotes)) {
-                                var matchC = win.friendsNotes.find(function(n) {
-                                    return (ev.from_email && n.user_email && n.user_email.toLowerCase() === ev.from_email.toLowerCase()) ||
-                                           (n.user_name && n.user_name === cFrom);
-                                });
-                                if (matchC) cAvatar = matchC.avatar_url || "";
-                            }
-                            if (cText && !_isDuplicateIncomingChat(ev, cFrom, cText, cMsgId)) {
-                                floatingChatContainer.spawnBubble(cFrom, cAvatar, cText);
-                            }
-                        } else if (ev.event === "friend_request") {
-                            win.fetchFriendsDataFast();
-                            var frName = ev.from_name || ev.from_email || I18n.tr("Ai đó", "Someone");
-                            win.notify("friend", I18n.tr(frName + " đã gửi lời mời kết bạn", frName + " sent a friend request"));
-                        } else if (ev.event === "friend_accepted") {
-                            win.fetchFriendsDataFast();
-                            win.fetchFriendsNotesFast();
-                            var faName = ev.from_name || ev.from_email || I18n.tr("Bạn bè", "Friend");
-                            win.notify("friend", I18n.tr(faName + " đã chấp nhận lời mời kết bạn", faName + " accepted friend request"));
-                        } else if (ev.event === "friend_removed") {
-                            win.fetchFriendsDataFast();
-                            win.fetchFriendsNotesFast();
-                        }
-                    }
-                    _pruneSilentListeners(win);
+                    handleSocialEvents(win, (evData && Array.isArray(evData.events)) ? evData.events : []);
                 } catch(e) {}
             }
         }
     };
     evXhr.send();
+}
+
+// Applies events from /api/notes/events or /api/social/tick (join, play/pause/seek, chat, ...)
+function handleSocialEvents(win, events) {
+    for (var i = 0; i < events.length; i++) {
+        var ev = events[i];
+        if (!ev) continue;
+        _touchListener(win, ev);
+        if (ev.event === "join") {
+            var isNew = win.ensureCoListenerRegistered(ev, true);
+            var isHb = (ev.data && ev.data.heartbeat === true);
+            if (isNew || !isHb) {
+                win.lastLocalActionTimestamp = Date.now();
+                win.syncNowPlaying(true);
+                var targetSender = ev.from_email || ev.from_id || "";
+                if (win.currentTrack && targetSender) {
+                    win.sendSocialEventFast(win.isPlaying ? "play" : "pause", targetSender, listenSyncData(win));
+                    win.sendSocialEventFast("seek", targetSender, listenSyncData(win));
+                    win.sendSocialEventFast("permission_update", targetSender, { allow_control: win.allowCoListenerControl });
+                    hostFollowupSyncTimer.targetListenerEmail = targetSender;
+                    hostFollowupSyncTimer.restart();
+                }
+            }
+        } else if (ev.event === "permission_update") {
+            if (ev.data && ev.data.allow_control !== undefined) {
+                win.guestCanControlHost = Boolean(ev.data.allow_control);
+                var hNamePerm = ev.from_name || I18n.tr("Host", "Host");
+                win.showToast(win.guestCanControlHost
+                    ? I18n.tr(hNamePerm + " đã bật quyền điều khiển chung", hNamePerm + " enabled shared control")
+                    : I18n.tr(hNamePerm + " đã khóa quyền điều khiển chung", hNamePerm + " disabled shared control"));
+            }
+        } else if (ev.event === "leave" || ev.event === "kick") {
+            var lEmail = (ev.from_email || "").trim().toLowerCase();
+            if (lEmail) {
+                if (win.activeCoListeners) {
+                    win.activeCoListeners = win.activeCoListeners.filter(function(e) { return (e || "").toLowerCase() !== lEmail; });
+                }
+                if (win.activeCoListenersDetails) {
+                    win.activeCoListenersDetails = win.activeCoListenersDetails.filter(function(d) { return (d.email || "").toLowerCase() !== lEmail; });
+                }
+                if (coListenersPopover.visible) {
+                    coListenersPopover.openAt(win.activeCoListenersDetails);
+                }
+            }
+            var fromName = ev.from_name || ev.from_email || I18n.tr("Bạn bè", "Friend");
+            if (win.listeningAlongFriend && (((win.listeningAlongFriend.user_email || "").toLowerCase() === lEmail) || win.listeningAlongFriend.user_name === ev.from_name)) {
+                win.listeningAlongFriend = null;
+                var leaveMsg = (ev.event === "kick")
+                    ? I18n.tr("Bạn đã bị mời ra khỏi phòng nghe cùng", "You were removed from the co-listening session")
+                    : I18n.tr(fromName + " đã dừng phát cùng bạn", fromName + " stopped co-listening with you");
+                win.notify("listen", leaveMsg);
+            } else {
+                win.notify("listen", I18n.tr(fromName + " đã dừng nghe cùng bạn", fromName + " stopped listening along with you"));
+            }
+        } else if (ev.event === "pause") {
+            var role = sessionRole(win, ev);
+            if (!role) continue;
+            if (role === "listener" && !win.allowCoListenerControl) {
+                _forceResyncUnauthorizedGuest(win, ev);
+                continue;
+            }
+            win.lastLocalActionTimestamp = Date.now();
+            // Read before the pause below clears isLoadingAudio (no seek into a song still loading)
+            var pPos = _eventPositionForMe(win, ev);
+            if (win.isPlaying) {
+                win.isSyncingFromFriend = true;
+                win.isPlaying = false;
+                win.isLoadingAudio = false;
+                Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "pause"]);
+                win.syncNowPlaying(true);
+                win.isSyncingFromFriend = false;
+            }
+            // Stop on the sender's spot so the next play starts both from one place
+            if (pPos >= 0 && Math.abs(win.currentTime - pPos) > 0.3) {
+                win.seekLocalOnly(pPos);
+            }
+            var pName = ev.from_name || I18n.tr("Bạn bè", "Friend");
+            win.showToast(I18n.tr(pName + " đã tạm dừng bài hát", pName + " paused playback"));
+        } else if (ev.event === "play" || ev.event === "resume") {
+            var role = sessionRole(win, ev);
+            if (!role) continue;
+            if (role === "listener" && !win.allowCoListenerControl) {
+                _forceResyncUnauthorizedGuest(win, ev);
+                continue;
+            }
+            if (_eventIsForOtherTrack(win, ev)) continue;
+            win.lastLocalActionTimestamp = Date.now();
+            var plPos = _eventPositionForMe(win, ev);
+            if (plPos >= 0 && Math.abs(win.currentTime - plPos) > DRIFT_TOLERANCE_SEC) {
+                win.seekLocalOnly(plPos);
+            }
+            if (!win.isPlaying && win.currentTrack) {
+                win.isSyncingFromFriend = true;
+                win.isPlaying = true;
+                Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "resume", win.currentTrack.path || ""]);
+                win.syncNowPlaying(true);
+                win.isSyncingFromFriend = false;
+            }
+            var rName = ev.from_name || I18n.tr("Bạn bè", "Friend");
+            win.showToast(I18n.tr(rName + " đã tiếp tục phát bài hát", rName + " resumed playback"));
+        } else if (ev.event === "seek") {
+            var role = sessionRole(win, ev);
+            if (!role) continue;
+            if (role === "listener" && !win.allowCoListenerControl) {
+                _forceResyncUnauthorizedGuest(win, ev);
+                continue;
+            }
+            // A seek made on the previous song, arriving after the switch
+            if (_eventIsForOtherTrack(win, ev)) continue;
+            var sPos = (ev.data && ev.data.position !== undefined) ? Number(ev.data.position) : (ev.position !== undefined ? Number(ev.position) : -1);
+            if (sPos >= 0) {
+                win.lastLocalActionTimestamp = Date.now();
+                win.isSyncingFromFriend = true;
+                if (win.isLoadingAudio) {
+                    win.pendingListenAlongSeekPosition = sPos;
+                } else {
+                    win.seekLocalOnly(sPos);
+                    listenAlongSeekSafetyTimer.targetPos = sPos;
+                    listenAlongSeekSafetyTimer.restart();
+                }
+                win.syncNowPlaying(true);
+                win.isSyncingFromFriend = false;
+                var skName = ev.from_name || I18n.tr("Bạn bè", "Friend");
+                var timeStr = win.formatPlaybackTime(sPos);
+                win.showToast(I18n.tr(skName + " đã tua đến " + timeStr, skName + " seeked to " + timeStr));
+            }
+        } else if (ev.event === "track_change") {
+            var tcRole = sessionRole(win, ev);
+            if (!tcRole) continue;
+            var canAcceptTrackChange = tcRole === "host" || win.allowCoListenerControl;
+            if (!canAcceptTrackChange) {
+                _forceResyncUnauthorizedGuest(win, ev);
+                continue;
+            }
+            if (ev.data && ev.data.track && canAcceptTrackChange) {
+                var newTrk = ev.data.track;
+                var newVid = newTrk.videoId || newTrk.id || "";
+                if (newVid.startsWith("yt_")) newVid = newVid.replace(/^yt_/, "");
+                var myVid = win.currentTrack ? (win.currentTrack.videoId || win.currentTrack.id || "") : "";
+                if (myVid.startsWith("yt_")) myVid = myVid.replace(/^yt_/, "");
+                if (newVid !== myVid) {
+                    win.isSyncingFromFriend = true;
+                    win.pendingListenAlongSeekPosition = 0;
+                    win.lastTrackSwitchTimestamp = Date.now();
+                    win.lastLocalActionTimestamp = Date.now();
+                    if ((newTrk.path && newTrk.path.startsWith("ytdl://")) || newTrk.videoId) {
+                        win.playOnlineTrack(newTrk, false);
+                    } else {
+                        win.playTrack(newTrk);
+                    }
+                    win.syncNowPlaying(true);
+                    win.isSyncingFromFriend = false;
+                    var tcName = ev.from_name || I18n.tr("Bạn bè", "Friend");
+                    win.showToast(I18n.tr(tcName + " đã chuyển bài hát", tcName + " changed track"));
+                }
+            }
+        } else if (ev.event === "track_suggest") {
+            if (ev.data && ev.data.track) {
+                var sFrom = ev.from_name || I18n.tr("Bạn bè", "Friend");
+                var sAvatar = ev.from_avatar || "";
+                if (!sAvatar && win.friendsNotes && Array.isArray(win.friendsNotes)) {
+                    var matchS = win.friendsNotes.find(function(n) {
+                        return (ev.from_email && n.user_email && n.user_email.toLowerCase() === ev.from_email.toLowerCase()) ||
+                               (n.user_name && n.user_name === sFrom);
+                    });
+                    if (matchS) sAvatar = matchS.avatar_url || "";
+                }
+                var sTitle = ev.data.track.title || ev.data.track.name || "";
+                win.notificationStore.add("listen", I18n.tr(sFrom + " gợi ý bài " + sTitle, sFrom + " suggested " + sTitle));
+                suggestTrackToast.showSuggestion(sFrom, sAvatar, ev.data.track);
+            }
+        } else if (ev.event === "listen_invite") {
+            handleListenInvite(win, ev);
+        } else if (ev.event === "chat_message") {
+            var cFrom = ev.from_name || I18n.tr("Bạn bè", "Friend");
+            var cAvatar = ev.from_avatar || "";
+            var cText = (ev.data && ev.data.text) ? ev.data.text : (ev.data && ev.data.message ? ev.data.message : "");
+            var cMsgId = (ev.data && ev.data.msg_id) ? String(ev.data.msg_id) : "";
+            if (!cAvatar && win.friendsNotes && Array.isArray(win.friendsNotes)) {
+                var matchC = win.friendsNotes.find(function(n) {
+                    return (ev.from_email && n.user_email && n.user_email.toLowerCase() === ev.from_email.toLowerCase()) ||
+                           (n.user_name && n.user_name === cFrom);
+                });
+                if (matchC) cAvatar = matchC.avatar_url || "";
+            }
+            if (cText && !_isDuplicateIncomingChat(ev, cFrom, cText, cMsgId)) {
+                floatingChatContainer.spawnBubble(cFrom, cAvatar, cText);
+            }
+        } else if (ev.event === "friend_request") {
+            win.fetchFriendsDataFast();
+            var frName = ev.from_name || ev.from_email || I18n.tr("Ai đó", "Someone");
+            win.notify("friend", I18n.tr(frName + " đã gửi lời mời kết bạn", frName + " sent a friend request"));
+        } else if (ev.event === "friend_accepted") {
+            win.fetchFriendsDataFast();
+            win.fetchFriendsNotesFast();
+            var faName = ev.from_name || ev.from_email || I18n.tr("Bạn bè", "Friend");
+            win.notify("friend", I18n.tr(faName + " đã chấp nhận lời mời kết bạn", faName + " accepted friend request"));
+        } else if (ev.event === "friend_removed") {
+            win.fetchFriendsDataFast();
+            win.fetchFriendsNotesFast();
+        }
+    }
+    _pruneSilentListeners(win);
 }
 
 function postDailyNote(win, text, track) {

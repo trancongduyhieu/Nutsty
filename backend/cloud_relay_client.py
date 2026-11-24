@@ -686,6 +686,15 @@ class CloudRelayClient:
                 return res
         return None
 
+    def social_tick(self, user_id, secret_key, extra):
+        """POST /api/social/tick: presence + events (+ notes, + one friend) in one relay request.
+        Returns the raw reply, including {"error": "Endpoint not found"} from a relay that predates it."""
+        if not self.is_external():
+            return None
+        data = dict(extra or {})
+        data.update({"user_id": user_id, "secret_key": secret_key})
+        return self._http_request("POST", "/api/social/tick", data=data)
+
     def delete_note(self, user_id, secret_key):
         if self.is_external():
             res = self._http_request("POST", "/api/notes/delete", data={

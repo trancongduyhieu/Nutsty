@@ -117,6 +117,40 @@ class SocialRelayCore:
     # 24h Notes & Friends Feed (Deepened Seam)
     # -------------------------------------------------------------------------
 
+    def apply_notes_response(self, res: Dict[str, Any], now: Optional[float] = None) -> Dict[str, Any]:
+        """Normalizes a relay notes payload (GET /api/notes or /api/social/tick) and refreshes the caches."""
+        with self._lock:
+            now = now or time.time()
+            norm_notes = []
+            for item in res.get("notes") or []:
+                if isinstance(item, dict):
+                    norm = self.normalize_peer(item)
+                    norm["note_text"] = item.get("note_text", "")
+                    norm["track"] = item.get("track")
+                    norm["created_at"] = item.get("created_at", 0)
+                    norm["is_friend"] = True
+                    norm_notes.append(norm)
+
+            # The relay's notes list already holds every accepted friend (LEFT JOIN on notes), so a
+            # second GET /api/friends here would only double the request count.
+            raw_my = res.get("my_note")
+            my_n = None
+            if isinstance(raw_my, dict):
+                my_n = self.normalize_peer(raw_my)
+                my_n["note_text"] = raw_my.get("note_text", "")
+                my_n["track"] = raw_my.get("track")
+
+            self._notes_cache = {n["user_id"]: n for n in norm_notes if n.get("user_id")}
+            self._my_note_cache = my_n
+            self._last_feed_sync = now
+            return {
+                "success": True,
+                "notes": norm_notes,
+                "my_note": my_note_or_none(my_n),
+                "count": len(norm_notes),
+                "cached_at": now,
+            }
+
     def get_feed(self, profile: str = "", user_email: str = "") -> Dict[str, Any]:
         """
         Retrieves active 24h notes and friends list with unified deduplication.
@@ -139,41 +173,7 @@ class SocialRelayCore:
                     res = self.transport.get_notes(caller_uid, caller_secret)
 
                 if res and res.get("success"):
-                    notes_raw = res.get("notes") or []
-                    norm_notes = []
-                    seen_uids = set()
-
-                    for item in notes_raw:
-                        if isinstance(item, dict):
-                            norm = self.normalize_peer(item)
-                            norm["note_text"] = item.get("note_text", "")
-                            norm["track"] = item.get("track")
-                            norm["created_at"] = item.get("created_at", 0)
-                            norm["is_friend"] = True
-                            if norm["user_id"]:
-                                seen_uids.add(norm["user_id"].lower())
-                            norm_notes.append(norm)
-
-                    # The relay's GET /api/notes already lists every accepted friend (LEFT JOIN on
-                    # notes), so a second GET /api/friends here only doubled the request count.
-
-                    my_n = res.get("my_note")
-                    if isinstance(my_n, dict):
-                        my_n = self.normalize_peer(my_n)
-                        my_n["note_text"] = res.get("my_note", {}).get("note_text", "")
-                        my_n["track"] = res.get("my_note", {}).get("track")
-
-                    self._notes_cache = {n["user_id"]: n for n in norm_notes if n.get("user_id")}
-                    self._my_note_cache = my_n
-                    self._last_feed_sync = now
-
-                    return {
-                        "success": True,
-                        "notes": norm_notes,
-                        "my_note": my_note_or_none(my_n),
-                        "count": len(norm_notes),
-                        "cached_at": now,
-                    }
+                    return self.apply_notes_response(res, now)
 
             # 2. Local Vault / In-Process Simulator Path
             vault = load_notes_vault()

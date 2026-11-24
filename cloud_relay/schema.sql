@@ -64,3 +64,28 @@ CREATE TABLE IF NOT EXISTS nutsty_notes (
 CREATE INDEX IF NOT EXISTS idx_notes_user_id ON nutsty_notes(user_id);
 CREATE INDEX IF NOT EXISTS idx_notes_tag ON nutsty_notes(tag);
 CREATE INDEX IF NOT EXISTS idx_notes_expires ON nutsty_notes(expires_at);
+
+-- Account sync: playlists, favorite playlists, liked songs, plays and listening progress.
+-- One row per item per account; last write wins on updated_at; seq is the per-account pull cursor.
+-- The Worker also creates these lazily (ensureSyncSchema), so a deploy alone is enough.
+CREATE TABLE IF NOT EXISTS nutsty_sync_items (
+    user_id TEXT NOT NULL,
+    kind TEXT NOT NULL,                -- 'playlist', 'favorite', 'liked', 'play', 'progress'
+    item_id TEXT NOT NULL,
+    data TEXT NOT NULL DEFAULT '',     -- JSON of the item ('' when deleted)
+    deleted INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,       -- Epoch ms from the device that made the change
+    device_id TEXT NOT NULL DEFAULT '',
+    seq INTEGER NOT NULL,
+    PRIMARY KEY (user_id, kind, item_id)
+) WITHOUT ROWID;
+
+CREATE INDEX IF NOT EXISTS idx_sync_user_seq ON nutsty_sync_items(user_id, seq);
+
+-- One-time codes that link a new device to an account (10 minutes)
+CREATE TABLE IF NOT EXISTS nutsty_link_codes (
+    code TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);

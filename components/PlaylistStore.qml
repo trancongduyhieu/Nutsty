@@ -32,6 +32,8 @@ QtObject {
 
     // A write did not reach disk. `error` is the backend code ("busy", "Playlist not found", ...) or "offline".
     signal writeFailed(string op, string error)
+    // A write reached disk (AccountSync sends it to the account's other devices)
+    signal wrote(string op)
 
     property var _queue: []
     property bool _inFlight: false
@@ -263,6 +265,7 @@ QtObject {
             }
         }
 
+        if (ok && job.op !== "list") store.wrote(job.op);
         if (ok && job.onDone) {
             try { job.onDone(res); } catch (e) { console.log("PlaylistStore onDone error:", e); }
         }

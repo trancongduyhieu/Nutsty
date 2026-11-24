@@ -117,3 +117,5 @@ RecapStory 1.0 RecapStory.qml
 WelcomeCardOverlay 1.0 WelcomeCardOverlay.qml
 VerifiedStamp 1.0 VerifiedStamp.qml
 FadeText 1.0 FadeText.qml
+AccountSync 1.0 AccountSync.qml
+ResumeListeningToast 1.0 ResumeListeningToast.qml

@@ -6,6 +6,7 @@ Extracted from auth_server.py for clean modularity and CodeGraph AST function in
 import os
 import json
 import time
+import hashlib
 from datetime import datetime
 
 try:
@@ -202,15 +203,10 @@ def handle_search_users(handler, query):
     handler._send_json({"results": results}, 200)
 
 
-def handle_get_note_events(handler, query):
-    profile = query.get("profile", [""])[0].strip()
-    user_email = query.get("user_email", [""])[0].strip()
-    suffix = resolve_profile_suffix(profile, user_email)
-    caller_ident = ensure_cloud_identity(suffix)
-
-    relay_evts = GLOBAL_RELAY_CLIENT.get_events(caller_ident["user_id"], caller_ident["secret_key"])
+def _shape_relay_events(relay_list):
+    """Relay event rows -> the UI's event shape (mirrored by nutsty-daemon social.rs note_events)."""
     events = []
-    for revt in relay_evts.get("events", []):
+    for revt in relay_list or []:
         raw_pl = revt.get("payload")
         if isinstance(raw_pl, str):
             try:
@@ -231,7 +227,11 @@ def handle_get_note_events(handler, query):
             "timestamp": revt.get("created_at", time.time() * 1000) / 1000.0,
             "data": inner_data
         })
+    return events
 
+
+def _take_local_events(caller_ident, user_email):
+    """Events another local profile on this machine left in the vault for this one (taken once)."""
     user_aliases = set(get_user_all_identifiers(user_email))
     if caller_ident.get("tag"):
         user_aliases.add(caller_ident["tag"].strip().lower())
@@ -239,12 +239,110 @@ def handle_get_note_events(handler, query):
         user_aliases.add(caller_ident["user_id"].strip().lower())
     local_evts = load_events_vault()
     my_local = [e for e in local_evts if e.get("to_email", "").strip().lower() in user_aliases]
-    rem_local = [e for e in local_evts if e.get("to_email", "").strip().lower() not in user_aliases]
     if my_local:
-        save_events_vault(rem_local)
-        events.extend(my_local)
+        save_events_vault([e for e in local_evts if e.get("to_email", "").strip().lower() not in user_aliases])
+    return my_local
 
+
+def handle_get_note_events(handler, query):
+    profile = query.get("profile", [""])[0].strip()
+    user_email = query.get("user_email", [""])[0].strip()
+    suffix = resolve_profile_suffix(profile, user_email)
+    caller_ident = ensure_cloud_identity(suffix)
+
+    relay_evts = GLOBAL_RELAY_CLIENT.get_events(caller_ident["user_id"], caller_ident["secret_key"])
+    events = _shape_relay_events(relay_evts.get("events", []))
+    events.extend(_take_local_events(caller_ident, user_email))
     handler._send_json({"count": len(events), "events": events}, 200)
+
+
+# A relay without /api/social/tick (not redeployed yet) is asked the old way for 10 minutes
+_TICK_UNSUPPORTED_UNTIL = 0.0
+# Old-relay path only: a watched friend is read from a notes feed at most this often
+_WATCH_FEED_MIN_SEC = 3.0
+_last_fallback_feed = 0.0
+
+
+def _notes_hash(feed):
+    blob = json.dumps([feed.get("notes") or [], feed.get("my_note")], sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha1(blob.encode("utf-8")).hexdigest()[:16]
+
+
+def social_tick(req_data):
+    """One poll for the UI: presence (when `now_playing` is in the body), unread events, the notes
+    feed (`notes: true`, answered with `notes_unchanged` when it matches `notes_hash`) and one
+    friend's presence (`watch`: the Listen Along host). One relay request on a current relay."""
+    global _TICK_UNSUPPORTED_UNTIL, _last_fallback_feed
+    profile = req_data.get("profile", "") or ""
+    user_email = (req_data.get("user_email", "") or "").strip()
+    suffix = resolve_profile_suffix(profile, user_email)
+    ident = ensure_cloud_identity(suffix)
+
+    send_presence = "now_playing" in req_data
+    np_val = req_data.get("now_playing") if isinstance(req_data.get("now_playing"), dict) else ""
+    want_notes = bool(req_data.get("notes"))
+    watch = str(req_data.get("watch") or "").strip()
+
+    relay = {}
+    if send_presence:
+        relay["now_playing"] = np_val
+    if want_notes:
+        relay["notes"] = True
+    if watch:
+        relay["watch"] = watch
+
+    res = None
+    now = time.time()
+    if GLOBAL_RELAY_CLIENT.is_external() and now >= _TICK_UNSUPPORTED_UNTIL:
+        res = GLOBAL_RELAY_CLIENT.social_tick(ident["user_id"], ident["secret_key"], relay)
+        if res and res.get("unauthorized"):
+            ident = ensure_cloud_identity(suffix, force_recreate=True)
+            res = GLOBAL_RELAY_CLIENT.social_tick(ident["user_id"], ident["secret_key"], relay)
+        if res and res.get("error") == "Endpoint not found":
+            _TICK_UNSUPPORTED_UNTIL = now + 600
+            res = None
+
+    feed = None
+    watch_peer = None
+    if res and res.get("success"):
+        relay_events = res.get("events") or []
+        if want_notes and "notes" in res:
+            feed = SOCIAL_RELAY_CORE.apply_notes_response(res, now)
+        if isinstance(res.get("watch"), dict):
+            watch_peer = SOCIAL_RELAY_CORE.normalize_peer(res["watch"])
+        out = {"success": True, "via": "tick", "server_time": res.get("server_time")}
+    else:
+        # Old relay or local vault: the separate calls, as before
+        if send_presence:
+            SOCIAL_RELAY_CORE.update_presence(np_val, profile, user_email)
+        relay_events = GLOBAL_RELAY_CLIENT.get_events(ident["user_id"], ident["secret_key"]).get("events", [])
+        if want_notes or (watch and now - _last_fallback_feed >= _WATCH_FEED_MIN_SEC):
+            _last_fallback_feed = now
+            feed = SOCIAL_RELAY_CORE.get_feed(profile, user_email)
+        if watch:
+            watch_peer = (SOCIAL_RELAY_CORE._notes_cache or {}).get(watch)
+        out = {"success": True, "via": "separate"}
+        if not want_notes:
+            feed = None
+
+    events = _shape_relay_events(relay_events)
+    events.extend(_take_local_events(ident, user_email))
+    out["events"] = events
+    if feed is not None:
+        h = _notes_hash(feed)
+        out["notes_hash"] = h
+        if h == str(req_data.get("notes_hash") or ""):
+            out["notes_unchanged"] = True
+        else:
+            out["notes"] = feed.get("notes") or []
+            out["my_note"] = feed.get("my_note")
+    if watch_peer:
+        out["watch"] = watch_peer
+    return out
+
+
+def handle_post_social_tick(handler, req_data):
+    handler._send_json(social_tick(req_data or {}), 200)
 
 
 def handle_post_update_profile(handler, req_data):

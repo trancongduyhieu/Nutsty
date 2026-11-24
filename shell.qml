@@ -1437,36 +1437,29 @@ Scope {
     readonly property bool anyFriendOnline: (win.friendsNotes || []).some(function(n) { return n && n.is_online === true; })
     readonly property bool socialInBackground: !win.visible || (typeof win.minimized !== "undefined" && win.minimized === true)
 
-    Timer {
-        id: socialEventsFastTimer
-        interval: win.isCoListeningActive ? 800
+    // One social poll (SocialEngine.socialTick): events every tick, presence on change or every
+    // 18 s (the relay shows "online" for 25 s), the notes feed every socialNotesEveryMs.
+    // Listen Along polls every 1.5 s; a guest moves the host's position on by the time since the
+    // host stamped it, so it stays in step between polls.
+    readonly property int socialTickMs: win.isCoListeningActive ? 1500
                   : (win.isUserActiveBoost && !win.socialInBackground) ? 3000
-                  : !win.anyFriendOnline ? 30000
-                  : win.socialInBackground ? 20000 : 10000
-        repeat: true
-        running: true
-        triggeredOnStart: true
-        onTriggered: {
-            win.pollSocialEventsFast();
-        }
-    }
+                  : (win.socialInBackground || !win.anyFriendOnline) ? 18000 : 10000
+    readonly property int socialNotesEveryMs: win.socialInBackground ? 60000 : 20000
+    function socialTick() { SocialEngine.socialTick(win, win.socialNotesEveryMs); }
 
     Timer {
-        id: friendsNotesTimer
-        // also carries the presence heartbeat: it must stay under the relay's 25 s online window
-        interval: win.isCoListeningActive ? 2000 : ((win.socialInBackground || !win.anyFriendOnline) ? 20000 : 10000)
+        id: socialTickTimer
+        interval: win.socialTickMs
         repeat: true
         running: true
         triggeredOnStart: true
-        onTriggered: {
-            win.fetchFriendsNotesFast();
-            win.syncNowPlaying(false);
-        }
+        onTriggered: win.socialTick()
     }
 
     Timer {
         id: friendsSyncTimer
-        interval: win.isCoListeningActive ? 15000 : (win.socialInBackground ? 120000 : 60000)
+        // Friend requests and accepts also arrive as events (which refresh this), so it can be slow
+        interval: win.socialInBackground ? 300000 : 120000
         repeat: true
         running: true
         triggeredOnStart: true
@@ -2106,6 +2099,7 @@ Scope {
         }
         win.syncCurrentTrackLiked();
         win.syncNowPlaying(true);
+        trackChangeReportTimer.restart();
     }
     property bool isPlaying: false
     // The recap plays its own snippets: the player pauses while it is open and resumes after
@@ -2172,6 +2166,7 @@ Scope {
             }
         }
         win.syncNowPlaying(true);
+        if (!win.isPlaying && !win.isLoadingAudio) win.reportListeningProgress();
     }
     property real currentTime: 0.0
     property real lastSyncTime: 0.0
@@ -2327,6 +2322,7 @@ Scope {
     }
 
     Component.onDestruction: {
+        win.reportListeningProgress();
         win.sendOfflineSignal();
         Quickshell.execDetached([win.appDir + "/bin/nutsty-bridge", "pause"]);
     }
@@ -3749,6 +3745,7 @@ Scope {
         SettingsModal {
             id: settingsModal
             objectName: "settingsModal"
+            accountSync: accountSync
             backgroundSourceItem: masterBackdropStack
             isLoggedIn: win.isAuthLoggedIn
             accountName: win.authAccountName
@@ -4341,6 +4338,16 @@ Scope {
             anchors.horizontalCenter: parent.horizontalCenter
             accentColor: win.accentColor
             onAcceptRequested: inv => win.acceptListenInvite(inv)
+        }
+
+        ResumeListeningToast {
+            id: resumeListeningToast
+            anchors.top: parent.top
+            anchors.topMargin: (suggestTrackToast.isShown ? 140 : 20) + (listenInviteToast.isShown ? 130 : 0)
+            anchors.horizontalCenter: parent.horizontalCenter
+            accentColor: win.accentColor
+            onContinueRequested: p => win.resumeFromOtherDevice(p)
+            onDismissed: p => accountSync.dismissResume(p)
         }
 
         FloatingChatBubble {
@@ -5124,6 +5131,7 @@ Scope {
 
     PlaylistStore {
         id: playlistStore
+        onWrote: op => accountSync.schedule()
         onWriteFailed: (op, error) => {
             win.showToast(error === "offline"
                 ? I18n.tr("Không lưu được danh sách phát: dịch vụ nền chưa chạy", "Could not save the playlist: the background service is not running")
@@ -5132,6 +5140,57 @@ Scope {
     }
 
     readonly property var favoritePlaylists: playlistStore.favoritePlaylists
+
+    // Same playlists, liked songs, plays and listening spot on every device of this account
+    AccountSync {
+        id: accountSync
+        onRemoteChanged: changed => {
+            if (changed.playlists || changed.favorites) playlistStore.reload();
+            if (changed.liked) likedSongsFileView.reload();
+        }
+        onLinked: tag => {
+            win.fetchCurrentUserProfile();
+            win.showToast(I18n.tr("Đã nối máy này vào tài khoản, đang đồng bộ", "This device is linked to your account, syncing now"), "success");
+        }
+        onResumeOffered: p => {
+            // Something is already playing here: this device's own spot will win on the next report
+            if (win.isPlaying || win.listeningAlongFriend || resumeListeningToast.isShown) return;
+            resumeListeningToast.showProgress(p);
+        }
+    }
+
+    function reportListeningProgress() {
+        if (!win.currentTrack || win.listeningAlongFriend) return;
+        accountSync.reportProgress(win.currentTrack, win.currentTime, win.totalDuration, win.isPlaying);
+    }
+
+    function resumeFromOtherDevice(p) {
+        accountSync.dismissResume(p);
+        var trk = p && p.track ? p.track : null;
+        if (!trk) return;
+        if (trk.videoId) win.playOnlineTrack(trk, false);
+        else win.playTrack(trk);
+        // Set after play: starting a track clears the pending seek
+        if ((Number(p.position) || 0) > 1) win.pendingListenAlongSeekPosition = Number(p.position);
+    }
+
+    Timer {
+        id: progressReportTimer
+        interval: 120000
+        repeat: true
+        running: win.isPlaying && !!win.currentTrack
+        onTriggered: win.reportListeningProgress()
+    }
+
+    Timer {
+        // A new song: tell the other devices once it has played a little
+        id: trackChangeReportTimer
+        interval: 15000
+        repeat: false
+        onTriggered: win.reportListeningProgress()
+    }
+
+    onLikedSongsMapChanged: accountSync.schedule()
 
     function loadFavoritePlaylists() {
         playlistStore.reload();

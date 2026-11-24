@@ -56,7 +56,8 @@ Rectangle {
     }
     Timer { id: cacheDoneTimer; interval: 2400; onTriggered: root.cacheJustCleaned = false }
     property string canvasPreference: "apple_first"
-    property int currentTab: 0 // 0: Google Account, 1: Desktop Lyrics
+    property int currentTab: 0 // 0: Account, 1: Desktop Lyrics, 2: Playback, 3: Appearance (header order 0, 2, 3, 1)
+    onCurrentTabChanged: if (typeof settingsFlickable !== "undefined") settingsFlickable.contentY = 0
     property bool desktopLyricsEnabled: true
     property bool taskbarLyricsEnabled: true
     property string taskbarLyricsPlacement: "taskbar"
@@ -392,6 +393,53 @@ Rectangle {
     property string playlistBackupPending: ""  // "export" / "import" while that button's job runs
     onPlaylistBackupBusyChanged: if (!playlistBackupBusy) playlistBackupPending = ""
 
+    // components/AccountSync.qml, set by shell.qml (null in previews)
+    property var accountSync: null
+    property bool linkCodeEntry: false
+    property double syncNowMs: Date.now()
+    Timer {
+        interval: 1000
+        repeat: true
+        running: root.visible && root.accountSync !== null && root.accountSync.linkCode !== ""
+        onTriggered: root.syncNowMs = Date.now()
+    }
+    Connections {
+        target: root.accountSync
+        ignoreUnknownSignals: true
+        function onLinked(tag) {
+            root.linkCodeEntry = false;
+            linkCodeInput.text = "";
+        }
+    }
+
+    function syncStatusText() {
+        var a = root.accountSync;
+        if (!a) return "";
+        if (a.running) return I18n.tr("Đang đồng bộ...", "Syncing...");
+        if (a.lastError === "server_outdated")
+            return I18n.tr("Máy chủ Nutsty chưa được cập nhật để đồng bộ", "The Nutsty server is not updated for sync yet");
+        if (a.lastError === "offline")
+            return I18n.tr("Chưa kết nối được, sẽ thử lại sau", "Not connected, will retry later");
+        if (a.lastError !== "" && a.lastError !== "busy")
+            return I18n.tr("Lần đồng bộ trước chưa xong, sẽ tự thử lại sau", "The last sync did not finish, will try again later");
+        if (a.lastSync > 0) {
+            var at = Qt.formatTime(new Date(a.lastSync), "HH:mm");
+            var wait = a.pending > 0 ? I18n.tr(" · " + a.pending + " thay đổi chờ gửi", " · " + a.pending + " changes waiting") : "";
+            return I18n.tr("Đồng bộ lần cuối lúc " + at, "Last synced at " + at) + wait;
+        }
+        return I18n.tr("Danh sách phát, bài đã thích, lịch sử nghe và chỗ đang nghe giống nhau trên mọi máy",
+                       "Playlists, liked songs, history and where you stopped stay the same on every device");
+    }
+
+    function linkErrorText(err) {
+        if (!err) return "";
+        if (err === "invalid_code") return I18n.tr("Mã sai hoặc đã hết hạn", "Wrong or expired code");
+        if (err === "offline") return I18n.tr("Chưa kết nối được, thử lại sau nhé", "Cannot connect right now, please try again later");
+        if (err === "server_outdated")
+            return I18n.tr("Máy chủ Nutsty chưa có tính năng này, cần cập nhật máy chủ trước", "The Nutsty server does not have this yet, it needs an update first");
+        return I18n.tr("Không kết nối được, thử lại nhé", "Could not link, please try again");
+    }
+
     readonly property url playlistBackupFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
 
     FileDialog {
@@ -425,12 +473,14 @@ Rectangle {
         property string label: ""
         property string iconSource: ""
         property bool busy: false
+        // Another job of the same row runs: dim and ignore clicks
+        property bool locked: root.playlistBackupBusy && !busy
         signal activated()
         height: 32
         width: pillRow.implicitWidth + 26
         radius: 16
         color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, pillMouse.containsMouse ? 0.24 : 0.14)
-        opacity: root.playlistBackupBusy && !busy ? 0.5 : 1.0
+        opacity: pill.locked ? 0.5 : 1.0
         scale: pillMouse.pressed ? 0.96 : 1.0
         Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
         Behavior on color { ColorAnimation { duration: 150 } }
@@ -483,7 +533,7 @@ Rectangle {
             id: pillMouse
             anchors.fill: parent
             hoverEnabled: true
-            enabled: !root.playlistBackupBusy
+            enabled: !pill.locked && !pill.busy
             cursorShape: Qt.PointingHandCursor
             onClicked: pill.activated()
         }
@@ -789,6 +839,64 @@ Rectangle {
                         }
                     }
 
+                    // Tab 2: Phát nhạc (numbers 0 and 1 stay as they were: shell.qml and the tray open them)
+                    Item {
+                        id: tab2Btn
+                        width: tab2Txt.implicitWidth
+                        height: 32
+
+                        Text {
+                            id: tab2Txt
+                            anchors.centerIn: parent
+                            text: I18n.tr("Phát nhạc", "Playback")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 14
+                            font.bold: root.currentTab === 2
+                            color: root.currentTab === 2 ? "#ffffff" : (tab2H.hovered ? "#ffffff" : Qt.rgba(255, 255, 255, 0.60))
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                        }
+
+                        HoverHandler { id: tab2H }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                root.closeAllDropdowns();
+                                root.currentTab = 2;
+                            }
+                        }
+                    }
+
+                    // Tab 3: Giao diện
+                    Item {
+                        id: tab3Btn
+                        width: tab3Txt.implicitWidth
+                        height: 32
+
+                        Text {
+                            id: tab3Txt
+                            anchors.centerIn: parent
+                            text: I18n.tr("Giao diện", "Appearance")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 14
+                            font.bold: root.currentTab === 3
+                            color: root.currentTab === 3 ? "#ffffff" : (tab3H.hovered ? "#ffffff" : Qt.rgba(255, 255, 255, 0.60))
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                        }
+
+                        HoverHandler { id: tab3H }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                root.closeAllDropdowns();
+                                root.currentTab = 3;
+                            }
+                        }
+                    }
+
                     // Tab 1: Lời bài hát Desktop
                     Item {
                         id: tab1Btn
@@ -826,8 +934,9 @@ Rectangle {
                     height: 2
                     radius: 1
                     color: "#ffffff"
-                    x: root.currentTab === 0 ? tab0Btn.x : tab1Btn.x
-                    width: root.currentTab === 0 ? tab0Btn.width : tab1Btn.width
+                    readonly property Item activeBtn: [tab0Btn, tab1Btn, tab2Btn, tab3Btn][root.currentTab] || tab0Btn
+                    x: activeBtn.x
+                    width: activeBtn.width
 
                     Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                     Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
@@ -857,9 +966,14 @@ Rectangle {
                     id: scrollContentContainer
                     width: settingsFlickable.width
                     height: implicitHeight
-                    implicitHeight: (root.currentTab === 0
-                                     ? tab0Content.implicitHeight + (langRowItem.menuOpen || streamQualityRowItem.menuOpen || downloadQualityRowItem.menuOpen || (typeof canvasPrefRowItem !== "undefined" && canvasPrefRowItem.menuOpen) ? 240 : 30)
-                                     : tab1Content.implicitHeight + (typeof lyricsSourceRowItem !== "undefined" && lyricsSourceRowItem.menuOpen ? 400 : 0)) + 8
+                    // Room under the last row so an open dropdown can scroll into view
+                    implicitHeight: (root.currentTab === 1
+                                     ? tab1Content.implicitHeight + (typeof lyricsSourceRowItem !== "undefined" && lyricsSourceRowItem.menuOpen ? 400 : 0)
+                                     : root.currentTab === 2
+                                       ? tab2Content.implicitHeight + (streamQualityRowItem.menuOpen || downloadQualityRowItem.menuOpen ? 240 : 30)
+                                       : root.currentTab === 3
+                                         ? tab3Content.implicitHeight + (langRowItem.menuOpen || canvasPrefRowItem.menuOpen ? 240 : 30)
+                                         : tab0Content.implicitHeight + 30) + 8
 
                     // =========================================================
                     // TAB 0: Google & Cloud Account Content (100% Frameless)
@@ -1356,24 +1470,263 @@ Rectangle {
                     }
                 }
 
-                // Language Selection Row (100% Borderless, Expandable Clean Dropdown Pinned to Right)
+                // =============================================================
+                // Sync across devices: the same account on another computer (link code, sync now)
+                // =============================================================
                 Item {
-                    id: langRowItem
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 46
-                    z: menuOpen ? 100 : 3
-
-                    property bool menuOpen: false
+                    Layout.preferredHeight: 52
+                    visible: root.accountSync !== null
 
                     Column {
                         anchors.left: parent.left
-                        anchors.right: langDropdownBtn.left
+                        anchors.right: accountSyncButtons.left
                         anchors.rightMargin: 16
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 2
 
                         Text {
-                            text: I18n.tr("Ngôn ngữ giao diện", "Interface Language")
+                            width: parent.width
+                            text: I18n.tr("Đồng bộ giữa các máy", "Sync across devices")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            width: parent.width
+                            text: root.syncStatusText()
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                            wrapMode: Text.WordWrap
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    Row {
+                        id: accountSyncButtons
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 8
+
+                        BackupPillButton {
+                            label: I18n.tr("Đồng bộ ngay", "Sync now")
+                            iconSource: "../assets/icons/view-refresh-symbolic.svg"
+                            locked: false
+                            busy: root.accountSync !== null && root.accountSync.running
+                            onActivated: root.accountSync.run()
+                        }
+
+                        BackupPillButton {
+                            label: I18n.tr("Thêm máy", "Add device")
+                            iconSource: "../assets/icons/list-add-symbolic.svg"
+                            locked: root.accountSync !== null && root.accountSync.linkBusy && !busy
+                            busy: root.accountSync !== null && root.accountSync.linkBusy && !root.linkCodeEntry
+                            onActivated: {
+                                root.linkCodeEntry = false;
+                                root.accountSync.createLinkCode();
+                            }
+                        }
+
+                        BackupPillButton {
+                            label: I18n.tr("Nhập mã", "Enter code")
+                            iconSource: "../assets/icons/accessories-text-editor-symbolic.svg"
+                            locked: root.accountSync !== null && root.accountSync.linkBusy
+                            onActivated: {
+                                root.linkCodeEntry = !root.linkCodeEntry;
+                                if (root.accountSync) root.accountSync.linkError = "";
+                                if (root.linkCodeEntry) linkCodeInput.forceActiveFocus();
+                            }
+                        }
+                    }
+                }
+
+                // Why Add device / Sync now did not work (the entry box below shows its own error)
+                Text {
+                    Layout.fillWidth: true
+                    Layout.topMargin: -8
+                    visible: root.accountSync !== null && root.accountSync.linkError !== "" && !root.linkCodeEntry
+                    text: root.accountSync ? root.linkErrorText(root.accountSync.linkError) : ""
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 11
+                    color: "#fda4af"
+                    wrapMode: Text.WordWrap
+                }
+
+                // Code made here, for the other device to type
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 64
+                    visible: root.accountSync !== null && root.accountSync.linkCode !== "" && !root.linkCodeEntry
+                    radius: 14
+                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.10)
+                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.30)
+                    border.width: 1
+
+                    readonly property string code: root.accountSync ? root.accountSync.linkCode : ""
+                    readonly property int secondsLeft: root.accountSync
+                        ? Math.max(0, Math.floor((root.accountSync.linkCodeExpiresAt - root.syncNowMs) / 1000)) : 0
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 16
+                        anchors.right: linkCodeText.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Trên máy kia: Cài đặt, Đồng bộ giữa các máy, Nhập mã",
+                                          "On the other device: Settings, Sync across devices, Enter code")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 12
+                            font.weight: Font.DemiBold
+                            color: Theme.textPrimary
+                            wrapMode: Text.WordWrap
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            width: parent.width
+                            readonly property int secs: parent.parent.secondsLeft
+                            readonly property string clock: Math.floor(secs / 60) + ":" + (secs % 60 < 10 ? "0" : "") + (secs % 60)
+                            text: I18n.tr("Mã dùng được một lần, còn " + clock, "Works once, " + clock + " left")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    Text {
+                        id: linkCodeText
+                        anchors.right: parent.right
+                        anchors.rightMargin: 18
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: parent.code.length === 6 ? parent.code.slice(0, 3) + "-" + parent.code.slice(3) : parent.code
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 24
+                        font.weight: Font.Bold
+                        font.letterSpacing: 2
+                        color: root.accentColor
+                    }
+                }
+
+                // Type the code shown on the other device
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: linkEntryColumn.implicitHeight + 24
+                    id: linkEntryBox
+                    visible: root.accountSync !== null && root.linkCodeEntry
+                    radius: 14
+                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.10)
+                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.30)
+                    border.width: 1
+
+                    function submit() {
+                        var code = linkCodeInput.text.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+                        if (code.length !== 6 || !root.accountSync || root.accountSync.linkBusy) return;
+                        root.accountSync.claimLinkCode(code);
+                    }
+
+                    Column {
+                        id: linkEntryColumn
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 12
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 8
+
+                        Item {
+                            width: parent.width
+                            height: 36
+
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.right: linkConfirmButton.left
+                                anchors.rightMargin: 10
+                                height: 36
+                                radius: 10
+                                color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, linkCodeInput.activeFocus ? 0.18 : 0.12)
+                                border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, linkCodeInput.activeFocus ? 0.55 : 0.25)
+                                border.width: 1
+
+                                TextInput {
+                                    id: linkCodeInput
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 12
+                                    anchors.rightMargin: 12
+                                    verticalAlignment: TextInput.AlignVCenter
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 15
+                                    font.weight: Font.DemiBold
+                                    font.letterSpacing: 2
+                                    font.capitalization: Font.AllUppercase
+                                    color: "#ffffff"
+                                    selectionColor: root.accentColor
+                                    maximumLength: 7
+                                    clip: true
+                                    onAccepted: linkEntryBox.submit()
+
+                                    Text {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        visible: linkCodeInput.text === ""
+                                        text: I18n.tr("Mã 6 chữ, ví dụ ABC-DEF", "6-letter code, e.g. ABC-DEF")
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 12
+                                        color: Theme.textSecondary
+                                    }
+                                }
+                            }
+
+                            BackupPillButton {
+                                id: linkConfirmButton
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                label: I18n.tr("Kết nối", "Link")
+                                iconSource: "../assets/icons/emblem-ok-symbolic.svg"
+                                locked: linkCodeInput.text.replace(/[^A-Za-z0-9]/g, "").length !== 6
+                                busy: root.accountSync !== null && root.accountSync.linkBusy
+                                onActivated: linkEntryBox.submit()
+                            }
+                        }
+
+                        Text {
+                            width: parent.width
+                            readonly property string err: root.accountSync ? root.linkErrorText(root.accountSync.linkError) : ""
+                            text: err !== "" ? err
+                                  : I18n.tr("Máy này sẽ dùng chung tài khoản với máy kia. Danh sách phát đang có ở đây vẫn được giữ và gộp vào.",
+                                            "This device will share the other device's account. Playlists already here are kept and merged in.")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: err !== "" ? "#fda4af" : Theme.textSecondary
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                }
+
+                // Sync History to Google Toggle (Frameless Row, Toggle Pinned to Right)
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 46
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: toggleSyncHistory.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            text: I18n.tr("Đồng bộ lịch sử nghe nhạc lên đám mây (YouTube Music)", "Sync listening history to Cloud (YouTube Music)")
                             font.family: Theme.fontFamily
                             font.pixelSize: 13
                             font.bold: true
@@ -1381,151 +1734,133 @@ Rectangle {
                         }
 
                         Text {
-                            text: I18n.tr("Toàn bộ ứng dụng hiển thị theo ngôn ngữ đã chọn", "All application UI displays in selected language")
+                            text: I18n.tr("Cập nhật lịch sử xem và gợi ý cá nhân hóa trên tài khoản Google", "Update watch history and personalized recommendations on Google Account")
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             color: Theme.textSecondary
                         }
                     }
 
-                    // Dropdown Trigger (Option 1: Chromatic Ghost Action Button)
+                    // Toggle Switch Pill (Pinned to Right)
                     Rectangle {
-                        id: langDropdownBtn
+                        id: toggleSyncHistory
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        height: 28
-                        width: langBtnRow.implicitWidth + 16
-                        radius: 6
-                        color: (langBtnMouse.containsMouse || langRowItem.menuOpen)
-                               ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
-                               : "transparent"
-                        border.width: 0
+                        width: 44
+                        height: 24
+                        radius: 12
+                        color: root.syncHistoryToGoogle ? root.accentColor : Qt.rgba(255, 255, 255, 0.14)
+                        Behavior on color { ColorAnimation { duration: 150 } }
 
-                        Behavior on color { ColorAnimation { duration: 120 } }
-
-                        Row {
-                            id: langBtnRow
-                            anchors.centerIn: parent
-                            spacing: 6
-
-                            Text {
-                                text: I18n.locale === "vi" ? "Tiếng Việt" : "English"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 12
-                                font.bold: true
-                                color: (langBtnMouse.containsMouse || langRowItem.menuOpen) ? "#ffffff" : Qt.rgba(255, 255, 255, 0.85)
-                                Behavior on color { ColorAnimation { duration: 120 } }
-                            }
-
-                            AppIcon {
-                                anchors.verticalCenter: parent.verticalCenter
-                                source: "../assets/icons/go-down-symbolic.svg"
-                                iconSize: 10
-                                color: root.accentColor
-                                rotation: langRowItem.menuOpen ? 180 : 0
-                                Behavior on rotation { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-                            }
+                        Rectangle {
+                            width: 18
+                            height: 18
+                            radius: 9
+                            color: "#ffffff"
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: root.syncHistoryToGoogle ? parent.width - width - 3 : 3
+                            Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
                         }
 
                         MouseArea {
-                            id: langBtnMouse
                             anchors.fill: parent
-                            hoverEnabled: true
+                            preventStealing: false
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                var next = !langRowItem.menuOpen;
-                                root.closeAllDropdowns();
-                                langRowItem.menuOpen = next;
-                            }
-                        }
-                    }
-
-                    // Chromatic Salience Dropdown Popover Menu (Zero Dull Grey)
-                    Rectangle {
-                        id: langDropdownMenu
-                        visible: langRowItem.menuOpen
-                        anchors.top: langDropdownBtn.bottom
-                        anchors.topMargin: 6
-                        anchors.right: langDropdownBtn.right
-                        width: 146
-                        height: langCol.implicitHeight + 10
-                        radius: 10
-                        color: Qt.rgba(0.06 + root.accentColor.r * 0.08, 0.06 + root.accentColor.g * 0.08, 0.08 + root.accentColor.b * 0.12, 0.96)
-                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
-                        border.width: 1
-                        z: 100
-
-                        Column {
-                            id: langCol
-                            anchors.top: parent.top
-                            anchors.topMargin: 5
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            spacing: 3
-
-                            readonly property var languages: [
-                                { code: "vi", name: "Tiếng Việt" },
-                                { code: "en", name: "English" }
-                            ]
-
-                            Repeater {
-                                model: langCol.languages
-                                delegate: Rectangle {
-                                    width: langCol.width - 10
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    height: 32
-                                    radius: 7
-                                    color: (I18n.locale === modelData.code)
-                                           ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.26)
-                                           : (langItemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.14) : "transparent")
-                                    border.color: (I18n.locale === modelData.code)
-                                                  ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
-                                                  : (langItemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25) : "transparent")
-                                    border.width: 1
-
-                                    Behavior on color { ColorAnimation { duration: 100 } }
-                                    Behavior on border.color { ColorAnimation { duration: 100 } }
-
-                                    Item {
-                                        anchors.fill: parent
-                                        anchors.leftMargin: 10
-                                        anchors.rightMargin: 10
-
-                                        Text {
-                                            anchors.left: parent.left
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            text: modelData.name
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: 12
-                                            font.bold: I18n.locale === modelData.code
-                                            color: (I18n.locale === modelData.code) ? "#ffffff" : (langItemMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.75))
-                                        }
-
-                                        AppIcon {
-                                            anchors.right: parent.right
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            source: "../assets/icons/emblem-ok-symbolic.svg"
-                                            iconSize: 12
-                                            color: root.accentColor
-                                            visible: I18n.locale === modelData.code
-                                        }
-                                    }
-
-                                    MouseArea {
-                                        id: langItemMouse
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            root.selectLanguageRequested(modelData.code);
-                                            langRowItem.menuOpen = false;
-                                        }
-                                    }
-                                }
+                                root.syncHistoryToGoogle = !root.syncHistoryToGoogle;
+                                root.toggleSyncHistoryRequested(root.syncHistoryToGoogle);
                             }
                         }
                     }
                 }
+
+                // =============================================================
+                // Playlist backup: export / import custom + favorite playlists as JSON
+                // =============================================================
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 52
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: playlistBackupButtons.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Sao lưu danh sách phát", "Playlist backup")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Lưu ra file JSON để chuyển sang máy khác hoặc khi cài lại ứng dụng",
+                                          "Save to a JSON file to move to another computer or after reinstalling")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                            wrapMode: Text.WordWrap
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    Row {
+                        id: playlistBackupButtons
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 8
+
+                        BackupPillButton {
+                            label: I18n.tr("Xuất file", "Export")
+                            iconSource: "../assets/icons/arrow-outward-symbolic.svg"
+                            busy: root.playlistBackupBusy && root.playlistBackupPending === "export"
+                            onActivated: {
+                                exportPlaylistsDialog.selectedFile = root.playlistBackupFolder + "/nutsty-playlists-"
+                                    + Qt.formatDate(new Date(), "yyyy-MM-dd") + ".json";
+                                exportPlaylistsDialog.open();
+                            }
+                        }
+
+                        BackupPillButton {
+                            label: I18n.tr("Nhập file", "Import")
+                            iconSource: "../assets/icons/download-symbolic.svg"
+                            busy: root.playlistBackupBusy && root.playlistBackupPending === "import"
+                            onActivated: importPlaylistsDialog.open()
+                        }
+                    }
+                }
+
+                // Status Message (When Logged In)
+                Text {
+                    Layout.fillWidth: true
+                    text: root.statusMessage
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 12
+                    font.bold: true
+                    color: root.statusIsOk ? root.accentColor : "#f87171"
+                    visible: root.isLoggedIn && root.statusMessage.length > 0
+                    wrapMode: Text.Wrap
+                }
+
+            } // Close tab0Content
+
+                    // =========================================================
+                    // TAB 2: Playback (quality, crossfade, cache)
+                    // =========================================================
+                    ColumnLayout {
+                        id: tab2Content
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        spacing: 14
+                        visible: root.currentTab === 2
 
                 // Streaming Audio Quality Row (100% Borderless, Expandable Clean Dropdown Pinned to Right)
                 Item {
@@ -1936,67 +2271,6 @@ Rectangle {
                                         }
                                     }
                                 }
-                            }
-                        }
-                    }
-                }
-
-                // Sync History to Google Toggle (Frameless Row, Toggle Pinned to Right)
-                Item {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 46
-
-                    Column {
-                        anchors.left: parent.left
-                        anchors.right: toggleSyncHistory.left
-                        anchors.rightMargin: 16
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 2
-
-                        Text {
-                            text: I18n.tr("Đồng bộ lịch sử nghe nhạc lên đám mây (YouTube Music)", "Sync listening history to Cloud (YouTube Music)")
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 13
-                            font.bold: true
-                            color: Theme.textPrimary
-                        }
-
-                        Text {
-                            text: I18n.tr("Cập nhật lịch sử xem và gợi ý cá nhân hóa trên tài khoản Google", "Update watch history and personalized recommendations on Google Account")
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 11
-                            color: Theme.textSecondary
-                        }
-                    }
-
-                    // Toggle Switch Pill (Pinned to Right)
-                    Rectangle {
-                        id: toggleSyncHistory
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 44
-                        height: 24
-                        radius: 12
-                        color: root.syncHistoryToGoogle ? root.accentColor : Qt.rgba(255, 255, 255, 0.14)
-                        Behavior on color { ColorAnimation { duration: 150 } }
-
-                        Rectangle {
-                            width: 18
-                            height: 18
-                            radius: 9
-                            color: "#ffffff"
-                            anchors.verticalCenter: parent.verticalCenter
-                            x: root.syncHistoryToGoogle ? parent.width - width - 3 : 3
-                            Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            preventStealing: false
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                root.syncHistoryToGoogle = !root.syncHistoryToGoogle;
-                                root.toggleSyncHistoryRequested(root.syncHistoryToGoogle);
                             }
                         }
                     }
@@ -2476,65 +2750,186 @@ Rectangle {
                     }
                 }
 
-                // =============================================================
-                // Playlist backup: export / import custom + favorite playlists as JSON
-                // =============================================================
+            } // Close tab2Content
+
+                    // =========================================================
+                    // TAB 3: Appearance (language, effects, window, version)
+                    // =========================================================
+                    ColumnLayout {
+                        id: tab3Content
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        spacing: 14
+                        visible: root.currentTab === 3
+
+                // Language Selection Row (100% Borderless, Expandable Clean Dropdown Pinned to Right)
                 Item {
+                    id: langRowItem
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 52
+                    Layout.preferredHeight: 46
+                    z: menuOpen ? 100 : 3
+
+                    property bool menuOpen: false
 
                     Column {
                         anchors.left: parent.left
-                        anchors.right: playlistBackupButtons.left
+                        anchors.right: langDropdownBtn.left
                         anchors.rightMargin: 16
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 2
 
                         Text {
-                            width: parent.width
-                            text: I18n.tr("Sao lưu danh sách phát", "Playlist backup")
+                            text: I18n.tr("Ngôn ngữ giao diện", "Interface Language")
                             font.family: Theme.fontFamily
                             font.pixelSize: 13
                             font.bold: true
                             color: Theme.textPrimary
-                            elide: Text.ElideRight
                         }
 
                         Text {
-                            width: parent.width
-                            text: I18n.tr("Lưu ra file JSON để chuyển sang máy khác hoặc khi cài lại ứng dụng",
-                                          "Save to a JSON file to move to another computer or after reinstalling")
+                            text: I18n.tr("Toàn bộ ứng dụng hiển thị theo ngôn ngữ đã chọn", "All application UI displays in selected language")
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             color: Theme.textSecondary
-                            wrapMode: Text.WordWrap
-                            maximumLineCount: 2
-                            elide: Text.ElideRight
                         }
                     }
 
-                    Row {
-                        id: playlistBackupButtons
+                    // Dropdown Trigger (Option 1: Chromatic Ghost Action Button)
+                    Rectangle {
+                        id: langDropdownBtn
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        spacing: 8
+                        height: 28
+                        width: langBtnRow.implicitWidth + 16
+                        radius: 6
+                        color: (langBtnMouse.containsMouse || langRowItem.menuOpen)
+                               ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
+                               : "transparent"
+                        border.width: 0
 
-                        BackupPillButton {
-                            label: I18n.tr("Xuất file", "Export")
-                            iconSource: "../assets/icons/arrow-outward-symbolic.svg"
-                            busy: root.playlistBackupBusy && root.playlistBackupPending === "export"
-                            onActivated: {
-                                exportPlaylistsDialog.selectedFile = root.playlistBackupFolder + "/nutsty-playlists-"
-                                    + Qt.formatDate(new Date(), "yyyy-MM-dd") + ".json";
-                                exportPlaylistsDialog.open();
+                        Behavior on color { ColorAnimation { duration: 120 } }
+
+                        Row {
+                            id: langBtnRow
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            Text {
+                                text: I18n.locale === "vi" ? "Tiếng Việt" : "English"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: (langBtnMouse.containsMouse || langRowItem.menuOpen) ? "#ffffff" : Qt.rgba(255, 255, 255, 0.85)
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                            }
+
+                            AppIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                source: "../assets/icons/go-down-symbolic.svg"
+                                iconSize: 10
+                                color: root.accentColor
+                                rotation: langRowItem.menuOpen ? 180 : 0
+                                Behavior on rotation { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
                             }
                         }
 
-                        BackupPillButton {
-                            label: I18n.tr("Nhập file", "Import")
-                            iconSource: "../assets/icons/download-symbolic.svg"
-                            busy: root.playlistBackupBusy && root.playlistBackupPending === "import"
-                            onActivated: importPlaylistsDialog.open()
+                        MouseArea {
+                            id: langBtnMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                var next = !langRowItem.menuOpen;
+                                root.closeAllDropdowns();
+                                langRowItem.menuOpen = next;
+                            }
+                        }
+                    }
+
+                    // Chromatic Salience Dropdown Popover Menu (Zero Dull Grey)
+                    Rectangle {
+                        id: langDropdownMenu
+                        visible: langRowItem.menuOpen
+                        anchors.top: langDropdownBtn.bottom
+                        anchors.topMargin: 6
+                        anchors.right: langDropdownBtn.right
+                        width: 146
+                        height: langCol.implicitHeight + 10
+                        radius: 10
+                        color: Qt.rgba(0.06 + root.accentColor.r * 0.08, 0.06 + root.accentColor.g * 0.08, 0.08 + root.accentColor.b * 0.12, 0.96)
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                        border.width: 1
+                        z: 100
+
+                        Column {
+                            id: langCol
+                            anchors.top: parent.top
+                            anchors.topMargin: 5
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            spacing: 3
+
+                            readonly property var languages: [
+                                { code: "vi", name: "Tiếng Việt" },
+                                { code: "en", name: "English" }
+                            ]
+
+                            Repeater {
+                                model: langCol.languages
+                                delegate: Rectangle {
+                                    width: langCol.width - 10
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    height: 32
+                                    radius: 7
+                                    color: (I18n.locale === modelData.code)
+                                           ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.26)
+                                           : (langItemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.14) : "transparent")
+                                    border.color: (I18n.locale === modelData.code)
+                                                  ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.45)
+                                                  : (langItemMouse.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25) : "transparent")
+                                    border.width: 1
+
+                                    Behavior on color { ColorAnimation { duration: 100 } }
+                                    Behavior on border.color { ColorAnimation { duration: 100 } }
+
+                                    Item {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+
+                                        Text {
+                                            anchors.left: parent.left
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: modelData.name
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 12
+                                            font.bold: I18n.locale === modelData.code
+                                            color: (I18n.locale === modelData.code) ? "#ffffff" : (langItemMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.75))
+                                        }
+
+                                        AppIcon {
+                                            anchors.right: parent.right
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            source: "../assets/icons/emblem-ok-symbolic.svg"
+                                            iconSize: 12
+                                            color: root.accentColor
+                                            visible: I18n.locale === modelData.code
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: langItemMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            root.selectLanguageRequested(modelData.code);
+                                            langRowItem.menuOpen = false;
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -3400,19 +3795,7 @@ Rectangle {
                     }
                 }
 
-                // Status Message (When Logged In)
-                Text {
-                    Layout.fillWidth: true
-                    text: root.statusMessage
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 12
-                    font.bold: true
-                    color: root.statusIsOk ? root.accentColor : "#f87171"
-                    visible: root.isLoggedIn && root.statusMessage.length > 0
-                    wrapMode: Text.Wrap
-                }
-
-            } // Close tab0Content
+            } // Close tab3Content
 
             // =================================================================
             // TAB 1: Desktop Lyrics Settings Content (100% Frameless)
