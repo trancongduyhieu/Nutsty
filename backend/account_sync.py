@@ -63,12 +63,15 @@ def _load_state(suffix):
         with open(_state_path(suffix), "r", encoding="utf-8") as f:
             st = json.load(f)
         if isinstance(st, dict) and st.get("version") == STATE_VERSION:
+            st.setdefault("devices", {})
+            st.setdefault("device_sent", "")
             return st
     except Exception:
         pass
     return {"version": STATE_VERSION, "device_id": "dev_" + uuid.uuid4().hex[:16], "user_id": "",
             "cursor": 0, "known": {}, "covers": {}, "cover_hashes": {},
-            "remote_progress": None, "last_sync": 0, "last_error": ""}
+            "remote_progress": None, "last_sync": 0, "last_error": "",
+            "devices": {}, "device_sent": ""}
 
 
 def _write_atomic(p, obj):
@@ -399,6 +402,13 @@ def _pull(st, ident):
                     except Exception:
                         pass
                 continue
+            if kind == "device":
+                # Each device on the account announces itself once; a detached device marks itself gone
+                if r.get("deleted"):
+                    st["devices"].pop(iid, None)
+                else:
+                    st["devices"][iid] = int(r.get("updated_at") or 0)
+                continue
             if kind not in ("playlist", "favorite", "liked"):
                 continue
             key = f"{kind}:{iid}"
@@ -473,7 +483,19 @@ def _push(st, ident, items):
         if len(plays) < 100:
             break
 
+    if st.get("device_sent") != ident["user_id"]:
+        res = _push_items(ident, st, [{"kind": "device", "item_id": st["device_id"], "updated_at": _now_ms(),
+                                       "data": "{}"}])
+        if res is None:
+            return False
+        if res and res[0].get("accepted"):
+            st["device_sent"] = ident["user_id"]
     return _push_progress(st["device_id"], ident, st["_suffix"])
+
+
+def is_linked(st):
+    """True when another device shares this account (it announced itself in a pull)."""
+    return any(d != st.get("device_id") for d in (st.get("devices") or {}))
 
 
 def _push_progress(device_id, ident, suffix):
@@ -547,7 +569,8 @@ def _sync_locked(suffix):
         return {"success": False, "error": "offline", "last_sync": st.get("last_sync", 0)}
     if st.get("user_id") != ident["user_id"]:
         # New account on this device (first sync, or just linked): start over and merge everything
-        st.update({"user_id": ident["user_id"], "cursor": 0, "remote_progress": None})
+        st.update({"user_id": ident["user_id"], "cursor": 0, "remote_progress": None,
+                   "devices": {}, "device_sent": ""})
         for k in st["known"].values():
             k["dirty"] = not k.get("del")
         st["known"] = {key: k for key, k in st["known"].items() if not k.get("del")}
@@ -618,7 +641,8 @@ def status(profile=""):
     dirty = sum(1 for k in st["known"].values() if k.get("dirty"))
     return {"success": True, "last_sync": st.get("last_sync", 0), "pending": dirty,
             "last_error": st.get("last_error", ""), "tag": ident.get("tag", ""),
-            "device_id": st.get("device_id", ""), "enabled": is_enabled(profile)}
+            "device_id": st.get("device_id", ""), "enabled": is_enabled(profile),
+            "linked": is_linked(st)}
 
 
 # ---------------------------------------------------------------------------
@@ -666,6 +690,13 @@ def detach_device(profile=""):
         if not ok:
             return {"success": False, "error": "busy"}
         old = crc.load_cloud_identity(suffix) or {}
+        st = _load_state(suffix)
+        if old.get("user_id") and old.get("secret_key"):
+            # Tell the old account this device left, so the others stop counting it as linked
+            gone = _push_items(old, st, [{"kind": "device", "item_id": st["device_id"], "deleted": True,
+                                          "updated_at": _now_ms()}])
+            if gone is None:
+                return {"success": False, "error": "offline"}
         res = crc.GLOBAL_RELAY_CLIENT.register(username=old.get("username") or "Nutsty User",
                                                avatar_url=old.get("avatar_url") or "")
         u = (res or {}).get("user") or {}
@@ -677,8 +708,8 @@ def detach_device(profile=""):
                  "custom_username": bool(old.get("custom_username"))}
         crc.save_cloud_identity(ident, suffix)
         # The new account is empty: the next sync sends everything here (see _sync_locked)
-        st = _load_state(suffix)
-        st.update({"user_id": "", "cursor": 0, "remote_progress": None, "last_error": ""})
+        st.update({"user_id": "", "cursor": 0, "remote_progress": None, "last_error": "",
+                   "devices": {}, "device_sent": ""})
         _save_state(suffix, st)
         return {"success": True, "tag": ident["tag"]}
 

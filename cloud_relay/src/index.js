@@ -132,7 +132,7 @@ async function buildNotesFeed(db, caller, userId) {
 // One row per item per account. Last write wins on updated_at; `seq` is a per-account change
 // counter that devices pull from (`since`). Deleted items stay as tombstones so other devices
 // learn about the delete instead of pushing the item back.
-const SYNC_KINDS = new Set(["playlist", "favorite", "liked", "play", "progress"]);
+const SYNC_KINDS = new Set(["playlist", "favorite", "liked", "play", "progress", "device"]);
 const SYNC_MAX_ITEMS = 100;
 const SYNC_MAX_ITEM_BYTES = 1_500_000; // D1 caps a value at 2 MB
 const SYNC_PULL_LIMIT = 200;

@@ -22,6 +22,8 @@ QtObject {
     property string linkError: ""
     // Off: this device keeps everything and syncs nothing until turned on again (backend remembers it)
     property bool enabled: true
+    // Another device shares this account. Off: there is nothing to turn off or detach from
+    property bool linkedToOthers: false
     property bool detachBusy: false
     property string detachError: ""
 
@@ -75,6 +77,10 @@ QtObject {
         sync._post("status", {}, function(res) {
             if (!res.success) return;
             sync.enabled = res.enabled !== false;
+            var wasLinked = sync.linkedToOthers;
+            sync.linkedToOthers = res.linked === true;
+            // The code on screen was used: the new device showed up, so the code box can go
+            if (!wasLinked && sync.linkedToOthers) sync.linkCode = "";
             sync.pending = res.pending || 0;
             if (res.last_sync) sync.lastSync = res.last_sync;
         });
@@ -135,6 +141,7 @@ QtObject {
             sync.detachBusy = false;
             if (res.success) {
                 sync.linkCode = "";
+                sync.linkedToOthers = false;
                 sync.detached(res.tag || "");
                 sync.run();
             } else {
@@ -162,6 +169,14 @@ QtObject {
         interval: 6000
         repeat: false
         running: true
+        onTriggered: sync.run()
+    }
+
+    // While a code is on screen, check often so the new device shows up here within seconds
+    property Timer codeWatchTimer: Timer {
+        interval: 5000
+        repeat: true
+        running: sync.linkCode !== "" && sync.enabled
         onTriggered: sync.run()
     }
 

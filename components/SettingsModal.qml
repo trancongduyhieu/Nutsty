@@ -1729,6 +1729,9 @@ Rectangle {
                     visible: root.accountSync !== null
 
                     readonly property bool on: root.accountSync !== null && root.accountSync.enabled
+                    // Nothing to sync with until another device is linked (still usable to turn a stuck "off" back on)
+                    readonly property bool usable: root.accountSync !== null
+                                                   && (root.accountSync.linkedToOthers || !root.accountSync.enabled)
 
                     Column {
                         anchors.left: parent.left
@@ -1749,8 +1752,11 @@ Rectangle {
 
                         Text {
                             width: parent.width
-                            text: I18n.tr("Tắt thì mọi thứ vẫn còn trên máy này nhưng không gửi đi hay nhận về. Bật lại sẽ gộp những gì đã đổi.",
+                            text: parent.parent.usable
+                                ? I18n.tr("Tắt thì mọi thứ vẫn còn trên máy này nhưng không gửi đi hay nhận về. Bật lại sẽ gộp những gì đã đổi.",
                                           "Off keeps everything on this device but sends and receives nothing. Turning it back on merges what changed.")
+                                : I18n.tr("Máy này chưa nối với máy nào. Bấm Thêm máy hoặc Nhập mã ở trên để bắt đầu.",
+                                          "This device is not linked to any other yet. Use Add device or Enter code above to start.")
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             color: Theme.textSecondary
@@ -1768,7 +1774,9 @@ Rectangle {
                         height: 24
                         radius: 12
                         color: parent.on ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18)
+                        opacity: parent.usable ? 1.0 : 0.35
                         Behavior on color { ColorAnimation { duration: 150 } }
+                        Behavior on opacity { NumberAnimation { duration: 150 } }
 
                         Rectangle {
                             width: 18
@@ -1783,6 +1791,7 @@ Rectangle {
                         MouseArea {
                             anchors.fill: parent
                             preventStealing: false
+                            enabled: parent.parent.usable
                             cursorShape: Qt.PointingHandCursor
                             onClicked: root.accountSync.setEnabled(!root.accountSync.enabled)
                         }
@@ -1793,7 +1802,7 @@ Rectangle {
                 Item {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 52
-                    visible: root.accountSync !== null && !root.detachConfirm
+                    visible: root.accountSync !== null && root.accountSync.linkedToOthers && !root.detachConfirm
 
                     Column {
                         anchors.left: parent.left
@@ -1844,7 +1853,7 @@ Rectangle {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: detachConfirmColumn.implicitHeight + 24
-                    visible: root.accountSync !== null && root.detachConfirm
+                    visible: root.accountSync !== null && root.accountSync.linkedToOthers && root.detachConfirm
                     radius: 14
                     color: Qt.rgba(244 / 255, 63 / 255, 94 / 255, 0.10)
                     border.color: Qt.rgba(244 / 255, 63 / 255, 94 / 255, 0.30)
