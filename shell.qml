@@ -3752,6 +3752,7 @@ Scope {
             id: settingsModal
             objectName: "settingsModal"
             accountSync: accountSync
+            friendsCount: (win.friendsList || []).length
             backgroundSourceItem: masterBackdropStack
             isLoggedIn: win.isAuthLoggedIn
             accountName: win.authAccountName
@@ -5155,7 +5156,10 @@ Scope {
             if (changed.liked) likedSongsFileView.reload();
         }
         onLinked: tag => {
+            // A new account on this device: its friends and notes replace the old ones
             win.fetchCurrentUserProfile();
+            win.fetchFriendsDataFast();
+            win.fetchFriendsNotesFast();
             win.showToast(I18n.tr("Đã nối máy này vào tài khoản, đang đồng bộ", "This device is linked to your account, syncing now"), "success");
         }
         onDetached: tag => {

@@ -397,6 +397,8 @@ Rectangle {
     property var accountSync: null
     property bool linkCodeEntry: false
     property bool detachConfirm: false
+    // Friends of the account this device uses now (the warning before typing a link code)
+    property int friendsCount: 0
     property double syncNowMs: Date.now()
     Timer {
         interval: 1000
@@ -1719,6 +1721,87 @@ Rectangle {
                             color: err !== "" ? "#fda4af" : Theme.textSecondary
                             wrapMode: Text.WordWrap
                         }
+
+                        // Friends belong to an account: linking swaps them, so say so before it happens
+                        Rectangle {
+                            width: parent.width
+                            height: friendsWarnText.implicitHeight + 16
+                            visible: root.friendsCount > 0 && root.accountSync !== null && root.accountSync.homeTag === ""
+                            radius: 10
+                            color: Qt.rgba(244 / 255, 63 / 255, 94 / 255, 0.12)
+                            border.color: Qt.rgba(244 / 255, 63 / 255, 94 / 255, 0.30)
+                            border.width: 1
+
+                            Text {
+                                id: friendsWarnText
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.leftMargin: 10
+                                anchors.rightMargin: 10
+                                text: I18n.tr("Máy này đang có " + root.friendsCount + " bạn bè. Sau khi nối, máy sẽ thấy bạn bè và ghi chú của tài khoản kia thay vào. Bạn bè hiện tại không mất: chúng được cất lại và trở về khi bấm Tách ra.",
+                                              "This device has " + root.friendsCount + (root.friendsCount === 1 ? " friend" : " friends") + ". Once linked it shows the other account's friends and notes instead. Your current friends are not lost: they are kept aside and come back when you press Detach.")
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 11
+                                color: Theme.textPrimary
+                                wrapMode: Text.WordWrap
+                            }
+                        }
+                    }
+                }
+
+                // The devices sharing this account, this one first
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    visible: root.accountSync !== null && root.accountSync.linkedToOthers
+                    spacing: 6
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: I18n.tr("Các máy đang dùng chung tài khoản", "Devices sharing this account")
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 11
+                        color: Theme.textSecondary
+                    }
+
+                    Repeater {
+                        model: root.accountSync ? root.accountSync.devices : []
+
+                        Rectangle {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 34
+                            radius: 10
+                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, modelData.self ? 0.14 : 0.08)
+
+                            Image {
+                                id: deviceIcon
+                                anchors.left: parent.left
+                                anchors.leftMargin: 12
+                                anchors.verticalCenter: parent.verticalCenter
+                                source: "../assets/icons/computer-symbolic.svg"
+                                sourceSize: Qt.size(15, 15)
+                                width: 15
+                                height: 15
+                                layer.enabled: true
+                                layer.effect: MultiEffect { colorization: 1.0; colorizationColor: root.accentColor }
+                            }
+
+                            Text {
+                                anchors.left: deviceIcon.right
+                                anchors.leftMargin: 10
+                                anchors.right: parent.right
+                                anchors.rightMargin: 12
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: (modelData.name || I18n.tr("Máy không tên", "Unnamed device"))
+                                      + (modelData.self ? I18n.tr("  (máy này)", "  (this device)") : "")
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                font.bold: modelData.self
+                                color: Theme.textPrimary
+                                elide: Text.ElideRight
+                            }
+                        }
                     }
                 }
 
@@ -1883,9 +1966,13 @@ Rectangle {
                             width: parent.width
                             readonly property string err: root.accountSync && root.accountSync.detachError !== ""
                                 ? root.linkErrorText(root.accountSync.detachError) : ""
+                            readonly property string home: root.accountSync ? root.accountSync.homeTag : ""
                             text: err !== "" ? err
-                                  : I18n.tr("Danh sách phát, bài đã thích và lịch sử nghe vẫn ở lại máy này. Bạn bè và ghi chú ở lại với tài khoản cũ trên các máy kia. Muốn nối lại thì dùng Thêm máy và Nhập mã như lúc đầu.",
-                                            "Playlists, liked songs and history stay on this device. Friends and notes stay with the old account on the other devices. To link again, use Add device and Enter code as before.")
+                                  : (home !== ""
+                                     ? I18n.tr("Máy này quay về tài khoản riêng @" + home + " cùng bạn bè và ghi chú từ trước khi nối. Danh sách phát, bài đã thích và lịch sử nghe vẫn ở lại máy này. Bạn bè và ghi chú của tài khoản chung ở lại trên các máy kia.",
+                                               "This device goes back to its own account @" + home + " with the friends and notes it had before linking. Playlists, liked songs and history stay here. The shared account's friends and notes stay on the other devices.")
+                                     : I18n.tr("Máy này nhận một tài khoản mới, chưa có bạn bè nào. Danh sách phát, bài đã thích và lịch sử nghe vẫn ở lại máy này. Bạn bè và ghi chú của tài khoản chung ở lại trên các máy kia. Muốn nối lại thì dùng Thêm máy và Nhập mã như lúc đầu.",
+                                               "This device gets a new account with no friends yet. Playlists, liked songs and history stay here. The shared account's friends and notes stay on the other devices. To link again, use Add device and Enter code as before."))
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             color: err !== "" ? "#fda4af" : Theme.textSecondary

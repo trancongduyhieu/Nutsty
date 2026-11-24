@@ -24,6 +24,10 @@ QtObject {
     property bool enabled: true
     // Another device shares this account. Off: there is nothing to turn off or detach from
     property bool linkedToOthers: false
+    // Devices on this account: [{name, self, since}]
+    property var devices: []
+    // This device's own account, parked while linked; detach returns to it ("" when there is none)
+    property string homeTag: ""
     property bool detachBusy: false
     property string detachError: ""
 
@@ -79,6 +83,8 @@ QtObject {
             sync.enabled = res.enabled !== false;
             var wasLinked = sync.linkedToOthers;
             sync.linkedToOthers = res.linked === true;
+            sync.devices = res.devices || [];
+            sync.homeTag = res.home_tag || "";
             // The code on screen was used: the new device showed up, so the code box can go
             if (!wasLinked && sync.linkedToOthers) sync.linkCode = "";
             sync.pending = res.pending || 0;
@@ -142,6 +148,8 @@ QtObject {
             if (res.success) {
                 sync.linkCode = "";
                 sync.linkedToOthers = false;
+                sync.devices = [];
+                sync.homeTag = "";
                 sync.detached(res.tag || "");
                 sync.run();
             } else {

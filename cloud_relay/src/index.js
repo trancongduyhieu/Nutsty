@@ -1240,6 +1240,7 @@ export default {
 
         // The new device's own throwaway account goes away when nothing points at it yet
         const old = await authenticateUser(db, body.old_user_id, body.old_secret_key);
+        let oldKept = false;
         if (old && old.id !== target.id) {
           const used = await db
             .prepare(
@@ -1255,6 +1256,19 @@ export default {
               db.prepare("DELETE FROM nutsty_sync_items WHERE user_id = ?1").bind(old.id),
               db.prepare("DELETE FROM nutsty_users WHERE id = ?1").bind(old.id),
             ]);
+          } else {
+            // Parked: the device keeps its key and comes back on detach. A sync row keeps the account
+            // out of consolidateDuplicateUserAccounts, which only removes accounts with no sync data
+            oldKept = true;
+            await db
+              .prepare(
+                `INSERT INTO nutsty_sync_items (user_id, kind, item_id, data, deleted, updated_at, device_id, seq)
+                 VALUES (?1, 'parked', 'parked', '{}', 0, ?2, '',
+                         (SELECT COALESCE(MAX(seq), 0) + 1 FROM nutsty_sync_items WHERE user_id = ?1))
+                 ON CONFLICT(user_id, kind, item_id) DO UPDATE SET updated_at = excluded.updated_at`
+              )
+              .bind(old.id, now)
+              .run();
           }
         }
         return jsonResponse({
@@ -1268,6 +1282,7 @@ export default {
             created_at: target.created_at,
           },
           secret_key: target.secret_key,
+          old_kept: oldKept,
         });
       }
 

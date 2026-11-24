@@ -110,6 +110,28 @@ def set_enabled(profile, enabled):
 
 
 # Progress has its own small file: it is written every few minutes while a sync may be running
+def _home_path(suffix):
+    """This device's own account, parked while it uses a linked one; detach returns to it."""
+    return os.path.join(pc.get_config_dir(), f"nutsty_cloud_identity_home{suffix}.json")
+
+
+def _load_home(suffix):
+    try:
+        with open(_home_path(suffix), "r", encoding="utf-8") as f:
+            h = json.load(f)
+        return h if isinstance(h, dict) and h.get("user_id") and h.get("secret_key") else None
+    except Exception:
+        return None
+
+
+def _device_name():
+    import platform
+    import socket
+    system = {"Linux": "Linux", "Windows": "Windows", "Darwin": "macOS"}.get(platform.system(), platform.system())
+    host = (socket.gethostname() or "").split(".")[0].strip()
+    return f"{host} · {system}" if host else system
+
+
 def _progress_path(suffix):
     return os.path.join(pc.get_config_dir(), f"nutsty_sync_progress{suffix}.json")
 
@@ -407,7 +429,11 @@ def _pull(st, ident):
                 if r.get("deleted"):
                     st["devices"].pop(iid, None)
                 else:
-                    st["devices"][iid] = int(r.get("updated_at") or 0)
+                    try:
+                        name = str((json.loads(r.get("data") or "{}") or {}).get("name") or "")
+                    except Exception:
+                        name = ""
+                    st["devices"][iid] = {"t": int(r.get("updated_at") or 0), "name": name}
                 continue
             if kind not in ("playlist", "favorite", "liked"):
                 continue
@@ -483,13 +509,15 @@ def _push(st, ident, items):
         if len(plays) < 100:
             break
 
-    if st.get("device_sent") != ident["user_id"]:
+    name = _device_name()
+    sent_key = ident["user_id"] + "|" + name  # sent again when the account or the computer name changes
+    if st.get("device_sent") != sent_key:
         res = _push_items(ident, st, [{"kind": "device", "item_id": st["device_id"], "updated_at": _now_ms(),
-                                       "data": "{}"}])
+                                       "data": json.dumps({"name": name}, ensure_ascii=False)}])
         if res is None:
             return False
         if res and res[0].get("accepted"):
-            st["device_sent"] = ident["user_id"]
+            st["device_sent"] = sent_key
     return _push_progress(st["device_id"], ident, st["_suffix"])
 
 
@@ -642,7 +670,18 @@ def status(profile=""):
     return {"success": True, "last_sync": st.get("last_sync", 0), "pending": dirty,
             "last_error": st.get("last_error", ""), "tag": ident.get("tag", ""),
             "device_id": st.get("device_id", ""), "enabled": is_enabled(profile),
-            "linked": is_linked(st)}
+            "linked": is_linked(st), "devices": _device_list(st),
+            "home_tag": (_load_home(suffix) or {}).get("tag", "")}
+
+
+def _device_list(st):
+    own = st.get("device_id")
+    out = []
+    for did, d in (st.get("devices") or {}).items():
+        d = d if isinstance(d, dict) else {"t": int(d or 0), "name": ""}
+        out.append({"name": d.get("name") or "", "self": did == own, "since": d.get("t", 0)})
+    out.sort(key=lambda d: (not d["self"], d["since"]))
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -672,6 +711,10 @@ def claim_link_code(profile, code):
     u = res.get("user") or {}
     if old.get("user_id") == u.get("id"):
         return {"success": True, "tag": u.get("tag", ""), "already": True}
+    # Park this device's own account (friends, notes) so detach can return to it. Only the first one:
+    # moving from one linked account to another keeps the original home. The server deleted it if unused.
+    if old.get("user_id") and old.get("secret_key") and res.get("old_kept") is not False and not _load_home(suffix):
+        _write_atomic(_home_path(suffix), old)
     ident = {"user_id": u.get("id"), "secret_key": res.get("secret_key"), "username": u.get("username", ""),
              "discriminator": u.get("discriminator", ""), "tag": u.get("tag", ""),
              "avatar_url": u.get("avatar_url", ""), "created_at": int(u.get("created_at") or _now_ms()),
@@ -697,21 +740,34 @@ def detach_device(profile=""):
                                           "updated_at": _now_ms()}])
             if gone is None:
                 return {"success": False, "error": "offline"}
-        res = crc.GLOBAL_RELAY_CLIENT.register(username=old.get("username") or "Nutsty User",
-                                               avatar_url=old.get("avatar_url") or "")
+        home = _load_home(suffix)
+        if home:
+            # Back to the account this device had before linking; the server makes a new one if it is gone
+            res = crc.GLOBAL_RELAY_CLIENT.register(username=home.get("username") or "Nutsty User",
+                                                   avatar_url=home.get("avatar_url") or "",
+                                                   client_secret=home["secret_key"], user_id=home["user_id"])
+        else:
+            res = crc.GLOBAL_RELAY_CLIENT.register(username=old.get("username") or "Nutsty User",
+                                                   avatar_url=old.get("avatar_url") or "")
         u = (res or {}).get("user") or {}
         if not (res or {}).get("success") or not u.get("id") or not res.get("secret_key"):
             return {"success": False, "error": "offline"}
+        restored = bool(home) and u["id"] == home["user_id"]
         ident = {"user_id": u["id"], "secret_key": res["secret_key"], "username": u.get("username", ""),
                  "discriminator": u.get("discriminator", ""), "tag": u.get("tag", ""),
                  "avatar_url": u.get("avatar_url", ""), "created_at": int(u.get("created_at") or _now_ms()),
-                 "custom_username": bool(old.get("custom_username"))}
+                 "custom_username": bool((home if restored else old).get("custom_username"))}
         crc.save_cloud_identity(ident, suffix)
+        if home:
+            try:
+                os.remove(_home_path(suffix))
+            except OSError:
+                pass
         # The new account is empty: the next sync sends everything here (see _sync_locked)
         st.update({"user_id": "", "cursor": 0, "remote_progress": None, "last_error": "",
                    "devices": {}, "device_sent": ""})
         _save_state(suffix, st)
-        return {"success": True, "tag": ident["tag"]}
+        return {"success": True, "tag": ident["tag"], "restored": restored}
 
 
 # ---------------------------------------------------------------------------
