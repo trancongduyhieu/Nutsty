@@ -179,6 +179,21 @@ var PRESENCE_HEARTBEAT_MS = 18000;
 var GUEST_HEARTBEAT_MS = 15000;
 var _tick = { inFlight: false, startedAt: 0, presenceAt: 0, presenceKey: "", notesAt: 0, notesHash: "", notesNow: false };
 
+// The feed polls every 20 s (60 s hidden), so a friend's new song can show late. Opening the home
+// page, the window or a friend's avatar asks for it at once; at most once per FEED_REFRESH_MIN_MS
+// so flipping between pages does not spend requests. Returns false when skipped.
+var FEED_REFRESH_MIN_MS = 3000;
+var _feedRefreshAt = 0;
+
+function refreshFriendsFeedNow(win, notesEveryMs) {
+    var now = Date.now();
+    if (now - _feedRefreshAt < FEED_REFRESH_MIN_MS) return false;
+    _feedRefreshAt = now;
+    _tick.notesNow = true;   // a tick already on the way leaves this set for the next one
+    socialTick(win, notesEveryMs);
+    return true;
+}
+
 function _isGuest(win) {
     return Boolean(win.listeningAlongFriend) && (!win.activeCoListeners || win.activeCoListeners.length === 0);
 }

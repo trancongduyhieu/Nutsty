@@ -87,6 +87,7 @@ Scope {
             } else {
                 unfocusedPurgeTimer.stop();
                 win.triggerUserActiveBoost();
+                if (win.currentView === "home") win.refreshFriendsFeedNow();
                 if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) {
                     ytNowPlayingView.updateActiveLyric(true);
                 }
@@ -389,9 +390,9 @@ Scope {
     property NotificationStore notificationStore: NotificationStore {}
     property string localApiUrl: "http://127.0.0.1:17890"
     property string notesApiUrl: Quickshell.env("NUTSTY_WORKER_URL") || "http://127.0.0.1:17890"
-    property string appVersion: "2.3.1"
-    property string latestVersion: "2.3.1"
-    property string lastSeenVersion: "2.3.1"
+    property string appVersion: "2.4.0"
+    property string latestVersion: "2.4.0"
+    property string lastSeenVersion: "2.4.0"
     property bool hasAppUpdate: false
     property bool isCheckingUpdate: false
     property string updateUrl: ""
@@ -1446,6 +1447,8 @@ Scope {
                   : (win.socialInBackground || !win.anyFriendOnline) ? 18000 : 10000
     readonly property int socialNotesEveryMs: win.socialInBackground ? 60000 : 20000
     function socialTick() { SocialEngine.socialTick(win, win.socialNotesEveryMs); }
+    function refreshFriendsFeedNow() { SocialEngine.refreshFriendsFeedNow(win, win.socialNotesEveryMs); }
+    onCurrentViewChanged: if (win.currentView === "home") win.refreshFriendsFeedNow()
 
     Timer {
         id: socialTickTimer
@@ -1567,7 +1570,7 @@ Scope {
                                 if (res.mock_update) {
                                     win.updateDemo = true;
                                     win.appVersion = "2.3.0";
-                                    win.latestVersion = "v2.3.1";
+                                    win.latestVersion = "v2.4.0";
                                     win.hasAppUpdate = true;
                                     win.updatePackageBytes = 399087882;
                                     win.updateReleaseNotes = "- **Cập nhật chỉ tải phần thay đổi**: Chỉ tải những tệp khác bản bạn đang dùng.\n- **Hộp thoại cập nhật mới**: Vòng chữ xoay quanh số phiên bản, tốc độ và thời gian còn lại.\n- **Giữ nguyên trình phát mpv**: Không đổi giữa các bản.";
@@ -2840,7 +2843,10 @@ Scope {
                             onUserNoteDetailRequested: userNoteDetailModalLoader.ensure().openModal(win.myLatestNote)
                             onPlayFriendTrackRequested: trk => win.playFriendTrack(trk)
                             onAddFriendRequested: win.promptAddFriend()
-                            onOpenStoryRequested: (friendData, idx) => friendStoryModalLoader.ensure().openWithIndex(idx)
+                            onOpenStoryRequested: (friendData, idx) => {
+                                win.refreshFriendsFeedNow();
+                                friendStoryModalLoader.ensure().openWithIndex(idx);
+                            }
                             likedCount: win.likedTracksList.length
                             downloadsCount: win.allTracks.length
                             myPlaylists: win.homeShortcutPlaylists
