@@ -640,5 +640,67 @@ class PullTests(unittest.TestCase):
             si.lyrics_helper.get_spotify_access_token = orig
 
 
+class RouteTests(unittest.TestCase):
+    def setUp(self):
+        for f in CONFIG_DIR.glob("spotify_*"):
+            f.unlink()
+
+    def test_status_route_on_both_routers(self):
+        import subprocess
+        import threading
+        import urllib.request
+        import auth_server
+        from http.server import ThreadingHTTPServer
+        proc = subprocess.Popen([sys.executable, str(BACKEND_DIR / "route_dispatcher.py"), "--serve"],
+                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=os.environ.copy())
+        try:
+            proc.stdin.write(json.dumps({"method": "POST", "url": "/api/spotify/sync/status",
+                                         "body": json.dumps({"profile": ""})}) + "\n")
+            proc.stdin.flush()
+            out = json.loads(proc.stdout.readline())
+            self.assertEqual(out["status"], 200)
+            self.assertFalse(json.loads(out["body"])["enabled"])
+        finally:
+            proc.stdin.close()
+            proc.wait(timeout=10)
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), auth_server.AuthWebhookHandler)
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        try:
+            url = f"http://127.0.0.1:{httpd.server_address[1]}/api/spotify/sync/status"
+            req = urllib.request.Request(url, data=b'{"profile": ""}',
+                                         headers={"Content-Type": "application/json"}, method="POST")
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                self.assertEqual(resp.status, 200)
+                self.assertFalse(json.loads(resp.read())["enabled"])
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+
+    def test_unknown_op_404(self):
+        import spotify_sync as ss
+        h = FakeHandler()
+        ss.handle_http_path(h, "/api/spotify/sync/nope", {})
+        self.assertEqual(h.sent[1], 404)
+
+    def test_set_enabled_and_selection_ops(self):
+        import spotify_sync as ss
+        h = FakeHandler()
+        ss.handle_http_path(h, "/api/spotify/sync/set_enabled", {"enabled": True})
+        self.assertTrue(h.sent[0]["enabled"])
+        ss.handle_http_path(h, "/api/spotify/sync/set_selection", {"ids": ["P"], "liked": False})
+        self.assertTrue(h.sent[0]["selectionConfirmed"])
+        self.assertEqual(h.sent[0]["selectedCount"], 1)
+        ss.handle_http_path(h, "/api/spotify/sync/force_apply", {"id": "P"})
+        self.assertEqual(h.sent[1], 200)
+
+
+class FakeHandler:
+    def __init__(self):
+        self.sent = None
+
+    def _send_json(self, data, status=200):
+        self.sent = (data, status)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

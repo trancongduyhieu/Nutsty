@@ -250,6 +250,12 @@ def dispatch_request(method, path, query_dict, body_str):
             except (ImportError, ValueError):
                 import account_sync
             account_sync.handle_http_path(handler, clean_path, req_json)
+        elif clean_path.startswith("/api/spotify/sync/"):
+            try:
+                from . import spotify_sync
+            except (ImportError, ValueError):
+                import spotify_sync
+            spotify_sync.handle_http_path(handler, clean_path, req_json)
         else:
             handler._send_json({"error": f"Not found: {clean_path}"}, 404)
     else:

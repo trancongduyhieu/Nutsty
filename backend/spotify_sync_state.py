@@ -10,7 +10,10 @@ import copy
 import os
 import time
 
-import playlist_manager as pm
+try:
+    from . import playlist_manager as pm
+except (ImportError, ValueError):
+    import playlist_manager as pm
 
 UNMATCHED_RETRY_SEC = 3 * 86400
 

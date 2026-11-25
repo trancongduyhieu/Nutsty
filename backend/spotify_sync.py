@@ -415,3 +415,50 @@ def status(profile=""):
         return {k: st.get(k) for k in ("enabled", "selectionConfirmed", "likedSelected", "writeBack",
                                        "lastSync", "lastError", "blocked", "unmatchedCount", "backlog")} | {
             "selectedCount": len(st.get("selected") or []), "running": _RUN_LOCK.locked()}
+
+
+# ---------------------------------------------------------------------------
+# HTTP: POST /api/spotify/sync/<op>  (route_dispatcher on Linux, auth_server fallback on Windows)
+# ---------------------------------------------------------------------------
+_last_run = {}
+
+
+def _run_background(profile):
+    def worker():
+        try:
+            _last_run[profile] = sync_once(profile)
+        except Exception as e:
+            sys.stderr.write(f"[spotify_sync] background run failed: {e}\n")
+    threading.Thread(target=worker, name="spotify-sync", daemon=True).start()
+
+
+def handle_http_path(handler, path, body):
+    op = path.rstrip("/").rsplit("/", 1)[-1]
+    body = body if isinstance(body, dict) else {}
+    profile = str(body.get("profile") or "")
+    try:
+        if op == "run":
+            if _RUN_LOCK.locked():
+                res = {"success": False, "error": "busy"}
+            else:
+                _run_background(profile)
+                res = {"success": True, "started": True}
+        elif op == "status":
+            res = dict(status(profile), last=_last_run.get(profile))
+        elif op == "choices":
+            res = dict(list_choices(profile), success=True)
+        elif op == "set_selection":
+            res = set_selection(profile, body.get("ids") or [], body.get("liked", True))
+        elif op == "set_enabled":
+            res = set_enabled(profile, body.get("enabled"))
+        elif op == "force_apply":
+            res = force_apply(profile, str(body.get("id") or ""))
+        else:
+            handler._send_json({"success": False, "error": f"unknown_op: {op}"}, 404)
+            return
+    except sw.SpotifyError as e:
+        res = {"success": False, "error": e.code}
+    except Exception as e:
+        sys.stderr.write(f"[spotify_sync] {op} failed: {e}\n")
+        res = {"success": False, "error": "internal"}
+    handler._send_json(res, 200)
