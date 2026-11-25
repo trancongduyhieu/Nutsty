@@ -312,5 +312,92 @@ class StateTests(unittest.TestCase):
         self.assertFalse(c2.should_retry("s1", 0))
 
 
+def sp_item(sid, name=None):
+    return {"spotifyId": sid, "uid": f"u-{sid}", "name": name or f"Song {sid}", "artist": "Artist",
+            "album": "Album", "duration_ms": 200000, "image": ""}
+
+
+def remote_list(ids, revision="r1"):
+    import spotify_web as sw
+    items = [sp_item(s) for s in ids]
+    return sw.RemoteList(items=items, total=len(items), revision=revision, complete=True)
+
+
+class FakeMatcher:
+    """Spotify id -> videoId 'v<sid>'; ids in `unmatched` return None."""
+
+    def __init__(self, unmatched=()):
+        self.unmatched = set(unmatched)
+        self.calls = []
+
+    def __call__(self, item):
+        sid = item.get("spotifyId") or item.get("id")
+        self.calls.append(sid)
+        if sid in self.unmatched:
+            return None
+        vid = f"v{sid}"
+        return {"title": item.get("name"), "artist": item.get("artist"), "album": "", "duration": 200,
+                "videoId": vid, "path": f"ytdl://{vid}", "image": "", "source": "spotify_import",
+                "spotifyId": sid}
+
+
+def yt(vid, **kw):
+    return dict({"title": vid, "artist": "A", "videoId": vid, "path": f"ytdl://{vid}"}, **kw)
+
+
+def legacy(pid, ts, vids):
+    pl_id = f"custom_pl_spotify_{pid}_{ts}"
+    return {"id": pl_id, "playlistId": pl_id, "title": "Old", "name": "Old", "source": "spotify_import",
+            "spotifyId": pid, "createdAt": ts, "tracks": [yt(v) for v in vids], "trackCount": len(vids)}
+
+
+class MigrationTests(unittest.TestCase):
+    def setUp(self):
+        for f in CONFIG_DIR.glob("spotify_*"):
+            f.unlink()
+
+    def migrate(self, playlists, remote):
+        import spotify_sync as ss
+        import spotify_sync_state as st
+        return ss.migrate_legacy_imports(playlists, {"P": remote}, FakeMatcher(), st.MatchCache())
+
+    def test_newest_duplicate_becomes_linked(self):
+        out = self.migrate([legacy("P", 100, ["va"]), legacy("P", 200, ["va"])], remote_list(["a"]))
+        ids = [p["id"] for p in out]
+        self.assertIn("custom_pl_spotify_P", ids)
+        self.assertIn("custom_pl_spotify_P_100", ids)
+        linked = next(p for p in out if p["id"] == "custom_pl_spotify_P")
+        self.assertEqual(linked["createdAt"], 200)
+        self.assertEqual(linked["playlistId"], "custom_pl_spotify_P")
+        self.assertEqual(linked["spotifyLink"]["id"], "P")
+        self.assertEqual(linked["spotifyLink"]["revision"], "r1")
+        self.assertNotIn("spotifyLink", next(p for p in out if p["id"] == "custom_pl_spotify_P_100"))
+
+    def test_tracks_get_spotify_id_by_video_match(self):
+        out = self.migrate([legacy("P", 100, ["va", "vmanual"])], remote_list(["a"]))
+        tracks = out[0]["tracks"]
+        self.assertEqual(tracks[0]["spotifyId"], "a")
+        self.assertNotIn("spotifyId", tracks[1])
+        self.assertEqual(out[0]["spotifyLink"]["base"], ["a"])
+
+    def test_missing_remote_tracks_appended(self):
+        out = self.migrate([legacy("P", 100, ["va"])], remote_list(["a", "b", "c"]))
+        self.assertEqual([t["videoId"] for t in out[0]["tracks"]], ["va", "vb", "vc"])
+        self.assertEqual(out[0]["spotifyLink"]["base"], ["a", "b", "c"])
+        self.assertEqual(out[0]["trackCount"], 3)
+
+    def test_migration_idempotent(self):
+        once = self.migrate([legacy("P", 100, ["va"])], remote_list(["a", "b"]))
+        twice = self.migrate(json.loads(json.dumps(once)), remote_list(["a", "b"]))
+        self.assertEqual(once, twice)
+
+    def test_legacy_without_remote_left_alone(self):
+        import spotify_sync as ss
+        import spotify_sync_state as st
+        pls = [legacy("Q", 100, ["va"])]
+        out = ss.migrate_legacy_imports(json.loads(json.dumps(pls)), {}, FakeMatcher(), st.MatchCache())
+        self.assertEqual(out, pls)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

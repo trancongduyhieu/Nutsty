@@ -589,7 +589,8 @@ def match_spotify_track_to_ytmusic(sp_track):
                 "videoId": vid,
                 "path": f"ytdl://{vid}",
                 "image": cand_image,
-                "source": "spotify_import"
+                "source": "spotify_import",
+                "spotifyId": sp_track.get("spotifyId") or sp_track.get("id") or "",
             }
     except Exception as e:
         sys.stderr.write(f"[spotify_importer] Track match error for '{query}': {e}\n")
