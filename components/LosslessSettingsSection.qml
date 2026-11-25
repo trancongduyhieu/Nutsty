@@ -405,32 +405,6 @@ ColumnLayout {
         }
     }
 
-    component SmallButton: Rectangle {
-        id: sb
-        property string label: ""
-        property bool danger: false
-        property bool primary: false
-        signal clicked()
-        readonly property color tone: danger ? root.roseColor : root.accentColor
-        height: 28
-        width: sbText.implicitWidth + 24
-        radius: 8
-        color: primary ? (sbMouse.containsMouse ? Qt.lighter(tone, 1.15) : tone)
-                       : Qt.rgba(tone.r, tone.g, tone.b, sbMouse.containsMouse ? 0.22 : 0.12)
-        border.color: Qt.rgba(tone.r, tone.g, tone.b, 0.35)
-        border.width: 1
-        Text {
-            id: sbText
-            anchors.centerIn: parent
-            text: sb.label
-            font.family: Theme.fontFamily
-            font.pixelSize: 12
-            font.bold: true
-            color: "#ffffff"
-        }
-        MouseArea { id: sbMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: sb.clicked() }
-    }
-
     Rectangle {
         visible: root.rateMatchShown && root.dropin !== null
         Layout.fillWidth: true
@@ -476,18 +450,24 @@ ColumnLayout {
 
             Row {
                 spacing: 8
-                SmallButton {
+                LosslessSmallButton {
+                    accentColor: root.accentColor
+                    roseColor: root.roseColor
                     visible: root.dropinState === "ask"
                     primary: true
                     label: I18n.tr("Ghi cấu hình", "Write config")
                     onClicked: root.runDropin("write")
                 }
-                SmallButton {
+                LosslessSmallButton {
+                    accentColor: root.accentColor
+                    roseColor: root.roseColor
                     visible: root.dropinState === "ask"
                     label: I18n.tr("Để sau", "Later")
                     onClicked: { root.dropin = null; root.dropinState = ""; }
                 }
-                SmallButton {
+                LosslessSmallButton {
+                    accentColor: root.accentColor
+                    roseColor: root.roseColor
                     visible: root.dropinState === "written" || (root.dropinState === "" && !!root.dropin && root.dropin.installed)
                     danger: true
                     label: I18n.tr("Gỡ cấu hình", "Remove config")

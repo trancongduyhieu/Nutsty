@@ -30,6 +30,13 @@ Mỗi dòng: `tên` — bẫy là gì — bằng chứng — triệu chứng ng�
    kiểu Cristian/NTP — `hostStampAgeSec`, test clock skew 7s — khách luôn lệch cố định vài giây
    giữa Linux và Windows.
 
+## D · Quickshell nạp nóng (1)
+
+8. `no-new-inline-component-on-hot-reload` — thêm `component X:` mới vào file QML đang chạy thì
+   Quickshell (noctalia-qs 0.0.12) nạp lại báo "X is not a type" và giữ bản cũ; mở mới thì chạy —
+   tái hiện bằng `quickshell -p` riêng, đổi file sang bản mới — giao diện mới không hiện, đọc
+   `quickshell log --pid <pid>`. Component mới để file riêng và thêm vào `components/qmldir`.
+
 ## C · Kiểm thử và chứng minh (1)
 
 7. `prove-races-with-fake-clock-harness` — nạp nguyên engine JS vào `node vm` với `Date.now` giả và
