@@ -74,6 +74,7 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 │   ├── route_dispatcher.py         # Subprocess CLI router cho nutsty-daemon (port 17890)
 │   ├── social_relay_core.py        # Deep Module mạng xã hội, SSOT identity, unified cache
 │   ├── stream_resolver.py          # Audio stream resolver (Android client, 403 prevention)
+│   ├── spotify_sync*.py / spotify_web.py # Đồng bộ hai chiều Spotify: client web-player, merge 3 bên, state theo máy
 │   ├── tidal_source.py             # Tidal lossless: đăng nhập link, khớp bài, cache, FLAC/MPD (tài khoản của chính người dùng)
 │   ├── catalog_engine.py           # Shelves, mood continuation, artist/album/search
 │   ├── song_enrichment.py          # Metadata enrichment, lyrics, related tracks
@@ -102,8 +103,7 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 │   ├── GachaAnimeLyricsView.qml    # Mẫu 1: Điện ảnh Serif (Instrument Serif)
 │   ├── HomeFeedView.qml            # Màn hình trang chủ online: Mood pills, carousels, grids
 │   ├── LosslessSettingsSection.qml # Mục Lossless (Tidal) trong Cài đặt + LosslessExplainModal.qml, lossless_logic.js
-│   ├── LibraryData.qml             # Model quản lý danh sách bài hát trong QML
-│   ├── LibraryLoader.qml           # Loader nạp dữ liệu từ library.json
+│   ├── LibraryData/Loader.qml      # Model danh sách bài hát QML & loader nạp library.json
 │   ├── MainTrackGrid.qml           # Grid danh sách bài hát & nút phát tuần tự
 │   ├── MarqueeText.qml             # Chữ cuộn ngang mượt mà khi text dài vượt giới hạn
 │   ├── NavArrowButton.qml          # Nút mũi tên < > đồng bộ màu động accentColor
@@ -115,11 +115,11 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 │   ├── SettingsModal.qml           # Modal đăng nhập Google Account Dark Glass
 │   ├── ShuffleButton.qml           # Nút phát ngẫu nhiên chuẩn Liquid Glass & Dynamic Accent
 │   ├── SpotifyImportModal.qml      # Modal chuyển giao Spotify Arc Gunshot Stage
+│   ├── SpotifySync*.qml            # Đồng bộ hai chiều Spotify trong Cài đặt (thẻ Setting Card, chọn playlist, ghi ngược)
 │   ├── SuggestTrackToast.qml       # Toast tương tác nhận đề xuất bài hát
 │   ├── Theme.qml                   # Hệ thống token màu, bo góc, padding
-│   ├── TrackCard.qml               # Card hiển thị bài hát trong grid
+│   ├── TrackCard/Row.qml           # Card bài hát trong grid & dòng bài hát trong hàng đợi
 │   ├── TrackContextMenu.qml        # Menu chuột phải Dark Glass
-│   ├── TrackRow.qml                # Dòng hiển thị bài hát trong hàng đợi
 │   └── UserNoteDetailModal.qml     # Modal xem/xóa ghi chú cá nhân Dark Glass
 ├── .agents/rules/                  # Quy tắc & kiến trúc chuyên sâu phân tầng
 └── AGENTS.md                       # File này (Hiến pháp kiến trúc tối cao)

@@ -72,7 +72,7 @@ def match_item(item, match, cache, now=None):
     try:
         found = match(item)
     except Exception:
-        found = None
+        return None  # offline or search failed: try again next cycle, do not cache "unmatched"
     if found and found.get("videoId"):
         found = dict(found, spotifyId=sid)
         cache.put(sid, found, now=now)
@@ -165,7 +165,7 @@ def _default_matcher():
         from . import spotify_importer
     except (ImportError, ValueError):
         import spotify_importer
-    return spotify_importer.match_spotify_track_to_ytmusic
+    return lambda item: spotify_importer.match_spotify_track_to_ytmusic(item, strict=True)
 
 
 def _find_linked(playlists, pid):
@@ -180,7 +180,7 @@ def _liked_entry(track, now):
     return {"videoId": vid, "title": title, "name": title, "artist": track.get("artist") or "",
             "image": img, "cover": img, "artUrl": img, "path": track.get("path") or f"ytdl://{vid}",
             "duration": track.get("duration") or "", "timestamp": int(now * 1000),
-            "spotifyId": track.get("spotifyId", "")}
+            "spotifyId": track.get("spotifyId", ""), "spotifySynced": True}
 
 
 # ---------------------------------------------------------------------------
@@ -252,8 +252,13 @@ def _note_baseline(st, pid, tracks, base):
     st["writeBackAbsent"] = dict(st.get("writeBackAbsent") or {}, **{pid: _absent_ids(tracks, base)})
 
 
+def _editable(info):
+    """The user may change this list on Spotify: owns it, or is a collaborator."""
+    return bool(info.get("editable", info.get("owned"))) and not info.get("spotifyMade")
+
+
 def _wb_on(st, info):
-    return bool(st.get("writeBack")) and bool(info.get("owned")) and not info.get("spotifyMade")
+    return bool(st.get("writeBack")) and _editable(info)
 
 
 def _needs_reverse(track, keys):
@@ -334,8 +339,14 @@ def _fetch(st, client, match, cache, now, playlists_snapshot):
                                 reverse[("liked", pm.get_track_unique_key(v))] = found
                 liked_remote = remote
     except sw.SpotifyError as e:
+        _note_error(st, e, now)
         error = e.code
     return library, fetched, liked_remote, reverse, error
+
+
+def _note_error(st, e, now):
+    if isinstance(e, sw.SpotifyRateLimited):
+        st["retryAt"] = now + max(1.0, float(e.retry_after or 60.0))
 
 
 # One playlist that cannot be read (deleted by its owner, made private) is skipped; anything that
@@ -376,7 +387,8 @@ def _learn(cache, tracks, now):
         if not isinstance(t, dict) or not t.get("videoId"):
             continue
         for sid in track_ids(t):
-            if not cache.get(sid):
+            hit = cache.get(sid)
+            if not hit or hit.get("unmatched"):
                 cache.put(sid, t, now=now)
 
 
@@ -465,7 +477,8 @@ def _apply_playlist(playlists, info, remote, st, cache, now, blocked, reverse=No
     old_link = rec.get("spotifyLink") or {}
     old_count = rec.get("trackCount")
     rec["trackCount"] = len(rec["tracks"])
-    link = {"id": pid, "owned": bool(info.get("owned")), "spotifyMade": bool(info.get("spotifyMade")),
+    link = {"id": pid, "owned": bool(info.get("owned")), "editable": _editable(info),
+            "spotifyMade": bool(info.get("spotifyMade")),
             "base": new_base, "revision": remote.revision or "",
             "libRevision": info.get("revision") or "", "syncedAt": now, "unmatched": len(unmatched)}
     if (before is not None and rec["tracks"] == before and old_count == rec["trackCount"]
@@ -513,6 +526,9 @@ def _apply_liked(remote, st, cache, now, blocked, reverse=None, jobs=None):
             local = _wb_local([(sid, liked[key]) for sid, key in local_of.items()],
                               set(base), set(remote_ids), keys)
         r = merge.three_way(base, remote_ids, local, wb, unmatched)
+        # A like that has been on Spotify and is gone there now was unliked on Spotify; this device
+        # only missed it (its base came later, the entry over account sync). Never like it again.
+        r.push_add = [s for s in r.push_add if not liked.get(local_of.get(s), {}).get("spotifySynced")]
         absent = set((st.get("writeBackAbsent") or {}).get("liked") or [])
         push_remove = [s for s in r.push_remove if s not in absent]
         force = st.get("forceApply") or []
@@ -548,25 +564,36 @@ def _apply_liked(remote, st, cache, now, blocked, reverse=None, jobs=None):
             continue
         liked[vid] = _liked_entry(m, now)
         changed = True
+    remote_set = set(remote_ids)
+    for v in liked.values():
+        if isinstance(v, dict) and not v.get("spotifySynced") and remote_set.intersection(track_ids(v)):
+            v["spotifySynced"] = True
+            changed = True
     st["likedBase"] = new_base
     if changed:
         pm._write_json(pm._liked_file(), liked)
     return changed
 
 
-def _push(client, jobs, sleep):
+def _push(client, jobs, sleep, st=None, now=0.0):
     """Send the queued writes slowly: fresh read first (skip what Spotify already has, find uids),
     at most PUSH_CAP tracks, PUSH_GAP_SEC between calls. Stops at the first error or when the switch
     is turned off. Returns ({list: (added, removed)}, error_code)."""
-    done, budget, calls = {}, PUSH_CAP, 0
+    done, budget, calls, written = {}, PUSH_CAP, 0, 0
+
+    def read(lid):
+        return client.liked_items() if lid == "liked" else client.playlist_items(lid)
+
     for job in jobs:
         if budget <= 0:
             break
         lid = job["list"]
         try:
-            fresh = client.liked_items() if lid == "liked" else client.playlist_items(lid)
+            fresh = read(lid)
         except sw.SpotifyError as e:
-            return done, e.code
+            if st is not None:
+                _note_error(st, e, now)
+            return done, e.code, written
         if not merge.remote_is_valid(fresh):
             continue
         uids = {}
@@ -577,13 +604,30 @@ def _push(client, jobs, sleep):
         done[lid] = (added, removed)
         for kind, ids in (("add", [s for s in job["add"] if s not in uids]),
                           ("remove", [s for s in job["remove"] if s in uids])):
+            sent = 0
             while ids and budget > 0:
-                batch, ids = ids[:min(PUSH_BATCH, budget)], ids[min(PUSH_BATCH, budget):]
                 if calls:
                     sleep(PUSH_GAP_SEC)
                 if not sstate.load_state().get("writeBack"):
-                    return done, ""
+                    return done, "", written
+                if kind == "add" and sent:
+                    # another device may have added some meanwhile: look again before each later batch
+                    try:
+                        again = read(lid)
+                    except sw.SpotifyError as e:
+                        if st is not None:
+                            _note_error(st, e, now)
+                        return done, e.code, written
+                    if not merge.remote_is_valid(again):
+                        break
+                    have = {i["spotifyId"] for i in again.items}
+                    added.extend(s for s in ids if s in have)
+                    ids = [s for s in ids if s not in have]
+                    if not ids:
+                        break
+                batch, ids = ids[:min(PUSH_BATCH, budget)], ids[min(PUSH_BATCH, budget):]
                 calls += 1
+                sent += 1
                 uris = [f"spotify:track:{s}" for s in batch]
                 try:
                     if lid == "liked":
@@ -593,10 +637,30 @@ def _push(client, jobs, sleep):
                     else:
                         client.remove_from_playlist(lid, [u for s in batch for u in uids[s] if u])
                 except sw.SpotifyError as e:
-                    return done, e.code
+                    if st is not None:
+                        _note_error(st, e, now)
+                    return done, e.code, written
                 budget -= len(batch)
+                written += len(batch)
                 (added if kind == "add" else removed).extend(batch)
-    return done, ""
+    return done, "", written
+
+
+def _mark_synced(sids):
+    """Liked entries standing for `sids` are on Spotify now (see spotifySynced in _apply_liked)."""
+    sids = set(sids)
+    if not sids:
+        return
+    liked = pm._read_json(pm._liked_file(), {})
+    if not isinstance(liked, dict):
+        return
+    dirty = False
+    for v in liked.values():
+        if isinstance(v, dict) and not v.get("spotifySynced") and sids.intersection(track_ids(v)):
+            v["spotifySynced"] = True
+            dirty = True
+    if dirty:
+        pm._write_json(pm._liked_file(), liked)
 
 
 def _patch_bases(st, done):
@@ -616,6 +680,7 @@ def _patch_bases(st, done):
                 continue
             if lid == "liked":
                 st["likedBase"] = patch(st.get("likedBase"), added, removed)
+                _mark_synced(added)
                 continue
             rec = _find_linked(playlists, lid)
             if rec and rec.get("spotifyLink"):
@@ -630,18 +695,19 @@ def _cycle(st, client, match, cache, now, sleep=time.sleep):
     try:
         _library, fetched, liked_remote, reverse, error = _fetch(st, client, match, cache, now, snapshot)
     except sw.SpotifyError as e:
+        _note_error(st, e, now)
         return _result(False, e.code)
     blocked, changed, jobs = [], {"playlists": False, "liked": False}, []
     unmatched = 0
     with pm.locked():
         playlists = pm.load_playlists()
-        before = len(playlists)
+        before = [p.get("id") if isinstance(p, dict) else None for p in playlists]
         playlists = migrate_legacy_imports(playlists, {pid: r for pid, (_i, r) in fetched.items()}, match, cache, now)
         for pid, (info, remote) in fetched.items():
             if _apply_playlist(playlists, info, remote, st, cache, now, blocked, reverse, jobs):
                 changed["playlists"] = True
             unmatched += _matched_map(remote, cache)[1].__len__()
-        if changed["playlists"] or len(playlists) != before:
+        if changed["playlists"] or [p.get("id") if isinstance(p, dict) else None for p in playlists] != before:
             pm.save_playlists(playlists)
         st["linked"] = sorted(set(st.get("linked") or []) | {pid for pid in fetched if _find_linked(playlists, pid)})
         if liked_remote is not None:
@@ -649,9 +715,8 @@ def _cycle(st, client, match, cache, now, sleep=time.sleep):
             unmatched += len(_matched_map(liked_remote, cache)[1])
     pushed = 0
     if jobs and not error:
-        done, error = _push(client, jobs, sleep)
+        done, error, pushed = _push(client, jobs, sleep, st, now)
         _patch_bases(st, done)
-        pushed = sum(len(a) + len(r) for a, r in done.values())
     return _result(not error, error, changed=changed, blocked=blocked, unmatched=unmatched, pushed=pushed)
 
 
@@ -678,11 +743,14 @@ def sync_once(profile="", client=None, matcher=None, now=None, sleep=None):
             if not st.get("enabled") or not st.get("selectionConfirmed"):
                 return _result(False, "disabled")
             now = time.time() if now is None else now
+            if now < float(st.get("retryAt") or 0):
+                return _result(False, "rate_limited")
             cache = sstate.MatchCache()
             try:
                 client = client or _default_client()
                 res = _cycle(st, client, matcher or _default_matcher(), cache, now, sleep or time.sleep)
             except sw.SpotifyError as e:
+                _note_error(st, e, now)
                 res = _result(False, e.code)
             except Exception as e:  # never let a sync bug take the daemon down
                 sys.stderr.write(f"[spotify_sync] cycle failed: {e}\n")
@@ -726,9 +794,10 @@ def _backlog_commit(pairs):
             dirty = False
             for key, sid in pairs:
                 for k, v in liked.items():
-                    if isinstance(v, dict) and pm.get_track_unique_key(v) == key and v.get("spotifyId") != sid:
-                        v["spotifyId"] = sid
-                        dirty = True
+                    if isinstance(v, dict) and pm.get_track_unique_key(v) == key:
+                        if add_track_id(v, sid) or not v.get("spotifySynced"):
+                            v["spotifySynced"] = True
+                            dirty = True
             if dirty:
                 pm._write_json(pm._liked_file(), liked)
         with sstate.edit_state() as st:
@@ -760,6 +829,8 @@ def _backlog_run(client, sleep, now):
             sid = v.get("spotifyId") or reverse_match(v, client, cache, now)
             if not sid:
                 unmatched += 1
+            elif v.get("spotifySynced") and sid not in have:
+                continue  # was on Spotify and unliked there: not an earlier like to push
             elif sid in have:
                 already.append((key, sid))
             elif sid not in {q for _k, q in queue}:
@@ -873,11 +944,13 @@ def set_write_back(profile, on, now=None):
             st.update(writeBack=False, writeBackSince=0.0, localBaseline={}, writeBackAbsent={})
             sstate.save_state(st)
             return status(profile)
+        if st.get("writeBack"):
+            return status(profile)  # already on: keep the baseline taken at switch-on
         cache = sstate.MatchCache()
         baseline, absent = {}, {}
         for pl in pm.load_playlists():
             link = (pl.get("spotifyLink") or {}) if isinstance(pl, dict) else {}
-            if not link.get("id") or not link.get("owned") or link.get("spotifyMade"):
+            if not link.get("id") or not _editable(link):
                 continue
             tracks = [t for t in pl.get("tracks") or [] if isinstance(t, dict)]
             baseline[link["id"]] = [pm.get_track_unique_key(t) for t in tracks]

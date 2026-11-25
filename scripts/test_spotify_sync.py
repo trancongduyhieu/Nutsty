@@ -856,7 +856,7 @@ class PushTests(SyncCase):
         self.assertEqual(r["error"], "rate_limited")
         self.assertEqual(st.load_state()["likedBase"], ["a"])
         c.write_error = None
-        self.sync(c)
+        self.sync(c, now=self.NOW + 6)  # after Spotify's Retry-After of 5 s
         self.assertEqual(c.writes, [("add_to_library", None, ["spotify:track:n"])])
         self.assertEqual(st.load_state()["likedBase"], ["a", "n"])
 
@@ -1223,6 +1223,219 @@ class FinalReviewTests(SyncCase):
             self.assertEqual(ss._default_client().spdc, "A")
 
 
+class RemainingFixTests(SyncCase):
+    """The deferred minors and I9, each reproduced."""
+
+    def write_back(self, on=True):
+        import spotify_sync as ss
+        return ss.set_write_back("", on, now=self.NOW)
+
+    def set_liked(self, data):
+        import playlist_manager as pm
+        pm._write_json(pm._liked_file(), data)
+
+    # I9: a like that has been on Spotify is never re-added from a device that missed the unlike
+    def test_like_seen_on_spotify_not_readded_by_other_device(self):
+        import spotify_sync_state as st
+        self.enable([], liked=True)
+        c = FakeClient([], liked=remote_list(["z"]))
+        self.sync(c)
+        entry = self.liked()["vz"]
+        self.assertTrue(entry.get("spotifySynced"))
+        # device B: its own base never had z; the entry came over account sync; Spotify unliked z
+        s = st.load_state()
+        s["likedBase"] = []
+        st.save_state(s)
+        self.write_back(True)
+        s = st.load_state()
+        s["localBaseline"] = {"liked": []}
+        st.save_state(s)
+        c.liked = remote_list([])
+        self.sync(c)
+        self.assertEqual(c.writes, [])
+
+    def test_pushed_like_marked_synced(self):
+        self.enable([], liked=True)
+        c = FakeClient([], liked=remote_list([]), search={"New": [cand("n1", "New")]})
+        self.sync(c)
+        self.write_back(True)
+        self.set_liked({"vnew": yt("vnew", title="New")})
+        self.sync(c)
+        self.assertEqual(c.writes, [("add_to_library", None, ["spotify:track:n1"])])
+        self.assertTrue(self.liked()["vnew"].get("spotifySynced"))
+
+    # matcher network error: retried next cycle, not marked unmatched for 3 days
+    def test_matcher_error_retried_next_cycle(self):
+        class Flaky(FakeMatcher):
+            def __call__(inner, item):
+                if not inner.calls:
+                    inner.calls.append(item["spotifyId"])
+                    raise ConnectionError("offline")
+                return super().__call__(item)
+        self.matcher = Flaky()
+        self.enable(["P"])
+        c = FakeClient([lib("P")], {"P": remote_list(["a"])})
+        self.sync(c)
+        self.sync(c)
+        self.assertEqual(self.vids(), ["va"])
+
+    def sync(self, client, matcher=None, now=None):
+        return super().sync(client, matcher or getattr(self, "matcher", None), now)
+
+    def test_strict_matcher_raises_on_search_failure(self):
+        import catalog_engine as ce
+        import spotify_importer as si
+        orig = ce.get_ytmusic_client
+
+        def boom():
+            raise ConnectionError("offline")
+        ce.get_ytmusic_client = boom
+        try:
+            self.assertEqual(ce.filter_search("zz strict probe", "songs", limit=5), [])
+            with self.assertRaises(Exception):
+                ce.filter_search("zz strict probe 2", "songs", limit=5, strict=True)
+        finally:
+            ce.get_ytmusic_client = orig
+        orig_fs = si.ytmusic_helper.filter_search
+
+        def raising(*a, **kw):
+            raise ConnectionError("offline")
+        si.ytmusic_helper.filter_search = raising
+        try:
+            self.assertIsNone(si.match_spotify_track_to_ytmusic({"name": "X", "artist": "Y"}))
+            with self.assertRaises(ConnectionError):
+                si.match_spotify_track_to_ytmusic({"name": "X", "artist": "Y"}, strict=True)
+        finally:
+            si.ytmusic_helper.filter_search = orig_fs
+
+    # _learn: an id cached as unmatched but carried by a track is that track's match
+    def test_learn_overrides_unmatched_entry(self):
+        import spotify_sync as ss
+        import spotify_sync_state as st
+        cache = st.MatchCache()
+        cache.put("a", None, now=self.NOW)
+        ss._learn(cache, [yt("va", spotifyId="a")], self.NOW)
+        self.assertEqual(cache.get("a").get("videoId"), "va")
+
+    # set_write_back(on) twice keeps the first baseline
+    def test_write_back_on_twice_keeps_baseline(self):
+        import spotify_sync_state as st
+        self.set_liked({"vold": yt("vold", title="Old")})
+        self.write_back(True)
+        self.set_liked(dict(self.liked(), vnew=yt("vnew", title="New")))
+        self.write_back(True)
+        self.assertEqual(len(st.load_state()["localBaseline"]["liked"]), 1)
+
+    # Retry-After: no Spotify call before the wait is over
+    def test_rate_limit_waits_retry_after(self):
+        import spotify_web as sw
+
+        class Counting(FakeClient):
+            calls = 0
+
+            def library_playlists(inner):
+                inner.calls += 1
+                return super().library_playlists()
+        self.enable(["P"])
+        c = Counting([lib("P")], {"P": [sw.SpotifyRateLimited("slow", retry_after=600), remote_list(["a"])]})
+        self.assertEqual(self.sync(c)["error"], "rate_limited")
+        self.assertEqual(self.sync(c, now=self.NOW + 10)["error"], "rate_limited")
+        self.assertEqual(c.calls, 1)
+        self.assertTrue(self.sync(c, now=self.NOW + 601)["success"])
+        self.assertEqual(self.vids(), ["va"])
+
+    # two devices adding at once: re-read before each later add batch
+    def test_add_batch_rechecks_spotify_first(self):
+        import playlist_manager as pm
+        self.enable(["P"])
+        names = [f"N{i}" for i in range(11)]
+
+        class Other(FakeClient):
+            reads = 0
+
+            def playlist_items(inner, pid):
+                inner.reads += 1
+                r = super().playlist_items(pid)
+                if inner.reads == 4:  # before the second add batch: another device added N10
+                    _grow(r, ["n10"])
+                return r
+        c = Other([lib("P")], {"P": remote_list(["a"])},
+                  search={n: [cand(n.lower(), n)] for n in names})
+        self.sync(c)
+        self.write_back(True)
+        pls = pm.load_playlists()
+        next(p for p in pls if p["id"] == "custom_pl_spotify_P")["tracks"].extend(yt(f"v{n}", title=n) for n in names)
+        pm.save_playlists(pls)
+        c.reads = 1
+        r = self.sync(c)
+        added = [u for op, _t, uris in c.writes if op == "add_to_playlist" for u in uris]
+        self.assertEqual(added.count("spotify:track:n10"), 0)
+        self.assertEqual(len(added), 10)
+        self.assertEqual(r["pushed"], 10)
+
+    # pushed counts only what was written
+    def test_pushed_counts_only_writes(self):
+        self.enable(["P"])
+        c = FakeClient([lib("P")], {"P": remote_list(["a"])}, search={"New": [cand("n1", "New")]})
+        self.sync(c)
+        self.write_back(True)
+        import playlist_manager as pm
+        pls = pm.load_playlists()
+        next(p for p in pls if p["id"] == "custom_pl_spotify_P")["tracks"].append(yt("vn", title="New"))
+        pm.save_playlists(pls)
+        c.playlists["P"] = [remote_list(["a"]), remote_list(["a", "n1"])]
+        self.assertEqual(self.sync(c)["pushed"], 0)
+
+    # migration is saved even when that playlist is held back this cycle
+    def test_migration_saved_when_blocked(self):
+        import playlist_manager as pm
+        import spotify_sync as ss
+        pm.save_playlists([legacy("P", 100, ["va"])])
+        self.enable(["P"])
+        orig = ss._apply_playlist
+        ss._apply_playlist = lambda *a, **kw: False
+        try:
+            self.sync(FakeClient([lib("P")], {"P": remote_list(["a"])}))
+        finally:
+            ss._apply_playlist = orig
+        self.assertIsNotNone(self.playlist())
+
+    # collaborative: a list the user may edit is written even when someone else owns it
+    def test_collaborative_playlist_written(self):
+        info = dict(lib("C", owned=False), editable=True)
+        self.enable(["C"])
+        c = FakeClient([info], {"C": remote_list(["a"])}, search={"New": [cand("n1", "New")]})
+        self.sync(c)
+        self.write_back(True)
+        import playlist_manager as pm
+        pls = pm.load_playlists()
+        next(p for p in pls if p["id"] == "custom_pl_spotify_C")["tracks"].append(yt("vn", title="New"))
+        pm.save_playlists(pls)
+        self.sync(c)
+        self.assertEqual(c.writes, [("add_to_playlist", "C", ["spotify:track:n1"])])
+
+    # catalog_engine liked writes hold the playlist lock
+    def test_liked_writes_hold_lock(self):
+        import contextlib
+        import catalog_engine as ce
+        import playlist_manager as pm
+        used = []
+        orig = pm.locked
+
+        @contextlib.contextmanager
+        def rec():
+            used.append(1)
+            with orig():
+                yield
+        pm.locked = rec
+        try:
+            ce.add_liked_song("vx", "X", "Y")
+            ce.remove_liked_song("vx", "X", "Y")
+        finally:
+            pm.locked = orig
+        self.assertEqual(len(used), 2)
+
+
 class TokenTests(unittest.TestCase):
     """I5 / C2: the access token belongs to one cookie, and an anonymous one is not a login."""
 
@@ -1283,6 +1496,17 @@ class EmptyResponseTests(unittest.TestCase):
         c, _ = self.client({"profileAttributes": [ok({"data": {"me": None}})]})
         with self.assertRaises(sw.SpotifyAuthError):
             c.me()
+
+    def test_editable_from_capabilities(self):
+        node = {"__typename": "Playlist", "name": "c", "revisionId": "r", "uri": "spotify:playlist:c",
+                "ownerV2": {"data": {"uri": "spotify:user:bob", "name": "bob"}},
+                "currentUserCapabilities": {"canEditItems": True}}
+        body = {"data": {"me": {"libraryV3": {"totalCount": 1, "items": [
+            {"item": {"_uri": "spotify:playlist:c", "data": node}}]}}}}
+        c, _ = self.client({"libraryV3": [ok(body)]})
+        p = c.library_playlists()[0]
+        self.assertFalse(p["owned"])
+        self.assertTrue(p["editable"])
 
     def test_episode_rows_do_not_make_list_incomplete(self):
         import spotify_sync_merge as merge

@@ -271,13 +271,18 @@ class SpotifyWebClient:
                 owner = ((node.get("ownerV2") or {}).get("data")) or {}
                 owner_id = _tail(owner.get("uri", "")) or owner.get("id", "")
                 count = ((node.get("content") or {}).get("totalCount")) or node.get("totalCount") or 0
+                owned = bool(my_id) and owner_id == my_id
+                caps = node.get("currentUserCapabilities")
+                # canEditItems also covers collaborative playlists someone else owns
+                editable = bool(caps.get("canEditItems")) if isinstance(caps, dict) else owned
                 out.append({
                     "id": _tail(uri),
                     "title": node.get("name", ""),
                     "image": _first_source(((node.get("images") or {}).get("items") or [{}])[0]),
                     "ownerId": owner_id,
                     "ownerName": owner.get("name", ""),
-                    "owned": bool(my_id) and owner_id == my_id,
+                    "owned": owned,
+                    "editable": editable and owner_id != "spotify",
                     "spotifyMade": owner_id == "spotify",
                     "revision": node.get("revisionId", "") or "",
                     "trackCount": int(count or 0),

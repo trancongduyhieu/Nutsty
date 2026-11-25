@@ -544,10 +544,10 @@ def fetch_spotify_playlist_tracks(playlist_id, token=None, spdc=None):
     return tracks
 
 
-def match_spotify_track_to_ytmusic(sp_track):
+def match_spotify_track_to_ytmusic(sp_track, strict=False):
     """
     Searches YouTube Music for the best matching videoId corresponding to the Spotify track.
-    Uses ytmusic_helper.filter_search and score evaluation.
+    Uses ytmusic_helper.filter_search and score evaluation. strict: a failed search raises.
     """
     name = sp_track.get("name", "")
     artist = sp_track.get("artist", "").replace("\xa0", " ")
@@ -556,11 +556,11 @@ def match_spotify_track_to_ytmusic(sp_track):
         return None
 
     try:
-        search_res = ytmusic_helper.filter_search(query, "songs", limit=5)
+        search_res = ytmusic_helper.filter_search(query, "songs", limit=5, **({"strict": True} if strict else {}))
         candidates = search_res if isinstance(search_res, list) else (search_res.get("items", []) if isinstance(search_res, dict) else [])
         if not candidates:
             # Fallback to general search without filter
-            search_res = ytmusic_helper.filter_search(query, "videos", limit=5)
+            search_res = ytmusic_helper.filter_search(query, "videos", limit=5, **({"strict": True} if strict else {}))
             candidates = search_res if isinstance(search_res, list) else (search_res.get("items", []) if isinstance(search_res, dict) else [])
 
         if not candidates:
@@ -598,6 +598,8 @@ def match_spotify_track_to_ytmusic(sp_track):
                 "spotifyId": sp_track.get("spotifyId") or sp_track.get("id") or "",
             }
     except Exception as e:
+        if strict:  # sync retries next cycle instead of caching "no match" for 3 days
+            raise
         sys.stderr.write(f"[spotify_importer] Track match error for '{query}': {e}\n")
 
     return None

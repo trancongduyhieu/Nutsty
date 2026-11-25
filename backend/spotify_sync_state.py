@@ -31,6 +31,7 @@ DEFAULT_STATE = {
     "localBaseline": {},     # "liked" or playlist id -> Nutsty track keys at write-back switch-on
     "writeBackAbsent": {},   # "liked" or playlist id -> base ids already gone locally at switch-on (never pushed)
     "forceApply": [],
+    "retryAt": 0.0,          # Spotify said Retry-After: no call before this time
     "linked": [],            # Spotify playlist ids whose Nutsty copy existed here; deleting it unlinks
     "lastSync": 0.0,
     "lastError": "",

@@ -83,7 +83,21 @@ def load_liked_songs():
 def save_liked_songs(data):
     save_json(LIKED_SONGS_FILE, data)
 
+def _liked_lock():
+    """The playlist lock, also held by Spotify sync and account sync while they edit liked songs."""
+    try:
+        from . import playlist_manager as pm
+    except (ImportError, ValueError):
+        import playlist_manager as pm
+    return pm.locked()
+
+
 def add_liked_song(video_id, title="", artist="", image="", duration="", path=""):
+    with _liked_lock():
+        return _add_liked_song(video_id, title, artist, image, duration, path)
+
+
+def _add_liked_song(video_id, title="", artist="", image="", duration="", path=""):
     clean_vid = str(video_id).strip().replace("ytdl://", "").replace("yt_", "")
     clean_title = title.strip() if title else ""
     clean_artist = artist.strip() if artist else ""
@@ -131,6 +145,11 @@ def add_liked_song(video_id, title="", artist="", image="", duration="", path=""
     return True
 
 def remove_liked_song(video_id, title="", artist=""):
+    with _liked_lock():
+        return _remove_liked_song(video_id, title, artist)
+
+
+def _remove_liked_song(video_id, title="", artist=""):
     clean_vid = str(video_id).strip().replace("ytdl://", "").replace("yt_", "")
     data = load_liked_songs()
     changed = False
@@ -1798,7 +1817,8 @@ def search_categorized(query):
 _FILTER_SEARCH_CACHE = {}
 _FILTER_SEARCH_CACHE_TTL = 180.0
 
-def filter_search(query, category="songs", limit=30):
+def filter_search(query, category="songs", limit=30, strict=False):
+    """strict: a failed search raises instead of answering [] (sync must tell "offline" from "no match")."""
     q = str(query or "").strip()
     if not q:
         return []
@@ -1904,6 +1924,8 @@ def filter_search(query, category="songs", limit=30):
 
         return items
     except Exception as e:
+        if strict:
+            raise
         sys.stderr.write(f"[filter_search error]: {e}\n")
         return []
 

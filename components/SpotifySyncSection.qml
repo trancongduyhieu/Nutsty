@@ -66,6 +66,10 @@ ColumnLayout {
         if (code === "rate_limited") return I18n.tr("Spotify đang giới hạn, sẽ thử lại sau.", "Spotify is rate limiting, will retry later.");
         if (code === "query_changed") return I18n.tr("Spotify vừa thay đổi, cần cập nhật Nutsty.", "Spotify changed something, Nutsty needs an update.");
         if (code === "busy") return I18n.tr("Nutsty đang đồng bộ, thử lại sau ít phút.", "Nutsty is syncing, try again in a few minutes.");
+        if (code === "no_cookie") return I18n.tr("Chưa đăng nhập Spotify. Hãy đăng nhập Spotify trong Cài đặt.", "You are not signed in to Spotify. Sign in to Spotify in Settings.");
+        if (code === "not_found" || code === "http_error" || code === "graphql_error")
+            return I18n.tr("Spotify từ chối yêu cầu, Nutsty sẽ thử lại sau.", "Spotify turned the request down, Nutsty will try again later.");
+        if (code === "internal") return I18n.tr("Nutsty gặp lỗi khi đồng bộ, sẽ thử lại sau.", "Nutsty hit an error while syncing, will try again later.");
         if (code === "") return "";
         return I18n.tr("Không kết nối được Spotify.", "Could not reach Spotify.");
     }
