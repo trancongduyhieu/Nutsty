@@ -20,8 +20,7 @@ DEFAULT_STATE = {
     "selected": [],          # Spotify playlist ids the user chose
     "likedSelected": True,
     "likedBase": None,       # Spotify ids agreed after the last liked-songs sync; None = never synced here
-    "bases": {},             # Spotify playlist id -> agreed Spotify ids
-    "revisions": {},         # Spotify playlist id -> revisionId seen at last sync
+    "seen": [],              # Spotify playlist ids already offered; a new owned one gets auto-selected
     "writeBack": False,
     "writeBackSince": 0.0,
     "localBaseline": {},     # "liked" or playlist id -> Nutsty track keys at write-back switch-on

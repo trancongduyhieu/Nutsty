@@ -399,5 +399,246 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(out, pls)
 
 
+def lib(pid, owned=True, made=False, rev="r1"):
+    return {"id": pid, "title": f"PL {pid}", "image": "", "ownerId": "me" if owned else ("spotify" if made else "bob"),
+            "ownerName": "", "owned": owned, "spotifyMade": made, "revision": rev, "trackCount": 0}
+
+
+class FakeClient:
+    def __init__(self, library=(), playlists=None, liked=None, error=None):
+        self.library = list(library)
+        self.playlists = dict(playlists or {})
+        self.liked = liked if liked is not None else remote_list([])
+        self.error = error
+        self.fetched = []
+
+    def me(self):
+        return {"id": "me", "name": "Me"}
+
+    def library_playlists(self):
+        if self.error:
+            raise self.error
+        return [dict(p) for p in self.library]
+
+    def playlist_items(self, pid):
+        self.fetched.append(pid)
+        r = self.playlists[pid]
+        if isinstance(r, Exception):
+            raise r
+        return r
+
+    def liked_items(self):
+        if isinstance(self.liked, Exception):
+            raise self.liked
+        return self.liked
+
+
+class PullTests(unittest.TestCase):
+    NOW = 1_800_000_000.0
+
+    def setUp(self):
+        for f in CONFIG_DIR.glob("*"):
+            if f.is_file():
+                f.unlink()
+
+    def enable(self, selected, liked=False, seen=None):
+        import spotify_sync_state as st
+        s = st.load_state()
+        s.update(enabled=True, selectionConfirmed=True, selected=list(selected), likedSelected=liked,
+                 seen=list(seen if seen is not None else selected))
+        st.save_state(s)
+
+    def sync(self, client, matcher=None, now=None):
+        import spotify_sync as ss
+        return ss.sync_once("", client=client, matcher=matcher or FakeMatcher(), now=now or self.NOW)
+
+    def playlist(self, pid="P"):
+        import playlist_manager as pm
+        return next((p for p in pm.load_playlists() if p["id"] == f"custom_pl_spotify_{pid}"), None)
+
+    def vids(self, pid="P"):
+        return [t["videoId"] for t in self.playlist(pid)["tracks"]]
+
+    def liked(self):
+        import playlist_manager as pm
+        return pm._read_json(pm._liked_file(), {})
+
+    def test_disabled_or_unconfirmed_does_nothing(self):
+        import spotify_sync_state as st
+        c = FakeClient([lib("P")], {"P": remote_list(["a"])})
+        self.assertEqual(self.sync(c)["error"], "disabled")
+        s = st.load_state()
+        s["enabled"] = True
+        st.save_state(s)
+        self.assertEqual(self.sync(c)["error"], "disabled")
+        self.assertEqual(c.fetched, [])
+        self.assertIsNone(self.playlist())
+
+    def test_creates_linked_playlist_with_fixed_id(self):
+        self.enable(["P"])
+        r = self.sync(FakeClient([lib("P")], {"P": remote_list(["a", "b"])}))
+        self.assertTrue(r["success"])
+        self.assertTrue(r["changed"]["playlists"])
+        pl = self.playlist()
+        self.assertEqual(self.vids(), ["va", "vb"])
+        self.assertEqual(pl["spotifyLink"]["base"], ["a", "b"])
+        self.assertTrue(pl["spotifyLink"]["owned"])
+        self.assertEqual(pl["tracks"][0]["spotifyId"], "a")
+        self.assertEqual(pl["trackCount"], 2)
+
+    def test_unchanged_revision_skips_fetch(self):
+        self.enable(["P"])
+        c = FakeClient([lib("P")], {"P": remote_list(["a"])})
+        self.sync(c)
+        self.sync(c)
+        self.assertEqual(c.fetched, ["P"])
+
+    def test_truncated_fetch_removes_nothing(self):
+        import spotify_web as sw
+        self.enable(["P"])
+        self.sync(FakeClient([lib("P")], {"P": remote_list(["a", "b"])}))
+        cut = sw.RemoteList(items=[sp_item("a")], total=2, revision="r2", complete=False)
+        self.sync(FakeClient([lib("P", rev="r2")], {"P": cut}))
+        self.assertEqual(self.vids(), ["va", "vb"])
+
+    def test_local_delete_survives_two_syncs(self):
+        import playlist_manager as pm
+        self.enable(["P"])
+        self.sync(FakeClient([lib("P")], {"P": remote_list(["a", "b"])}))
+        pls = pm.load_playlists()
+        pl = next(p for p in pls if p["id"] == "custom_pl_spotify_P")
+        pl["tracks"] = [t for t in pl["tracks"] if t["videoId"] != "vb"]
+        pm.save_playlists(pls)
+        for rev in ("r2", "r3"):
+            self.sync(FakeClient([lib("P", rev=rev)], {"P": remote_list(["a", "b"], revision=rev)}))
+            self.assertEqual(self.vids(), ["va"])
+
+    def test_remote_remove_and_add_pulled(self):
+        self.enable(["P"])
+        self.sync(FakeClient([lib("P")], {"P": remote_list(["a", "b", "c", "d"])}))
+        self.sync(FakeClient([lib("P", rev="r2")], {"P": remote_list(["a", "b", "c", "e"], revision="r2")}))
+        self.assertEqual(self.vids(), ["va", "vb", "vc", "ve"])
+
+    def test_unmatched_remote_add_retried_later(self):
+        self.enable(["P"])
+        c = FakeClient([lib("P")], {"P": remote_list(["a", "b"])})
+        r = self.sync(c, FakeMatcher(unmatched={"b"}))
+        self.assertEqual(r["unmatched"], 1)
+        self.assertEqual(self.vids(), ["va"])
+        fixed = FakeMatcher()
+        self.sync(c, fixed, now=self.NOW + 86400)
+        self.assertEqual(self.vids(), ["va"])
+        self.assertNotIn("b", fixed.calls)
+        self.sync(c, fixed, now=self.NOW + 3 * 86400 + 1)
+        self.assertEqual(self.vids(), ["va", "vb"])
+
+    def test_mass_delete_blocked_then_force_apply(self):
+        import spotify_sync as ss
+        import spotify_sync_state as st
+        self.enable(["P"])
+        self.sync(FakeClient([lib("P")], {"P": remote_list(list("abcdef"))}))
+        c = FakeClient([lib("P", rev="r2")], {"P": remote_list(["a"], revision="r2")})
+        r = self.sync(c)
+        self.assertEqual(r["blocked"], ["P"])
+        self.assertEqual(len(self.vids()), 6)
+        self.assertEqual(st.load_state()["blocked"], ["P"])
+        ss.force_apply("", "P")
+        r = self.sync(c)
+        self.assertEqual(r["blocked"], [])
+        self.assertEqual(self.vids(), ["va"])
+        self.assertEqual(st.load_state()["forceApply"], [])
+
+    def test_spotify_made_replaced_wholesale_without_guard(self):
+        self.enable(["D"])
+        self.sync(FakeClient([lib("D", owned=False, made=True)], {"D": remote_list(list("abcdef"))}))
+        r = self.sync(FakeClient([lib("D", owned=False, made=True, rev="r2")], {"D": remote_list(["x"], revision="r2")}))
+        self.assertEqual(r["blocked"], [])
+        self.assertEqual(self.vids("D"), ["vx"])
+
+    def test_liked_first_run_is_baseline_only(self):
+        import playlist_manager as pm
+        import spotify_sync_state as st
+        pm._write_json(pm._liked_file(), {"vz": yt("vz"), "va": yt("va")})
+        self.enable([], liked=True)
+        r = self.sync(FakeClient([], liked=remote_list(["a", "b"])))
+        self.assertTrue(r["changed"]["liked"])
+        liked = self.liked()
+        self.assertEqual(set(liked), {"vz", "va", "vb"})
+        self.assertEqual(liked["vb"]["spotifyId"], "b")
+        self.assertEqual(liked["vb"]["path"], "ytdl://vb")
+        self.assertIn("timestamp", liked["vb"])
+        self.assertEqual(sorted(st.load_state()["likedBase"]), ["a", "b"])
+
+    def test_liked_removal_after_baseline(self):
+        self.enable([], liked=True)
+        self.sync(FakeClient([], liked=remote_list(["a", "b"])))
+        self.sync(FakeClient([], liked=remote_list(["a"])))
+        self.assertEqual(set(self.liked()), {"va"})
+
+    def test_auth_error_leaves_files_untouched(self):
+        import spotify_web as sw
+        import spotify_sync_state as st
+        import playlist_manager as pm
+        self.enable(["P"], liked=True)
+        self.sync(FakeClient([lib("P")], {"P": remote_list(["a"])}, liked=remote_list(["a"])))
+        before = {f.name: f.read_bytes() for f in CONFIG_DIR.glob("*.json") if "spotify_sync_state" not in f.name}
+        r = self.sync(FakeClient(error=sw.SpotifyAuthError("x")))
+        self.assertFalse(r["success"])
+        self.assertEqual(r["error"], "auth_expired")
+        after = {f.name: f.read_bytes() for f in CONFIG_DIR.glob("*.json") if "spotify_sync_state" not in f.name}
+        self.assertEqual(before, after)
+        self.assertEqual(st.load_state()["lastError"], "auth_expired")
+
+    def test_error_mid_cycle_keeps_that_playlist_untouched(self):
+        import spotify_web as sw
+        self.enable(["P", "Q"])
+        self.sync(FakeClient([lib("P"), lib("Q")], {"P": remote_list(["a"]), "Q": remote_list(["q"])}))
+        r = self.sync(FakeClient([lib("P", rev="r2"), lib("Q", rev="r2")],
+                                 {"P": remote_list(["a", "b"], revision="r2"), "Q": sw.SpotifyRateLimited("x", 5)}))
+        self.assertEqual(r["error"], "rate_limited")
+        self.assertEqual(self.vids("P"), ["va", "vb"])
+        self.assertEqual(self.vids("Q"), ["vq"])
+
+    def test_new_owned_playlist_auto_selected_spotify_made_not(self):
+        import spotify_sync_state as st
+        self.enable(["P"], seen=["P"])
+        self.sync(FakeClient([lib("P"), lib("N"), lib("D", owned=False, made=True)],
+                             {"P": remote_list(["a"]), "N": remote_list(["n"]), "D": remote_list(["d"])}))
+        sel = st.load_state()["selected"]
+        self.assertIn("N", sel)
+        self.assertNotIn("D", sel)
+        self.assertEqual(self.vids("N"), ["vn"])
+        self.assertIsNone(self.playlist("D"))
+
+    def test_list_choices_defaults_then_confirmed(self):
+        import spotify_sync as ss
+        c = FakeClient([lib("P"), lib("D", owned=False, made=True), lib("F", owned=False)])
+        ch = ss.list_choices("", client=c)
+        sel = {p["id"]: p["selected"] for p in ch["playlists"]}
+        self.assertEqual(sel, {"P": True, "D": False, "F": False})
+        self.assertTrue(ch["liked"])
+        ss.set_selection("", ["D"], False)
+        ch = ss.list_choices("", client=c)
+        self.assertEqual({p["id"]: p["selected"] for p in ch["playlists"]}, {"P": False, "D": True, "F": False})
+        self.assertFalse(ch["liked"])
+
+    def test_playlist_list_cache_expires_after_6h(self):
+        import time as _t
+        import spotify_importer as si
+        cached = CONFIG_DIR / "spotify_cached_playlists.json"
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        orig = si.lyrics_helper.get_spotify_access_token
+        si.lyrics_helper.get_spotify_access_token = lambda *a, **k: ""
+        try:
+            cached.write_text(json.dumps({"fetchedAt": _t.time() - 3600, "playlists": [{"id": "x"}]}))
+            self.assertTrue(si.fetch_user_spotify_playlists(spdc="c")["success"])
+            cached.write_text(json.dumps({"fetchedAt": _t.time() - 7 * 3600, "playlists": [{"id": "x"}]}))
+            self.assertFalse(si.fetch_user_spotify_playlists(spdc="c")["success"])
+            cached.write_text(json.dumps([{"id": "x"}]))
+            self.assertFalse(si.fetch_user_spotify_playlists(spdc="c")["success"])
+        finally:
+            si.lyrics_helper.get_spotify_access_token = orig
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
