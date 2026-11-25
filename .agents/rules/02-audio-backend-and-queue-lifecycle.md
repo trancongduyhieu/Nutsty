@@ -1,64 +1,37 @@
 # Audio Backend, IPC & Queue Lifecycle Specification
 
-Tài liệu đặc tả chuyên sâu về hệ thống daemon phát nhạc, giao thức IPC Unix Domain Socket, YouTube Music engine và vòng đời quản lý hàng đợi phát nhạc của dự án Nutsty.
-
----
+Daemon phát nhạc, IPC mpv, YouTube Music engine và vòng đời hàng đợi.
 
 ## 1. Backend Daemon & Giao Thức IPC MPV
 - **Tiến trình**: `backend/player_daemon.py` quản lý một instance `mpv` thường trú.
 - **Giao tiếp**: Unix Domain Socket tại `/tmp/nutsty_mpv.sock`.
 - **Tính năng âm thanh**:
-  - Hỗ trợ phát liền mạch (gapless playback), giải mã phần cứng (hardware decoding).
-  - Tích hợp hook `yt-dlp` (`mpv --ytdl-format="bestaudio"`) để stream luồng YouTube Music trực tiếp (< 100MB RAM, độ trễ cực thấp).
+  - Gapless, giải mã phần cứng.
+  - Hook `yt-dlp` (`--ytdl-format="bestaudio"`) stream YouTube Music trực tiếp.
   - **Tránh HTTP 403 CDN & Autoplay tức thì**: `resolve_stream_url()` dùng `player_client: ["android"]` (không ép cookie web vào direct googlevideo URL). MPV thêm `--referrer=https://www.youtube.com/`, `--audio-buffer=0.4` để mở stream ~1 s.
-- **Quy tắc an toàn**: Không bao giờ giao tiếp trực tiếp với tiến trình con `mpv` bằng stdin/stdout shell thô; mọi lệnh phát, dừng, tìm bài, điều chỉnh âm lượng bắt buộc phải gửi qua socket IPC JSON.
+- **Quy tắc**: mọi lệnh tới mpv đi qua socket IPC JSON, không dùng stdin/stdout.
 
----
-
-## 2. YouTube Music Streaming & Bóc Tách Phân Đoạn (Continuation Shelves)
-- **Kiến trúc bóc tách 4 module sâu**:
-  - `stream_resolver.py`: Trích xuất stream audio (`player_client: ["android"]`), chặn HTTP 403 CDN, autoplay tức thì < 1.0s.
-  - `catalog_engine.py`: Bóc tách initial shelves & continuation shelves (`sectionListContinuation`) cho > 10 mood tags.
-  - `song_enrichment.py`: Bổ sung metadata, lyrics, related tracks và đồng bộ danh mục.
-  - `ytmusic_auth.py`: Quản lý OAuth token Google, refresh cookie và session.
-- **Facade**: `backend/ytmusic_helper.py` (~257 dòng) đóng vai trò single entry-point mỏng gọi 4 module trên.
-
----
-
+## 2. YouTube Music Streaming (4 module + facade `ytmusic_helper.py`)
+- `stream_resolver.py` (stream android, chặn 403), `catalog_engine.py` (shelves + continuation cho >10 mood), `song_enrichment.py` (metadata, lyrics, related), `ytmusic_auth.py` (OAuth/cookie).
 ## 3. Phân Lập Luồng Duyệt (Browsing) & Hàng Đợi Phát Nhạc (Playback Queue)
 - **Hai thuộc tính độc lập tại `shell.qml`**:
   - `win.browsingTracks`: Danh sách bài hát đang hiển thị trên giao diện duyệt (kết quả tìm kiếm, tab Downloads, danh sách bài của album/nghệ sĩ).
   - `win.currentTracks`: Hàng đợi phát nhạc thực sự (Queue).
-- **Nguyên tắc bất khả xâm phạm**: Thao tác duyệt xem playlist, gõ tìm kiếm bài hát hoặc mở tab Tải xuống **không được ghi đè hàng đợi** (`win.currentTracks`); chỉ click trực tiếp vào bài mới phát.
-
----
+- **Nguyên tắc**: duyệt playlist, tìm kiếm, mở tab Tải xuống **không ghi đè** `win.currentTracks`; chỉ bấm phát bài mới đổi.
 
 ## 4. Tách Bạch Browsing Title & Playing Source Title
 - **Ràng buộc cốt lõi**:
   - `win.mainSectionTitle`: Tiêu đề phục vụ giao diện duyệt (browsing UI).
   - `win.playingSourceTitle`: Nguồn gốc thực tế của bài hát đang phát (album, playlist, artist hoặc queue).
-- **Mục đích**: Triệt tiêu hoàn toàn hiện tượng xung đột trạng thái (race condition) khi người dùng đang nghe Album A nhưng bấm chuột sang xem Album B. `playingSourceTitle` chỉ được gán lại khi người dùng thực sự bấm phát một nguồn mới.
-
----
+- **Mục đích**: nghe Album A mà mở xem Album B không làm đổi nguồn; `playingSourceTitle` chỉ gán khi thực sự phát nguồn mới.
 
 ## 5. Cơ Chế Snapshot & Reset Queue An Toàn Khi Chuyển Mood Chips
-- **Tệp**: `shell.qml` và `components/YTMusicNowPlayingView.qml`.
-- **Cơ chế hoạt động**:
-  1. **Khởi tạo bài/album mới**: Khi phát bài hát mới từ album (`!isAlreadyInQueue` trong `onTrackChanged` hoặc `playingPlaylistTitle` đổi), `root.originalAlbumQueue` được reset về `[]` và `root.selectedMoodIndex = 0`.
-  2. **Đồng bộ tab Tất cả**: Tại tab "Tất cả" (`selectedMoodIndex === 0`), `originalAlbumQueue` tự động cập nhật theo `queueTracks`.
-  3. **Snapshot khi đổi Mood**: Khi người dùng bấm sang mood phụ ("Khám phá", "Lãng mạn"), `loadQueueForChipIndex` tự động snapshot toàn bộ danh sách bài hát đang hiển thị ở mood 0 vào `originalAlbumQueue` trước khi gọi API nạp radio mood.
-  4. **Khôi phục nguyên bản**: Khi bấm quay lại tag "Tất cả" (`index 0`), hệ thống khôi phục ngay lập tức danh sách bài hát gốc của album vào `win.currentTracks` và phát tín hiệu `queueUpdated` mà không gọi API radio.
-- **Chặn đè queue**: `moodChipsProc` bị chặn tự động gọi `loadQueueForChipIndex` khi đang phát album/playlist để bảo đảm hàng đợi ban đầu không bị ghi đè.
+- **Tệp**: `shell.qml`, `components/YTMusicNowPlayingView.qml`. Bài/album mới (`!isAlreadyInQueue` hoặc `playingPlaylistTitle` đổi) reset `originalAlbumQueue = []`, `selectedMoodIndex = 0`; ở tab "Tất cả" nó bám theo `queueTracks`.
+- **Đổi mood**: `loadQueueForChipIndex` snapshot danh sách mood 0 vào `originalAlbumQueue` trước khi nạp radio; quay lại index 0 thì khôi phục vào `win.currentTracks` + `queueUpdated`, không gọi API. `moodChipsProc` không tự gọi khi đang phát album/playlist.
 
----
-
-## 6. Trình Quản Lý Tải Nhạc Đa Luồng (Download Manager Daemon)
-- **Backend**: `backend/download_manager.py` chạy thường trú, giao tiếp qua Unix Domain Socket `/tmp/nutsty_download.sock` và file trạng thái nguyên tử (atomic JSON) `/tmp/frostify_download_status.json`.
-- **Chất lượng**: Tự động tải âm thanh 192k AAC/M4A qua `yt-dlp`, nhúng ID3 + bìa qua FFmpeg (`-an -frames:v 1 -update 1`), tải kèm `.lrc` vào `~/Music/Downloads_Phone`.
-- **Giao diện**: `components/DownloadManager.qml` (State engine qua `FileView` + polling timer 250ms) và `components/DownloadQueuePopover.qml` (Minimalist Clean #121212 Nutsty, progress bar 3px, nút hủy, nút mở thư mục nhạc).
-
----
-
+## 6. Download Manager Daemon
+- `backend/download_manager.py` thường trú, socket `/tmp/nutsty_download.sock`, trạng thái atomic JSON `/tmp/frostify_download_status.json`. Tải 192k AAC/M4A qua `yt-dlp`, nhúng tag + bìa, kèm `.lrc` vào `~/Music/Downloads_Phone`.
+- UI: `DownloadManager.qml` (`FileView` + timer 250ms), `DownloadQueuePopover.qml`.
 ## 7. Kiến Trúc Modular Social & Music Engine (3 SSOT Chuẩn Hóa)
 - **Backend Modular**: `backend/auth_server.py` điều phối sang `backend/music_routes.py` và `backend/social_routes.py`. Toàn bộ logic mạng xã hội tập trung tại Deep Module `backend/social_relay_core.py` (caching, danh tính SSOT #2, phân phối event).
 - **Frontend Engines**: `components/social_engine.js` (Listen Along, bạn bè, Danmaku) và `components/playback_engine.js` (toàn bộ vòng đời phát nhạc, mutate queue, reconcile MPV status).
@@ -66,8 +39,6 @@ Tài liệu đặc tả chuyên sâu về hệ thống daemon phát nhạc, giao
   1. **SSOT #1 (Config Path)**: `platform_compat.get_config_dir()` trả về `~/.config/noctalia` đồng nhất trên Linux & Windows.
   2. **SSOT #2 (Canonical Identity)**: `social_relay_core.get_caller_identity()` lấy định danh chuẩn từ `nutsty_cloud_identity.json`.
   3. **SSOT #3 (Peer Normalization)**: `SocialEngine.normalizePeer(raw)` chuẩn hóa mọi peer về `{ user_id, tag, email, name, avatar, is_online }`.
-
----
 
 ## 8. Friends 24h Notes, Listen Along & PlaybackEngine Consolidate
 - **PlaybackEngine (`components/playback_engine.js`)**: Tập trung toàn bộ logic `playOnlineTrack`, `playTrack`, `togglePlay`, `playNext`, `seekAudio`, `handlePlayerStatus` (bù trôi, sleep timer, auto-advance). `shell.qml` chỉ giữ 1-line delegates.
@@ -89,11 +60,16 @@ Tài liệu đặc tả chuyên sâu về hệ thống daemon phát nhạc, giao
 - **Social fast path** (`social.rs`, `ureq`): notes, events, friends, now_playing gọi thẳng relay, không giữ worker Python.
 - **Footgun**: `try_handle` trả `None` → Python xử lý (chưa có identity, cần sync tên/avatar, 401, events cục bộ, `/api/notes` lỗi mạng). Sửa route/identity ở Python phải sửa cả `social.rs`.
 
----
-
 ## 12. Cập Nhật Delta (`backend/update_delta.py`, `updater.py`, `components/UpdateModal.qml`)
 - **Cơ chế**: Windows đọc central directory của zip release qua HTTP Range (CRC32 + size = manifest), chỉ tải tệp khác bản đang cài, kiểm CRC, tệp staged đúng thì bỏ qua (resume). Không có Range thì tải nguyên zip.
-- **Delta vs nguyên gói**: chỉ Windows có delta (~40 MB so với zip ~381 MB); Linux và máy không có Range tải nguyên gói. Bản 2.3.0 trở xuống vẫn phải tải đủ một lần để có bộ cập nhật mới. Số MB chỉ hiện khi đã biết thật (`sizeKnown`), chưa biết thì chạy Odometer quay.
+- **Delta**: chỉ Windows (~40 MB thay vì ~381 MB); Linux tải nguyên gói. MB chỉ hiện khi đã biết (`sizeKnown`), chưa biết thì Odometer quay.
 - **API**: `/api/update/plan` (`planning`→`planned`), `/start`, `/cancel`, `/status`. UI: `UpdateModal.qml`, state ở `shell.qml` `updateState`.
-- **UI**: `UpdateModal.qml` cấm xuất hiện/biến mất đột ngột: dùng opacity + Behavior (OutExpo) và `FadeText` thay vì `visible`/`text` đổi thẳng; nhân thời lượng với `root.motion` (0 ở Lite). Mở `open_settings?mock=1` để xem demo.
+- **UI**: `UpdateModal.qml` không bật/tắt đột ngột: opacity + Behavior (OutExpo), `FadeText`, thời lượng nhân `root.motion`. Demo: `open_settings?mock=1`.
 - **Footgun**: CI phải ghim mpv (mpv đổi = ~97 MB mỗi bản). Suffix Range `bytes=-N` bị CDN GitHub từ chối (501), luôn dùng khoảng tuyệt đối. `.source`/`*.part` bị loại khi robocopy. Chạy `scripts/test_update_delta.py`.
+
+## 13. Tidal Lossless (`backend/tidal_source.py`, `audio_output.py`, `lossless_logic.js`)
+- **Resolve** (`resolve_media_path`): file đã tải > Tidal (bật, đã đăng nhập, không tạm tắt) > YouTube. Tidal lỗi/None/quá 4s → YouTube; epoch cũ bỏ kết quả. Nguồn thật ghi ở `now_source.json`.
+- **Nghe Cùng**: `lossless_suspend 1` tạo cờ, đang phát Tidal thì nạp YouTube đúng vị trí; `0` chỉ xóa cờ. Chỉ tài khoản của chính người dùng, không log token, session chmod 600.
+- **Nhãn**: `build_audio_specs` (Python) = `nutsty-bridge/src/audio_specs.rs`; không biết thì để trống, cấm bịa mặc định.
+- **DAC**: `exclusive` restart mpv giữ vị trí, khóa AutoMix + âm lượng 100, ao lỗi → `shared` + toast. `rate_match` (Linux) chỉ ghi `90-nutsty-rates.conf` khi người dùng đồng ý, không đè `allowed-rates` có sẵn.
+- **Footgun**: link FLAC/MPD hết hạn giữa bài → `stream_failed <pos>` nạp YouTube đúng vị trí, bỏ Tidal bài đó một lúc (`TIDAL_SKIP_FILE`). Test: `scripts/test_lossless_resolve.py`.
