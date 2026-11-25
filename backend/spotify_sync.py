@@ -145,10 +145,99 @@ def _liked_entry(track, now):
             "spotifyId": track.get("spotifyId", "")}
 
 
+# ---------------------------------------------------------------------------
+# Write-back (spec 5.6): only what changed in Nutsty after the switch went on reaches Spotify
+# ---------------------------------------------------------------------------
+REVERSE_THRESHOLD = 50
+PUSH_CAP = 30          # tracks written per cycle; the rest waits for the next cycle
+PUSH_BATCH = 10        # tracks per write call
+PUSH_GAP_SEC = 3.0     # pause between write calls
+_SWITCH_KEYS = ("enabled", "writeBack", "writeBackSince", "localBaseline", "writeBackAbsent")
+
+
+def _importer():
+    try:
+        from . import spotify_importer
+    except (ImportError, ValueError):
+        import spotify_importer
+    return spotify_importer
+
+
+def reverse_match(track, client, cache, now=None):
+    """Nutsty track -> Spotify id via search, scored like the importer; None below the threshold.
+    A miss is cached under rev:<track key> and retried after the usual window."""
+    now = time.time() if now is None else now
+    vid = track.get("videoId")
+    if not vid:
+        return None
+    sid = cache.find_by_video(vid)
+    if sid:
+        return sid
+    key = "rev:" + pm.get_track_unique_key(track)
+    if not cache.should_retry(key, now):
+        return None
+    title = str(track.get("title") or track.get("name") or "").strip()
+    artist = str(track.get("artist") or "").strip()
+    if not title:
+        return None
+    si = _importer()
+    wanted = {"name": title, "artist": artist,
+              "duration_ms": int(si.parse_duration_to_seconds(track.get("duration") or 0) * 1000)}
+    best, best_score = None, None
+    for c in client.search_tracks(title, artist):
+        if not c.get("spotifyId"):
+            continue
+        score = si.calculate_track_match_score(
+            wanted, {"title": c.get("name"), "artist": c.get("artist"), "durationMs": c.get("duration_ms") or 0})
+        if score >= REVERSE_THRESHOLD and (best_score is None or score > best_score):
+            best, best_score = c["spotifyId"], score
+    if not best:
+        cache.put(key, None, now=now)
+        return None
+    hit = cache.get(best)
+    if not hit or hit.get("unmatched"):
+        cache.put(best, dict(track, spotifyId=best), now=now)
+    return best
+
+
+def _wb_on(st, info):
+    return bool(st.get("writeBack")) and bool(info.get("owned")) and not info.get("spotifyMade")
+
+
+def _needs_reverse(track, keys):
+    return (isinstance(track, dict) and not track.get("spotifyId") and bool(track.get("videoId"))
+            and pm.get_track_unique_key(track) not in keys)
+
+
+def _wb_local(pairs, base, remote, keys):
+    """Spotify ids Nutsty holds, minus tracks that were already there at switch-on and Spotify
+    never had: those are never pushed. `pairs` is (spotifyId, track)."""
+    out = []
+    for sid, track in pairs:
+        if sid and (pm.get_track_unique_key(track) not in keys or sid in base or sid in remote):
+            out.append(sid)
+    return out
+
+
+def _push_pending(rec, st, pid):
+    """True when the linked playlist has Nutsty-side changes to push, so it is read even when
+    Spotify's revision did not move."""
+    link = rec.get("spotifyLink") or {}
+    base = set(link.get("base") or [])
+    keys = set((st.get("localBaseline") or {}).get(pid) or [])
+    absent = set((st.get("writeBackAbsent") or {}).get(pid) or [])
+    tracks = [t for t in rec.get("tracks") or [] if isinstance(t, dict)]
+    if any(_needs_reverse(t, keys) for t in tracks):
+        return True
+    local = set(_wb_local([(t.get("spotifyId"), t) for t in tracks], base, base, keys))
+    return bool(local - base) or bool(base - local - absent)
+
+
 def _fetch(st, client, match, cache, now, playlists_snapshot):
     """Network phase: read everything first so a failure never leaves a half-written file.
-    Returns (library, fetched {pid: (info, remote)}, liked_remote, error_code)."""
-    fetched, liked_remote = {}, None
+    Returns (library, fetched {pid: (info, remote)}, liked_remote, reverse {(list, key): sid}, error_code)."""
+    fetched, liked_remote, reverse = {}, None, {}
+    baseline = st.get("localBaseline") or {}
     library = client.library_playlists()
     seen = set(st.get("seen") or [])
     selected = list(st.get("selected") or [])
@@ -168,8 +257,10 @@ def _fetch(st, client, match, cache, now, playlists_snapshot):
                 continue
             rec = _find_linked(playlists_snapshot, pid)
             link = (rec or {}).get("spotifyLink") or {}
+            wb = bool(rec) and _wb_on(st, info)
             if (rec and info.get("revision") and link.get("libRevision") == info["revision"]
-                    and not link.get("unmatched") and pid not in force):
+                    and not link.get("unmatched") and pid not in force
+                    and not (wb and _push_pending(rec, st, pid))):
                 continue
             remote = client.playlist_items(pid)
             if not merge.remote_is_valid(remote):
@@ -178,6 +269,13 @@ def _fetch(st, client, match, cache, now, playlists_snapshot):
             for item in remote.items:
                 if item["spotifyId"] not in base:
                     match_item(item, match, cache, now)
+            if wb:
+                keys = set(baseline.get(pid) or [])
+                for t in rec.get("tracks") or []:
+                    if _needs_reverse(t, keys):
+                        found = reverse_match(t, client, cache, now)
+                        if found:
+                            reverse[(pid, pm.get_track_unique_key(t))] = found
             fetched[pid] = (info, remote)
         if st.get("likedSelected"):
             remote = client.liked_items()
@@ -186,10 +284,27 @@ def _fetch(st, client, match, cache, now, playlists_snapshot):
                 for item in remote.items:
                     if item["spotifyId"] not in base:
                         match_item(item, match, cache, now)
+                if st.get("writeBack") and st.get("likedBase") is not None:
+                    keys = set(baseline.get("liked") or [])
+                    liked = pm._read_json(pm._liked_file(), {})
+                    for v in (liked.values() if isinstance(liked, dict) else []):
+                        if _needs_reverse(v, keys):
+                            found = reverse_match(v, client, cache, now)
+                            if found:
+                                reverse[("liked", pm.get_track_unique_key(v))] = found
                 liked_remote = remote
     except sw.SpotifyError as e:
         error = e.code
-    return library, fetched, liked_remote, error
+    return library, fetched, liked_remote, reverse, error
+
+
+def _learn(cache, tracks, now):
+    """A Nutsty track that already carries a Spotify id is that id's match: record it, so the id is
+    not reported unmatched (and kept out of base) once write-back has put it on Spotify."""
+    for t in tracks:
+        sid = t.get("spotifyId") if isinstance(t, dict) else None
+        if sid and t.get("videoId") and not cache.get(sid):
+            cache.put(sid, t, now=now)
 
 
 def _matched_map(remote, cache):
@@ -203,9 +318,11 @@ def _matched_map(remote, cache):
     return out, unmatched
 
 
-def _apply_playlist(playlists, info, remote, st, cache, now, blocked):
+def _apply_playlist(playlists, info, remote, st, cache, now, blocked, reverse=None, jobs=None):
     pid = info["id"]
     rec = _find_linked(playlists, pid)
+    if rec is not None:
+        _learn(cache, rec.get("tracks") or [], now)
     matched, unmatched = _matched_map(remote, cache)
     remote_ids = [i["spotifyId"] for i in remote.items]
     ordered = [dict(matched[s]) for s in remote_ids if s in matched]
@@ -223,11 +340,26 @@ def _apply_playlist(playlists, info, remote, st, cache, now, blocked):
         new_base = [s for s in remote_ids if s in matched]
     else:
         link = rec.get("spotifyLink") or {}
-        tracks = list(rec.get("tracks") or [])
-        local = [t.get("spotifyId") for t in tracks if isinstance(t, dict) and t.get("spotifyId")]
-        r = merge.three_way(link.get("base") or [], remote_ids, local, False, unmatched)
+        base = link.get("base") or []
+        tracks = [dict(t) if isinstance(t, dict) else t for t in rec.get("tracks") or []]
+        wb = _wb_on(st, info)
+        if wb:
+            keys = set((st.get("localBaseline") or {}).get(pid) or [])
+            for t in tracks:
+                if _needs_reverse(t, keys):
+                    found = (reverse or {}).get((pid, pm.get_track_unique_key(t)))
+                    if found:
+                        t["spotifyId"] = found
+            local = _wb_local([(t.get("spotifyId"), t) for t in tracks if isinstance(t, dict)],
+                              set(base), set(remote_ids), keys)
+        else:
+            local = [t.get("spotifyId") for t in tracks if isinstance(t, dict) and t.get("spotifyId")]
+        r = merge.three_way(base, remote_ids, local, wb, unmatched)
+        absent = set((st.get("writeBackAbsent") or {}).get(pid) or [])
+        push_remove = [s for s in r.push_remove if s not in absent]
         force = st.get("forceApply") or []
-        if merge.mass_delete_blocked(len(link.get("base") or []), len(r.pull_remove)) and pid not in force:
+        if (merge.mass_delete_blocked(len(base), len(r.pull_remove))
+                or merge.mass_delete_blocked(len(base), len(push_remove))) and pid not in force:
             blocked.append(pid)
             return False
         if pid in force:
@@ -245,7 +377,11 @@ def _apply_playlist(playlists, info, remote, st, cache, now, blocked):
                 tracks.append(dict(m))
                 by_video[m["videoId"]] = tracks[-1]
         rec["tracks"] = tracks
-        new_base = r.new_base
+        # Base holds only what Spotify has now; each push that lands is added afterwards (_patch_bases),
+        # so a crash or a failed write leaves the change pending instead of deleting it next cycle.
+        new_base = [s for s in merge._dedupe(remote_ids) if s not in unmatched]
+        if wb and (r.push_add or push_remove) and jobs is not None:
+            jobs.append({"list": pid, "add": list(r.push_add), "remove": push_remove})
     rec["trackCount"] = len(rec["tracks"])
     rec["spotifyLink"] = {"id": pid, "owned": bool(info.get("owned")), "spotifyMade": bool(info.get("spotifyMade")),
                           "base": new_base, "revision": remote.revision or "",
@@ -254,11 +390,12 @@ def _apply_playlist(playlists, info, remote, st, cache, now, blocked):
     return True
 
 
-def _apply_liked(remote, st, cache, now, blocked):
+def _apply_liked(remote, st, cache, now, blocked, reverse=None, jobs=None):
     """Merge Spotify liked songs into Nutsty liked songs. Returns True when the file changed."""
     liked = pm._read_json(pm._liked_file(), {})
     if not isinstance(liked, dict):
         liked = {}
+    _learn(cache, liked.values(), now)
     matched, unmatched = _matched_map(remote, cache)
     remote_ids = [i["spotifyId"] for i in remote.items]
     local_of = {}
@@ -274,14 +411,33 @@ def _apply_liked(remote, st, cache, now, blocked):
         pull_add = [s for s in remote_ids if s not in local_of]
         pull_remove, new_base = [], [s for s in remote_ids if s not in unmatched]
     else:
-        r = merge.three_way(base, remote_ids, list(local_of), False, unmatched)
+        wb = bool(st.get("writeBack"))
+        local = list(local_of)
+        if wb:
+            keys = set((st.get("localBaseline") or {}).get("liked") or [])
+            for key, v in liked.items():
+                if _needs_reverse(v, keys):
+                    found = (reverse or {}).get(("liked", pm.get_track_unique_key(v)))
+                    if found and local_of.get(found, key) == key:
+                        v["spotifyId"] = found
+                        local_of[found] = key
+                        changed = True
+            local = _wb_local([(sid, liked[key]) for sid, key in local_of.items()],
+                              set(base), set(remote_ids), keys)
+        r = merge.three_way(base, remote_ids, local, wb, unmatched)
+        absent = set((st.get("writeBackAbsent") or {}).get("liked") or [])
+        push_remove = [s for s in r.push_remove if s not in absent]
         force = st.get("forceApply") or []
-        if merge.mass_delete_blocked(len(base), len(r.pull_remove)) and "liked" not in force:
+        if (merge.mass_delete_blocked(len(base), len(r.pull_remove))
+                or merge.mass_delete_blocked(len(base), len(push_remove))) and "liked" not in force:
             blocked.append("liked")
             return False
         if "liked" in force:
             st["forceApply"] = [x for x in force if x != "liked"]
-        pull_add, pull_remove, new_base = r.pull_add, r.pull_remove, r.new_base
+        pull_add, pull_remove = r.pull_add, r.pull_remove
+        new_base = [s for s in merge._dedupe(remote_ids) if s not in unmatched]
+        if wb and (r.push_add or push_remove) and jobs is not None:
+            jobs.append({"list": "liked", "add": list(r.push_add), "remove": push_remove})
     for sid in pull_remove:
         key = local_of.get(sid)
         if key in liked:
@@ -309,31 +465,114 @@ def _apply_liked(remote, st, cache, now, blocked):
     return changed
 
 
-def _cycle(st, client, match, cache, now):
+def _push(client, jobs, sleep):
+    """Send the queued writes slowly: fresh read first (skip what Spotify already has, find uids),
+    at most PUSH_CAP tracks, PUSH_GAP_SEC between calls. Stops at the first error or when the switch
+    is turned off. Returns ({list: (added, removed)}, error_code)."""
+    done, budget, calls = {}, PUSH_CAP, 0
+    for job in jobs:
+        if budget <= 0:
+            break
+        lid = job["list"]
+        try:
+            fresh = client.liked_items() if lid == "liked" else client.playlist_items(lid)
+        except sw.SpotifyError as e:
+            return done, e.code
+        if not merge.remote_is_valid(fresh):
+            continue
+        uids = {}
+        for item in fresh.items:
+            uids.setdefault(item["spotifyId"], []).append(item.get("uid"))
+        added = [s for s in job["add"] if s in uids]
+        removed = [s for s in job["remove"] if s not in uids]
+        done[lid] = (added, removed)
+        for kind, ids in (("add", [s for s in job["add"] if s not in uids]),
+                          ("remove", [s for s in job["remove"] if s in uids])):
+            while ids and budget > 0:
+                batch, ids = ids[:min(PUSH_BATCH, budget)], ids[min(PUSH_BATCH, budget):]
+                if calls:
+                    sleep(PUSH_GAP_SEC)
+                if not sstate.load_state().get("writeBack"):
+                    return done, ""
+                calls += 1
+                uris = [f"spotify:track:{s}" for s in batch]
+                try:
+                    if lid == "liked":
+                        (client.add_to_library if kind == "add" else client.remove_from_library)(uris)
+                    elif kind == "add":
+                        client.add_to_playlist(lid, uris)
+                    else:
+                        client.remove_from_playlist(lid, [u for s in batch for u in uids[s] if u])
+                except sw.SpotifyError as e:
+                    return done, e.code
+                budget -= len(batch)
+                (added if kind == "add" else removed).extend(batch)
+    return done, ""
+
+
+def _patch_bases(st, done):
+    """Fold the writes that landed into each base (liked base lives in state, saved by sync_once)."""
+    def patch(base, added, removed):
+        gone = set(removed)
+        out = [s for s in base or [] if s not in gone]
+        return out + [s for s in added if s not in set(out)]
+
+    if not any(a or r for a, r in done.values()):
+        return
+    with pm.locked():
+        playlists = pm.load_playlists()
+        dirty = False
+        for lid, (added, removed) in done.items():
+            if not added and not removed:
+                continue
+            if lid == "liked":
+                st["likedBase"] = patch(st.get("likedBase"), added, removed)
+                continue
+            rec = _find_linked(playlists, lid)
+            if rec and rec.get("spotifyLink"):
+                rec["spotifyLink"]["base"] = patch(rec["spotifyLink"].get("base"), added, removed)
+                dirty = True
+        if dirty:
+            pm.save_playlists(playlists)
+
+
+def _cycle(st, client, match, cache, now, sleep=time.sleep):
     snapshot = pm.load_playlists()
     try:
-        _library, fetched, liked_remote, error = _fetch(st, client, match, cache, now, snapshot)
+        _library, fetched, liked_remote, reverse, error = _fetch(st, client, match, cache, now, snapshot)
     except sw.SpotifyError as e:
         return _result(False, e.code)
-    blocked, changed = [], {"playlists": False, "liked": False}
+    blocked, changed, jobs = [], {"playlists": False, "liked": False}, []
     unmatched = 0
     with pm.locked():
         playlists = pm.load_playlists()
         before = len(playlists)
         playlists = migrate_legacy_imports(playlists, {pid: r for pid, (_i, r) in fetched.items()}, match, cache, now)
         for pid, (info, remote) in fetched.items():
-            if _apply_playlist(playlists, info, remote, st, cache, now, blocked):
+            if _apply_playlist(playlists, info, remote, st, cache, now, blocked, reverse, jobs):
                 changed["playlists"] = True
             unmatched += _matched_map(remote, cache)[1].__len__()
         if changed["playlists"] or len(playlists) != before:
             pm.save_playlists(playlists)
         if liked_remote is not None:
-            changed["liked"] = _apply_liked(liked_remote, st, cache, now, blocked)
+            changed["liked"] = _apply_liked(liked_remote, st, cache, now, blocked, reverse, jobs)
             unmatched += len(_matched_map(liked_remote, cache)[1])
-    return _result(not error, error, changed=changed, blocked=blocked, unmatched=unmatched)
+    pushed = 0
+    if jobs and not error:
+        done, error = _push(client, jobs, sleep)
+        _patch_bases(st, done)
+        pushed = sum(len(a) + len(r) for a, r in done.values())
+    return _result(not error, error, changed=changed, blocked=blocked, unmatched=unmatched, pushed=pushed)
 
 
-def sync_once(profile="", client=None, matcher=None, now=None):
+def _keep_switches(st):
+    """The user may flip a switch while a run is in flight; the run must not write the old value back."""
+    disk = sstate.load_state()
+    for k in _SWITCH_KEYS:
+        st[k] = disk[k]
+
+
+def sync_once(profile="", client=None, matcher=None, now=None, sleep=None):
     if not _RUN_LOCK.acquire(blocking=False):
         return _result(False, "busy")
     try:
@@ -345,7 +584,7 @@ def sync_once(profile="", client=None, matcher=None, now=None):
             cache = sstate.MatchCache()
             try:
                 client = client or _default_client()
-                res = _cycle(st, client, matcher or _default_matcher(), cache, now)
+                res = _cycle(st, client, matcher or _default_matcher(), cache, now, sleep or time.sleep)
             except sw.SpotifyError as e:
                 res = _result(False, e.code)
             except Exception as e:  # never let a sync bug take the daemon down
@@ -359,6 +598,7 @@ def sync_once(profile="", client=None, matcher=None, now=None):
             if res["error"] in ("", "rate_limited", "network") or res["success"]:
                 st["blocked"] = res["blocked"]
                 st["unmatchedCount"] = res["unmatched"]
+            _keep_switches(st)
             sstate.save_state(st)
             return res
     finally:
@@ -396,6 +636,36 @@ def set_enabled(profile, enabled):
     with pm.profile_scope(profile):
         st = sstate.load_state()
         st["enabled"] = bool(enabled)
+        sstate.save_state(st)
+        return status(profile)
+
+
+def set_write_back(profile, on, now=None):
+    """On: note what Nutsty already holds, so only later changes are pushed (spec 5.6). Off: forget it."""
+    with pm.profile_scope(profile):
+        st = sstate.load_state()
+        if not on:
+            st.update(writeBack=False, writeBackSince=0.0, localBaseline={}, writeBackAbsent={})
+            sstate.save_state(st)
+            return status(profile)
+        cache = sstate.MatchCache()
+        baseline, absent = {}, {}
+        for pl in pm.load_playlists():
+            link = (pl.get("spotifyLink") or {}) if isinstance(pl, dict) else {}
+            if not link.get("id") or not link.get("owned") or link.get("spotifyMade"):
+                continue
+            tracks = [t for t in pl.get("tracks") or [] if isinstance(t, dict)]
+            baseline[link["id"]] = [pm.get_track_unique_key(t) for t in tracks]
+            have = {t.get("spotifyId") for t in tracks}
+            absent[link["id"]] = [s for s in link.get("base") or [] if s not in have]
+        liked = pm._read_json(pm._liked_file(), {})
+        liked = liked if isinstance(liked, dict) else {}
+        baseline["liked"] = [pm.get_track_unique_key(v) for v in liked.values() if isinstance(v, dict)]
+        have = {v.get("spotifyId") or cache.find_by_video(v.get("videoId") or k)
+                for k, v in liked.items() if isinstance(v, dict)}
+        absent["liked"] = [s for s in st.get("likedBase") or [] if s not in have]
+        st.update(writeBack=True, writeBackSince=time.time() if now is None else now,
+                  localBaseline=baseline, writeBackAbsent=absent)
         sstate.save_state(st)
         return status(profile)
 
@@ -460,6 +730,8 @@ def handle_http_path(handler, path, body):
             res = set_selection(profile, body.get("ids") or [], body.get("liked", True))
         elif op == "set_enabled":
             res = set_enabled(profile, body.get("enabled"))
+        elif op == "set_write_back":
+            res = set_write_back(profile, bool(body.get("on")))
         elif op == "force_apply":
             res = force_apply(profile, str(body.get("id") or ""))
         else:

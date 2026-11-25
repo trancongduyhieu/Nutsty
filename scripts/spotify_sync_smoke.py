@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """
-Manual, READ-ONLY smoke test of backend/spotify_web.py against the real web player,
-using the sp_dc cookie the user saved in Nutsty settings (their own account).
-Not part of CI. Never calls a write op.
+Manual smoke test of backend/spotify_web.py against the real web player,
+using the sp_dc cookie the user saved in Nutsty settings (their own account). Not part of CI.
 
-Usage: python scripts/spotify_sync_smoke.py
+Usage:
+  python scripts/spotify_sync_smoke.py                      read-only checks
+  python scripts/spotify_sync_smoke.py --write <playlistId> add one track to a throwaway playlist
+      you made by hand, read it back, remove it again. Refuses a playlist you do not own or one
+      holding more than 5 tracks, so a real playlist is never touched.
 """
 import sys
 from pathlib import Path
@@ -27,7 +30,41 @@ def step(name, fn):
     return False
 
 
+def write_check(c, pid):
+    me = c.me()
+    owned = {p["id"]: p for p in c.library_playlists() if p["owned"]}
+    if pid not in owned:
+        print(f"[stop] {pid} is not a playlist owned by {me.get('name')!r}; nothing written.")
+        return 1
+    before = c.playlist_items(pid)
+    if len(before.items) > 5:
+        print(f"[stop] {owned[pid]['title']!r} holds {len(before.items)} tracks; use an empty throwaway playlist.")
+        return 1
+    hits = c.search_tracks("Hello", "Adele")
+    if not hits:
+        print("[FAIL] search returned nothing")
+        return 1
+    sid = hits[0]["spotifyId"]
+    ok = step(f"add_to_playlist({owned[pid]['title']!r}, {hits[0]['name']!r})",
+              lambda: (c.add_to_playlist(pid, [f"spotify:track:{sid}"]), "sent")[1])
+    after = c.playlist_items(pid)
+    uids = [i["uid"] for i in after.items if i["spotifyId"] == sid]
+    ok &= step("read back after add", lambda: f"present={bool(uids)} uids={uids}")
+    if uids:
+        ok &= step("remove_from_playlist", lambda: (c.remove_from_playlist(pid, uids), "sent")[1])
+        gone = c.playlist_items(pid)
+        ok &= step("read back after remove",
+                   lambda: f"present={any(i['spotifyId'] == sid for i in gone.items)} total={gone.total}")
+    return 0 if ok and uids else 1
+
+
 def main():
+    if len(sys.argv) == 3 and sys.argv[1] == "--write":
+        spdc = lyrics_helper.get_spotify_spdc()
+        if not spdc:
+            print("No Spotify cookie saved in Nutsty settings; sign in first.")
+            return 2
+        return write_check(sw.SpotifyWebClient(spdc), sys.argv[2])
     spdc = lyrics_helper.get_spotify_spdc()
     if not spdc:
         print("No Spotify cookie saved in Nutsty settings; sign in first.")

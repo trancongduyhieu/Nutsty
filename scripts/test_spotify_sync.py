@@ -405,12 +405,20 @@ def lib(pid, owned=True, made=False, rev="r1"):
 
 
 class FakeClient:
-    def __init__(self, library=(), playlists=None, liked=None, error=None):
+    """Spotify stand-in. A playlist/liked value may be a RemoteList, an Exception, or a list of them
+    consumed in order (last repeats). Writes are recorded in `writes` and applied to a RemoteList value;
+    `write_error` raises on every write while set. `search` maps a title to candidate items."""
+
+    def __init__(self, library=(), playlists=None, liked=None, error=None, search=None):
         self.library = list(library)
         self.playlists = dict(playlists or {})
         self.liked = liked if liked is not None else remote_list([])
         self.error = error
+        self.search = dict(search or {})
         self.fetched = []
+        self.searched = []
+        self.writes = []
+        self.write_error = None
 
     def me(self):
         return {"id": "me", "name": "Me"}
@@ -420,26 +428,69 @@ class FakeClient:
             raise self.error
         return [dict(p) for p in self.library]
 
+    @staticmethod
+    def _next(value):
+        if isinstance(value, list):
+            value = value.pop(0) if len(value) > 1 else value[0]
+        if isinstance(value, Exception):
+            raise value
+        return value
+
     def playlist_items(self, pid):
         self.fetched.append(pid)
-        r = self.playlists[pid]
-        if isinstance(r, Exception):
-            raise r
-        return r
+        return self._next(self.playlists[pid])
 
     def liked_items(self):
-        if isinstance(self.liked, Exception):
-            raise self.liked
-        return self.liked
+        return self._next(self.liked)
+
+    def search_tracks(self, title, artist, limit=10):
+        self.searched.append(title)
+        return [dict(c) for c in self.search.get(title, [])]
+
+    def _write(self, op, target, items, remote, mutate):
+        if self.write_error:
+            raise self.write_error
+        self.writes.append((op, target, list(items)))
+        if not isinstance(remote, list) and remote is not None and not isinstance(remote, Exception):
+            mutate(remote)
+
+    def add_to_playlist(self, pid, uris):
+        ids = [u.rsplit(":", 1)[-1] for u in uris]
+        self._write("add_to_playlist", pid, uris, self.playlists.get(pid),
+                    lambda r: _grow(r, ids))
+
+    def remove_from_playlist(self, pid, uids):
+        self._write("remove_from_playlist", pid, uids, self.playlists.get(pid),
+                    lambda r: _shrink(r, lambda i: i["uid"] in set(uids)))
+
+    def add_to_library(self, uris):
+        ids = [u.rsplit(":", 1)[-1] for u in uris]
+        self._write("add_to_library", None, uris, self.liked, lambda r: _grow(r, ids))
+
+    def remove_from_library(self, uris):
+        ids = {u.rsplit(":", 1)[-1] for u in uris}
+        self._write("remove_from_library", None, uris, self.liked,
+                    lambda r: _shrink(r, lambda i: i["spotifyId"] in ids))
 
 
-class PullTests(unittest.TestCase):
+def _grow(remote, ids):
+    remote.items.extend(sp_item(s) for s in ids)
+    remote.total = len(remote.items)
+
+
+def _shrink(remote, gone):
+    remote.items[:] = [i for i in remote.items if not gone(i)]
+    remote.total = len(remote.items)
+
+
+class SyncCase(unittest.TestCase):
     NOW = 1_800_000_000.0
 
     def setUp(self):
         for f in CONFIG_DIR.glob("*"):
             if f.is_file():
                 f.unlink()
+        self.sleeps = []
 
     def enable(self, selected, liked=False, seen=None):
         import spotify_sync_state as st
@@ -450,7 +501,8 @@ class PullTests(unittest.TestCase):
 
     def sync(self, client, matcher=None, now=None):
         import spotify_sync as ss
-        return ss.sync_once("", client=client, matcher=matcher or FakeMatcher(), now=now or self.NOW)
+        return ss.sync_once("", client=client, matcher=matcher or FakeMatcher(), now=now or self.NOW,
+                            sleep=self.sleeps.append)
 
     def playlist(self, pid="P"):
         import playlist_manager as pm
@@ -463,6 +515,8 @@ class PullTests(unittest.TestCase):
         import playlist_manager as pm
         return pm._read_json(pm._liked_file(), {})
 
+
+class PullTests(SyncCase):
     def test_disabled_or_unconfirmed_does_nothing(self):
         import spotify_sync_state as st
         c = FakeClient([lib("P")], {"P": remote_list(["a"])})
@@ -640,6 +694,195 @@ class PullTests(unittest.TestCase):
             si.lyrics_helper.get_spotify_access_token = orig
 
 
+def cand(sid, name, artist="A", dur=0):
+    return {"spotifyId": sid, "name": name, "artist": artist, "album": "", "duration_ms": dur, "image": ""}
+
+
+class PushTests(SyncCase):
+    """Write-back (spec 5.6): only changes made after the switch goes on reach Spotify."""
+
+    def write_back(self, on=True):
+        import spotify_sync as ss
+        return ss.set_write_back("", on, now=self.NOW)
+
+    def edit_playlist(self, pid="P", drop=(), add=()):
+        import playlist_manager as pm
+        pls = pm.load_playlists()
+        pl = next(p for p in pls if p["id"] == f"custom_pl_spotify_{pid}")
+        pl["tracks"] = [t for t in pl["tracks"] if t["videoId"] not in set(drop)] + list(add)
+        pm.save_playlists(pls)
+
+    def set_liked(self, data):
+        import playlist_manager as pm
+        pm._write_json(pm._liked_file(), data)
+
+    def owned_p(self, ids, search=None):
+        self.enable(["P"])
+        c = FakeClient([lib("P")], {"P": remote_list(ids)}, search=search)
+        self.sync(c)
+        return c
+
+    def test_write_back_off_pushes_nothing(self):
+        c = self.owned_p(["a", "b"], search={"New": [cand("n1", "New")]})
+        self.edit_playlist(drop=["vb"], add=[yt("vn", title="New")])
+        self.sync(c)
+        self.assertEqual(c.writes, [])
+        self.assertEqual(c.searched, [])
+
+    def test_only_changes_after_switch_on_are_pushed(self):
+        import spotify_sync_state as st
+        self.set_liked({"vold": yt("vold", title="Old")})
+        self.enable([], liked=True)
+        c = FakeClient([], liked=remote_list([]),
+                       search={"Old": [cand("o1", "Old")], "New": [cand("n1", "New")]})
+        self.sync(c)
+        self.write_back(True)
+        self.set_liked(dict(self.liked(), vnew=yt("vnew", title="New")))
+        self.sync(c)
+        self.assertEqual(c.writes, [("add_to_library", None, ["spotify:track:n1"])])
+        self.assertEqual(c.searched, ["New"])
+        self.assertEqual(self.liked()["vnew"]["spotifyId"], "n1")
+        self.assertEqual(st.load_state()["likedBase"], ["n1"])
+
+    def test_removal_before_switch_on_not_pushed(self):
+        c = self.owned_p(["a", "b"])
+        self.edit_playlist(drop=["vb"])
+        self.write_back(True)
+        self.sync(c)
+        self.assertEqual(c.writes, [])
+        self.assertEqual(self.vids(), ["va"])
+
+    def test_push_add_skips_track_already_remote(self):
+        c = self.owned_p(["a"], search={"New": [cand("n1", "New")]})
+        self.write_back(True)
+        self.edit_playlist(add=[yt("vn", title="New")])
+        c.playlists["P"] = [remote_list(["a"]), remote_list(["a", "n1"])]
+        self.sync(c)
+        self.assertEqual(c.writes, [])
+        self.assertEqual(self.vids(), ["va", "vn"])
+        self.assertEqual(self.playlist()["spotifyLink"]["base"], ["a", "n1"])
+
+    def test_push_add_to_owned_playlist(self):
+        c = self.owned_p(["a"], search={"New": [cand("n1", "New")]})
+        self.write_back(True)
+        self.edit_playlist(add=[yt("vn", title="New")])
+        self.sync(c)
+        self.assertEqual(c.writes, [("add_to_playlist", "P", ["spotify:track:n1"])])
+        self.assertEqual(self.playlist()["spotifyLink"]["base"], ["a", "n1"])
+        self.assertEqual(self.playlist()["tracks"][1]["spotifyId"], "n1")
+
+    def test_unlike_pushes_remove_from_library(self):
+        import spotify_sync_state as st
+        self.enable([], liked=True)
+        c = FakeClient([], liked=remote_list(["a", "b"]))
+        self.sync(c)
+        self.write_back(True)
+        liked = self.liked()
+        del liked["vb"]
+        self.set_liked(liked)
+        self.sync(c)
+        self.assertEqual(c.writes, [("remove_from_library", None, ["spotify:track:b"])])
+        self.assertEqual(st.load_state()["likedBase"], ["a"])
+        self.assertEqual(set(self.liked()), {"va"})
+
+    def test_remove_in_owned_playlist_uses_uid(self):
+        c = self.owned_p(["a", "b"])
+        self.write_back(True)
+        self.edit_playlist(drop=["vb"])
+        self.sync(c)
+        self.assertEqual(c.writes, [("remove_from_playlist", "P", ["u-b"])])
+        self.assertEqual(self.playlist()["spotifyLink"]["base"], ["a"])
+        self.assertEqual(self.vids(), ["va"])
+
+    def test_followed_playlist_never_written(self):
+        self.enable(["F"])
+        c = FakeClient([lib("F", owned=False)], {"F": remote_list(["a", "b"])},
+                       search={"New": [cand("n1", "New")]})
+        self.sync(c)
+        self.write_back(True)
+        self.edit_playlist("F", drop=["vb"], add=[yt("vn", title="New")])
+        c.library = [lib("F", owned=False, rev="r2")]
+        self.sync(c)
+        self.assertEqual(c.writes, [])
+        self.assertEqual(c.searched, [])
+
+    def test_mass_local_delete_not_pushed(self):
+        import spotify_sync_state as st
+        c = self.owned_p(list("abcdef"))
+        self.write_back(True)
+        self.edit_playlist(drop=["va", "vb", "vc", "vd", "ve"])
+        r = self.sync(c)
+        self.assertEqual(c.writes, [])
+        self.assertEqual(r["blocked"], ["P"])
+        self.assertEqual(st.load_state()["blocked"], ["P"])
+
+    def test_write_cap_30_per_cycle_rest_next_cycle(self):
+        import spotify_sync_state as st
+        self.enable([], liked=True)
+        c = FakeClient([], liked=remote_list([]))
+        self.sync(c)
+        self.write_back(True)
+        self.set_liked({f"v{i}": yt(f"v{i}", spotifyId=f"s{i}") for i in range(35)})
+        self.sync(c)
+        pushed = [u for op, _t, uris in c.writes for u in uris]
+        self.assertEqual(len(pushed), 30)
+        self.assertEqual(len(self.sleeps), len(c.writes) - 1)
+        self.assertTrue(all(s >= 3 for s in self.sleeps))
+        self.assertEqual(len(st.load_state()["likedBase"]), 30)
+        self.sync(c)
+        pushed = [u for op, _t, uris in c.writes for u in uris]
+        self.assertEqual(len(pushed), 35)
+        self.assertEqual(len(set(pushed)), 35)
+        self.assertEqual(len(st.load_state()["likedBase"]), 35)
+
+    def test_failed_write_not_in_base(self):
+        import spotify_web as sw
+        import spotify_sync_state as st
+        self.enable([], liked=True)
+        c = FakeClient([], liked=remote_list(["a"]))
+        self.sync(c)
+        self.write_back(True)
+        self.set_liked(dict(self.liked(), vn=yt("vn", spotifyId="n")))
+        c.write_error = sw.SpotifyRateLimited("slow down", 5)
+        r = self.sync(c)
+        self.assertEqual(r["error"], "rate_limited")
+        self.assertEqual(st.load_state()["likedBase"], ["a"])
+        c.write_error = None
+        self.sync(c)
+        self.assertEqual(c.writes, [("add_to_library", None, ["spotify:track:n"])])
+        self.assertEqual(st.load_state()["likedBase"], ["a", "n"])
+
+    def test_switch_off_mid_run_stops_pushing(self):
+        import spotify_sync as ss
+        import spotify_sync_state as st
+        self.enable([], liked=True)
+        c = FakeClient([], liked=remote_list([]))
+        self.sync(c)
+        self.write_back(True)
+        self.set_liked({f"v{i}": yt(f"v{i}", spotifyId=f"s{i}") for i in range(25)})
+
+        def sleep(sec):
+            ss.set_write_back("", False, now=self.NOW)
+
+        ss.sync_once("", client=c, matcher=FakeMatcher(), now=self.NOW, sleep=sleep)
+        self.assertEqual(len(c.writes), 1)
+        self.assertFalse(st.load_state()["writeBack"])
+
+    def test_reverse_match_threshold(self):
+        import spotify_sync as ss
+        import spotify_sync_state as st
+        cache = st.MatchCache()
+        c = FakeClient(search={"My Song": [cand("x", "Totally Other", "Someone")]})
+        self.assertIsNone(ss.reverse_match(yt("v1", title="My Song", artist="Me"), c, cache, now=self.NOW))
+        self.assertTrue(cache.get("rev:yt_v1")["unmatched"])
+        self.assertIsNone(ss.reverse_match(yt("v1", title="My Song", artist="Me"), c, cache, now=self.NOW + 60))
+        self.assertEqual(c.searched, ["My Song"])
+        c.search["Good"] = [cand("w", "Other"), cand("g", "Good", "Me", dur=200000)]
+        self.assertEqual(ss.reverse_match(yt("v2", title="Good", artist="Me", duration=200), c, cache,
+                                          now=self.NOW), "g")
+        self.assertEqual(cache.find_by_video("v2"), "g")
+
+
 class RouteTests(unittest.TestCase):
     def setUp(self):
         for f in CONFIG_DIR.glob("spotify_*"):
@@ -703,6 +946,10 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(h.sent[0]["selectedCount"], 1)
         ss.handle_http_path(h, "/api/spotify/sync/force_apply", {"id": "P"})
         self.assertEqual(h.sent[1], 200)
+        ss.handle_http_path(h, "/api/spotify/sync/set_write_back", {"on": True})
+        self.assertTrue(h.sent[0]["writeBack"])
+        ss.handle_http_path(h, "/api/spotify/sync/set_write_back", {"on": False})
+        self.assertFalse(h.sent[0]["writeBack"])
 
 
 class FakeHandler:

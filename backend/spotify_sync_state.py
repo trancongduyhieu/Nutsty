@@ -27,6 +27,7 @@ DEFAULT_STATE = {
     "writeBack": False,
     "writeBackSince": 0.0,
     "localBaseline": {},     # "liked" or playlist id -> Nutsty track keys at write-back switch-on
+    "writeBackAbsent": {},   # "liked" or playlist id -> base ids already gone locally at switch-on (never pushed)
     "forceApply": [],
     "lastSync": 0.0,
     "lastError": "",
