@@ -116,7 +116,7 @@ components:
 
 Nutsty is a sheet of glass resting on the user's desktop. While nothing plays, the window is a dark acrylic pane at 58% (`Qt.rgba(0.04, 0.04, 0.06, 0.58)`) and the wallpaper shows straight through. Once a song plays, a velvet backdrop fades in over 400ms, the album art blooms into a blurred aurora behind the content, and every interactive control takes on the song's colour. The interface never brings its own palette. It borrows one from the wallpaper and the cover art, through OKLAB chromatic salience extraction.
 
-The UI is dense and quiet, made of small type (11 to 13px), hairline borders and concentric rounded corners. Expression goes into the large moments: the Now Playing view, the Instrument Serif lyrics and the Spotify import stage. Controls stay translucent and tinted. They brighten on hover instead of rising off the surface.
+The UI is dense and quiet, made of small type (11 to 13px), hairline borders and concentric rounded corners. Expression goes into the large moments (the Now Playing view, the Instrument Serif lyrics, the recap, the listener card) and, as Mochy taught, into **one signature move on every screen**, settings included (see Signature Moments). Controls stay translucent and tinted. They brighten on hover instead of rising off the surface.
 
 Motion is quick and soft. Most transitions run 100 to 160ms with `Easing.OutCubic`, or `InOutQuad` for opacity and colour. Playful entrances use `OutBack`. The backdrop crossfades over 400ms and the cover over 900ms. Long moves (page morphs, cards opening, charts growing, the welcome card's flight) use Mochy's emphasized decelerate `[0.2, 0, 0, 1]`: 420ms to open a card, 320ms for a chevron, 900ms for a chart to grow, 1400ms for a figure to roll. Older code still uses `[0.42, 0, 0.16, 1]`; new code uses the Mochy curve.
 
@@ -228,6 +228,23 @@ The settings and sync screens are built from these, one card per setting, stacke
 ### Signature: Source Tiles (from Mochy's library)
 Content that comes from several services (Spotify, YouTube, Apple Music, Tidal) is a two-column grid of 16px tiles under an uppercase section label (Label, DemiBold 11px, tracking 0.08em). Each tile has the service mark and name in bold on top, a large count under it (Headline), and up to two covers peeking from the bottom-right corner. Service marks are the one place brand colour appears; the tile itself stays glass. Filter chips above the grid are capsules: glass at rest, accent fill when selected. A wide card with the service logos in a row invites an import when the library is empty.
 
+### Signature Moments (one per screen)
+Studied from Mochy (Nov 2026): what makes it feel unlike other apps is not the cards but that **every screen has exactly one thing that moves or is set in an unexpected way**: the service logos drifting sideways in the import card, the update ring spinning with a bite out of it, the scratch card, the receipt, a big word set against a small sentence. Nutsty already owns most of these pieces, but until now spent them only on the profile, recap and welcome; settings, sync and import stayed static and read as generic. The rule: each surface picks **one** signature from the kit below, everything else on it stays quiet, and a screen never runs more than one endless loop at a time.
+- **Reuse the kit, never reinvent it:** `Odometer.qml` for any number that changes (counts, totals, version); `ShapeLoader.qml` (a morphing polar shape) for a wait that is the screen's subject, `CircularSpinner.qml` only for a small inline wait; `ShimmerText.qml` for a working verb ("Đang đồng bộ..."); the giant ghost word at white 6% drifting behind a hero (`ProfileView.qml`, `RecapStory.qml`); the white dot grid; the card flight between two places (welcome card to avatar, profile card to page); scratch to reveal (the barcode); the torn receipt.
+- **Drifting strip (to build):** a row of service marks or covers sliding sideways in an endless loop at 20 to 30 px/s, faded at both ends, for an invitation such as "import your music here". Brand marks keep their own colour only here.
+- **Gapped ring:** a determinate progress ring is an arc with a gap that keeps turning slowly while the arc grows; at 100% the gap closes and the ring morphs into a tick. Never a plain bar for an update or a first sync.
+- **Lite mode** shows each signature's end state at once and stops its loop; loops also stop while the screen is hidden.
+
+### Signature Type (Mochy's text layouts)
+Mochy's type does not sit in label-value rows; each figure gets a layout of its own. Use these instead of "Label: value".
+- **Shrunk units:** the number in Black at Headline size, its unit in a small weight on the same baseline: "23h 29m", "25px", "1x".
+- **Stacked caption:** a short caption broken into two or three right-aligned lines sitting beside the big number, not under it ("Tổng / thời gian / nghe").
+- **Tag on the title:** a small light tag set at the cap height to the right of a big title ("Thống kê" with "2026 Re'cap").
+- **Story sentence:** a small lead line, one huge word or figure, then a small follow-up ("và vào lúc này," / "THỨ BA" / "là ngày bạn thích nghe nhạc nhất"); alignment may switch left or right from page to page.
+- **Machine text as texture:** monospace IDs and timestamps ("HỒ SƠ USR#79570311736", "in lúc 18/11/2026 12:37"), and a word turned 90 degrees along a card's edge ("THẺ CỦA ...").
+- **Prompt in spaced caps** at the foot of a story page ("CHẠM ĐỂ KẾT THÚC"), tracking 0.2em.
+- Still through `I18n.tr()`: each layout must hold in both languages, so test the long one.
+
 ### Navigation
 - **Carousel arrows:** `NavArrowButton.qml` is a circle tinted with the accent. It scales to 1.06 on hover and fades to 28% opacity, disabled, at the scroll limit.
 - **Sidebar and segmented tabs:** a rounded segmented bar with a highlight that slides to the selected item. The library remembers the last section.
@@ -259,6 +276,7 @@ A layer-shell overlay (Linux) or frameless overlay (Windows) with four presets: 
 - **Do** use SVG icons through `AppIcon.qml`, and pass all copy through `I18n.tr()`.
 - **Do** provide a Lite mode path for any continuous or whole-window effect.
 - **Do** give a setting card a preview of its effect and its value in large type, as Mochy does; words on the left, result on the right.
+- **Do** give every screen one signature from the kit (a rolling figure, a drifting strip, a gapped ring, a story sentence) and keep the rest of it quiet.
 
 ### Don't:
 - **Don't** use emoji anywhere in the interface.
@@ -268,3 +286,4 @@ A layer-shell overlay (Linux) or frameless overlay (Windows) with four presets: 
 - **Don't** build settings as iOS grouped lists of thin rows with round icons. Use one setting card per setting, Mochy's anatomy.
 - **Don't** fake glass with a milky translucent rectangle, or hide the glass source with `visible: false`.
 - **Don't** give lyrics a white halo. Use cinematic shadows.
+- **Don't** stack signatures: two loops or two big type moves on one screen cancel each other out.
