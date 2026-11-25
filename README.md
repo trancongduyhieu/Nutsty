@@ -64,7 +64,7 @@ Cũng trong mục Lossless, chọn một trong các cách sau. Các chế độ 
 | :--- | :--- | :--- |
 | Qua hệ thống | Linux, Windows | Âm thanh đi qua bộ trộn của máy như mọi app khác. Giữ đủ tính năng. |
 | Đúng tần số gốc | Linux | DAC nhận đúng tần số của từng bài, vẫn giữ Tự động hòa trộn. Nutsty hỏi trước khi đổi cài đặt âm thanh của máy và không đè lên cài đặt bạn đã tự chỉnh. |
-| Nguyên bản tuyệt đối | Linux, Windows | Âm thanh đi thẳng tới DAC không qua xử lý nào. Đổi lại: Tự động hòa trộn tắt, âm lượng trong app cố định 100%, app khác không phát tiếng qua DAC được. Nếu DAC không nhận, Nutsty tự quay về "Qua hệ thống" và báo cho bạn. |
+| Nguyên bản tuyệt đối | Windows | Âm thanh đi thẳng tới DAC không qua xử lý nào. Đổi lại: Tự động hòa trộn tắt, âm lượng trong app cố định 100%, app khác không phát tiếng qua DAC được. Nếu DAC không nhận, Nutsty tự quay về "Qua hệ thống" và báo cho bạn. |
 
 ### Giao diện
 - Màu nhấn lấy từ hình nền và ảnh bìa (thuật toán OKLAB / OKLCH), đổi theo bài đang phát.
