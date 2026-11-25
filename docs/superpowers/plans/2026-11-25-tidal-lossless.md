@@ -47,6 +47,7 @@ Không có test, không commit code spike. Chỉ commit bản ghi kết quả. N
 - [ ] **Step 3:** Phát bằng mpv cả luồng BTS (URL trực tiếp) và MPD (`file://...mpd`). Ghi lại mpv có mở được không và thời gian tới khi có tiếng.
 - [ ] **Step 4:** Đo `crossfade_engine.decode_levels` trên một URL FLAC (thời gian chạy).
 - [ ] **Step 5:** Linux: phát bài 44,1 kHz và 96 kHz với `--audio-exclusive=yes`, đọc `/proc/asound/card*/pcm*p/sub0/hw_params`. Thử lại sau khi thêm drop-in `allowed-rates` vào scratchpad cấu hình tạm (chỉ khi người dùng đồng ý ghi vào `~/.config/pipewire/pipewire.conf.d/`). Windows: chạy mpv `--audio-exclusive=yes --msg-level=ao=v`, chép phần log ao.
+- [ ] **Step 5b:** Phát 3 bài FLAC liền, ghi dung lượng `--demuxer-cache-dir` tăng thêm bao nhiêu. Nếu quá 300 MB thì ghi đề xuất giới hạn `--demuxer-max-bytes` vào evidence để Task 3 áp dụng.
 - [ ] **Step 6:** Ghi kết quả vào `docs/evidence/2026-11-25-tidal-spike.md`, kết luận 4 câu hỏi: OAuth có ra HiRes không, mpv đọc MPD được không, `decode_levels` có kịp (< 3 giây) không, exclusive có đưa đúng tần số tới DAC không.
 - [ ] **Step 7: Cổng quyết định.** Nếu OAuth không ra HiRes: hỏi người dùng chọn (a) bản đầu chỉ FLAC 16-bit, hay (b) thêm PKCE qua server localhost. Nếu mpv không đọc MPD: dừng, báo người dùng trước khi làm tiếp. Ghi quyết định vào file evidence.
 - [ ] **Step 8: Commit**
@@ -129,6 +130,7 @@ git commit -m "feat(lossless): Tidal source module with matching, caching and Yo
 
 **Files:**
 - Modify: `backend/player_daemon.py` (`resolve_media_path` ~dòng 358, `_resolve_for_crossfade` ~559, action `play` ~902, thêm action mới gần `audio_specs` ~1193)
+- Modify: `components/playback_engine.js` (`handlePlayerStatus` ~dòng 1044)
 - Create: `tests/test_lossless_resolve.py`
 
 **Interfaces:**
@@ -137,7 +139,8 @@ git commit -m "feat(lossless): Tidal source module with matching, caching and Yo
   - `get_lossless_settings() -> dict` trả `{"enabled": bool, "quality": str, "dac_mode": str}` (đọc cùng file settings như `get_current_streaming_quality`)
   - `LOSSLESS_SUSPEND_FILE = os.path.join(TEMP_DIR, f"nutsty_lossless_suspended{PROFILE_SUFFIX}")`, `is_lossless_suspended() -> bool`
   - `PLAYBACK_STATE_FILE` có thêm khóa `"source": "tidal"|"youtube"|"local"` và `"tidal": TidalStream|None` (dùng cho nhãn ở Task 6)
-  - Action CLI `lossless_suspend <1|0>`: `1` ghi file cờ; nếu bài đang phát có `source == "tidal"` thì lấy `time-pos`, resolve YouTube với `force_tidal_off=True` và `loadfile <url> replace start=<pos>`. `0` xóa file cờ, không nạp lại (lossless bật lại từ bài sau). In JSON `{"suspended": bool, "reloaded": bool}`.
+  - Action CLI `lossless_suspend <1|0>`: `1` ghi file cờ; nếu bài đang phát có `source == "tidal"` thì lấy `time-pos`, resolve YouTube với `skip_tidal=True` và `loadfile <url> replace start=<pos>`. `0` xóa file cờ, không nạp lại (lossless bật lại từ bài sau). In JSON `{"suspended": bool, "reloaded": bool}`.
+  - Action CLI `stream_failed <pos>`: bài đang phát là Tidal mà mpv lỗi thì nạp bản YouTube ở `start=<pos>` và nhớ bài này là miss trong 10 phút.
   - `resolve_media_path(..., skip_tidal=False, source_out=None)`: tham số mới, `source_out` là dict nhận `{"source", "tidal"}`.
 
 - [ ] **Step 1: Viết test hỏng** trong `tests/test_lossless_resolve.py`. Thay `player_daemon.tidal_source.resolve` bằng hàm giả, thay `ytmusic_helper.resolve_stream_url` và `send_mpv_cmd` bằng hàm giả ghi lại lệnh, đặt settings vào thư mục tạm.
@@ -231,6 +234,7 @@ assert.strictEqual(L.normalizeLosslessSettings({losslessQuality: "ultra"}, false
 - [ ] **Step 3: Viết `lossless_logic.js`.** Chạy lại test, phải qua.
 - [ ] **Step 4: Lưu/đọc cài đặt.** Thêm 3 khóa vào `saveSettings`/`loadSettings` qua `normalizeLosslessSettings`.
 - [ ] **Step 5: Mục "Lossless (Tidal)" trong `SettingsModal.qml`.** Trạng thái tài khoản (tên + gói), nút "Đăng nhập Tidal" / "Đăng xuất" (Muted Rose), công tắc lossless (bật thì mở modal, không bật thẳng), chọn chất lượng (ẩn `hires` nếu `!tidalStatus.can_hires`), chọn chế độ DAC theo `dacModesFor`. Đăng nhập: POST `/api/tidal/login/start`, `Qt.openUrlExternally(url)`, hiện mã và "Đang chờ xác nhận trên trình duyệt…", Timer 2000 ms gọi `/api/tidal/login/poll` tới `ok`/`expired`/`error`. Gói không có lossless: hiện câu nói rõ và giữ công tắc tắt. `needs_relogin`: hiện dòng nhắc đăng nhập lại. Khi `win.isCoListeningActive && losslessEnabled`: hiện dòng "Tạm tắt lossless khi Nghe Cùng".
+- [ ] **Step 5b: Chất lượng mặc định.** Lần đầu đăng nhập `ok` mà người dùng chưa từng chọn chất lượng: `losslessQuality = tidalStatus.can_hires ? "hires" : "lossless"`.
 - [ ] **Step 6: `LosslessExplainModal.qml`.** Nội dung đúng mục 8 của spec (5 ý + 3 lựa chọn DAC, Windows ẩn `rate_match` và có dòng giải thích). Nút "Để sau" (`dismissed`) và "Bật lossless" (`accepted(mode)`). Bấm "Bật lossless" thì `win.autoMixBeforeLossless = win.autoMixEnabled`, đặt `losslessEnabled = true` và `dacOutputMode`, rồi `saveSettings()`.
 - [ ] **Step 7: Toast Nghe Cùng.** Trong `shell.qml`, `onIsCoListeningActiveChanged` gọi `suspendTransition`. `"suspend"`: chạy `player_daemon.py lossless_suspend 1` và `win.showToast(I18n.tr("Đang Nghe Cùng: tạm phát bản YouTube để hai bên nghe khớp nhau. Lossless sẽ bật lại khi dừng nghe cùng.", "Listening Along: playing the YouTube version so you both stay in sync. Lossless comes back when you stop."))`. `"resume"`: chạy `lossless_suspend 0` và toast `I18n.tr("Lossless đã bật lại từ bài tiếp theo.", "Lossless is back from the next song.")`. Lúc khởi động app luôn gọi `lossless_suspend 0` để xóa cờ cũ.
 - [ ] **Step 8: Kiểm tra.** `node scripts/test_lossless_logic.cjs`, `node scripts/test_listen_along.mjs`, `python scripts/verify_codebase.py`, `python scripts/verify_qml_compat.py`, `qmllint components/SettingsModal.qml components/LosslessExplainModal.qml shell.qml` đều qua. Chạy app, mở Cài đặt, chụp màn hình mục mới và modal ở cả `vi` và `en`, xem ảnh để chắc không lẫn tiếng.
