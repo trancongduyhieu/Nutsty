@@ -6,8 +6,10 @@ Lives next to the playlists in the config dir and follows playlist_manager.profi
 so each Nutsty profile on this machine keeps its own sync switch, baselines and cache.
 None of this goes through account sync: a second device starts with a baseline-only run.
 """
+import contextlib
 import copy
 import os
+import threading
 import time
 
 try:
@@ -29,6 +31,7 @@ DEFAULT_STATE = {
     "localBaseline": {},     # "liked" or playlist id -> Nutsty track keys at write-back switch-on
     "writeBackAbsent": {},   # "liked" or playlist id -> base ids already gone locally at switch-on (never pushed)
     "forceApply": [],
+    "linked": [],            # Spotify playlist ids whose Nutsty copy existed here; deleting it unlinks
     "lastSync": 0.0,
     "lastError": "",
     "blocked": [],
@@ -52,6 +55,19 @@ def load_state():
 
 def save_state(state):
     return pm._write_json(_path("spotify_sync_state"), state)
+
+
+# Every read-modify-write of the state file holds this, so a route and a running sync never
+# overwrite each other's change. Never hold it across a network call.
+STATE_LOCK = threading.RLock()
+
+
+@contextlib.contextmanager
+def edit_state():
+    with STATE_LOCK:
+        state = load_state()
+        yield state
+        save_state(state)
 
 
 class MatchCache:

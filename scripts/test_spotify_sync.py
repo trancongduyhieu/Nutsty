@@ -1045,6 +1045,256 @@ class RouteTests(unittest.TestCase):
         self.assertFalse(h.sent[0]["writeBack"])
 
 
+class AliasMatcher(FakeMatcher):
+    """Like FakeMatcher, but ids in `alias` match the same YouTube video as another id."""
+
+    def __init__(self, alias, unmatched=()):
+        super().__init__(unmatched)
+        self.alias = dict(alias)
+
+    def __call__(self, item):
+        out = super().__call__(item)
+        sid = item.get("spotifyId")
+        if out and sid in self.alias:
+            vid = f"v{self.alias[sid]}"
+            out.update(videoId=vid, path=f"ytdl://{vid}")
+        return out
+
+
+class FinalReviewTests(SyncCase):
+    """Findings from the whole-branch review: each test reproduces one."""
+
+    def write_back(self, on=True):
+        import spotify_sync as ss
+        return ss.set_write_back("", on, now=self.NOW)
+
+    def sync(self, client, matcher=None, now=None):
+        return super().sync(client, matcher or self.matcher, now)
+
+    def setUp(self):
+        super().setUp()
+        self.matcher = FakeMatcher()
+
+    # C1: two Spotify ids, one YouTube video
+    def test_two_ids_same_video_playlist_never_removes_original(self):
+        self.matcher = AliasMatcher({"s2": "s1"})
+        self.enable(["P"])
+        c = FakeClient([lib("P")], {"P": remote_list(["s1"])})
+        self.sync(c)
+        self.write_back(True)
+        c.library, c.playlists["P"] = [lib("P", rev="r2")], remote_list(["s1", "s2"])
+        self.sync(c)
+        c.library = [lib("P", rev="r3")]
+        self.sync(c)
+        self.assertEqual(c.writes, [])
+        self.assertEqual(self.vids(), ["vs1"])
+        c.library, c.playlists["P"] = [lib("P", rev="r4")], remote_list(["s2"])
+        self.sync(c)
+        self.assertEqual(self.vids(), ["vs1"])
+        self.assertEqual(c.writes, [])
+
+    def test_two_ids_same_video_liked_never_unliked(self):
+        self.matcher = AliasMatcher({"s2": "s1"})
+        self.enable([], liked=True)
+        c = FakeClient([], liked=remote_list(["s1"]))
+        self.sync(c)
+        self.write_back(True)
+        c.liked = remote_list(["s1", "s2"])
+        self.sync(c)
+        self.sync(c)
+        self.assertEqual(c.writes, [])
+        c.liked = remote_list(["s2"])
+        self.sync(c)
+        self.assertIn("vs1", self.liked())
+        self.assertEqual(c.writes, [])
+
+    def test_two_ids_same_video_migration_keeps_both(self):
+        import spotify_sync as ss
+        import spotify_sync_state as st
+        out = ss.migrate_legacy_imports([legacy("P", 100, ["va"])], {"P": remote_list(["a", "a2"])},
+                                        AliasMatcher({"a2": "a"}), st.MatchCache())
+        self.assertEqual([t["videoId"] for t in out[0]["tracks"]], ["va"])
+        self.assertEqual(ss.track_ids(out[0]["tracks"][0]), ["a", "a2"])
+
+    # I1: a list linked after write-back went on gets its own baseline
+    def test_list_linked_after_switch_on_pushes_only_later_changes(self):
+        import playlist_manager as pm
+        pm.save_playlists([legacy("P", 100, ["va", "vgone"])])
+        self.enable([])
+        self.write_back(True)
+        self.enable(["P"])
+        c = FakeClient([lib("P")], {"P": remote_list(["a"])},
+                       search={"vgone": [cand("g1", "vgone")], "New": [cand("n1", "New")]})
+        self.sync(c)
+        self.sync(c)
+        self.assertEqual(c.writes, [])
+        pls = pm.load_playlists()
+        next(p for p in pls if p["id"] == "custom_pl_spotify_P")["tracks"].append(yt("vn", title="New"))
+        pm.save_playlists(pls)
+        self.sync(c)
+        self.assertEqual(c.writes, [("add_to_playlist", "P", ["spotify:track:n1"])])
+
+    # I2: the worker must not recycle itself while a sync or backlog holds the lock
+    def test_worker_busy_while_sync_lock_held(self):
+        import route_dispatcher as rd
+        import spotify_sync as ss
+        self.assertFalse(rd._background_busy())
+        with ss._RUN_LOCK:
+            self.assertTrue(rd._background_busy())
+
+    # I3: one unreadable playlist does not stop the rest
+    def test_unavailable_playlist_skipped_rest_synced(self):
+        import spotify_web as sw
+        self.enable(["P1", "P2"], liked=True)
+        c = FakeClient([lib("P1"), lib("P2")],
+                       {"P1": sw.SpotifyError("gone", code="not_found"), "P2": remote_list(["b"])},
+                       liked=remote_list(["c"]))
+        self.sync(c)
+        self.assertEqual(self.vids("P2"), ["vb"])
+        self.assertIn("vc", self.liked())
+
+    # I6: a switch flipped while a run is in flight is not overwritten
+    def test_list_choices_keeps_switch_flipped_meanwhile(self):
+        import spotify_sync as ss
+        import spotify_sync_state as st
+        self.enable(["P"])
+        self.write_back(True)
+
+        class Racing(FakeClient):
+            def library_playlists(inner):
+                ss.set_write_back("", False)
+                return super().library_playlists()
+        ss.list_choices("", client=Racing([lib("P")]))
+        self.assertFalse(st.load_state()["writeBack"])
+
+    def test_selection_changed_during_sync_kept(self):
+        import spotify_sync as ss
+        import spotify_sync_state as st
+
+        class Racing(FakeClient):
+            def playlist_items(inner, pid):
+                ss.set_selection("", ["Q"], False)
+                ss.force_apply("", "Q")
+                return super().playlist_items(pid)
+        self.enable(["P"], liked=True)
+        self.sync(Racing([lib("P")], {"P": remote_list(["a"])}))
+        s = st.load_state()
+        self.assertEqual(s["selected"], ["Q"])
+        self.assertFalse(s["likedSelected"])
+        self.assertIn("Q", s["forceApply"])
+
+    # I7: a linked playlist deleted in Nutsty stays deleted
+    def test_deleted_linked_playlist_not_recreated(self):
+        import playlist_manager as pm
+        import spotify_sync as ss
+        import spotify_sync_state as st
+        self.enable(["P"])
+        c = FakeClient([lib("P")], {"P": remote_list(["a"])})
+        self.sync(c)
+        pm.save_playlists([p for p in pm.load_playlists() if p["id"] != "custom_pl_spotify_P"])
+        c.library = [lib("P", rev="r2")]
+        self.sync(c)
+        self.assertIsNone(self.playlist())
+        self.assertNotIn("P", st.load_state()["selected"])
+        ss.set_selection("", ["P"], False)
+        self.sync(c)
+        self.assertEqual(self.vids(), ["va"])
+
+    # I8: a cycle that changes nothing leaves the record as it was
+    def test_unchanged_reread_keeps_record(self):
+        self.matcher = FakeMatcher(unmatched={"b"})
+        self.enable(["P"])
+        c = FakeClient([lib("P")], {"P": remote_list(["a", "b"])})
+        self.sync(c)
+        before = self.playlist()
+        self.sync(c, now=self.NOW + 100)
+        self.assertEqual(c.fetched, ["P", "P"])
+        self.assertEqual(self.playlist(), before)
+
+    # I5: each profile uses its own Spotify cookie
+    def test_profile_reads_its_own_cookie(self):
+        import playlist_manager as pm
+        import spotify_sync as ss
+        (CONFIG_DIR / "nutsty_settings.json").write_text(json.dumps({"spotifySpdc": "A"}))
+        (CONFIG_DIR / "nutsty_settings_user2.json").write_text(json.dumps({"spotifySpdc": "B"}))
+        with pm.profile_scope("user2"):
+            self.assertEqual(ss._default_client().spdc, "B")
+        with pm.profile_scope(""):
+            self.assertEqual(ss._default_client().spdc, "A")
+
+
+class TokenTests(unittest.TestCase):
+    """I5 / C2: the access token belongs to one cookie, and an anonymous one is not a login."""
+
+    def setUp(self):
+        import lyrics_helper as lh
+        self.lh = lh
+        self.orig = lh._http_get
+        lh._SPOTIFY_TOKEN_CACHE = {"token": "", "expires_at": 0}
+        self.anon = False
+
+        def fake(url, headers=None, timeout=8):
+            if "/api/token" in url:
+                cookie = (headers or {}).get("Cookie", "").split("=", 1)[-1]
+                return json.dumps({"accessToken": f"tok-{cookie}", "isAnonymous": self.anon,
+                                   "accessTokenExpirationTimestampMs": 4_000_000_000_000})
+            return None
+        lh._http_get = fake
+
+    def tearDown(self):
+        self.lh._http_get = self.orig
+        self.lh._SPOTIFY_TOKEN_CACHE = {"token": "", "expires_at": 0}
+
+    def test_token_cache_is_per_cookie(self):
+        self.assertEqual(self.lh.get_spotify_access_token("A"), "tok-A")
+        self.assertEqual(self.lh.get_spotify_access_token("B"), "tok-B")
+
+    def test_anonymous_token_refused_for_sync(self):
+        import spotify_web as sw
+        self.anon = True
+        self.assertEqual(sw._default_token("A"), "")
+
+
+class EmptyResponseTests(unittest.TestCase):
+    """C2 / I4: a 200 answer without the expected data is an error, never an empty list."""
+
+    client = WebClientTests.client
+
+    def test_null_playlist_is_error(self):
+        import spotify_web as sw
+        c, _ = self.client({"fetchPlaylist": [ok({"data": {"playlistV2": None}})]})
+        with self.assertRaises(sw.SpotifyError):
+            c.playlist_items("pl1")
+
+    def test_null_me_on_liked_is_auth_error(self):
+        import spotify_web as sw
+        c, _ = self.client({"fetchLibraryTracks": [ok({"data": {"me": None}})]})
+        with self.assertRaises(sw.SpotifyAuthError):
+            c.liked_items()
+
+    def test_null_library_is_error(self):
+        import spotify_web as sw
+        c, _ = self.client({"libraryV3": [ok({"data": {"me": {"libraryV3": None}}})]})
+        with self.assertRaises(sw.SpotifyError):
+            c.library_playlists()
+
+    def test_me_without_id_is_auth_error(self):
+        import spotify_web as sw
+        c, _ = self.client({"profileAttributes": [ok({"data": {"me": None}})]})
+        with self.assertRaises(sw.SpotifyAuthError):
+            c.me()
+
+    def test_episode_rows_do_not_make_list_incomplete(self):
+        import spotify_sync_merge as merge
+        page = playlist_page(["a", "b"], 3, 0)
+        page["data"]["playlistV2"]["content"]["items"].append(
+            {"uid": "uid-e", "itemV2": {"data": {"uri": "spotify:episode:e"}}})
+        c, _ = self.client({"fetchPlaylist": [ok(page)]})
+        r = c.playlist_items("pl1")
+        self.assertEqual([i["spotifyId"] for i in r.items], ["a", "b"])
+        self.assertTrue(merge.remote_is_valid(r))
+
+
 class FakeHandler:
     def __init__(self):
         self.sent = None

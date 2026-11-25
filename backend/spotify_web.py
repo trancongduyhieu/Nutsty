@@ -104,7 +104,8 @@ def _urllib_transport(url, payload, headers):
 
 def _default_token(spdc):
     import lyrics_helper
-    return lyrics_helper.get_spotify_access_token(spdc) or ""
+    # require_user: an anonymous token reads every list as empty, which would look like "delete all"
+    return lyrics_helper.get_spotify_access_token(spdc, require_user=True) or ""
 
 
 def _default_client_token():
@@ -142,6 +143,19 @@ def parse_track(data, uri=None):
         "duration_ms": int(dur.get("totalMilliseconds") or 0),
         "image": _first_source(album.get("coverArt") or {}),
     }
+
+
+def _required(data, *path, op=""):
+    """Walk `path` in a GraphQL answer. A missing `me` means no signed-in user; any other missing
+    node is a malformed answer. Both raise, so a 200 without data never reads as an empty list."""
+    node = data
+    for key in path:
+        node = node.get(key) if isinstance(node, dict) else None
+        if not isinstance(node, dict):
+            if key == "me":
+                raise SpotifyAuthError(f"{op}: no signed-in user")
+            raise SpotifyNetworkError(f"{op}: answer without {key}")
+    return node
 
 
 class SpotifyWebClient:
@@ -230,6 +244,8 @@ class SpotifyWebClient:
             data = self.query("profileAttributes", {})
             prof = ((data.get("me") or {}).get("profile")) or {}
             uid = prof.get("username") or _tail(prof.get("uri", ""))
+            if not uid:
+                raise SpotifyAuthError("profileAttributes: no signed-in user")
             self._me = {"id": uid, "name": prof.get("name") or uid}
         return self._me
 
@@ -243,7 +259,7 @@ class SpotifyWebClient:
                 "limit": LIBRARY_PAGE, "offset": offset, "flatten": True,
                 "expandedFolders": [], "folderUri": None, "includeFoldersWhenFlattening": False,
             })
-            lib = (data.get("me") or {}).get("libraryV3") or {}
+            lib = _required(data, "me", "libraryV3", op="libraryV3")
             total = int(lib.get("totalCount") or 0)
             items = lib.get("items") or []
             for wrap in items:
@@ -272,16 +288,16 @@ class SpotifyWebClient:
         return out
 
     def playlist_items(self, pid):
-        items, offset, total, revision = [], 0, None, ""
+        items, offset, total, revision, skipped = [], 0, None, "", 0
         while True:
             data = self.query("fetchPlaylist", {
                 "uri": f"spotify:playlist:{pid}", "offset": offset,
                 "limit": PLAYLIST_PAGE, "enableWatchFeedEntrypoint": False,
             })
-            pl = data.get("playlistV2") or {}
-            if pl.get("__typename") and pl["__typename"] != "Playlist":
+            pl = data.get("playlistV2")
+            if not pl or (pl.get("__typename") and pl["__typename"] != "Playlist"):
                 raise SpotifyError(f"playlist {pid} unavailable", code="not_found")
-            content = pl.get("content") or {}
+            content = _required(pl, "content", op="fetchPlaylist")
             total = int(content.get("totalCount") or 0)
             revision = pl.get("revisionId", revision) or revision
             page = content.get("items") or []
@@ -290,20 +306,21 @@ class SpotifyWebClient:
                 track = node.get("data") or {}
                 uri = node.get("_uri") or track.get("uri") or ""
                 if not uri.startswith("spotify:track:"):
-                    continue  # episodes, local files: not syncable
+                    skipped += 1  # episodes, local files: not syncable, and not counted in total
+                    continue
                 it = parse_track(track, uri)
                 it["uid"] = row.get("uid") or node.get("uid") or ""
                 items.append(it)
             offset += len(page)
             if not page or offset >= total:
                 break
-        return RemoteList(items=items, total=total, revision=revision, complete=offset >= total)
+        return RemoteList(items=items, total=total - skipped, revision=revision, complete=offset >= total)
 
     def liked_items(self):
         items, offset, total = [], 0, None
         while True:
             data = self.query("fetchLibraryTracks", {"offset": offset, "limit": LIBRARY_PAGE})
-            tracks = (((data.get("me") or {}).get("library") or {}).get("tracks")) or {}
+            tracks = _required(data, "me", "library", "tracks", op="fetchLibraryTracks")
             total = int(tracks.get("totalCount") or 0)
             page = tracks.get("items") or []
             for row in page:

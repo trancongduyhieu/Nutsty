@@ -283,13 +283,16 @@ MAX_REQUESTS = 500
 
 
 def _background_busy():
-    """True while an update download or Spotify import started by this worker is running."""
+    """True while an update download, Spotify import or Spotify sync in this worker is running."""
     for mod_name, attr in (("updater", "direct_updater"), ("spotify_importer", "importer")):
         mod = sys.modules.get(mod_name) or sys.modules.get(f"backend.{mod_name}")
         job = getattr(mod, attr, None) if mod else None
         if job is not None and getattr(job, "active", False):
             return True
-    return False
+    # a Spotify sync cycle or "push earlier likes" run holds this lock; recycling would kill it
+    sync = sys.modules.get("spotify_sync") or sys.modules.get("backend.spotify_sync")
+    lock = getattr(sync, "_RUN_LOCK", None) if sync else None
+    return bool(lock is not None and lock.locked())
 
 
 def _exit_worker():
