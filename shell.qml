@@ -1907,8 +1907,8 @@ Scope {
                     var prev = win.dacState();
                     win.dacOutputMode = "shared";
                     win.applyDacChange(prev);
-                    win.notify("error", I18n.tr("Một ứng dụng khác đang giữ DAC nên chưa phát nguyên bản tuyệt đối được. Nutsty chuyển về Qua hệ thống.",
-                                                "Another app is holding the DAC, so fully bit-perfect could not start. Nutsty switched to Through the system."));
+                    win.notify("error", I18n.tr("Nguyên bản tuyệt đối cần DAC chỉ phát mỗi Nutsty, nhưng một ứng dụng khác (có thể là thanh trạng thái hay trình duyệt) đang phát qua DAC. Nutsty chuyển về Qua hệ thống.",
+                                                "Fully bit-perfect needs the DAC to play only Nutsty, but another app (maybe your status bar or a browser) is playing through it. Nutsty switched to Through the system."));
                 } else if (res && res.restarted && !win.bitPerfectActive) {
                     PlaybackEngine.setVolume(win, win.volume);
                 }

@@ -45,6 +45,57 @@ class AoFailureWaitTest(unittest.TestCase):
             self.assertTrue(pd._ao_failed_in_log())
 
 
+class ExclusiveProbeTest(unittest.TestCase):
+    """Before mpv gets the exclusive flag, a short silent probe checks the DAC can be taken."""
+
+    def _probe_with_log(self, log_text, rc=0):
+        import player_daemon as pd
+
+        def fake_run(cmd, **kw):
+            log = [a.split("=", 1)[1] for a in cmd if a.startswith("--log-file=")][0]
+            Path(log).write_text(log_text)
+            return mock.Mock(returncode=rc)
+        with mock.patch.object(pd.subprocess, "run", fake_run):
+            return pd.exclusive_output_works(["--audio-exclusive=yes"])
+
+    def test_pipewire_refusing_exclusive_fails_the_probe(self):
+        # another app (the shell's own sounds) is linked to the DAC: PipeWire finds no target
+        log = ("[i][cplayer] AO: [pipewire] 44100Hz mono 1ch s16\n"
+               "[w][ao/pipewire] Stream in error state, trying to reload...\n"
+               "[w][ao/pipewire] Error during playback: No such file or directory, no target node available\n")
+        self.assertFalse(self._probe_with_log(log))
+
+    def test_device_busy_fails_the_probe(self):
+        self.assertFalse(self._probe_with_log("[e][ao] Failed to initialize audio driver 'wasapi'\n"))
+
+    def test_clean_open_passes(self):
+        self.assertTrue(self._probe_with_log("[i][cplayer] AO: [pipewire] 44100Hz stereo 2ch s16\n"
+                                             "[i][cplayer] Exiting... (End of file)\n"))
+
+    def test_probe_that_cannot_run_does_not_block_the_mode(self):
+        # no lavfi in this mpv build: unknown, keep the old behavior
+        self.assertTrue(self._probe_with_log("[e][cplayer] No protocol handler found to open URL av://lavfi\n", rc=2))
+
+    def test_ensure_mpv_drops_the_flag_when_the_probe_fails(self):
+        import player_daemon as pd
+        started = []
+
+        class Proc:
+            def poll(self):
+                return None
+        with mock.patch.object(pd.pc, "connect_mpv_socket", side_effect=[OSError()] + [mock.Mock()] * 5), \
+             mock.patch.object(pd, "is_mpv_running", lambda: False), \
+             mock.patch.object(pd.time, "sleep", lambda s: None), \
+             mock.patch.object(pd, "get_lossless_settings", lambda: {"enabled": False, "quality": "lossless", "dac_mode": "exclusive"}), \
+             mock.patch.object(pd, "exclusive_output_works", lambda args: False), \
+             mock.patch.object(pd, "_mark_exclusive_failed") as marked, \
+             mock.patch.object(pd.subprocess, "Popen", lambda cmd, **kw: started.append(cmd) or Proc()):
+            self.assertTrue(pd.ensure_mpv())
+        self.assertEqual(len(started), 1)
+        self.assertNotIn("--audio-exclusive=yes", started[0])
+        marked.assert_called_once()
+
+
 class RateDropinTest(unittest.TestCase):
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp(prefix="nutsty_pw_"))

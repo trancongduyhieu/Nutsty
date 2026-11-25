@@ -292,6 +292,9 @@ def ensure_mpv(force_shared=False):
         cmd.extend(_mpv_stream_args(ytdl_fmt))
         import audio_output
         dac_args = [] if force_shared else audio_output.mpv_output_args(get_lossless_settings())
+        if dac_args and not exclusive_output_works(dac_args):
+            _mark_exclusive_failed()
+            dac_args = []
         if dac_args:
             # Bit-perfect: in-app volume stays at 100%, the DAC or the headphones set the level
             cmd.extend(dac_args + ["--volume=100"])
@@ -319,7 +322,34 @@ def ensure_mpv(force_shared=False):
 
 
 EXCLUSIVE_FAILED_FILE = os.path.join(TEMP_DIR, f"nutsty_exclusive_failed{PROFILE_SUFFIX}")
-AO_FAILURE_MARKERS = ("Failed to initialize audio driver", "Could not open/initialize audio device")
+# The last two: PipeWire refuses an exclusive stream while another app (the shell's own sounds, a
+# browser) is linked to the same DAC; mpv then keeps reloading the output and races through the song.
+AO_FAILURE_MARKERS = ("Failed to initialize audio driver", "Could not open/initialize audio device",
+                      "no target node available", "Stream in error state")
+PROBE_LOG_FILE = os.path.join(TEMP_DIR, f"nutsty_exclusive_probe{PROFILE_SUFFIX}.log")
+
+
+def exclusive_output_works(dac_args):
+    """Open the DAC with the exclusive flag for a moment, silent, before the real mpv gets it.
+    False only when the log shows the output was refused; a probe that cannot run says True."""
+    try:
+        os.remove(PROBE_LOG_FILE)
+    except OSError:
+        pass
+    cmd = [pc.get_binary_path("mpv"), "--no-config", "--no-video", "--no-terminal", "--idle=no",
+           "--volume=0", "--length=0.5", f"--log-file={PROBE_LOG_FILE}"] + list(dac_args) + \
+          ["av://lavfi:sine=frequency=440:duration=1"]
+    try:
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=6,
+                       **pc.get_daemon_popen_kwargs())
+    except Exception:
+        pass
+    try:
+        with open(PROBE_LOG_FILE, "r", encoding="utf-8", errors="replace") as f:
+            text = f.read()
+    except OSError:
+        return True
+    return not any(m in text for m in AO_FAILURE_MARKERS)
 
 
 def _mark_exclusive_failed():
