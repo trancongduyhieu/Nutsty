@@ -38,6 +38,13 @@ ColumnLayout {
         return n || I18n.tr("Một playlist", "A playlist");
     }
 
+    // The cover stack needs the playlist list once per session while sync is on
+    function loadStackOnce() {
+        if (root.on && root.sync && (root.sync.choices || []).length === 0 && !root.sync.choicesLoading) root.sync.loadChoices();
+    }
+    onOnChanged: loadStackOnce()
+    Component.onCompleted: loadStackOnce()
+
     // Seed the checkboxes from what the backend proposes each time the list arrives
     Connections {
         target: root.sync
@@ -216,27 +223,30 @@ ColumnLayout {
             id: grid
             Layout.fillWidth: true
             visible: !picker.loading && picker.err === ""
-            columns: width >= 520 ? 2 : 1
-            columnSpacing: 8
-            rowSpacing: 8
+            // As many 120px-plus covers as fit, never fewer than three
+            columns: Math.max(3, Math.floor((width + columnSpacing) / (120 + columnSpacing)))
+            columnSpacing: 16
+            rowSpacing: 20
 
-            SpotifyChoiceRow {
+            SpotifyChoiceTile {
                 Layout.fillWidth: true
                 Layout.preferredWidth: 1
+                Layout.alignment: Qt.AlignTop
                 accentColor: root.accentColor
                 likedTile: true
                 title: I18n.tr("Bài hát đã thích", "Liked Songs")
-                subtitle: I18n.tr("Thích bên nào, bên kia cũng có", "Like it on one side, it shows on the other")
+                subtitle: I18n.tr("Thư viện của bạn", "Your library")
                 checked: root.likedPicked
                 onToggled: root.likedPicked = !root.likedPicked
             }
 
             Repeater {
                 model: grid.visible && root.sync ? root.sync.choices : []
-                delegate: SpotifyChoiceRow {
+                delegate: SpotifyChoiceTile {
                     required property var modelData
                     Layout.fillWidth: true
                     Layout.preferredWidth: 1
+                    Layout.alignment: Qt.AlignTop
                     accentColor: root.accentColor
                     title: modelData.title || ""
                     cover: modelData.image || ""
@@ -294,6 +304,68 @@ ColumnLayout {
             anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
             spacing: 3
+
+            // What is being kept in step, as a stack of small covers
+            Row {
+                id: coverStack
+                visible: syncedRepeater.count > 0 || (root.sync && root.sync.likedChoice)
+                bottomPadding: 8
+                spacing: -8
+                readonly property var synced: {
+                    var list = root.sync ? (root.sync.choices || []) : [];
+                    var out = [];
+                    for (var i = 0; i < list.length; i++) if (list[i].selected) out.push(list[i]);
+                    return out;
+                }
+
+                Rectangle {
+                    visible: !!(root.sync && root.sync.likedChoice)
+                    width: 30
+                    height: 30
+                    radius: 6
+                    border.width: 1
+                    border.color: Qt.rgba(1, 1, 1, 0.18)
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: Qt.lighter(root.accentColor, 1.35) }
+                        GradientStop { position: 1.0; color: Qt.darker(root.accentColor, 1.9) }
+                    }
+                    AppIcon {
+                        anchors.centerIn: parent
+                        source: "../assets/icons/emblem-favorite-symbolic.svg"
+                        iconSize: 13
+                        color: "#ffffff"
+                    }
+                }
+
+                Repeater {
+                    id: syncedRepeater
+                    model: coverStack.synced.slice(0, 6)
+                    delegate: RoundedImage {
+                        required property var modelData
+                        width: 30
+                        height: 30
+                        radius: 6
+                        source: modelData.image || ""
+                        sourceSize: Qt.size(60, 60)
+                        initialsText: modelData.title || ""
+                        fallbackIcon: "../assets/icons/media-playlist-consecutive-symbolic.svg"
+                        fallbackIconColor: root.accentColor
+                        borderColor: Qt.rgba(1, 1, 1, 0.18)
+                        borderWidth: 1
+                    }
+                }
+
+                Text {
+                    visible: coverStack.synced.length > 6
+                    anchors.verticalCenter: parent.verticalCenter
+                    leftPadding: 16
+                    text: "+" + (coverStack.synced.length - 6)
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                    color: Theme.textSecondary
+                }
+            }
 
             Text {
                 width: parent.width
