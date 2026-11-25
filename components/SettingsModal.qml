@@ -1367,8 +1367,6 @@ Rectangle {
                 // Two-way Spotify sync, only once a cookie is saved
                 SpotifySyncSection {
                     Layout.fillWidth: true
-                    Layout.leftMargin: 4
-                    Layout.rightMargin: 16
                     visible: root.spotifySync !== null && root.spotifySpdc && root.spotifySpdc.length > 10
                     sync: root.spotifySync
                     accentColor: root.accentColor

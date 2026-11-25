@@ -166,7 +166,7 @@ ColumnLayout {
                     Odometer {
                         id: countOdo
                         text: String(root.syncedCount)
-                        pixelSize: 44
+                        pixelSize: 32
                         spinning: !!(root.sync && root.sync.running)
                     }
                 }
@@ -433,9 +433,9 @@ ColumnLayout {
             visible: !root.choicesLoading && root.choicesErr === ""
             text: root.pickedCount + "/" + root.totalCount
             font.family: Theme.fontFamily
-            font.pixelSize: 28
-            font.weight: Font.Black
-            color: Theme.textPrimary
+            font.pixelSize: 13
+            font.bold: true
+            color: Theme.textSecondary
         }
 
         SpotifySubCard {

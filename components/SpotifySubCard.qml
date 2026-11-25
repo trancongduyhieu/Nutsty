@@ -2,8 +2,8 @@ import QtQuick
 import QtQuick.Layouts
 import "."
 
-// Sub-card inside a SpotifySettingCard (Mochy's "Làm mờ lũy tiến" row): one option on a 12px tinted card,
-// 20 - 8 = 12 concentric with its parent. Text on the left, a control (trailing) on the right.
+// One option row inside a SpotifySettingCard: text on the left, a control (trailing) on the right.
+// Flat like the other Settings rows; a faint accent tint shows only on hover of a clickable row (rose when danger).
 // Own file, not an inline component: Quickshell hot reload cannot resolve an inline component added later.
 Rectangle {
     id: sub
@@ -20,11 +20,10 @@ Rectangle {
     readonly property color tone: danger ? Qt.rgba(244 / 255, 63 / 255, 94 / 255, 1.0) : accentColor
 
     Layout.fillWidth: true
-    implicitHeight: Math.max(48, textCol.implicitHeight + 20)
-    radius: 12
-    color: Qt.rgba(tone.r, tone.g, tone.b, subMouse.containsMouse ? 0.20 : 0.12)
-    border.width: 1
-    border.color: Qt.rgba(tone.r, tone.g, tone.b, danger ? 0.30 : 0.14)
+    implicitHeight: Math.max(44, textCol.implicitHeight + 16)
+    radius: 10
+    color: danger ? Qt.rgba(tone.r, tone.g, tone.b, 0.12)
+                  : Qt.rgba(tone.r, tone.g, tone.b, clickable && subMouse.containsMouse ? 0.10 : 0.0)
     Behavior on color { ColorAnimation { duration: 140 } }
 
     MouseArea {
@@ -39,7 +38,7 @@ Rectangle {
     Column {
         id: textCol
         anchors.left: parent.left
-        anchors.leftMargin: 14
+        anchors.leftMargin: danger ? 12 : 0
         anchors.right: trailingSlot.left
         anchors.rightMargin: 12
         anchors.verticalCenter: parent.verticalCenter
@@ -50,7 +49,7 @@ Rectangle {
             running: visible
             text: sub.title
             pixelSize: 13
-            fontWeight: Font.DemiBold
+            fontWeight: Font.Bold
             letterSpacing: 0
         }
 
@@ -60,7 +59,7 @@ Rectangle {
             text: sub.title
             font.family: Theme.fontFamily
             font.pixelSize: 13
-            font.weight: Font.DemiBold
+            font.bold: true
             color: sub.danger ? "#fda4af" : Theme.textPrimary
             wrapMode: Text.WordWrap
         }
@@ -79,7 +78,7 @@ Rectangle {
     Item {
         id: trailingSlot
         anchors.right: parent.right
-        anchors.rightMargin: 10
+        anchors.rightMargin: sub.danger ? 10 : 0
         anchors.verticalCenter: parent.verticalCenter
         width: childrenRect.width
         height: childrenRect.height

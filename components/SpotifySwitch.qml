@@ -1,7 +1,7 @@
 import QtQuick
 import "."
 
-// The switch of a Spotify setting card: accent track when on, accent-tinted when off (never grey).
+// The switch of a Spotify setting card, same as the other Settings toggles: accent track when on, accent-tinted when off.
 // Own file, not an inline component: Quickshell hot reload cannot resolve an inline component added later.
 Rectangle {
     id: sw
@@ -13,8 +13,6 @@ Rectangle {
     height: 24
     radius: 12
     color: checked ? accentColor : Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.18)
-    border.color: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.35)
-    border.width: 1
     Behavior on color { ColorAnimation { duration: 150 } }
 
     Rectangle {

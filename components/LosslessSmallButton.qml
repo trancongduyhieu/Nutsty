@@ -26,7 +26,9 @@ Rectangle {
         font.family: Theme.fontFamily
         font.pixelSize: 12
         font.bold: true
-        color: "#ffffff"
+        // white on a light accent (pale gold) washes out: dark text on a filled light pill
+        color: sb.primary && (0.299 * sb.tone.r + 0.587 * sb.tone.g + 0.114 * sb.tone.b) > 0.6
+               ? Qt.rgba(0, 0, 0, 0.85) : "#ffffff"
     }
     MouseArea { id: sbMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: sb.clicked() }
 }

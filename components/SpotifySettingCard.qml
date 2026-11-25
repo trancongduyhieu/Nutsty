@@ -2,8 +2,8 @@ import QtQuick
 import QtQuick.Layouts
 import "."
 
-// One setting card, Mochy's anatomy (DESIGN.md "Setting Card"): bold title top-left, description under it,
-// a control top-right (headerRight), then the body. Surface is accent-tinted glass with a hairline, never opaque grey.
+// One setting group in the flat anatomy of the other Settings rows: 13px bold title, 11px description,
+// a control on the right (headerRight), then the body. No surface of its own, so it sits in line with the rows below.
 // Own file, not an inline component: Quickshell hot reload cannot resolve an inline component added later.
 Rectangle {
     id: card
@@ -15,24 +15,16 @@ Rectangle {
     default property alias body: bodyCol.data
     property alias headerRight: headerRightSlot.data
 
-    implicitHeight: col.implicitHeight + 36
-    radius: 20
-    color: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.08)
-    border.width: 1
-    border.color: Qt.rgba(1, 1, 1, cardHover.hovered ? 0.18 : 0.07)
-    Behavior on border.color { ColorAnimation { duration: 160 } }
-
-    HoverHandler { id: cardHover }
+    implicitHeight: col.implicitHeight + 12
+    color: "transparent"
 
     ColumnLayout {
         id: col
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.leftMargin: 20
-        anchors.rightMargin: 20
-        anchors.topMargin: 18
-        spacing: 14
+        anchors.topMargin: 6
+        spacing: 10
 
         RowLayout {
             Layout.fillWidth: true
@@ -41,14 +33,14 @@ Rectangle {
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignTop
-                spacing: 4
+                spacing: 2
 
                 Text {
                     Layout.fillWidth: true
                     text: card.title
                     font.family: Theme.fontFamily
-                    font.pixelSize: 18
-                    font.weight: Font.Bold
+                    font.pixelSize: 13
+                    font.bold: true
                     color: Theme.textPrimary
                     wrapMode: Text.WordWrap
                 }
@@ -58,8 +50,7 @@ Rectangle {
                     visible: card.description !== ""
                     text: card.description
                     font.family: Theme.fontFamily
-                    font.pixelSize: 12
-                    lineHeight: 1.25
+                    font.pixelSize: 11
                     color: Theme.textSecondary
                     wrapMode: Text.WordWrap
                     maximumLineCount: 3
@@ -69,7 +60,7 @@ Rectangle {
 
             Item {
                 id: headerRightSlot
-                Layout.alignment: Qt.AlignTop
+                Layout.alignment: Qt.AlignVCenter
                 Layout.preferredWidth: childrenRect.width
                 Layout.preferredHeight: childrenRect.height
             }
