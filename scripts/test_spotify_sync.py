@@ -179,6 +179,14 @@ class WebClientTests(unittest.TestCase):
         self.assertTrue(r.complete)
         self.assertEqual([i["spotifyId"] for i in r.items], ["a", "b"])
 
+    def test_add_to_playlist_sends_playlist_item_uris(self):
+        c, t = self.client({"addToPlaylist": [ok({"data": {}})]})
+        c.add_to_playlist("pl1", ["spotify:track:x"])
+        op, variables = t.calls[-1]
+        self.assertEqual(op, "addToPlaylist")
+        self.assertEqual(variables["playlistItemUris"], ["spotify:track:x"])
+        self.assertEqual(variables["playlistUri"], "spotify:playlist:pl1")
+
     def test_search_tracks_parsed(self):
         body = {"data": {"searchV2": {"tracksV2": {"items": [
             {"item": {"data": dict(gql_track("s1", name="Hello"), duration={"totalMilliseconds": 180000})}},

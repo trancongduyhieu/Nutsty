@@ -334,7 +334,7 @@ class SpotifyWebClient:
     # -- write ops (write-back only) -------------------------------------
     def add_to_playlist(self, pid, uris):
         return self.query("addToPlaylist", {
-            "uris": list(uris), "playlistUri": f"spotify:playlist:{pid}",
+            "playlistItemUris": list(uris), "playlistUri": f"spotify:playlist:{pid}",
             "newPosition": {"moveType": "BOTTOM_OF_PLAYLIST", "fromUid": None},
         })
 
