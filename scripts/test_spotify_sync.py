@@ -255,5 +255,62 @@ class MergeTests(unittest.TestCase):
         self.assertTrue(sm.mass_delete_blocked(6, 4))
 
 
+class StateTests(unittest.TestCase):
+    def setUp(self):
+        for f in CONFIG_DIR.glob("spotify_*"):
+            f.unlink()
+
+    def test_defaults_when_missing(self):
+        import spotify_sync_state as st
+        s = st.load_state()
+        self.assertFalse(s["enabled"])
+        self.assertFalse(s["selectionConfirmed"])
+        self.assertIsNone(s["likedBase"])
+        self.assertFalse(s["writeBack"])
+        self.assertEqual(s["selected"], [])
+        self.assertEqual(s["localBaseline"], {})
+
+    def test_round_trip(self):
+        import spotify_sync_state as st
+        s = st.load_state()
+        s.update(enabled=True, selected=["p1"], likedBase=["a"])
+        st.save_state(s)
+        again = st.load_state()
+        self.assertTrue(again["enabled"])
+        self.assertEqual(again["selected"], ["p1"])
+        self.assertEqual(again["likedBase"], ["a"])
+
+    def test_profile_isolation(self):
+        import playlist_manager as pm
+        import spotify_sync_state as st
+        with pm.profile_scope("user2"):
+            s = st.load_state()
+            s["enabled"] = True
+            st.save_state(s)
+        self.assertFalse(st.load_state()["enabled"])
+        self.assertTrue((CONFIG_DIR / "spotify_sync_state_user2.json").exists())
+        self.assertFalse((CONFIG_DIR / "spotify_sync_state.json").exists())
+
+    def test_match_cache_retry_window(self):
+        import spotify_sync_state as st
+        c = st.MatchCache()
+        c.put("sx", None, now=1000.0)
+        self.assertTrue(c.get("sx")["unmatched"])
+        self.assertFalse(c.should_retry("sx", 1000.0 + 86400))
+        self.assertTrue(c.should_retry("sx", 1000.0 + 3 * 86400 + 1))
+        self.assertTrue(c.should_retry("never-seen", 1000.0))
+
+    def test_match_cache_reverse_lookup_and_persist(self):
+        import spotify_sync_state as st
+        c = st.MatchCache()
+        c.put("s1", {"videoId": "v1", "title": "T"})
+        c.save()
+        c2 = st.MatchCache()
+        self.assertEqual(c2.get("s1")["videoId"], "v1")
+        self.assertEqual(c2.find_by_video("v1"), "s1")
+        self.assertIsNone(c2.find_by_video("nope"))
+        self.assertFalse(c2.should_retry("s1", 0))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
