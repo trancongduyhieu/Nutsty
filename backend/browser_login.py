@@ -306,6 +306,57 @@ async def query_browser_profile(cdp_port):
         log(f"query_browser_profile debug: {e}", "DEBUG")
     return None
 
+async def read_chosen_youtube_account(cdp_port):
+    """Return {"sessionIndex", "email", "name"} once a music.youtube.com tab is signed in, else None.
+
+    The login profile keeps every Google account the user ever added, so cookies alone say nothing
+    about which one they picked. We only accept the login after the account chooser hands off to
+    YouTube Music, and read the chosen account's slot (SESSION_INDEX = X-Goog-AuthUser) from that page.
+    """
+    import websockets
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{cdp_port}/json/list", timeout=1.0) as r:
+            pages = json.loads(r.read().decode("utf-8"))
+    except Exception:
+        return None
+    js = r"""
+    (() => {
+        try {
+            if (!window.ytcfg || !window.ytcfg.get) return null;
+            const idx = window.ytcfg.get("SESSION_INDEX");
+            return {
+                loggedIn: !!window.ytcfg.get("LOGGED_IN"),
+                sessionIndex: (idx === undefined || idx === null) ? null : String(idx),
+                email: window.ytcfg.get("USER_EMAIL") || "",
+                name: window.ytcfg.get("USER_NAME") || ""
+            };
+        } catch (e) { return null; }
+    })()
+    """
+    for p in pages:
+        if p.get("type") != "page" or not p.get("webSocketDebuggerUrl"):
+            continue
+        if not p.get("url", "").startswith("https://music.youtube.com"):
+            continue
+        try:
+            ws = p["webSocketDebuggerUrl"].replace("localhost", "127.0.0.1")
+            async with websockets.connect(ws, ping_interval=None) as sock:
+                await sock.send(json.dumps({"id": 4242, "method": "Runtime.evaluate",
+                                            "params": {"expression": js, "returnByValue": True}}))
+                while True:
+                    parsed = json.loads(await asyncio.wait_for(sock.recv(), timeout=1.5))
+                    if parsed.get("id") == 4242:
+                        break
+            val = parsed.get("result", {}).get("result", {}).get("value")
+            if isinstance(val, dict) and val.get("loggedIn"):
+                if val.get("sessionIndex") is None:
+                    val["sessionIndex"] = "0"
+                return val
+        except Exception as e:
+            log(f"read_chosen_youtube_account debug: {e}", "DEBUG")
+    return None
+
+
 async def capture_cookies_via_cdp(ws_url, cdp_port, proc, service="youtube", max_timeout=300):
     import websockets
 
@@ -366,9 +417,13 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, service="youtube", max
                         break
 
                 # 2. Dual-Layer Fallback: Query all active page targets in /json/list (NO early break!)
+                on_google_accounts = False
                 try:
                     with urllib.request.urlopen(f"http://127.0.0.1:{cdp_port}/json/list", timeout=1.0) as r:
                         pages = json.loads(r.read().decode("utf-8"))
+                    on_google_accounts = any(
+                        p.get("type") == "page" and p.get("url", "").startswith("https://accounts.google.com")
+                        for p in pages)
 
                     target_urls = [
                         "https://open.spotify.com",
@@ -501,7 +556,8 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, service="youtube", max
                         log("Google authentication detected (SAPISID found). Awaiting YouTube Music redirect...")
 
                     # Auto-navigate to music.youtube.com if Google signed in but no YouTube session yet (>1.5s)
-                    if has_sapisid and not has_yt_session and google_signed_in_time and (time.time() - google_signed_in_time > 1.5):
+                    # Never while a tab is still on accounts.google.com: that would skip the account chooser
+                    if has_sapisid and not has_yt_session and not on_google_accounts and google_signed_in_time and (time.time() - google_signed_in_time > 1.5):
                         log("Google session active, navigating to music.youtube.com to complete YouTube auth...", "INFO")
                         try:
                             with urllib.request.urlopen(f"http://127.0.0.1:{cdp_port}/json/list", timeout=1.0) as r:
@@ -523,8 +579,17 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, service="youtube", max
                         except Exception as ne:
                             log(f"Page navigation helper error: {ne}", "WARN")
 
-                    # Crucial condition: must have auth (SAPISID) AND YouTube session
-                    if has_sapisid and has_yt_session:
+                    # Crucial condition: must have auth (SAPISID) AND YouTube session AND the user picked an account
+                    chosen = None
+                    # While the chooser tab is still on accounts.google.com the user has not picked yet,
+                    # even if a restored music.youtube.com tab from last time is signed in
+                    if has_sapisid and has_yt_session and not on_google_accounts:
+                        chosen = await read_chosen_youtube_account(cdp_port)
+                        if not chosen and time.time() - last_pending_log > 3.0:
+                            last_pending_log = time.time()
+                            log("Saved Google session present; waiting for the user to pick an account...", "INFO")
+                    if chosen:
+                        log(f"User picked account slot {chosen.get('sessionIndex')} ({chosen.get('email') or 'email pending'}).")
                         log("Candidate credentials complete! Merging and verifying...")
                         merged = dict(google_cookies)
                         merged.update(yt_cookies)
@@ -540,6 +605,10 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, service="youtube", max
                         profile_hint = None
                         try:
                             profile_hint = await query_browser_profile(cdp_port)
+                            if chosen.get("email") or chosen.get("name"):
+                                profile_hint = {"name": chosen.get("name") or (profile_hint or {}).get("name", ""),
+                                                "email": chosen.get("email") or (profile_hint or {}).get("email", ""),
+                                                "thumb": (profile_hint or {}).get("thumb", "")}
                             if profile_hint and (profile_hint.get("name") or profile_hint.get("email")):
                                 log(f"Extracted profile hint from browser: {profile_hint.get('name')} ({profile_hint.get('email')})")
                         except Exception as pe:
@@ -547,7 +616,8 @@ async def capture_cookies_via_cdp(ws_url, cdp_port, proc, service="youtube", max
 
                         # Verify auth using ytmusic_helper
                         try:
-                            res = ytmusic_helper.save_auth(full_cookie_str, profile_hint=profile_hint)
+                            res = ytmusic_helper.save_auth(full_cookie_str, profile_hint=profile_hint,
+                                                          authuser=chosen.get("sessionIndex"))
                             if res.get("success"):
                                 acc_name = res.get("name", "Google User")
                                 acc_email = res.get("email", "")

@@ -8,10 +8,10 @@ CURRENT_COMMIT="$(git -C "$DIR" rev-parse HEAD 2>/dev/null || echo "unknown")"
 LAST_COMMIT="$(cat /tmp/nutsty_running_commit 2>/dev/null || echo "")"
 
 # Ensure required Python dependencies before starting backend or UI
-if ! python3 -c "import mutagen, ytmusicapi, syncedlyrics, pypinyin" >/dev/null 2>&1; then
-    echo "Installing missing Python dependencies (mutagen, ytmusicapi, syncedlyrics, pypinyin)..."
-    python3 -m pip install mutagen ytmusicapi syncedlyrics pypinyin --quiet || \
-    python3 -m pip install --break-system-packages --user mutagen ytmusicapi syncedlyrics pypinyin --quiet || true
+if ! python3 -c "import mutagen, ytmusicapi, syncedlyrics, pypinyin, websockets, tidalapi" >/dev/null 2>&1; then
+    echo "Installing missing Python dependencies (mutagen, ytmusicapi, syncedlyrics, pypinyin, websockets, tidalapi)..."
+    python3 -m pip install mutagen ytmusicapi syncedlyrics pypinyin websockets tidalapi==0.8.11 --quiet || \
+    python3 -m pip install --break-system-packages --user mutagen ytmusicapi syncedlyrics pypinyin websockets tidalapi==0.8.11 --quiet || true
 fi
 
 # Terminate legacy heavy Python auth_server if running

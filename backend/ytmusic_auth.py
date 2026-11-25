@@ -530,7 +530,7 @@ def get_auth_status():
 
         return {"logged_in": False, "name": "", "thumb": "", "email": "", "error": str(e)}
 
-def save_auth(raw_text, profile_hint=None):
+def save_auth(raw_text, profile_hint=None, authuser=None):
     if isinstance(raw_text, dict):
         raw_text = "; ".join(f"{k}={v}" for k, v in raw_text.items())
     raw_text = str(raw_text).strip()
@@ -549,7 +549,10 @@ def save_auth(raw_text, profile_hint=None):
         # Authuser detection
         target_authuser = "0"
         authuser_match = re.search(r'(?:x-goog-)?authuser[=:\s]+(["\']?)(\d+)\1', raw_text, re.IGNORECASE)
-        if authuser_match:
+        if authuser is not None and str(authuser).isdigit():
+            # Account slot the user picked in the browser login window
+            target_authuser = str(authuser)
+        elif authuser_match:
             target_authuser = authuser_match.group(2)
         elif PROFILE_NAME == "user2" or PROFILE_NAME == "friend":
             target_authuser = "1"
@@ -616,7 +619,8 @@ def save_auth(raw_text, profile_hint=None):
             test_client = ytmusicapi.YTMusic(temp_file)
             account_info = extract_account_details_from_client(test_client, headers)
         except Exception as err1:
-            if target_authuser != "0":
+            # Do not fall back to slot 0 when the user explicitly picked an account: that is someone else
+            if target_authuser != "0" and authuser is None:
                 try:
                     headers["x-goog-authuser"] = "0"
                     save_json(temp_file, headers)
