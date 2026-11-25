@@ -8,6 +8,7 @@ import QtQuick.Effects
 import "./components"
 import "components/social_engine.js" as SocialEngine
 import "components/playback_engine.js" as PlaybackEngine
+import "components/lossless_logic.js" as LosslessLogic
 
 Scope {
     id: appScope
@@ -290,6 +291,15 @@ Scope {
     readonly property bool sleepTimerVolumeLocked: sleepTimerController.volumeLocked
     property string currentLanguage: I18n.locale
     property string streamingQuality: "high_opus"
+    // Tidal lossless (the user's own Tidal account). dacOutputMode only applies while losslessEnabled.
+    property bool losslessEnabled: false
+    property string losslessQuality: "lossless"
+    property bool losslessQualityChosen: false
+    property string dacOutputMode: "shared"
+    property var tidalStatus: null
+    property bool autoMixBeforeLossless: true
+    readonly property bool isWindowsPlatform: Qt.platform.os === "windows"
+    property bool coListeningWasActive: false
     property string downloadQuality: "high_opus"
     property string spotifySpdc: ""
     property string lyricsSource: "auto"
@@ -1800,6 +1810,70 @@ Scope {
         return SocialEngine.unfriendUser(win, targetEmail);
     }
 
+    // Listen Along plays the YouTube version on both sides; lossless returns from the next song.
+    onIsCoListeningActiveChanged: {
+        var t = LosslessLogic.suspendTransition(win.coListeningWasActive, win.isCoListeningActive, win.losslessEnabled);
+        win.coListeningWasActive = win.isCoListeningActive;
+        if (t === "suspend") {
+            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "lossless_suspend", "1"]);
+            win.showToast(I18n.tr("Đang Nghe Cùng: tạm phát bản YouTube để hai bên nghe khớp nhau. Lossless sẽ bật lại khi dừng nghe cùng.",
+                                  "Listening Along: playing the YouTube version so you both stay in sync. Lossless comes back when you stop."), "listen");
+        } else if (t === "resume") {
+            Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "lossless_suspend", "0"]);
+            win.showToast(I18n.tr("Lossless đã bật lại từ bài tiếp theo.", "Lossless is back from the next song."), "listen");
+        }
+    }
+
+    function refreshTidalStatus() {
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", win.localApiUrl + "/api/tidal/status");
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE || xhr.status !== 200) return;
+            try { win.applyTidalStatus(JSON.parse(xhr.responseText)); } catch (e) {}
+        };
+        xhr.send();
+    }
+
+    // A fresh status from the backend (startup, or a finished login in Settings).
+    function applyTidalStatus(st) {
+        if (!st || st.state === "error") return;
+        var firstLogin = st.logged_in && !(win.tidalStatus && win.tidalStatus.logged_in);
+        win.tidalStatus = st;
+        if (firstLogin) {
+            var q = LosslessLogic.defaultQualityAfterLogin(st, win.losslessQualityChosen, win.losslessQuality);
+            if (q !== win.losslessQuality) { win.losslessQuality = q; win.saveSettings(); }
+        }
+    }
+
+    // The explain modal was accepted: lossless on, AutoMix value kept for when it is turned off.
+    function enableLossless(mode) {
+        win.autoMixBeforeLossless = win.autoMixEnabled;
+        win.dacOutputMode = LosslessLogic.dacModesFor(win.isWindowsPlatform).indexOf(mode) >= 0 ? mode : "shared";
+        win.losslessEnabled = true;
+        win.saveSettings();
+    }
+
+    function disableLossless() {
+        win.losslessEnabled = false;
+        win.saveSettings();
+    }
+
+    function setLosslessQuality(q) {
+        win.losslessQuality = LosslessLogic.effectiveQuality(q, win.tidalStatus);
+        win.losslessQualityChosen = true;
+        win.saveSettings();
+    }
+
+    function setDacOutputMode(mode) {
+        if (LosslessLogic.dacModesFor(win.isWindowsPlatform).indexOf(mode) < 0) return;
+        win.dacOutputMode = mode;
+        win.saveSettings();
+    }
+
+    function openLosslessExplain() {
+        losslessExplainModal.openModal(win.dacOutputMode);
+    }
+
     // kind picks the toast icon: update, listen, friend, library, download, success, error, info
     function showToast(msg, kind) {
         if (!msg) return;
@@ -2316,6 +2390,10 @@ Scope {
     }
 
     Component.onCompleted: {
+        // A crash during Listen Along can leave the suspension flag behind
+        Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "lossless_suspend", "0"]);
+        win.coListeningWasActive = win.isCoListeningActive;
+        win.refreshTidalStatus();
         win.loadHomeFeed();
         win.checkAuthStatus();
         win.loadCustomPlaylists();
@@ -3982,6 +4060,13 @@ Scope {
         }
 
 
+        LosslessExplainModal {
+            id: losslessExplainModal
+            backgroundSourceItem: masterBackdropStack
+            isWindows: win.isWindowsPlatform
+            onAccepted: mode => win.enableLossless(mode)
+        }
+
         PostNoteModal {
             id: postNoteModal
             backgroundSourceItem: masterBackdropStack
@@ -4582,6 +4667,12 @@ Scope {
             if (obj.cacheLimitMb !== undefined) win.cacheLimitMb = [1024, 1536, 2048].indexOf(parseInt(obj.cacheLimitMb)) >= 0 ? parseInt(obj.cacheLimitMb) : 1536;
             if (obj.crossfadeSeconds !== undefined) win.crossfadeSeconds = Math.max(2, Math.min(12, parseInt(obj.crossfadeSeconds) || 6));
             if (obj.autoMixEnabled !== undefined) win.autoMixEnabled = !!obj.autoMixEnabled;
+            var ll = LosslessLogic.normalizeLosslessSettings(obj, win.isWindowsPlatform);
+            win.losslessEnabled = ll.losslessEnabled;
+            win.losslessQuality = ll.losslessQuality;
+            win.losslessQualityChosen = ll.losslessQualityChosen;
+            win.dacOutputMode = ll.dacOutputMode;
+            if (typeof obj.autoMixBeforeLossless === "boolean") win.autoMixBeforeLossless = obj.autoMixBeforeLossless;
             if (obj.liquidGlassPreset !== undefined) win.liquidGlassPreset = obj.liquidGlassPreset;
             if (obj.liquidGlassBlur !== undefined) win.liquidGlassBlur = obj.liquidGlassBlur;
             if (obj.liquidGlassDisplacement !== undefined) win.liquidGlassDisplacement = obj.liquidGlassDisplacement;
@@ -4641,6 +4732,11 @@ Scope {
             closeBehavior: win.closeBehavior,
             cacheLimitMb: win.cacheLimitMb,
             autoMixEnabled: win.autoMixEnabled,
+            losslessEnabled: win.losslessEnabled,
+            losslessQuality: win.losslessQuality,
+            losslessQualityChosen: win.losslessQualityChosen,
+            dacOutputMode: win.dacOutputMode,
+            autoMixBeforeLossless: win.autoMixBeforeLossless,
             liquidGlassPreset: win.liquidGlassPreset,
             liquidGlassBlur: win.liquidGlassBlur,
             liquidGlassDisplacement: win.liquidGlassDisplacement,

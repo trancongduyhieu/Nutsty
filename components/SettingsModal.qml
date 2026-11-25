@@ -2357,6 +2357,14 @@ Rectangle {
                     }
                 }
 
+                // Lossless (Tidal): account, on/off, quality and DAC mode
+                LosslessSettingsSection {
+                    Layout.fillWidth: true
+                    host: (typeof win !== "undefined") ? win : null
+                    accentColor: root.accentColor
+                    apiUrl: (typeof win !== "undefined" && win.localApiUrl) ? win.localApiUrl : "http://127.0.0.1:17890"
+                }
+
                 // Download Audio Quality Row (100% Borderless, Expandable Clean Dropdown Pinned to Right)
                 Item {
                     id: downloadQualityRowItem

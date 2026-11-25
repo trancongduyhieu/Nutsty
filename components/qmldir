@@ -119,3 +119,5 @@ VerifiedStamp 1.0 VerifiedStamp.qml
 FadeText 1.0 FadeText.qml
 AccountSync 1.0 AccountSync.qml
 ResumeListeningToast 1.0 ResumeListeningToast.qml
+LosslessExplainModal 1.0 LosslessExplainModal.qml
+LosslessSettingsSection 1.0 LosslessSettingsSection.qml

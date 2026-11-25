@@ -74,6 +74,7 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 │   ├── route_dispatcher.py         # Subprocess CLI router cho nutsty-daemon (port 17890)
 │   ├── social_relay_core.py        # Deep Module mạng xã hội, SSOT identity, unified cache
 │   ├── stream_resolver.py          # Audio stream resolver (Android client, 403 prevention)
+│   ├── tidal_source.py             # Tidal lossless: đăng nhập link, khớp bài, cache, FLAC/MPD (tài khoản của chính người dùng)
 │   ├── catalog_engine.py           # Shelves, mood continuation, artist/album/search
 │   ├── song_enrichment.py          # Metadata enrichment, lyrics, related tracks
 │   ├── ytmusic_auth.py             # Google OAuth & cookie session manager
@@ -100,6 +101,7 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 │   ├── FriendStoryModal.qml        # Modal xem ghi chú bạn bè, đĩa nhạc xoay & nút Nghe Cùng
 │   ├── GachaAnimeLyricsView.qml    # Mẫu 1: Điện ảnh Serif (Instrument Serif)
 │   ├── HomeFeedView.qml            # Màn hình trang chủ online: Mood pills, carousels, grids
+│   ├── LosslessSettingsSection.qml # Mục Lossless (Tidal) trong Cài đặt + LosslessExplainModal.qml, lossless_logic.js
 │   ├── LibraryData.qml             # Model quản lý danh sách bài hát trong QML
 │   ├── LibraryLoader.qml           # Loader nạp dữ liệu từ library.json
 │   ├── MainTrackGrid.qml           # Grid danh sách bài hát & nút phát tuần tự
