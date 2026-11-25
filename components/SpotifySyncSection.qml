@@ -4,11 +4,11 @@ import "."
 
 // Settings > Account, under the Spotify account row: two-way sync with the user's own Spotify library.
 // `sync` is the SpotifySync object of shell.qml. Shown only while a Spotify cookie is saved.
-// Laid out after Mochy's Sync and account-import screens: grouped cards of rows, round icon or cover,
-// title over one line of description, a control at the end; longer notes go under the card.
+// Mochy's setting-card anatomy (DESIGN.md "Setting Card"): one card per setting, switch top-right,
+// the value in large type bottom-left, a preview of the effect on the right, options as sub-cards.
 ColumnLayout {
     id: root
-    spacing: 16
+    spacing: 12
 
     property var sync: null
     property color accentColor: Theme.accent
@@ -33,7 +33,8 @@ ColumnLayout {
         for (var i = 0; i < list.length; i++) if (list[i].selected) out.push(list[i]);
         return out;
     }
-    readonly property int syncedCount: synced.length + (sync && sync.likedChoice ? 1 : 0)
+    readonly property bool likedSynced: !!(sync && sync.likedChoice)
+    readonly property int syncedCount: synced.length + (likedSynced ? 1 : 0)
 
     function openPicker() {
         if (!root.sync) return;
@@ -69,14 +70,30 @@ ColumnLayout {
         else root.openPicker();
     }
 
-    // The cover stack needs the playlist list once per session while sync is on
+    function setAll(on) {
+        var m = {};
+        var list = root.sync ? (root.sync.choices || []) : [];
+        for (var i = 0; i < list.length; i++) m[list[i].id] = on;
+        root.picked = m;
+        root.likedPicked = on;
+    }
+
+    function confirm() {
+        if (!root.sync || root.pickedCount === 0) return;
+        var ids = [];
+        for (var k in root.picked) if (root.picked[k]) ids.push(k);
+        root.sync.confirmSelection(ids, root.likedPicked);
+        root.pickerOpen = false;
+    }
+
+    // The cover fan needs the playlist list once per session while sync is on
     function loadStackOnce() {
         if (root.on && root.sync && (root.sync.choices || []).length === 0 && !root.sync.choicesLoading) root.sync.loadChoices();
     }
     onOnChanged: loadStackOnce()
     Component.onCompleted: loadStackOnce()
 
-    // Seed the checkboxes from what the backend proposes each time the list arrives
+    // Seed the picks from what the backend proposes each time the list arrives
     Connections {
         target: root.sync
         function onChoicesChanged() {
@@ -88,175 +105,203 @@ ColumnLayout {
         }
     }
 
-    // --- On/off ---------------------------------------------------------------------------------
-    ColumnLayout {
+    // --- Card 1: the setting itself ------------------------------------------------------------------
+    SpotifySettingCard {
         Layout.fillWidth: true
-        spacing: 8
+        accentColor: root.accentColor
+        showBody: root.on && !root.pickerOpen
+        title: I18n.tr("Tự cập nhật từ Spotify", "Auto-update from Spotify")
+        description: I18n.tr("Playlist và bài đã thích của bạn tự về Nutsty. Chỉ nên bật trên một máy, các máy khác nhận qua đồng bộ tài khoản.",
+                             "Your playlists and likes arrive in Nutsty by themselves. Turn this on for one device only, your other devices get them through account sync.")
 
-        SpotifySyncGroup {
-            Layout.fillWidth: true
-            title: I18n.tr("Đồng bộ Spotify", "Spotify sync")
-            accentColor: root.accentColor
+        headerRight: Rectangle {
+            id: syncSwitch
+            width: 44
+            height: 24
+            radius: 12
+            readonly property bool lit: root.on || root.pickerOpen
+            color: lit ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18)
+            border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+            border.width: 1
+            Behavior on color { ColorAnimation { duration: 150 } }
 
-            SpotifySyncRow {
-                accentColor: root.accentColor
-                iconSource: "../assets/icons/spotify-link.svg"
-                title: I18n.tr("Tự cập nhật từ Spotify", "Auto-update from Spotify")
-                description: I18n.tr("Playlist và bài đã thích về Nutsty", "Your playlists and likes, in Nutsty")
+            Rectangle {
+                width: 18
+                height: 18
+                radius: 9
+                color: "#ffffff"
+                anchors.verticalCenter: parent.verticalCenter
+                x: syncSwitch.lit ? parent.width - width - 3 : 3
+                Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                anchors.margins: -6
+                cursorShape: Qt.PointingHandCursor
                 onClicked: root.toggleSync()
+            }
+        }
 
-                Rectangle {
-                    id: syncSwitch
-                    width: 44
-                    height: 24
-                    radius: 12
-                    readonly property bool lit: root.on || root.pickerOpen
-                    color: lit ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18)
-                    border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
-                    border.width: 1
-                    Behavior on color { ColorAnimation { duration: 150 } }
+        // Value bottom-left, what is kept in step fanned out on the right
+        RowLayout {
+            Layout.fillWidth: true
+            visible: root.on && !root.pickerOpen
+            spacing: 16
 
-                    Rectangle {
-                        width: 18
-                        height: 18
-                        radius: 9
-                        color: "#ffffff"
-                        anchors.verticalCenter: parent.verticalCenter
-                        x: syncSwitch.lit ? parent.width - width - 3 : 3
-                        Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignBottom
+                spacing: 0
+
+                Text {
+                    text: root.syncedCount
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 40
+                    font.weight: Font.Black
+                    color: Theme.textPrimary
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: I18n.tr("mục đang khớp với Spotify", "kept in step with Spotify")
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 12
+                    color: Theme.textSecondary
+                    wrapMode: Text.WordWrap
+                }
+            }
+
+            // Cover fan: Liked Songs first, then up to three synced covers, tilted like a hand of cards
+            Item {
+                id: fan
+                Layout.preferredWidth: 190
+                Layout.preferredHeight: 92
+                readonly property var covers: {
+                    var out = [];
+                    if (root.likedSynced) out.push({ liked: true, image: "", title: "" });
+                    for (var i = 0; i < root.synced.length && out.length < 4; i++) out.push(root.synced[i]);
+                    return out;
+                }
+
+                Repeater {
+                    model: fan.covers
+                    delegate: Item {
+                        id: fanCard
+                        required property var modelData
+                        required property int index
+                        readonly property real mid: (fan.covers.length - 1) / 2
+                        width: 72
+                        height: 72
+                        z: index
+                        x: fan.width - 72 - 10 - (fan.covers.length - 1 - index) * 34
+                        y: 10 + Math.abs(index - mid) * 4
+                        rotation: (index - mid) * 7
+                        transformOrigin: Item.Bottom
+
+                        RoundedImage {
+                            anchors.fill: parent
+                            visible: !fanCard.modelData.liked
+                            radius: 12
+                            source: fanCard.modelData.image || ""
+                            sourceSize: Qt.size(152, 152)
+                            initialsText: fanCard.modelData.title || ""
+                            fallbackIcon: "../assets/icons/media-playlist-consecutive-symbolic.svg"
+                            fallbackIconColor: root.accentColor
+                            fallbackIconSize: 22
+                            borderColor: Qt.rgba(1, 1, 1, 0.14)
+                            borderWidth: 1
+                        }
+
+                        Rectangle {
+                            anchors.fill: parent
+                            visible: !!fanCard.modelData.liked
+                            radius: 12
+                            border.width: 1
+                            border.color: Qt.rgba(1, 1, 1, 0.14)
+                            gradient: Gradient {
+                                GradientStop { position: 0.0; color: Qt.lighter(root.accentColor, 1.35) }
+                                GradientStop { position: 1.0; color: Qt.darker(root.accentColor, 1.9) }
+                            }
+                            AppIcon {
+                                anchors.centerIn: parent
+                                source: "../assets/icons/emblem-favorite-symbolic.svg"
+                                iconSize: 24
+                                color: "#ffffff"
+                            }
+                        }
                     }
                 }
             }
         }
 
-        Text {
-            Layout.fillWidth: true
-            Layout.leftMargin: 4
-            text: I18n.tr("Chỉ nên bật trên một máy. Các máy khác nhận qua đồng bộ tài khoản.",
-                          "Turn this on for one device only. Your other devices get the changes through account sync.")
-            font.family: Theme.fontFamily
-            font.pixelSize: 11
-            color: Theme.textMuted
-            wrapMode: Text.WordWrap
-        }
-    }
-
-    // --- Status while on: sync now, what is synced, lists held back ---------------------------------
-    ColumnLayout {
-        Layout.fillWidth: true
-        visible: root.on && !root.pickerOpen
-        spacing: 8
-
-        SpotifySyncGroup {
-            Layout.fillWidth: true
-            title: I18n.tr("Bây giờ", "Now")
+        SpotifySubCard {
+            visible: root.on && !root.pickerOpen
             accentColor: root.accentColor
+            clickable: !(root.sync && root.sync.running)
+            title: root.sync && root.sync.running ? I18n.tr("Đang đồng bộ...", "Syncing...") : I18n.tr("Đồng bộ ngay", "Sync now")
+            description: !root.sync ? "" : (root.sync.lastSync > 0
+                  ? I18n.tr("Lần cuối lúc %1", "Last synced at %1").arg(Qt.formatDateTime(new Date(root.sync.lastSync * 1000), "HH:mm dd/MM"))
+                  : I18n.tr("Chưa đồng bộ lần nào", "Not synced yet"))
+            onClicked: root.sync.run()
 
-            SpotifySyncRow {
-                accentColor: root.accentColor
-                iconSource: "../assets/icons/view-refresh-symbolic.svg"
-                active: !(root.sync && root.sync.running)
-                title: root.sync && root.sync.running ? I18n.tr("Đang đồng bộ...", "Syncing...") : I18n.tr("Đồng bộ ngay", "Sync now")
-                description: !root.sync ? "" : (root.sync.lastSync > 0
-                      ? I18n.tr("Lần cuối lúc %1", "Last synced at %1").arg(Qt.formatDateTime(new Date(root.sync.lastSync * 1000), "HH:mm dd/MM"))
-                      : I18n.tr("Chưa đồng bộ lần nào", "Not synced yet"))
-                onClicked: root.sync.run()
-
+            Item {
+                width: 20
+                height: 20
                 CircularSpinner {
+                    anchors.centerIn: parent
                     visible: !!(root.sync && root.sync.running)
                     size: 18
                     strokeWidth: 2
                     color: root.accentColor
                     running: visible
                 }
-            }
-
-            SpotifySyncRow {
-                accentColor: root.accentColor
-                iconSource: "../assets/icons/media-playlist-consecutive-symbolic.svg"
-                title: I18n.tr("Chọn playlist", "Choose playlists")
-                description: I18n.tr("Đang giữ %1 mục khớp với Spotify", "Keeping %1 in step with Spotify").arg(root.syncedCount)
-                onClicked: root.openPicker()
-
-                // What is being kept in step, as a small stack of round covers
-                Row {
-                    spacing: -8
-
-                    Rectangle {
-                        visible: !!(root.sync && root.sync.likedChoice)
-                        width: 26
-                        height: 26
-                        radius: 13
-                        border.width: 1
-                        border.color: Qt.rgba(1, 1, 1, 0.18)
-                        gradient: Gradient {
-                            GradientStop { position: 0.0; color: Qt.lighter(root.accentColor, 1.35) }
-                            GradientStop { position: 1.0; color: Qt.darker(root.accentColor, 1.9) }
-                        }
-                        AppIcon {
-                            anchors.centerIn: parent
-                            source: "../assets/icons/emblem-favorite-symbolic.svg"
-                            iconSize: 11
-                            color: "#ffffff"
-                        }
-                    }
-
-                    Repeater {
-                        model: root.synced.slice(0, 4)
-                        delegate: RoundedImage {
-                            required property var modelData
-                            width: 26
-                            height: 26
-                            radius: 13
-                            source: modelData.image || ""
-                            sourceSize: Qt.size(52, 52)
-                            initialsText: modelData.title || ""
-                            fallbackIcon: "../assets/icons/media-playlist-consecutive-symbolic.svg"
-                            fallbackIconColor: root.accentColor
-                            fallbackIconSize: 11
-                            borderColor: Qt.rgba(1, 1, 1, 0.18)
-                            borderWidth: 1
-                        }
-                    }
-
-                    Text {
-                        visible: root.synced.length > 4
-                        anchors.verticalCenter: parent.verticalCenter
-                        leftPadding: 14
-                        text: "+" + (root.synced.length - 4)
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 11
-                        font.weight: Font.DemiBold
-                        color: Theme.textSecondary
-                    }
+                AppIcon {
+                    anchors.centerIn: parent
+                    visible: !(root.sync && root.sync.running)
+                    source: "../assets/icons/view-refresh-symbolic.svg"
+                    iconSize: 16
+                    color: root.accentColor
                 }
             }
+        }
 
-            // Lists held back by the mass-delete guard
-            Repeater {
-                model: root.sync ? root.sync.blocked : []
-                delegate: SpotifySyncRow {
-                    required property var modelData
-                    accentColor: root.accentColor
+        SpotifySubCard {
+            visible: root.on && !root.pickerOpen
+            accentColor: root.accentColor
+            clickable: true
+            title: I18n.tr("Chọn playlist", "Choose playlists")
+            description: I18n.tr("%1 trên %2 mục trong thư viện", "%1 of %2 in your library").arg(root.syncedCount).arg(root.totalCount)
+            onClicked: root.openPicker()
+
+            AppIcon {
+                source: "../assets/icons/media-playlist-consecutive-symbolic.svg"
+                iconSize: 16
+                color: root.accentColor
+            }
+        }
+
+        // Lists held back by the mass-delete guard
+        Repeater {
+            model: root.on && !root.pickerOpen && root.sync ? root.sync.blocked : []
+            delegate: SpotifySubCard {
+                required property var modelData
+                accentColor: root.accentColor
+                danger: true
+                title: I18n.tr("%1 định xóa nhiều bài, đã tạm dừng", "%1 would remove many songs, paused").arg(root.blockedName(modelData))
+                description: I18n.tr("Kiểm tra trên Spotify trước khi áp dụng", "Check it on Spotify before applying")
+
+                LosslessSmallButton {
+                    label: I18n.tr("Vẫn áp dụng", "Apply anyway")
                     danger: true
-                    clickable: false
-                    iconSource: "../assets/icons/spotify-link.svg"
-                    title: I18n.tr("%1 định xóa nhiều bài, đã tạm dừng", "%1 would remove many songs, paused").arg(root.blockedName(modelData))
-                    description: I18n.tr("Kiểm tra trên Spotify trước khi áp dụng", "Check it on Spotify before applying")
-
-                    LosslessSmallButton {
-                        label: I18n.tr("Vẫn áp dụng", "Apply anyway")
-                        danger: true
-                        onClicked: if (root.sync) root.sync.forceApply(modelData)
-                    }
+                    onClicked: if (root.sync) root.sync.forceApply(modelData)
                 }
             }
         }
 
         Text {
             Layout.fillWidth: true
-            Layout.leftMargin: 4
-            visible: !!(root.sync && root.sync.unmatched > 0)
+            Layout.leftMargin: 2
+            visible: root.on && !root.pickerOpen && !!(root.sync && root.sync.unmatched > 0)
             text: root.sync ? I18n.tr("%1 bài chưa tìm được bản trên YouTube", "%1 songs not found on YouTube yet").arg(root.sync.unmatched) : ""
             font.family: Theme.fontFamily
             font.pixelSize: 11
@@ -266,8 +311,8 @@ ColumnLayout {
 
         Text {
             Layout.fillWidth: true
-            Layout.leftMargin: 4
-            visible: text !== ""
+            Layout.leftMargin: 2
+            visible: root.on && !root.pickerOpen && text !== ""
             text: root.sync ? root.errorText(root.sync.lastError) : ""
             font.family: Theme.fontFamily
             font.pixelSize: 11
@@ -276,114 +321,109 @@ ColumnLayout {
         }
     }
 
-    // --- Picker: actions on top, then every list with its cover and a checkbox -----------------------
-    ColumnLayout {
+    // --- Card 2: the picker, covers as the choices ---------------------------------------------------
+    SpotifySettingCard {
         Layout.fillWidth: true
         visible: root.pickerOpen
-        spacing: 16
+        accentColor: root.accentColor
+        title: I18n.tr("Chọn playlist để đồng bộ", "Choose playlists to sync")
+        description: I18n.tr("Chạm vào ảnh bìa để chọn hoặc bỏ. Lần đầu sẽ mất vài phút.",
+                             "Tap a cover to pick or drop it. The first sync takes a few minutes.")
 
-        SpotifySyncGroup {
-            Layout.fillWidth: true
-            title: I18n.tr("Chọn playlist để đồng bộ", "Choose playlists to sync")
-            accentColor: root.accentColor
-
-            SpotifySyncRow {
-                accentColor: root.accentColor
-                iconSource: "../assets/icons/list-add-symbolic.svg"
-                active: !root.choicesLoading && root.choicesErr === "" && root.pickedCount > 0
-                title: root.pickedCount === 0 ? I18n.tr("Chọn thứ cần đồng bộ", "Choose what to sync")
-                                              : I18n.tr("Đồng bộ %1 mục đã chọn", "Sync %1 selected").arg(root.pickedCount)
-                description: root.pickedCount === 0 ? I18n.tr("Đánh dấu playlist bên dưới", "Tick playlists below")
-                                                    : I18n.tr("Lần đầu sẽ mất vài phút", "The first sync takes a few minutes")
-                onClicked: {
-                    var ids = [];
-                    for (var k in root.picked) if (root.picked[k]) ids.push(k);
-                    root.sync.confirmSelection(ids, root.likedPicked);
-                    root.pickerOpen = false;
-                }
-            }
-
-            SpotifySyncRow {
-                readonly property bool all: root.pickedCount === root.totalCount
-                accentColor: root.accentColor
-                iconSource: "../assets/icons/edit-select-all-symbolic.svg"
-                active: !root.choicesLoading && root.choicesErr === ""
-                title: all ? I18n.tr("Bỏ chọn hết", "Clear all") : I18n.tr("Chọn hết", "Select all")
-                onClicked: {
-                    var on = !all;
-                    var m = {};
-                    var list = root.sync ? (root.sync.choices || []) : [];
-                    for (var i = 0; i < list.length; i++) m[list[i].id] = on;
-                    root.picked = m;
-                    root.likedPicked = on;
-                }
-            }
-
-            SpotifySyncRow {
-                accentColor: root.accentColor
-                iconSource: "../assets/icons/window-close-symbolic.svg"
-                title: I18n.tr("Hủy", "Cancel")
-                onClicked: root.pickerOpen = false
-            }
+        headerRight: Text {
+            visible: !root.choicesLoading && root.choicesErr === ""
+            text: root.pickedCount + "/" + root.totalCount
+            font.family: Theme.fontFamily
+            font.pixelSize: 28
+            font.weight: Font.Black
+            color: Theme.textPrimary
         }
 
-        // Loading or error, in place of the list
-        SpotifySyncGroup {
-            Layout.fillWidth: true
+        SpotifySubCard {
             visible: root.choicesLoading || root.choicesErr !== ""
             accentColor: root.accentColor
+            danger: root.choicesErr !== ""
+            title: root.choicesLoading ? I18n.tr("Đang lấy playlist từ Spotify...", "Getting your playlists from Spotify...")
+                                       : root.errorText(root.choicesErr)
 
-            SpotifySyncRow {
-                accentColor: root.accentColor
-                clickable: false
-                danger: root.choicesErr !== ""
-                iconSource: "../assets/icons/spotify-link.svg"
-                title: root.choicesLoading ? I18n.tr("Đang lấy playlist từ Spotify...", "Getting your playlists from Spotify...")
-                                           : root.errorText(root.choicesErr)
-
-                CircularSpinner {
-                    visible: root.choicesLoading
-                    size: 18
-                    strokeWidth: 2
-                    color: root.accentColor
-                    running: visible
-                }
+            CircularSpinner {
+                visible: root.choicesLoading
+                size: 18
+                strokeWidth: 2
+                color: root.accentColor
+                running: visible
             }
         }
 
-        SpotifySyncGroup {
+        Grid {
+            id: coverGrid
             Layout.fillWidth: true
+            Layout.topMargin: 2
             visible: !root.choicesLoading && root.choicesErr === ""
-            title: I18n.tr("%1 mục trong thư viện", "%1 in your library").arg(root.totalCount)
-            accentColor: root.accentColor
+            spacing: 10
+            columns: Math.max(3, Math.floor((width + spacing) / (130 + spacing)))
+            readonly property real cell: (width - (columns - 1) * spacing) / columns
 
-            SpotifySyncRow {
+            SpotifyCoverPick {
+                width: coverGrid.cell
+                height: coverGrid.cell
                 accentColor: root.accentColor
                 likedArt: true
+                checked: root.likedPicked
                 title: I18n.tr("Bài hát đã thích", "Liked Songs")
-                description: I18n.tr("Thư viện của bạn", "Your library")
-                onClicked: root.likedPicked = !root.likedPicked
-
-                SpotifySyncCheck { checked: root.likedPicked; accentColor: root.accentColor }
+                subtitle: I18n.tr("Thư viện của bạn", "Your library")
+                onToggled: root.likedPicked = !root.likedPicked
             }
 
             Repeater {
                 model: root.pickerOpen && root.sync ? root.sync.choices : []
-                delegate: SpotifySyncRow {
+                delegate: SpotifyCoverPick {
                     required property var modelData
+                    width: coverGrid.cell
+                    height: coverGrid.cell
                     accentColor: root.accentColor
-                    coverMode: true
                     cover: modelData.image || ""
+                    checked: !!root.picked[modelData.id]
                     title: modelData.title || ""
-                    description: root.ownerText(modelData)
-                    onClicked: {
+                    subtitle: root.ownerText(modelData)
+                    onToggled: {
                         var m = Object.assign({}, root.picked);
                         m[modelData.id] = !m[modelData.id];
                         root.picked = m;
                     }
-
-                    SpotifySyncCheck { checked: !!root.picked[modelData.id]; accentColor: root.accentColor }
                 }
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.topMargin: 6
+            spacing: 8
+
+            LosslessSmallButton {
+                readonly property bool all: root.pickedCount === root.totalCount
+                visible: !root.choicesLoading && root.choicesErr === ""
+                accentColor: root.accentColor
+                label: all ? I18n.tr("Bỏ chọn hết", "Clear all") : I18n.tr("Chọn hết", "Select all")
+                onClicked: root.setAll(!all)
+            }
+
+            Item { Layout.fillWidth: true }
+
+            LosslessSmallButton {
+                accentColor: root.accentColor
+                label: I18n.tr("Hủy", "Cancel")
+                onClicked: root.pickerOpen = false
+            }
+
+            LosslessSmallButton {
+                readonly property bool ready: !root.choicesLoading && root.choicesErr === "" && root.pickedCount > 0
+                accentColor: root.accentColor
+                primary: true
+                enabled: ready
+                opacity: ready ? 1.0 : 0.4
+                label: I18n.tr("Bắt đầu đồng bộ", "Start syncing")
+                onClicked: root.confirm()
             }
         }
     }
