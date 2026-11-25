@@ -38,6 +38,8 @@ Rectangle {
     property bool liteModeAutoActive: false
     property int crossfadeSeconds: 6
     property bool autoMixEnabled: false
+    // Fully bit-perfect lossless holds the DAC alone: AutoMix cannot run
+    property bool autoMixLocked: false
     property int cacheLimitMb: 1536
     property var cacheUsage: null
     property bool cacheBusy: false
@@ -2736,7 +2738,9 @@ Rectangle {
 
                         Text {
                             width: parent.width
-                            text: I18n.tr("Nghe độ lớn của từng bài để chọn lúc chuyển, bỏ qua đoạn im lặng đầu và cuối bài", "Reads each song's loudness to pick the blend point and skip silent intros and endings")
+                            text: root.autoMixLocked
+                                  ? I18n.tr("Tắt do chế độ nguyên bản", "Off in bit-perfect mode")
+                                  : I18n.tr("Nghe độ lớn của từng bài để chọn lúc chuyển, bỏ qua đoạn im lặng đầu và cuối bài", "Reads each song's loudness to pick the blend point and skip silent intros and endings")
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             color: Theme.textSecondary
@@ -2752,6 +2756,7 @@ Rectangle {
                         height: 24
                         radius: 12
                         color: root.autoMixEnabled ? root.accentColor : Qt.rgba(255, 255, 255, 0.14)
+                        opacity: root.autoMixLocked ? 0.4 : 1.0
                         Behavior on color { ColorAnimation { duration: 150 } }
 
                         Rectangle {
@@ -2767,6 +2772,7 @@ Rectangle {
                         MouseArea {
                             anchors.fill: parent
                             preventStealing: false
+                            enabled: !root.autoMixLocked
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 root.autoMixEnabled = !root.autoMixEnabled;

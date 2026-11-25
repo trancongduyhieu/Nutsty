@@ -33,3 +33,23 @@ assert.strictEqual(L.effectiveQuality("hires", {can_hires: false}), "lossless");
 assert.strictEqual(L.effectiveQuality("hires", {can_hires: true}), "hires");
 
 console.log("ALL LOSSLESS LOGIC TESTS PASSED");
+
+// --- dacTransition (Task 7) ---
+{
+    const d = (a, b) => JSON.parse(JSON.stringify(L.dacTransition(a, b)));
+    assert.deepStrictEqual(d({ enabled: true, mode: "shared" }, { enabled: true, mode: "exclusive" }),
+        { restartMpv: true, autoMixLocked: true, restoreAutoMix: false });
+    assert.deepStrictEqual(d({ enabled: true, mode: "exclusive" }, { enabled: false, mode: "exclusive" }),
+        { restartMpv: true, autoMixLocked: false, restoreAutoMix: true });
+    assert.deepStrictEqual(d({ enabled: true, mode: "exclusive" }, { enabled: true, mode: "shared" }),
+        { restartMpv: true, autoMixLocked: false, restoreAutoMix: true });
+    assert.strictEqual(d({ enabled: true, mode: "shared" }, { enabled: true, mode: "rate_match" }).restartMpv, false);
+    const off = d({ enabled: true, mode: "rate_match" }, { enabled: false, mode: "rate_match" });
+    assert.strictEqual(off.restartMpv, false);
+    assert.strictEqual(off.restoreAutoMix, true);
+    assert.deepStrictEqual(d({ enabled: false, mode: "exclusive" }, { enabled: true, mode: "exclusive" }),
+        { restartMpv: true, autoMixLocked: true, restoreAutoMix: false });
+    assert.deepStrictEqual(d({ enabled: true, mode: "exclusive" }, { enabled: true, mode: "exclusive" }),
+        { restartMpv: false, autoMixLocked: true, restoreAutoMix: false });
+    console.log("dacTransition: all passed");
+}

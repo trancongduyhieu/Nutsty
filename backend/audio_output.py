@@ -3,6 +3,7 @@ Pure helpers, no mpv access, so tests feed them plain dicts."""
 import glob
 import os
 import re
+from pathlib import Path
 
 LOSSLESS_CODECS = ("flac", "alac", "wavpack", "ape", "tta", "truehd", "mlp")
 
@@ -104,3 +105,61 @@ def build_audio_specs(props, now_source, dac_mode, suspended, is_windows, alsa_r
         "sample_rate_str": _rate_str(sample_rate),
         "channels_str": _channels_str(channels),
     }
+
+
+# --- DAC output modes ------------------------------------------------------------------
+RATES = [44100, 48000, 88200, 96000, 176400, 192000]
+DROPIN_NAME = "90-nutsty-rates.conf"
+PIPEWIRE_DROPIN = Path.home() / ".config/pipewire/pipewire.conf.d" / DROPIN_NAME
+
+
+def mpv_output_args(settings):
+    """Extra mpv flags for the DAC mode. Only bit-perfect needs one."""
+    s = settings or {}
+    if s.get("enabled") and s.get("dac_mode") == "exclusive":
+        return ["--audio-exclusive=yes"]
+    return []
+
+
+def find_existing_allowed_rates(conf_dir):
+    """(file, line) for every other *.conf in conf_dir that already sets allowed-rates."""
+    conf_dir = Path(conf_dir)
+    found = []
+    if not conf_dir.is_dir():
+        return found
+    for f in sorted(conf_dir.glob("*.conf")):
+        if f.name == DROPIN_NAME:
+            continue
+        try:
+            for line in f.read_text(encoding="utf-8", errors="replace").splitlines():
+                if "allowed-rates" in line and not line.lstrip().startswith("#"):
+                    found.append((str(f), line.strip()))
+        except OSError:
+            continue
+    return found
+
+
+def write_rate_dropin(conf_dir):
+    """Let PipeWire switch to each song's rate. Never written when another file sets allowed-rates."""
+    conf_dir = Path(conf_dir)
+    path = conf_dir / DROPIN_NAME
+    conflicts = find_existing_allowed_rates(conf_dir)
+    if conflicts:
+        return {"written": False, "path": str(path), "conflicts": conflicts}
+    rates = " ".join(str(r) for r in RATES)
+    conf_dir.mkdir(parents=True, exist_ok=True)
+    path.write_text("# Written by Nutsty (lossless, original sample rate). Delete this file to undo.\n"
+                    "context.properties = {\n"
+                    f"    default.clock.allowed-rates = [ {rates} ]\n"
+                    "}\n", encoding="utf-8")
+    return {"written": True, "path": str(path), "conflicts": []}
+
+
+def remove_rate_dropin(conf_dir):
+    """Delete only Nutsty's own drop-in. True when a file was removed."""
+    path = Path(conf_dir) / DROPIN_NAME
+    try:
+        path.unlink()
+        return True
+    except FileNotFoundError:
+        return False

@@ -20,6 +20,9 @@ Item {
     property real currentTime: 0.0
     property real totalDuration: 1.0
     property real volume: 100.0
+    // Fully bit-perfect lossless: volume stays at 100%, the DAC sets the level
+    property bool volumeLocked: false
+    onVolumeLockedChanged: if (volumeLocked) isVolumePopupOpen = false
     property real prevVolume: 100.0
     property bool isShuffle: false
     property string repeatMode: "off"   // "off" | "all" (queue) | "one" (current song)
@@ -1103,8 +1106,11 @@ Item {
                         color: root.isVolumePopupOpen ? root.accentColor : "#ffffff"
                     }
 
+                    opacity: root.volumeLocked ? 0.45 : 1.0
+
                     MouseArea {
                         anchors.fill: parent
+                        enabled: !root.volumeLocked
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             root.isVolumePopupOpen = !root.isVolumePopupOpen;

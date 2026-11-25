@@ -301,7 +301,7 @@ function publishMixUpcoming(win, nextTrk, leadSec, blendSec) {
 }
 
 function maybeStartCrossfade(win, seekGrace) {
-    if (!win.crossfadeEnabled || win.repeatMode === "one" || win.listeningAlongFriend) { clearMixUpcoming(win); return false; }
+    if (!win.crossfadeEnabled || win.repeatMode === "one" || win.listeningAlongFriend || win.bitPerfectActive) { clearMixUpcoming(win); return false; }
     if (win.isLoadingAudio || !win.isPlaying || seekGrace) return false;
     if (win.isSleepTimerActive && win.sleepTimerMode === "end_of_track") { clearMixUpcoming(win); return false; }
     var dur = win.totalDuration;

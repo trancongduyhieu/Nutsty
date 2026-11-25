@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell.Io
 import "."
 import "lossless_logic.js" as LosslessLogic
 
@@ -73,7 +74,7 @@ ColumnLayout {
         });
     }
 
-    Component.onCompleted: refreshStatus()
+    Component.onCompleted: { refreshStatus(); if (rateMatchShown) checkRateDropin(); }
 
     Timer {
         id: pollTimer
@@ -342,7 +343,7 @@ ColumnLayout {
 
     ChoiceRow {
         visible: root.enabledNow
-        title: I18n.tr("Đưa âm thanh tới DAC", "Sending audio to the DAC")
+        title: I18n.tr("Đưa âm thanh tới DAC", "DAC output")
         subtitle: root.host && root.host.dacOutputMode === "exclusive"
                   ? I18n.tr("AutoMix tắt, âm lượng trong app cố định 100%", "AutoMix off, in-app volume fixed at 100%")
                   : ""
@@ -355,6 +356,141 @@ ColumnLayout {
             };
             return LosslessLogic.dacModesFor(root.isWindows).map(function(k) { return { key: k, label: labels[k] }; });
         }
-        onPicked: key => { if (root.host) root.host.setDacOutputMode(key); }
+        onPicked: key => {
+            if (!root.host) return;
+            root.host.setDacOutputMode(key);
+            if (key === "rate_match") root.checkRateDropin();
+        }
+    }
+
+    // --- Original sample rate (Linux): PipeWire may only switch rates it is allowed to ---------
+    // Nutsty writes its own drop-in file only after the user agrees, never edits another file and
+    // never restarts PipeWire by itself.
+    readonly property bool rateMatchShown: root.enabledNow && !root.isWindows && !!root.host && root.host.dacOutputMode === "rate_match"
+    property var dropin: null           // last `rate_dropin check|write` result
+    property string dropinState: ""     // "", "ask", "conflict", "written", "removed"
+
+    onRateMatchShownChanged: if (rateMatchShown && !dropin) checkRateDropin()
+
+    function runDropin(action) {
+        if (dropinProc.running || !root.host) return;
+        dropinProc.action = action;
+        dropinProc.command = ["python3", "-u", root.host.appDir + "/backend/player_daemon.py", "rate_dropin", action];
+        dropinProc.running = true;
+    }
+    function checkRateDropin() { runDropin("check"); }
+
+    Process {
+        id: dropinProc
+        property string action: ""
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                var res = null;
+                try { res = JSON.parse(data); } catch (e) { return; }
+                if (dropinProc.action === "check") {
+                    root.dropin = res;
+                    root.dropinState = res.installed ? "" : (res.conflicts && res.conflicts.length ? "conflict" : "ask");
+                } else if (dropinProc.action === "write") {
+                    root.dropin = res;
+                    root.dropinState = res.written ? "written" : "conflict";
+                } else if (dropinProc.action === "remove") {
+                    root.dropin = { installed: false, conflicts: [] };
+                    root.dropinState = "removed";
+                }
+            }
+        }
+    }
+
+    component SmallButton: Rectangle {
+        id: sb
+        property string label: ""
+        property bool danger: false
+        property bool primary: false
+        signal clicked()
+        readonly property color tone: danger ? root.roseColor : root.accentColor
+        height: 28
+        width: sbText.implicitWidth + 24
+        radius: 8
+        color: primary ? (sbMouse.containsMouse ? Qt.lighter(tone, 1.15) : tone)
+                       : Qt.rgba(tone.r, tone.g, tone.b, sbMouse.containsMouse ? 0.22 : 0.12)
+        border.color: Qt.rgba(tone.r, tone.g, tone.b, 0.35)
+        border.width: 1
+        Text {
+            id: sbText
+            anchors.centerIn: parent
+            text: sb.label
+            font.family: Theme.fontFamily
+            font.pixelSize: 12
+            font.bold: true
+            color: "#ffffff"
+        }
+        MouseArea { id: sbMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: sb.clicked() }
+    }
+
+    Rectangle {
+        visible: root.rateMatchShown && root.dropin !== null
+        Layout.fillWidth: true
+        Layout.preferredHeight: dropinCol.implicitHeight + 24
+        radius: 12
+        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.08)
+        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22)
+        border.width: 1
+
+        ColumnLayout {
+            id: dropinCol
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.margins: 12
+            spacing: 8
+
+            Text {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                font.family: Theme.fontFamily
+                font.pixelSize: 11
+                color: Theme.textSecondary
+                text: {
+                    var path = root.dropin && root.dropin.path ? root.dropin.path : "";
+                    if (root.dropinState === "ask")
+                        return I18n.tr("Để PipeWire đổi theo tần số của từng bài, Nutsty cần thêm một file cấu hình nhỏ: " + path + ". Nutsty không sửa file nào khác và không tự khởi động lại PipeWire.",
+                                       "To let PipeWire follow each song's sample rate, Nutsty needs to add one small config file: " + path + ". Nutsty changes no other file and does not restart PipeWire by itself.");
+                    if (root.dropinState === "conflict") {
+                        var lines = (root.dropin.conflicts || []).map(function(c) { return c[0] + ": " + c[1]; }).join("\n");
+                        return I18n.tr("Máy đã có cấu hình tần số riêng nên Nutsty không ghi thêm. Hãy thêm 44100 88200 176400 vào dòng này nếu thiếu:\n" + lines,
+                                       "Your system already sets its own sample rates, so Nutsty writes nothing. Add 44100 88200 176400 to this line if they are missing:\n" + lines);
+                    }
+                    if (root.dropinState === "written")
+                        return I18n.tr("Đã ghi cấu hình. Chạy lệnh systemctl --user restart pipewire hoặc đăng xuất rồi đăng nhập lại để áp dụng.",
+                                       "Config written. Run systemctl --user restart pipewire, or log out and back in, to apply it.");
+                    if (root.dropinState === "removed")
+                        return I18n.tr("Đã gỡ cấu hình. Khởi động lại PipeWire hoặc đăng xuất để trở lại như cũ.",
+                                       "Config removed. Restart PipeWire or log out to go back to how it was.");
+                    return I18n.tr("Cấu hình tần số của Nutsty đã có: " + path, "Nutsty's sample rate config is in place: " + path);
+                }
+            }
+
+            Row {
+                spacing: 8
+                SmallButton {
+                    visible: root.dropinState === "ask"
+                    primary: true
+                    label: I18n.tr("Ghi cấu hình", "Write config")
+                    onClicked: root.runDropin("write")
+                }
+                SmallButton {
+                    visible: root.dropinState === "ask"
+                    label: I18n.tr("Để sau", "Later")
+                    onClicked: { root.dropin = null; root.dropinState = ""; }
+                }
+                SmallButton {
+                    visible: root.dropinState === "written" || (root.dropinState === "" && !!root.dropin && root.dropin.installed)
+                    danger: true
+                    label: I18n.tr("Gỡ cấu hình", "Remove config")
+                    onClicked: root.runDropin("remove")
+                }
+            }
+        }
     }
 }

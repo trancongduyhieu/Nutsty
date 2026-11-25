@@ -1847,15 +1847,69 @@ Scope {
 
     // The explain modal was accepted: lossless on, AutoMix value kept for when it is turned off.
     function enableLossless(mode) {
+        var prev = win.dacState();
         win.autoMixBeforeLossless = win.autoMixEnabled;
         win.dacOutputMode = LosslessLogic.dacModesFor(win.isWindowsPlatform).indexOf(mode) >= 0 ? mode : "shared";
         win.losslessEnabled = true;
-        win.saveSettings();
+        win.applyDacChange(prev);
     }
 
     function disableLossless() {
+        var prev = win.dacState();
         win.losslessEnabled = false;
+        win.applyDacChange(prev);
+    }
+
+    // Bit-perfect: mpv holds the DAC alone, so AutoMix (two players at once) and in-app volume are off.
+    readonly property bool bitPerfectActive: win.losslessEnabled && win.dacOutputMode === "exclusive"
+    property bool dacStartupChecked: false
+
+    function dacState() {
+        return { enabled: win.losslessEnabled, mode: win.dacOutputMode };
+    }
+
+    // Call after losslessEnabled / dacOutputMode changed, with the state from before the change.
+    function applyDacChange(prev) {
+        var t = LosslessLogic.dacTransition(prev, win.dacState());
+        var wasLocked = !!prev.enabled && prev.mode === "exclusive";
+        if (t.autoMixLocked && !wasLocked) {
+            win.autoMixBeforeLossless = win.autoMixEnabled;
+            win.autoMixEnabled = false;
+            win.autoMixPlan = null;
+        }
+        if (t.restoreAutoMix) win.autoMixEnabled = win.autoMixBeforeLossless;
         win.saveSettings();
+        if (t.restartMpv) win.restartMpvForDac();
+    }
+
+    function restartMpvForDac() {
+        if (dacRestartProc.running) { dacRestartProc.again = true; return; }
+        dacRestartProc.command = ["python3", "-u", win.appDir + "/backend/player_daemon.py", "restart_mpv_keep_position"];
+        dacRestartProc.running = true;
+    }
+
+    Process {
+        id: dacRestartProc
+        property bool again: false
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                var res = null;
+                try { res = JSON.parse(data); } catch (e) { return; }
+                if (res && res.exclusive_failed && win.dacOutputMode === "exclusive") {
+                    var prev = win.dacState();
+                    win.dacOutputMode = "shared";
+                    win.applyDacChange(prev);
+                    win.notify("error", I18n.tr("Một ứng dụng khác đang giữ DAC nên chưa phát nguyên bản tuyệt đối được. Nutsty chuyển về Qua hệ thống.",
+                                                "Another app is holding the DAC, so fully bit-perfect could not start. Nutsty switched to Through the system."));
+                } else if (res && res.restarted && !win.bitPerfectActive) {
+                    PlaybackEngine.setVolume(win, win.volume);
+                }
+            }
+        }
+        onExited: {
+            if (again) { again = false; Qt.callLater(win.restartMpvForDac); }
+        }
     }
 
     function setLosslessQuality(q) {
@@ -1866,8 +1920,9 @@ Scope {
 
     function setDacOutputMode(mode) {
         if (LosslessLogic.dacModesFor(win.isWindowsPlatform).indexOf(mode) < 0) return;
+        var prev = win.dacState();
         win.dacOutputMode = mode;
-        win.saveSettings();
+        win.applyDacChange(prev);
     }
 
     function openLosslessExplain() {
@@ -3471,7 +3526,7 @@ Scope {
                     isLoadingAudio: win.uiLoadingAudio
                     isShuffle: win.isShuffle
                     repeatMode: win.repeatMode
-                    volume: win.volume
+                    volume: win.bitPerfectActive ? 100 : win.volume
                     queueTracks: win.currentTracks
                     playingPlaylistTitle: win.playingSourceTitle || I18n.tr("Hàng đợi", "Queue")
                     accentColor: win.accentColor
@@ -3567,7 +3622,8 @@ Scope {
             isLoadingAudio: win.uiLoadingAudio
             currentTime: win.currentTime
             totalDuration: win.totalDuration
-            volume: win.volume
+            volume: win.bitPerfectActive ? 100 : win.volume
+            volumeLocked: win.bitPerfectActive
             isShuffle: win.isShuffle
             repeatMode: win.repeatMode
             isLyricsActive: win.isMochySidePanelOpen && win.mochyActiveTab === "lyrics"
@@ -3953,8 +4009,11 @@ Scope {
             playlistBackupBusy: win.playlistBackupBusy
             onExportPlaylistsRequested: fileUrl => win.runPlaylistBackup("export", fileUrl)
             onImportPlaylistsRequested: fileUrl => win.runPlaylistBackup("import", fileUrl)
+            autoMixLocked: win.bitPerfectActive
             onToggleAutoMixRequested: enabled => {
+                if (win.bitPerfectActive) return;
                 win.autoMixEnabled = enabled;
+                win.autoMixBeforeLossless = enabled;
                 win.autoMixPlan = null;
                 win.autoMixRequestedKey = "";
                 win.saveSettings();
@@ -4673,6 +4732,12 @@ Scope {
             win.losslessQualityChosen = ll.losslessQualityChosen;
             win.dacOutputMode = ll.dacOutputMode;
             if (typeof obj.autoMixBeforeLossless === "boolean") win.autoMixBeforeLossless = obj.autoMixBeforeLossless;
+            if (win.bitPerfectActive) win.autoMixEnabled = false;
+            if (!win.dacStartupChecked) {
+                win.dacStartupChecked = true;
+                // mpv may still run with the flags of the last session; no-op when they already match
+                if (win.bitPerfectActive) Qt.callLater(win.restartMpvForDac);
+            }
             if (obj.liquidGlassPreset !== undefined) win.liquidGlassPreset = obj.liquidGlassPreset;
             if (obj.liquidGlassBlur !== undefined) win.liquidGlassBlur = obj.liquidGlassBlur;
             if (obj.liquidGlassDisplacement !== undefined) win.liquidGlassDisplacement = obj.liquidGlassDisplacement;
@@ -4994,6 +5059,7 @@ Scope {
     function setVolume(vol) {
         // A whole-timer sleep fade owns mpv's volume until it ends or is cancelled
         if (sleepTimerController.volumeLocked) return;
+        if (win.bitPerfectActive) return;
         return PlaybackEngine.setVolume(win, vol);
     }
 

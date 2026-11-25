@@ -40,3 +40,16 @@ function effectiveQuality(quality, status) {
     if (quality === "hires" && !(status && status.can_hires)) return "lossless";
     return QUALITIES.indexOf(quality) >= 0 ? quality : "lossless";
 }
+
+// Lossless or DAC mode changed. Only bit-perfect (exclusive) needs a new mpv and locks AutoMix;
+// leaving lossless or bit-perfect puts AutoMix back as it was.
+function dacTransition(prev, next) {
+    var p = prev || {}, n = next || {};
+    var wasExclusive = !!p.enabled && p.mode === "exclusive";
+    var isExclusive = !!n.enabled && n.mode === "exclusive";
+    return {
+        restartMpv: wasExclusive !== isExclusive,
+        autoMixLocked: isExclusive,
+        restoreAutoMix: (wasExclusive && !isExclusive) || (!!p.enabled && !n.enabled)
+    };
+}

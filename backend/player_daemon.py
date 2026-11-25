@@ -215,8 +215,9 @@ def _mpv_stream_args(ytdl_fmt, user_agent=DEFAULT_UA):
         pass
     return args
 
-def ensure_mpv():
-    """Ensure background MPV process is running with IPC socket safely without process thrashing"""
+def ensure_mpv(force_shared=False):
+    """Ensure background MPV process is running with IPC socket safely without process thrashing.
+    force_shared: start without the bit-perfect flag (the DAC refused exclusive access)."""
     with _MPV_LOCK, pc.InterprocessLock(os.path.join(TEMP_DIR, f"nutsty_mpv_spawn{PROFILE_SUFFIX}.lock")):
         # 1. If socket responds, we are good
         try:
@@ -286,20 +287,121 @@ def ensure_mpv():
             f"--log-file={LOG_FILE}"
         ]
         cmd.extend(_mpv_stream_args(ytdl_fmt))
+        import audio_output
+        dac_args = [] if force_shared else audio_output.mpv_output_args(get_lossless_settings())
+        if dac_args:
+            # Bit-perfect: in-app volume stays at 100%, the DAC or the headphones set the level
+            cmd.extend(dac_args + ["--volume=100"])
 
         popen_kwargs = pc.get_daemon_popen_kwargs()
-        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **popen_kwargs)
-        
+        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **popen_kwargs)
+
         # Wait for socket to appear and accept connection
         for _ in range(25):
             time.sleep(0.1)
+            if dac_args and proc.poll() is not None:
+                break
             try:
                 s = pc.connect_mpv_socket(IPC_TYPE, IPC_TARGET, timeout=1.0)
                 s.close()
                 return True
             except Exception:
                 pass
+        if dac_args and proc.poll() is not None:
+            _mark_exclusive_failed()
+        else:
+            return False
+    # mpv quit at once with the exclusive flag: start it again the normal way
+    return ensure_mpv(force_shared=True)
+
+
+EXCLUSIVE_FAILED_FILE = os.path.join(TEMP_DIR, f"nutsty_exclusive_failed{PROFILE_SUFFIX}")
+AO_FAILURE_MARKERS = ("Failed to initialize audio driver", "Could not open/initialize audio device")
+
+
+def _mark_exclusive_failed():
+    try:
+        open(EXCLUSIVE_FAILED_FILE, "w").close()
+    except OSError:
+        pass
+
+
+def _take_exclusive_failed():
+    """True once after ensure_mpv had to drop the exclusive flag."""
+    try:
+        os.remove(EXCLUSIVE_FAILED_FILE)
+        return True
+    except OSError:
         return False
+
+
+def _ao_failed_in_log(wait_s=2.5):
+    """The audio output could not open the device (another app holds it in exclusive mode)."""
+    deadline = time.time() + wait_s
+    while time.time() < deadline:
+        try:
+            with open(LOG_FILE, "r", encoding="utf-8", errors="replace") as f:
+                text = f.read()
+            if any(m in text for m in AO_FAILURE_MARKERS):
+                return True
+        except OSError:
+            pass
+        if get_mpv_property("current-ao"):
+            return False
+        time.sleep(0.25)
+    return False
+
+
+def _stop_main_mpv():
+    try:
+        send_mpv_cmd(["quit"], timeout=1.0)
+    except Exception:
+        pass
+    for _ in range(20):
+        if not is_mpv_running():
+            return
+        time.sleep(0.1)
+    pc.kill_process("mpv.exe" if pc.IS_WINDOWS else MPV_TITLE)
+    time.sleep(0.15)
+
+
+def restart_mpv_keep_position():
+    """Apply a new DAC mode: start mpv again with the right flags and carry on from the same spot.
+    Nothing happens when mpv already runs with the wanted mode."""
+    import audio_output
+    want_exclusive = bool(audio_output.mpv_output_args(get_lossless_settings()))
+    try:
+        s = pc.connect_mpv_socket(IPC_TYPE, IPC_TARGET, timeout=0.8)
+        s.close()
+        alive = True
+    except Exception:
+        alive = False
+    if alive and bool(get_mpv_property("audio-exclusive")) == want_exclusive:
+        return {"restarted": False, "exclusive_failed": _take_exclusive_failed()}
+    path = get_mpv_property("path") if alive else None
+    pos = (get_mpv_property("time-pos") or 0.0) if alive else 0.0
+    paused = (get_mpv_property("pause") is True) if alive else False
+    volume = get_mpv_property("volume") if alive else None
+    if alive:
+        _stop_main_mpv()
+
+    def _load():
+        if path:
+            send_mpv_cmd({"name": "loadfile", "url": path, "flags": "replace", "index": -1,
+                          "options": {"start": f"{max(0.0, float(pos)):.3f}", "pause": "yes" if paused else "no"}})
+        if volume is not None and not (want_exclusive and not failed):
+            send_mpv_cmd(["set_property", "volume", volume])
+
+    failed = False
+    ensure_mpv()
+    failed = _take_exclusive_failed()
+    _load()
+    if want_exclusive and not failed and path and _ao_failed_in_log():
+        failed = True
+        _stop_main_mpv()
+        ensure_mpv(force_shared=True)
+        _load()
+    return {"restarted": True, "exclusive_failed": failed}
 
 def send_mpv_cmd(command_args, timeout=2.0):
     """Send JSON IPC command to MPV"""
@@ -1324,6 +1426,18 @@ def execute_command(args):
             except OSError:
                 pass
         print(json.dumps({"suspended": on, "reloaded": reloaded}))
+    elif action == "restart_mpv_keep_position":
+        print(json.dumps(restart_mpv_keep_position()))
+    elif action == "rate_dropin" and len(args) > 1:
+        import audio_output
+        conf_dir = audio_output.PIPEWIRE_DROPIN.parent
+        if args[1] == "write":
+            print(json.dumps(audio_output.write_rate_dropin(conf_dir)))
+        elif args[1] == "remove":
+            print(json.dumps({"removed": audio_output.remove_rate_dropin(conf_dir)}))
+        else:
+            print(json.dumps({"installed": audio_output.PIPEWIRE_DROPIN.exists(), "path": str(audio_output.PIPEWIRE_DROPIN),
+                              "conflicts": audio_output.find_existing_allowed_rates(conf_dir)}))
     elif action == "stream_failed":
         # The Tidal stream stopped mid-song (expired link, network): carry on with YouTube from there
         pos = _float_arg(args, 1)
