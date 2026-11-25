@@ -121,62 +121,129 @@ ColumnLayout {
         }
     }
 
-    // --- Playlist picker -------------------------------------------------------------------
-    Rectangle {
+    // --- Playlist picker: covers in a two-column grid, no box around it ---------------------
+    ColumnLayout {
+        id: picker
         Layout.fillWidth: true
+        Layout.topMargin: 4
         visible: root.pickerOpen
-        implicitHeight: pickerCol.implicitHeight + 24
-        radius: 12
-        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.08)
-        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.25)
-        border.width: 1
+        spacing: 12
 
-        ColumnLayout {
-            id: pickerCol
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.margins: 12
-            spacing: 6
+        readonly property bool loading: !!(root.sync && root.sync.choicesLoading)
+        readonly property string err: root.sync ? root.sync.choicesError : ""
+        readonly property int pickedCount: {
+            var n = root.likedPicked ? 1 : 0;
+            for (var k in root.picked) if (root.picked[k]) n++;
+            return n;
+        }
+        readonly property int totalCount: 1 + (root.sync && root.sync.choices ? root.sync.choices.length : 0)
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 12
 
             Text {
                 Layout.fillWidth: true
                 text: I18n.tr("Chọn playlist để đồng bộ", "Choose playlists to sync")
                 font.family: Theme.fontFamily
-                font.pixelSize: 13
+                font.pixelSize: 14
                 font.bold: true
                 color: Theme.textPrimary
+                elide: Text.ElideRight
+            }
+
+            Text {
+                visible: !picker.loading && picker.err === ""
+                text: I18n.tr("Đã chọn %1/%2", "%1 of %2 selected").arg(picker.pickedCount).arg(picker.totalCount)
+                font.family: Theme.fontFamily
+                font.pixelSize: 12
+                color: Theme.textSecondary
+            }
+
+            Text {
+                id: toggleAllText
+                visible: !picker.loading && picker.err === ""
+                readonly property bool all: picker.pickedCount === picker.totalCount
+                text: all ? I18n.tr("Bỏ chọn hết", "Clear all") : I18n.tr("Chọn hết", "Select all")
+                font.family: Theme.fontFamily
+                font.pixelSize: 12
+                font.weight: Font.DemiBold
+                color: toggleAllMouse.containsMouse ? Qt.lighter(root.accentColor, 1.25) : root.accentColor
+                MouseArea {
+                    id: toggleAllMouse
+                    anchors.fill: parent
+                    anchors.margins: -6
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        var on = !toggleAllText.all;
+                        var m = {};
+                        var list = root.sync ? (root.sync.choices || []) : [];
+                        for (var i = 0; i < list.length; i++) m[list[i].id] = on;
+                        root.picked = m;
+                        root.likedPicked = on;
+                    }
+                }
+            }
+        }
+
+        // Loading or error line
+        RowLayout {
+            Layout.fillWidth: true
+            visible: picker.loading || picker.err !== ""
+            spacing: 10
+
+            CircularSpinner {
+                visible: picker.loading
+                size: 16
+                strokeWidth: 2
+                color: root.accentColor
+                running: picker.loading
             }
 
             Text {
                 Layout.fillWidth: true
-                visible: root.sync && (root.sync.choicesLoading || root.sync.choicesError !== "")
-                text: !root.sync ? "" : (root.sync.choicesLoading
-                      ? I18n.tr("Đang tải danh sách playlist...", "Loading playlists...")
-                      : root.errorText(root.sync.choicesError))
+                text: picker.loading ? I18n.tr("Đang lấy playlist từ Spotify...", "Getting your playlists from Spotify...")
+                                     : root.errorText(picker.err)
                 font.family: Theme.fontFamily
-                font.pixelSize: 11
-                color: root.sync && root.sync.choicesError !== "" ? "#fda4af" : Theme.textSecondary
+                font.pixelSize: 12
+                color: picker.err !== "" ? "#fda4af" : Theme.textSecondary
                 wrapMode: Text.WordWrap
             }
+        }
+
+        GridLayout {
+            id: grid
+            Layout.fillWidth: true
+            visible: !picker.loading && picker.err === ""
+            columns: width >= 520 ? 2 : 1
+            columnSpacing: 8
+            rowSpacing: 8
 
             SpotifyChoiceRow {
                 Layout.fillWidth: true
-                visible: root.sync && !root.sync.choicesLoading
+                Layout.preferredWidth: 1
                 accentColor: root.accentColor
+                likedTile: true
                 title: I18n.tr("Bài hát đã thích", "Liked Songs")
+                subtitle: I18n.tr("Thích bên nào, bên kia cũng có", "Like it on one side, it shows on the other")
                 checked: root.likedPicked
                 onToggled: root.likedPicked = !root.likedPicked
             }
 
             Repeater {
-                model: root.sync && !root.sync.choicesLoading ? root.sync.choices : []
+                model: grid.visible && root.sync ? root.sync.choices : []
                 delegate: SpotifyChoiceRow {
                     required property var modelData
                     Layout.fillWidth: true
+                    Layout.preferredWidth: 1
                     accentColor: root.accentColor
                     title: modelData.title || ""
-                    hint: modelData.spotifyMade ? I18n.tr("Spotify tự tạo, thay mới mỗi lần", "Made by Spotify, replaced each time") : ""
+                    cover: modelData.image || ""
+                    subtitle: modelData.spotifyMade
+                              ? I18n.tr("Spotify tự tạo, thay mới mỗi lần", "Made by Spotify, replaced each time")
+                              : (modelData.owned ? I18n.tr("Của bạn", "Yours")
+                                                 : I18n.tr("Của %1", "By %1").arg(modelData.ownerName || "Spotify"))
                     checked: !!root.picked[modelData.id]
                     onToggled: {
                         var m = Object.assign({}, root.picked);
@@ -185,30 +252,30 @@ ColumnLayout {
                     }
                 }
             }
+        }
 
-            Row {
-                Layout.alignment: Qt.AlignRight
-                Layout.topMargin: 4
-                spacing: 8
+        Row {
+            Layout.alignment: Qt.AlignRight
+            spacing: 8
 
-                LosslessSmallButton {
-                    label: I18n.tr("Hủy", "Cancel")
-                    accentColor: root.accentColor
-                    onClicked: root.pickerOpen = false
-                }
+            LosslessSmallButton {
+                label: I18n.tr("Hủy", "Cancel")
+                accentColor: root.accentColor
+                onClicked: root.pickerOpen = false
+            }
 
-                LosslessSmallButton {
-                    label: I18n.tr("Bắt đầu đồng bộ", "Start syncing")
-                    primary: true
-                    accentColor: root.accentColor
-                    opacity: root.sync && !root.sync.choicesLoading && root.sync.choicesError === "" ? 1.0 : 0.45
-                    onClicked: {
-                        if (!root.sync || root.sync.choicesLoading || root.sync.choicesError !== "") return;
-                        var ids = [];
-                        for (var k in root.picked) if (root.picked[k]) ids.push(k);
-                        root.sync.confirmSelection(ids, root.likedPicked);
-                        root.pickerOpen = false;
-                    }
+            LosslessSmallButton {
+                readonly property bool ready: !picker.loading && picker.err === "" && picker.pickedCount > 0
+                label: I18n.tr("Bắt đầu đồng bộ", "Start syncing")
+                primary: true
+                accentColor: root.accentColor
+                opacity: ready ? 1.0 : 0.45
+                onClicked: {
+                    if (!ready) return;
+                    var ids = [];
+                    for (var k in root.picked) if (root.picked[k]) ids.push(k);
+                    root.sync.confirmSelection(ids, root.likedPicked);
+                    root.pickerOpen = false;
                 }
             }
         }
