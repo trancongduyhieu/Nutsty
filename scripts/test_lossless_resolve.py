@@ -168,6 +168,18 @@ class LosslessResolveTest(unittest.TestCase):
         self._write_settings()
         self.assertEqual(pd.get_lossless_settings(), {"enabled": True, "quality": "lossless", "dac_mode": "shared"})
 
+    def test_dac_mode_without_tidal(self):
+        # chosen in Settings with Tidal off: local FLAC still goes to the DAC that way
+        self.settings = {"losslessEnabled": False, "dacOutputMode": "exclusive", "dacModeStandalone": True}
+        self._write_settings()
+        self.assertEqual(pd.get_lossless_settings()["dac_mode"], "exclusive")
+
+    def test_old_dac_mode_saved_with_tidal_off_stays_shared(self):
+        # saved before the DAC mode stood alone, it only counted while lossless was on
+        self.settings = {"losslessEnabled": False, "dacOutputMode": "exclusive"}
+        self._write_settings()
+        self.assertEqual(pd.get_lossless_settings()["dac_mode"], "shared")
+
     # --- Listen Along suspension -----------------------------------------------------
     def test_suspend_reloads_youtube_at_position(self):
         pd.record_now_source("vid1", "tidal", TIDAL)

@@ -30,13 +30,16 @@ except ImportError:
 
 MATCH_THRESHOLD = 0.75
 MISS_TTL_S = 7 * 86400
+NO_LOSSLESS_TTL_S = 86400   # matched, but Tidal only has it lossy (or encrypted) at this quality
 STREAM_TTL_S = 600
+REQUEST_TIMEOUT_S = 15    # tidalapi sets none; a stalled request must not hold the process
 DURATION_TOLERANCE_S = 3.0
 QUALITY_MAP = {"hires": "HI_RES_LOSSLESS", "lossless": "LOSSLESS"}
 LOSSLESS_QUALITIES = ("LOSSLESS", "HI_RES_LOSSLESS", "HI_RES")
 
 _session_factory = None   # callable returning a tidalapi.Session (tests inject a fake)
 _sessions = {}           # profile suffix -> logged-in tidalapi.Session
+_saved_tokens = {}       # profile suffix -> access token last written to the session file
 _profile_ctx = contextvars.ContextVar("tidal_profile", default=None)
 _bg_threads = []
 _lock = threading.Lock()
@@ -45,6 +48,26 @@ _lock = threading.Lock()
 def _default_session_factory():
     import tidalapi
     return tidalapi.Session()
+
+
+def _new_session():
+    sess = (_session_factory or _default_session_factory)()
+    _apply_request_timeout(sess)
+    return sess
+
+
+def _apply_request_timeout(sess):
+    """Every tidalapi call goes through request_session.request (post() calls it too)."""
+    rs = getattr(sess, "request_session", None)
+    if rs is None or getattr(rs, "_nutsty_timeout", False):
+        return
+    orig = rs.request
+
+    def request(method, url, **kw):
+        kw.setdefault("timeout", REQUEST_TIMEOUT_S)
+        return orig(method, url, **kw)
+    rs.request = request
+    rs._nutsty_timeout = True
 
 
 def _fetch_subscription(session):
@@ -109,14 +132,57 @@ def _read_json(path, default):
         return default
 
 
+def _ensure_dir(path):
+    """mkdir; the per-profile temp dir (MPD manifests, stream links) is owner-only."""
+    path = Path(path)
+    if path == mpd_dir():
+        path.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if not pc.IS_WINDOWS:
+            try:
+                os.chmod(path, 0o700)
+            except OSError:
+                pass
+    else:
+        path.mkdir(parents=True, exist_ok=True)
+
+
+def _open_private(path, mode="w"):
+    """Open for writing with mode 0600 from the start, so the content is never readable by others."""
+    path = Path(path)
+    _ensure_dir(path.parent)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    _chmod_private(path)  # an existing file keeps its old mode through O_CREAT
+    return os.fdopen(fd, mode, encoding="utf-8")
+
+
 def _write_private_json(path, data):
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
+    with _open_private(tmp) as f:
         json.dump(data, f, ensure_ascii=False)
-    _chmod_private(tmp)
     os.replace(tmp, path)
+
+
+def _save_session(session):
+    """tidalapi opens the file with "w", which keeps the mode of a file that already exists."""
+    path = session_file()
+    _open_private(path).close()
+    session.save_session_to_file(path)
+    _chmod_private(path)
+    _saved_tokens[_suffix()] = getattr(session, "access_token", None)
+
+
+def _save_if_refreshed(session):
+    """tidalapi refreshes an expired token in memory only; keep the file current."""
+    token = getattr(session, "access_token", None)
+    # a logout during the lookup removed the session: never write it back
+    if _sessions.get(_suffix()) is not session or not session_file().exists():
+        return
+    if token and token != _saved_tokens.get(_suffix()):
+        try:
+            _save_session(session)
+        except Exception as e:
+            _log(f"session save failed: {type(e).__name__}")
 
 
 def _chmod_private(path):
@@ -141,10 +207,11 @@ def _get_session():
     if not session_file().exists() or _read_json(status_file(), {}).get("needs_relogin"):
         return None
     try:
-        sess = (_session_factory or _default_session_factory)()
+        sess = _new_session()
         if not sess.load_session_from_file(session_file()):
             return None
         _sessions[_suffix()] = sess
+        _saved_tokens[_suffix()] = getattr(sess, "access_token", None)
         return sess
     except Exception as e:
         _log(f"session load failed: {type(e).__name__}")
@@ -153,10 +220,7 @@ def _get_session():
 
 def _finish_login(session):
     """Persist a freshly authorised session and its account summary."""
-    path = session_file()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    session.save_session_to_file(path)
-    _chmod_private(path)
+    _save_session(session)
     account, subscription, can_hires = "", "", False
     try:
         user = session.user
@@ -215,7 +279,7 @@ def _is_track_unavailable(e):
 def login_start():
     """Start device login. Returns {url, code, expires_in}; url already carries the code."""
     try:
-        sess = (_session_factory or _default_session_factory)()
+        sess = _new_session()
         link = sess.get_link_login()
         url = str(link.verification_uri_complete)
         if not url.startswith("http"):
@@ -250,7 +314,7 @@ def login_poll():
         _clear_pending()
         return {"state": "expired", "account": "", "subscription": ""}
     try:
-        sess = (_session_factory or _default_session_factory)()
+        sess = _new_session()
         sess.process_link_login(_PendingLink(pending), until_expiry=False)
     except TimeoutError:
         return {"state": "pending", "account": "", "subscription": ""}
@@ -273,6 +337,7 @@ def _clear_pending():
 
 def logout():
     _sessions.pop(_suffix(), None)
+    _saved_tokens.pop(_suffix(), None)
     for p in (session_file(), status_file(), _stream_cache_file(), _pending_login_file()):
         try:
             Path(p).unlink()
@@ -315,6 +380,8 @@ def clean_title(title, artist=""):
         left, right = t.split(" - ", 1)
         if left.strip() == a or left.strip() in a or a in left.strip():
             t = right
+        elif right.strip() == a or a in right.strip():
+            t = left  # "Hello - Adele": the artist after the dash
     t = _PIPE_RE.sub("", t)
     t = _NOISE_RE.sub(" ", t)
     t = _DASH_TAIL_RE.sub("", t)
@@ -398,10 +465,9 @@ def _stream_of(sess, track, quality_key):
         return None
     codec = str(manifest.get_codecs() or "FLAC").upper()
     if stream.is_mpd:
-        d = mpd_dir()
-        d.mkdir(parents=True, exist_ok=True)
-        p = d / f"tidal_{track.id}_{quality_key}.mpd"
-        p.write_text(stream.get_manifest_data(), encoding="utf-8")
+        p = mpd_dir() / f"tidal_{track.id}_{quality_key}.mpd"
+        with _open_private(p) as f:
+            f.write(stream.get_manifest_data())
         url = p.as_uri()
     else:
         urls = manifest.get_urls() or []
@@ -439,6 +505,8 @@ def _work(video_id, title, artist, duration_s, quality_key):
         now = time.time()
         if m and m.get("tidal_id") is None and now - float(m.get("ts", 0)) < MISS_TTL_S:
             return None
+        if m and m.get("no_lossless") == quality_key and now - float(m.get("ts", 0)) < NO_LOSSLESS_TTL_S:
+            return None
         if m and m.get("tidal_id") is not None:
             track = sess.track(m["tidal_id"])
         else:
@@ -450,6 +518,11 @@ def _work(video_id, title, artist, duration_s, quality_key):
             if track is None:
                 return None
         result = _stream_of(sess, track, quality_key)
+        if not result:
+            with _lock:
+                matches = _read_json(match_cache_file(), {})
+                matches[video_id] = {"tidal_id": track.id, "no_lossless": quality_key, "ts": now}
+                _write_private_json(match_cache_file(), matches)
         if result:
             with _lock:
                 cache = _read_json(_stream_cache_file(), {})
@@ -470,12 +543,16 @@ def _work(video_id, title, artist, duration_s, quality_key):
         else:
             _log(f"resolve failed: {type(e).__name__}")
         return None
+    finally:
+        _save_if_refreshed(sess)
 
 
 def resolve(video_id, title, artist, duration_s, quality, budget_s=4.0):
     """TidalStream for a YouTube track, or None (play YouTube). Bounded by budget_s:
     past it, returns None and lets the lookup finish in the background for next time."""
-    if not video_id or not status()["logged_in"]:
+    st = status()
+    # a plan without lossless (Free, or HIGH only) never gets FLAC: no lookup at all
+    if not video_id or not st["logged_in"] or not st["can_lossless"]:
         return None
     quality_key = quality if quality in QUALITY_MAP else "lossless"
     cached = _cached_stream(video_id, quality_key)
@@ -503,6 +580,7 @@ def _reset_for_tests():
     global _session_factory
     _join_background_for_tests(2.0)
     _sessions.clear()
+    _saved_tokens.clear()
     _session_factory = None
 
 

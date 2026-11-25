@@ -291,7 +291,7 @@ Scope {
     readonly property bool sleepTimerVolumeLocked: sleepTimerController.volumeLocked
     property string currentLanguage: I18n.locale
     property string streamingQuality: "high_opus"
-    // Tidal lossless (the user's own Tidal account). dacOutputMode only applies while losslessEnabled.
+    // Tidal lossless (the user's own Tidal account). dacOutputMode stands alone: local FLAC uses it too.
     property bool losslessEnabled: false
     property string losslessQuality: "lossless"
     property bool losslessQualityChosen: false
@@ -1850,10 +1850,10 @@ Scope {
         }
     }
 
-    // The explain modal was accepted: lossless on, AutoMix value kept for when it is turned off.
+    // The explain modal was accepted: lossless on with the DAC mode picked there. applyDacChange
+    // keeps the AutoMix value only when bit-perfect starts now, so an earlier one is not lost.
     function enableLossless(mode) {
         var prev = win.dacState();
-        win.autoMixBeforeLossless = win.autoMixEnabled;
         win.dacOutputMode = LosslessLogic.dacModesFor(win.isWindowsPlatform).indexOf(mode) >= 0 ? mode : "shared";
         win.losslessEnabled = true;
         win.applyDacChange(prev);
@@ -1861,24 +1861,24 @@ Scope {
         if (win.isCoListeningActive) win.showListenAlongLosslessNotice();
     }
 
+    // The DAC mode stays as chosen: local FLAC still goes to the DAC that way.
     function disableLossless() {
-        var prev = win.dacState();
         win.losslessEnabled = false;
-        win.applyDacChange(prev);
+        win.saveSettings();
     }
 
     // Bit-perfect: mpv holds the DAC alone, so AutoMix (two players at once) and in-app volume are off.
-    readonly property bool bitPerfectActive: win.losslessEnabled && win.dacOutputMode === "exclusive"
+    readonly property bool bitPerfectActive: win.dacOutputMode === "exclusive"
     property bool dacStartupChecked: false
 
     function dacState() {
-        return { enabled: win.losslessEnabled, mode: win.dacOutputMode };
+        return { mode: win.dacOutputMode };
     }
 
-    // Call after losslessEnabled / dacOutputMode changed, with the state from before the change.
+    // Call after dacOutputMode changed, with the state from before the change.
     function applyDacChange(prev) {
         var t = LosslessLogic.dacTransition(prev, win.dacState());
-        var wasLocked = !!prev.enabled && prev.mode === "exclusive";
+        var wasLocked = prev.mode === "exclusive";
         if (t.autoMixLocked && !wasLocked) {
             win.autoMixBeforeLossless = win.autoMixEnabled;
             win.autoMixEnabled = false;
@@ -4808,6 +4808,7 @@ Scope {
             losslessQuality: win.losslessQuality,
             losslessQualityChosen: win.losslessQualityChosen,
             dacOutputMode: win.dacOutputMode,
+            dacModeStandalone: true,
             autoMixBeforeLossless: win.autoMixBeforeLossless,
             liquidGlassPreset: win.liquidGlassPreset,
             liquidGlassBlur: win.liquidGlassBlur,

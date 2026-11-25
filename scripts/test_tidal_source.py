@@ -100,8 +100,10 @@ class FakeSession:
         return True
 
     def save_session_to_file(self, path):
+        # like tidalapi: open(path, "w"); record the mode the file has while the token is written
         with open(path, "w") as f:
-            f.write('{"access_token": {"data": "%s"}}' % FAKE_TOKEN)
+            self.mode_while_writing = os.stat(path).st_mode & 0o777
+            f.write('{"access_token": {"data": "%s"}}' % self.access_token)
 
     def check_login(self):
         return True
@@ -183,6 +185,11 @@ class TidalSourceTest(unittest.TestCase):
         self.assertLess(ts.score_candidate("Yellow", "Coldplay", 266, "Yellow", ["Coldplay"], 270), ts.MATCH_THRESHOLD)
         self.assertGreaterEqual(ts.score_candidate("Yellow", "Coldplay", 266, "Yellow", ["Coldplay"], 268), ts.MATCH_THRESHOLD)
 
+    def test_artist_suffix_is_dropped(self):
+        self.assertEqual(ts.clean_title("Hello - Adele", "Adele"), "hello")
+        self.assertGreaterEqual(ts.score_candidate("Hello - Adele", "Adele", 295, "Hello", ["Adele"], 295), ts.MATCH_THRESHOLD)
+        self.assertEqual(ts.clean_title("Love - Story", "Taylor Swift"), "love - story")
+
     def test_wrong_artist_rejected(self):
         self.assertLess(ts.score_candidate("Yellow", "Coldplay", 266, "Yellow", ["Katy Perry"], 266), ts.MATCH_THRESHOLD)
 
@@ -215,6 +222,18 @@ class TidalSourceTest(unittest.TestCase):
     def test_lossy_stream_returns_none(self):
         self.yellow._stream = bts(quality="HIGH")
         self.assertIsNone(ts.resolve("vid1", "Yellow", "Coldplay", 266, "lossless"))
+
+    def test_plan_without_lossless_skips_tidal(self):
+        self.session.max_quality = "HIGH"
+        ts._finish_login(self.session)
+        self.assertIsNone(ts.resolve("vid1", "Yellow", "Coldplay", 266, "lossless"))
+        self.assertEqual(self.session.search_calls, 0)
+
+    def test_lossy_only_track_is_not_asked_again_every_play(self):
+        self.yellow._stream = bts(quality="HIGH")
+        ts.resolve("vid1", "Yellow", "Coldplay", 266, "lossless")
+        ts.resolve("vid1", "Yellow", "Coldplay", 266, "lossless")
+        self.assertEqual(self.yellow.stream_calls, 1)
 
     def test_no_match_returns_none(self):
         self.assertIsNone(ts.resolve("vid9", "Nothing Like It", "Nobody", 100, "lossless"))
@@ -347,6 +366,52 @@ class TidalSourceTest(unittest.TestCase):
     def test_session_file_mode_600(self):
         mode = os.stat(ts.session_file()).st_mode & 0o777
         self.assertEqual(mode, 0o600)
+
+    @unittest.skipIf(sys.platform.startswith("win"), "POSIX permissions")
+    def test_session_file_private_while_token_is_written(self):
+        os.unlink(ts.session_file())
+        ts._finish_login(self.session)
+        self.assertEqual(self.session.mode_while_writing, 0o600)
+
+    def test_refreshed_token_is_saved_back(self):
+        ts._sessions.clear()  # a new process loads the saved session
+
+        def refresh_then_stream(track):
+            self.session.access_token = "REFRESHED-TOKEN"
+            return bts()
+        self.yellow._stream = refresh_then_stream
+        ts.resolve("vid1", "Yellow", "Coldplay", 266, "lossless")
+        with open(ts.session_file()) as f:
+            self.assertIn("REFRESHED-TOKEN", f.read())
+
+    def test_logout_during_lookup_is_not_undone_by_token_save(self):
+        ts._sessions.clear()
+
+        def logout_then_stream(track):
+            self.session.access_token = "REFRESHED-TOKEN"
+            ts.logout()
+            return bts()
+        self.yellow._stream = logout_then_stream
+        ts.resolve("vid1", "Yellow", "Coldplay", 266, "lossless")
+        self.assertFalse(os.path.exists(ts.session_file()))
+
+    @unittest.skipIf(sys.platform.startswith("win"), "POSIX permissions")
+    def test_mpd_dir_and_manifest_are_private(self):
+        s = ts.resolve("vid2", "Song24", "Artist", 200, "hires")
+        self.assertEqual(os.stat(ts.mpd_dir()).st_mode & 0o777, 0o700)
+        self.assertEqual(os.stat(s["url"][len("file://"):]).st_mode & 0o777, 0o600)
+
+    def test_requests_get_a_default_timeout(self):
+        seen = {}
+
+        class FakeRequests:
+            def request(self, method, url, **kw):
+                seen.update(kw)
+        self.session.request_session = FakeRequests()
+        ts._sessions.clear()
+        ts._get_session()
+        self.session.request_session.request("GET", "https://api.tidal.com/x")
+        self.assertEqual(seen.get("timeout"), ts.REQUEST_TIMEOUT_S)
 
     def test_logout_removes_session(self):
         ts.logout()

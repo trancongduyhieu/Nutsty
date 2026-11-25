@@ -9,6 +9,16 @@ Số phiên bản có dạng `A.B.C`, ví dụ `1.2.0`:
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-11-25
+
+### Added
+- **Nghe nhạc lossless qua Tidal**: Nếu bạn có gói Tidal nghe được lossless, vào Cài đặt, mục "Lossless", đăng nhập tài khoản Tidal của chính bạn rồi bật lên. Bài nào tìm được trên Tidal sẽ phát bản FLAC (16-bit, hoặc Hi-Res nếu gói của bạn có), bài không có trên Tidal vẫn phát bản YouTube như cũ. Trước khi bật, Nutsty nói rõ những gì sẽ thay đổi, ví dụ mỗi bài tốn khoảng 30-50 MB dữ liệu thay vì 3-5 MB. Khi Nghe Cùng, Nutsty tạm phát bản YouTube để hai bên nghe khớp nhau, dừng Nghe Cùng thì lossless trở lại. Tài khoản Tidal gói miễn phí không có lossless nên Nutsty vẫn phát YouTube như bình thường.
+- **Thanh phát hiện đúng chất lượng thật**: Dưới tên bài, Nutsty ghi chất lượng của đúng bản đang phát (ví dụ FLAC 24-bit 96 kHz hay AAC). Chưa biết chắc thì để trống, không ghi bừa một con số.
+- **Ba cách đưa âm thanh tới DAC**: Trong Cài đặt, mục "Lossless", chọn "Qua hệ thống" (giữ mọi tính năng như cũ), "Đúng tần số gốc" (chỉ có trên Linux, DAC nhận đúng tần số của từng bài, vẫn giữ AutoMix) hoặc "Nguyên bản tuyệt đối" (âm thanh đi thẳng tới DAC không qua xử lý nào, đổi lại AutoMix tắt, âm lượng trong app cố định 100% và app khác không phát tiếng qua DAC được). Các chế độ này dùng được cả khi không bật Tidal, nên nhạc FLAC trong thư viện máy bạn cũng được phát đúng chất lượng gốc. Với "Đúng tần số gốc", Nutsty hỏi bạn trước khi đổi cài đặt âm thanh của máy và không đè lên cài đặt bạn đã tự chỉnh. Nếu DAC không nhận chế độ "Nguyên bản tuyệt đối", Nutsty tự quay về "Qua hệ thống" và báo cho bạn.
+
+### Fixed
+- **Tidal ổn định hơn**: Khi Tidal chậm hoặc mất mạng, Nutsty không còn đợi mãi mà chuyển sang bản YouTube sau vài giây. Link Tidal hết hạn giữa bài thì Nutsty phát tiếp bản YouTube đúng chỗ đang nghe. Bài chỉ có bản thường trên Tidal không bị hỏi lại mỗi lần phát. Tên bài có kèm tên ca sĩ phía sau (ví dụ "Hello - Adele") giờ cũng tìm đúng trên Tidal. Đăng nhập Tidal được giữ lâu dài, không phải đăng nhập lại sau vài ngày, và thông tin đăng nhập chỉ tài khoản máy của bạn đọc được.
+
 ## [2.4.0] - 2026-11-25
 
 ### Added

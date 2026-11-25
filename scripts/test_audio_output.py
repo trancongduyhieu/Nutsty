@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """DAC output modes: mpv flags and the PipeWire rate drop-in. Temp dirs only, never the real
 ~/.config/pipewire. Run: python scripts/test_audio_output.py"""
+import io
 import os
 import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend"))
@@ -20,7 +22,8 @@ RATE_LINE = "default.clock.allowed-rates = [ 44100 48000 88200 96000 176400 1920
 class MpvArgsTest(unittest.TestCase):
     def test_four_combinations(self):
         self.assertEqual(ao.mpv_output_args({"enabled": True, "dac_mode": "exclusive"}), ["--audio-exclusive=yes"])
-        self.assertEqual(ao.mpv_output_args({"enabled": False, "dac_mode": "exclusive"}), [])
+        # local FLAC uses the DAC mode too, Tidal off or on
+        self.assertEqual(ao.mpv_output_args({"enabled": False, "dac_mode": "exclusive"}), ["--audio-exclusive=yes"])
         self.assertEqual(ao.mpv_output_args({"enabled": True, "dac_mode": "shared"}), [])
         self.assertEqual(ao.mpv_output_args({"enabled": True, "dac_mode": "rate_match"}), [])
 
@@ -29,12 +32,42 @@ class MpvArgsTest(unittest.TestCase):
         self.assertEqual(ao.PIPEWIRE_DROPIN, Path.home() / ".config/pipewire/pipewire.conf.d/90-nutsty-rates.conf")
 
 
+class AoFailureWaitTest(unittest.TestCase):
+    def test_waits_past_slow_stream_open(self):
+        # a Tidal MPD can take several seconds before mpv opens the audio output
+        import player_daemon as pd
+        clock = {"t": 0.0}
+        log_says_failed = lambda: clock["t"] >= 4.0
+        with mock.patch.object(pd.time, "time", lambda: clock["t"]), \
+             mock.patch.object(pd.time, "sleep", lambda s: clock.__setitem__("t", clock["t"] + s)), \
+             mock.patch.object(pd, "get_mpv_property", lambda name, *a, **k: None), \
+             mock.patch("builtins.open", lambda *a, **k: io.StringIO(pd.AO_FAILURE_MARKERS[0] if log_says_failed() else "")):
+            self.assertTrue(pd._ao_failed_in_log())
+
+
 class RateDropinTest(unittest.TestCase):
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp(prefix="nutsty_pw_"))
+        # never read the real /etc/pipewire of the machine running the tests
+        self.etc = Path(tempfile.mkdtemp(prefix="nutsty_etc_pw_"))
+        self.sys_patch = mock.patch.object(ao, "SYSTEM_PIPEWIRE", self.etc)
+        self.sys_patch.start()
 
     def tearDown(self):
+        self.sys_patch.stop()
         shutil.rmtree(self.dir, ignore_errors=True)
+        shutil.rmtree(self.etc, ignore_errors=True)
+
+    def test_main_and_system_configs_count_as_conflicts(self):
+        conf_dir = self.dir / "pipewire.conf.d"
+        conf_dir.mkdir()
+        (self.dir / "pipewire.conf").write_text("context.properties = {\n  default.clock.allowed-rates = [ 44100 ]\n}\n")
+        (self.etc / "pipewire.conf.d").mkdir()
+        (self.etc / "pipewire.conf.d" / "50-system.conf").write_text("default.clock.allowed-rates = [ 48000 ]\n")
+        (self.etc / "pipewire.conf").write_text("#default.clock.allowed-rates = [ 48000 ]\n")
+        files = sorted(Path(f).name for f, _ in ao.find_existing_allowed_rates(conf_dir))
+        self.assertEqual(files, ["50-system.conf", "pipewire.conf"])
+        self.assertFalse(ao.write_rate_dropin(conf_dir)["written"])
 
     def test_write_creates_dir_and_line(self):
         conf_dir = self.dir / "pipewire.conf.d"

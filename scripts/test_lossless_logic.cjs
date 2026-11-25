@@ -19,7 +19,12 @@ assert.deepStrictEqual(Array.from(L.dacModesFor(true)), ["shared", "exclusive"])
 assert.deepStrictEqual(Array.from(L.dacModesFor(false)), ["shared", "rate_match", "exclusive"]);
 
 assert.strictEqual(L.normalizeLosslessSettings({dacOutputMode: "rate_match"}, true).dacOutputMode, "shared");
-assert.strictEqual(L.normalizeLosslessSettings({dacOutputMode: "rate_match"}, false).dacOutputMode, "rate_match");
+assert.strictEqual(L.normalizeLosslessSettings({dacOutputMode: "rate_match", dacModeStandalone: true}, false).dacOutputMode, "rate_match");
+// DAC mode no longer needs Tidal: local FLAC goes to the DAC too. A mode saved before that
+// (no dacModeStandalone) only counted while lossless was on, so it stays off when lossless was off.
+assert.strictEqual(L.normalizeLosslessSettings({dacOutputMode: "exclusive", losslessEnabled: false}, false).dacOutputMode, "shared");
+assert.strictEqual(L.normalizeLosslessSettings({dacOutputMode: "exclusive", losslessEnabled: true}, false).dacOutputMode, "exclusive");
+assert.strictEqual(L.normalizeLosslessSettings({dacOutputMode: "exclusive", dacModeStandalone: true}, false).dacOutputMode, "exclusive");
 assert.strictEqual(L.normalizeLosslessSettings({losslessQuality: "ultra"}, false).losslessQuality, "lossless");
 assert.strictEqual(L.normalizeLosslessSettings({losslessQuality: "hires"}, false).losslessQuality, "hires");
 assert.deepStrictEqual(JSON.parse(JSON.stringify(L.normalizeLosslessSettings(null, false))),
@@ -38,22 +43,19 @@ assert.strictEqual(L.effectiveQuality("hires", {can_hires: true}), "hires");
 
 console.log("ALL LOSSLESS LOGIC TESTS PASSED");
 
-// --- dacTransition (Task 7) ---
+// --- dacTransition: the DAC mode alone decides, Tidal on or off does not matter ---
 {
     const d = (a, b) => JSON.parse(JSON.stringify(L.dacTransition(a, b)));
-    assert.deepStrictEqual(d({ enabled: true, mode: "shared" }, { enabled: true, mode: "exclusive" }),
+    assert.deepStrictEqual(d({ mode: "shared" }, { mode: "exclusive" }),
         { restartMpv: true, autoMixLocked: true, restoreAutoMix: false });
+    assert.deepStrictEqual(d({ mode: "exclusive" }, { mode: "shared" }),
+        { restartMpv: true, autoMixLocked: false, restoreAutoMix: true });
+    assert.deepStrictEqual(d({ mode: "shared" }, { mode: "rate_match" }),
+        { restartMpv: false, autoMixLocked: false, restoreAutoMix: false });
+    assert.deepStrictEqual(d({ mode: "exclusive" }, { mode: "exclusive" }),
+        { restartMpv: false, autoMixLocked: true, restoreAutoMix: false });
+    // turning Tidal off keeps the DAC mode, so nothing restarts and AutoMix stays as it is
     assert.deepStrictEqual(d({ enabled: true, mode: "exclusive" }, { enabled: false, mode: "exclusive" }),
-        { restartMpv: true, autoMixLocked: false, restoreAutoMix: true });
-    assert.deepStrictEqual(d({ enabled: true, mode: "exclusive" }, { enabled: true, mode: "shared" }),
-        { restartMpv: true, autoMixLocked: false, restoreAutoMix: true });
-    assert.strictEqual(d({ enabled: true, mode: "shared" }, { enabled: true, mode: "rate_match" }).restartMpv, false);
-    const off = d({ enabled: true, mode: "rate_match" }, { enabled: false, mode: "rate_match" });
-    assert.strictEqual(off.restartMpv, false);
-    assert.strictEqual(off.restoreAutoMix, true);
-    assert.deepStrictEqual(d({ enabled: false, mode: "exclusive" }, { enabled: true, mode: "exclusive" }),
-        { restartMpv: true, autoMixLocked: true, restoreAutoMix: false });
-    assert.deepStrictEqual(d({ enabled: true, mode: "exclusive" }, { enabled: true, mode: "exclusive" }),
         { restartMpv: false, autoMixLocked: true, restoreAutoMix: false });
     console.log("dacTransition: all passed");
 }

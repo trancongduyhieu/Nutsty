@@ -344,8 +344,8 @@ ColumnLayout {
         onPicked: key => { if (root.host) root.host.setLosslessQuality(key); }
     }
 
+    // Not tied to Tidal: local FLAC goes to the DAC the same way.
     ChoiceRow {
-        visible: root.enabledNow
         title: I18n.tr("Đưa âm thanh tới DAC", "DAC output")
         subtitle: root.host && root.host.dacOutputMode === "exclusive"
                   ? I18n.tr("AutoMix tắt, âm lượng trong app cố định 100%", "AutoMix off, in-app volume fixed at 100%")
@@ -369,7 +369,7 @@ ColumnLayout {
     // --- Original sample rate (Linux): PipeWire may only switch rates it is allowed to ---------
     // Nutsty writes its own drop-in file only after the user agrees, never edits another file and
     // never restarts PipeWire by itself.
-    readonly property bool rateMatchShown: root.enabledNow && !root.isWindows && !!root.host && root.host.dacOutputMode === "rate_match"
+    readonly property bool rateMatchShown: !root.isWindows && !!root.host && root.host.dacOutputMode === "rate_match"
     property var dropin: null           // last `rate_dropin check|write` result
     property string dropinState: ""     // "", "ask", "conflict", "written", "removed"
 

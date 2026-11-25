@@ -21,7 +21,10 @@ function dacModesFor(isWindows) {
 function normalizeLosslessSettings(obj, isWindows) {
     var o = (obj && typeof obj === "object") ? obj : {};
     var quality = QUALITIES.indexOf(o.losslessQuality) >= 0 ? o.losslessQuality : "lossless";
-    var mode = dacModesFor(isWindows).indexOf(o.dacOutputMode) >= 0 ? o.dacOutputMode : "shared";
+    // The DAC mode stands alone (local FLAC uses it too). One saved before that only counted
+    // while lossless was on, so it is ignored when lossless was off.
+    var counts = o.dacModeStandalone === true || o.losslessEnabled === true;
+    var mode = counts && dacModesFor(isWindows).indexOf(o.dacOutputMode) >= 0 ? o.dacOutputMode : "shared";
     return {
         losslessEnabled: o.losslessEnabled === true,
         losslessQuality: quality,
@@ -42,15 +45,14 @@ function effectiveQuality(quality, status) {
     return QUALITIES.indexOf(quality) >= 0 ? quality : "lossless";
 }
 
-// Lossless or DAC mode changed. Only bit-perfect (exclusive) needs a new mpv and locks AutoMix;
-// leaving lossless or bit-perfect puts AutoMix back as it was.
+// DAC mode changed. Only bit-perfect (exclusive) needs a new mpv and locks AutoMix; leaving it
+// puts AutoMix back as it was. Tidal on or off does not change the DAC mode.
 function dacTransition(prev, next) {
-    var p = prev || {}, n = next || {};
-    var wasExclusive = !!p.enabled && p.mode === "exclusive";
-    var isExclusive = !!n.enabled && n.mode === "exclusive";
+    var wasExclusive = (prev || {}).mode === "exclusive";
+    var isExclusive = (next || {}).mode === "exclusive";
     return {
         restartMpv: wasExclusive !== isExclusive,
         autoMixLocked: isExclusive,
-        restoreAutoMix: (wasExclusive && !isExclusive) || (!!p.enabled && !n.enabled)
+        restoreAutoMix: wasExclusive && !isExclusive
     };
 }

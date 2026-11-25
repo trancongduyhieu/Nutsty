@@ -1054,10 +1054,11 @@ function isMidSongDrop(win, s) {
     return win.currentTime > 1.0 && dur > 0 && win.currentTime < dur - 4.0;
 }
 
-// Ask the backend to carry on with YouTube from the same second, once per song. The backend only
+// Ask the backend to carry on with YouTube from the same second, once per play. The backend only
 // acts when the song came from Tidal, so a YouTube drop keeps its old handling.
 function recoverMidSongDrop(win, s) {
-    var key = trackKeyOf(win.currentTrack);
+    // once per play: the same song played again later has a new trackChangeTimestamp
+    var key = trackKeyOf(win.currentTrack) + "@" + (win.trackChangeTimestamp || 0);
     if (!isMidSongDrop(win, s) || win.streamRecoverKey === key) return false;
     win.streamRecoverKey = key;
     Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "stream_failed", String(win.currentTime)]);

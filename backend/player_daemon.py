@@ -116,7 +116,10 @@ def get_lossless_settings():
     s = _read_settings()
     quality = s.get("losslessQuality")
     dac_mode = s.get("dacOutputMode")
-    if dac_mode not in ("shared", "rate_match", "exclusive") or (dac_mode == "rate_match" and pc.IS_WINDOWS):
+    # Same rule as lossless_logic.normalizeLosslessSettings: a mode saved before it stood alone
+    # (no dacModeStandalone) only counted while lossless was on.
+    counts = s.get("dacModeStandalone") is True or s.get("losslessEnabled") is True
+    if not counts or dac_mode not in ("shared", "rate_match", "exclusive") or (dac_mode == "rate_match" and pc.IS_WINDOWS):
         dac_mode = "shared"
     return {
         "enabled": bool(s.get("losslessEnabled", False)),
@@ -335,7 +338,10 @@ def _take_exclusive_failed():
         return False
 
 
-def _ao_failed_in_log(wait_s=2.5):
+AO_OPEN_WAIT_S = 8.0  # mpv opens the output only after the first audio; a Tidal MPD can take seconds
+
+
+def _ao_failed_in_log(wait_s=AO_OPEN_WAIT_S):
     """The audio output could not open the device (another app holds it in exclusive mode)."""
     deadline = time.time() + wait_s
     while time.time() < deadline:

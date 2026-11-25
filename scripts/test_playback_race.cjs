@@ -170,6 +170,10 @@ console.log("host clock offset is removed from the position estimate...");
     assert.deepStrictEqual(execLog.filter(c => c.includes("stream_failed")), ["/app/backend/player_daemon.py stream_failed 80"]);
     PE.handlePlayerStatus(w, idle, null, null);
     assert.strictEqual(execLog.filter(c => c.includes("stream_failed")).length, 1, "once per song");
+    // the same song played again (repeat one, replay) is a new play: a drop there recovers too
+    w.trackChangeTimestamp = NOW - 30000;
+    PE.handlePlayerStatus(w, idle, null, null);
+    assert.strictEqual(execLog.filter(c => c.includes("stream_failed")).length, 2, "once per play, not per song forever");
 }
 
 console.log("ALL PLAYBACK RACE TESTS PASSED");

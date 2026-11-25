@@ -111,25 +111,28 @@ def build_audio_specs(props, now_source, dac_mode, suspended, is_windows, alsa_r
 RATES = [44100, 48000, 88200, 96000, 176400, 192000]
 DROPIN_NAME = "90-nutsty-rates.conf"
 PIPEWIRE_DROPIN = Path.home() / ".config/pipewire/pipewire.conf.d" / DROPIN_NAME
+SYSTEM_PIPEWIRE = Path("/etc/pipewire")   # admin config, read only (never written)
 
 
 def mpv_output_args(settings):
-    """Extra mpv flags for the DAC mode. Only bit-perfect needs one."""
+    """Extra mpv flags for the DAC mode, Tidal on or off. Only bit-perfect needs one."""
     s = settings or {}
-    if s.get("enabled") and s.get("dac_mode") == "exclusive":
+    if s.get("dac_mode") == "exclusive":
         return ["--audio-exclusive=yes"]
     return []
 
 
 def find_existing_allowed_rates(conf_dir):
-    """(file, line) for every other *.conf in conf_dir that already sets allowed-rates."""
+    """(file, line) for every other PipeWire file that already sets allowed-rates: the other
+    drop-ins next to ours, the user's main pipewire.conf, and the same two under /etc/pipewire."""
     conf_dir = Path(conf_dir)
+    files = []
+    for d in (conf_dir, SYSTEM_PIPEWIRE / "pipewire.conf.d"):
+        if d.is_dir():
+            files += [f for f in sorted(d.glob("*.conf")) if f.name != DROPIN_NAME]
+    files += [p for p in (conf_dir.parent / "pipewire.conf", SYSTEM_PIPEWIRE / "pipewire.conf") if p.is_file()]
     found = []
-    if not conf_dir.is_dir():
-        return found
-    for f in sorted(conf_dir.glob("*.conf")):
-        if f.name == DROPIN_NAME:
-            continue
+    for f in files:
         try:
             for line in f.read_text(encoding="utf-8", errors="replace").splitlines():
                 if "allowed-rates" in line and not line.lstrip().startswith("#"):
