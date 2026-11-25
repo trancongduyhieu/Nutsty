@@ -190,5 +190,70 @@ class WebClientTests(unittest.TestCase):
         self.assertEqual(res[0]["duration_ms"], 180000)
 
 
+class MergeTests(unittest.TestCase):
+    def m(self, base, remote, local, write_back=False, unmatched=frozenset()):
+        import spotify_sync_merge as sm
+        return sm.three_way(list(base), list(remote), list(local), write_back, set(unmatched))
+
+    def test_remote_add_pulled_in_remote_order(self):
+        r = self.m("a", "acb", "a")
+        self.assertEqual(r.pull_add, ["c", "b"])
+        self.assertEqual(r.pull_remove, [])
+
+    def test_remote_add_already_local_not_duplicated(self):
+        r = self.m("a", "ab", "ab")
+        self.assertEqual(r.pull_add, [])
+        self.assertEqual(r.new_base, ["a", "b"])
+
+    def test_remote_remove_pulled(self):
+        r = self.m("ab", "a", "ab")
+        self.assertEqual(r.pull_remove, ["b"])
+        self.assertEqual(r.new_base, ["a"])
+
+    def test_local_removal_not_readded(self):
+        r = self.m("ab", "ab", "a", write_back=False)
+        self.assertEqual(r.pull_add, [])
+        self.assertEqual(r.push_remove, [])
+        self.assertEqual(r.new_base, ["a", "b"])
+
+    def test_local_removal_pushed_when_write_back(self):
+        r = self.m("ab", "ab", "a", write_back=True)
+        self.assertEqual(r.push_remove, ["b"])
+        self.assertEqual(r.new_base, ["a"])
+
+    def test_local_add_pushed_only_when_write_back(self):
+        off = self.m("a", "a", "az", write_back=False)
+        self.assertEqual(off.push_add, [])
+        self.assertEqual(off.new_base, ["a"])
+        on = self.m("a", "a", "az", write_back=True)
+        self.assertEqual(on.push_add, ["z"])
+        self.assertEqual(on.new_base, ["a", "z"])
+
+    def test_both_removed_is_quiet(self):
+        r = self.m("ab", "a", "a", write_back=True)
+        self.assertEqual((r.pull_remove, r.push_remove), ([], []))
+        self.assertEqual(r.new_base, ["a"])
+
+    def test_unmatched_excluded_from_new_base(self):
+        r = self.m("", "ax", "", unmatched={"x"})
+        self.assertNotIn("x", r.new_base)
+        self.assertEqual(r.pull_add, ["a", "x"])
+
+    def test_incomplete_remote_rejected(self):
+        import spotify_web as sw
+        import spotify_sync_merge as sm
+        self.assertTrue(sm.remote_is_valid(sw.RemoteList(items=[{}] * 3, total=3, complete=True)))
+        self.assertFalse(sm.remote_is_valid(sw.RemoteList(items=[{}] * 3, total=3, complete=False)))
+        self.assertFalse(sm.remote_is_valid(sw.RemoteList(items=[{}] * 2, total=3, complete=True)))
+        self.assertFalse(sm.remote_is_valid(None))
+
+    def test_mass_delete_guard(self):
+        import spotify_sync_merge as sm
+        self.assertTrue(sm.mass_delete_blocked(10, 6))
+        self.assertFalse(sm.mass_delete_blocked(10, 5))
+        self.assertFalse(sm.mass_delete_blocked(4, 3))
+        self.assertTrue(sm.mass_delete_blocked(6, 4))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
