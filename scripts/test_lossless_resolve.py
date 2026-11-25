@@ -198,6 +198,27 @@ class LosslessResolveTest(unittest.TestCase):
         self.assertFalse(os.path.exists(pd.LOSSLESS_SUSPEND_FILE))
         self.assertEqual(self._loadfiles(), [])
 
+    def test_flag_set_during_tidal_lookup_falls_back(self):
+        # Listen Along started while Tidal was answering: the slow answer must not win
+        self.tidal.on_call = lambda: open(pd.LOSSLESS_SUSPEND_FILE, "w").close()
+        box = {}
+        self.assertEqual(pd.resolve_media_path("ytdl://vid1", "Yellow", "Coldplay", source_out=box), "https://yt/vid1")
+        self.assertEqual(box["source"], "youtube")
+
+    def test_play_that_lost_the_race_reloads_youtube(self):
+        # lossless_suspend ran before play recorded its Tidal source, so it reloaded nothing
+        pd.record_active_play_epoch(100, "ytdl://vid1", "vid1")
+        pd.record_now_source("vid1", "tidal", TIDAL)
+        open(pd.LOSSLESS_SUSPEND_FILE, "w").close()
+        self.assertTrue(pd.enforce_listen_along_suspension())
+        self.assertEqual(self._loadfiles()[-1]["url"], "https://yt/vid1")
+        self.assertEqual(pd.read_now_source()["source"], "youtube")
+
+    def test_enforce_is_noop_without_flag(self):
+        pd.record_now_source("vid1", "tidal", TIDAL)
+        self.assertFalse(pd.enforce_listen_along_suspension())
+        self.assertEqual(self._loadfiles(), [])
+
     # --- mid-song stream failure -----------------------------------------------------
     def test_tidal_stream_error_falls_back_at_position(self):
         pd.record_now_source("vid1", "tidal", TIDAL)

@@ -7,6 +7,7 @@ import sys
 import types
 import unittest
 from unittest import mock
+from urllib.parse import parse_qs, urlparse
 
 BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend"))
 if BACKEND not in sys.path:
@@ -23,6 +24,15 @@ def fake_tidal(**overrides):
     m.login_start = lambda: {"url": "https://link.tidal.com/ABCDE", "code": "ABCDE", "expires_in": 300}
     m.login_poll = lambda: {"state": "pending", "account": "", "subscription": ""}
     m.logout = lambda: m.calls.append("logout")
+    m.profiles = []
+
+    import contextlib
+
+    @contextlib.contextmanager
+    def using_profile(profile):
+        m.profiles.append(profile)
+        yield
+    m.using_profile = using_profile
     for k, v in overrides.items():
         setattr(m, k, v)
     return m
@@ -30,7 +40,8 @@ def fake_tidal(**overrides):
 
 def call(method, path, mod):
     with mock.patch.dict(sys.modules, {"tidal_source": mod}):
-        res = rd.dispatch_request(method, path, {}, "")
+        parsed = urlparse(path)
+        res = rd.dispatch_request(method, parsed.path, parse_qs(parsed.query), "")
     return res
 
 
@@ -46,6 +57,18 @@ def boom(*a, **k):
 
 
 class TidalRoutesTest(unittest.TestCase):
+    def test_profile_query_is_passed_to_tidal_source(self):
+        mod = fake_tidal()
+        for method, path in (("GET", "/api/tidal/status"), ("POST", "/api/tidal/login/start"),
+                             ("GET", "/api/tidal/login/poll"), ("POST", "/api/tidal/logout")):
+            call(method, path + "?profile=user2", mod)
+        self.assertEqual(mod.profiles, ["user2"] * 4)
+
+    def test_no_profile_query_keeps_process_profile(self):
+        mod = fake_tidal()
+        call("GET", "/api/tidal/status", mod)
+        self.assertEqual(mod.profiles, [])
+
     def test_status(self):
         code, data = body(call("GET", "/api/tidal/status", fake_tidal()))
         self.assertEqual(code, 200)

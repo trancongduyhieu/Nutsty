@@ -1814,19 +1814,24 @@ Scope {
     onIsCoListeningActiveChanged: {
         var t = LosslessLogic.suspendTransition(win.coListeningWasActive, win.isCoListeningActive, win.losslessEnabled);
         win.coListeningWasActive = win.isCoListeningActive;
-        if (t === "suspend") {
+        if (t.command === "suspend") {
             Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "lossless_suspend", "1"]);
-            win.showToast(I18n.tr("Đang Nghe Cùng: tạm phát bản YouTube để hai bên nghe khớp nhau. Lossless sẽ bật lại khi dừng nghe cùng.",
-                                  "Listening Along: playing the YouTube version so you both stay in sync. Lossless comes back when you stop."), "listen");
-        } else if (t === "resume") {
+            if (t.notify) win.showListenAlongLosslessNotice();
+        } else if (t.command === "resume") {
             Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "lossless_suspend", "0"]);
-            win.showToast(I18n.tr("Lossless đã bật lại từ bài tiếp theo.", "Lossless is back from the next song."), "listen");
+            if (t.notify) win.showToast(I18n.tr("Lossless đã bật lại từ bài tiếp theo.", "Lossless is back from the next song."), "listen");
         }
+    }
+
+    function showListenAlongLosslessNotice() {
+        win.showToast(I18n.tr("Đang Nghe Cùng: tạm phát bản YouTube để hai bên nghe khớp nhau. Lossless sẽ bật lại khi dừng nghe cùng.",
+                              "Listening Along: playing the YouTube version so you both stay in sync. Lossless comes back when you stop."), "listen");
     }
 
     function refreshTidalStatus() {
         var xhr = new XMLHttpRequest();
-        xhr.open("GET", win.localApiUrl + "/api/tidal/status");
+        xhr.open("GET", win.localApiUrl + "/api/tidal/status?profile="
+                 + encodeURIComponent((Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase()));
         xhr.onreadystatechange = function() {
             if (xhr.readyState !== XMLHttpRequest.DONE || xhr.status !== 200) return;
             try { win.applyTidalStatus(JSON.parse(xhr.responseText)); } catch (e) {}
@@ -1852,6 +1857,8 @@ Scope {
         win.dacOutputMode = LosslessLogic.dacModesFor(win.isWindowsPlatform).indexOf(mode) >= 0 ? mode : "shared";
         win.losslessEnabled = true;
         win.applyDacChange(prev);
+        // The flag is already set for this session; say why the song stays on YouTube
+        if (win.isCoListeningActive) win.showListenAlongLosslessNotice();
     }
 
     function disableLossless() {

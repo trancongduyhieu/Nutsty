@@ -85,9 +85,9 @@ def dispatch_request(method, path, query_dict, body_str):
         if clean_path == "/api/auth/status":
             music_routes.handle_get_auth_status(handler)
         elif clean_path == "/api/tidal/status":
-            music_routes.handle_get_tidal_status(handler)
+            music_routes.handle_get_tidal_status(handler, query_dict)
         elif clean_path == "/api/tidal/login/poll":
-            music_routes.handle_get_tidal_login_poll(handler)
+            music_routes.handle_get_tidal_login_poll(handler, query_dict)
         elif clean_path == "/api/mood":
             music_routes.handle_get_mood(handler, query_dict)
         elif clean_path == "/api/home":
@@ -166,9 +166,9 @@ def dispatch_request(method, path, query_dict, body_str):
         elif clean_path in ("/api/auth/auto-sync", "/api/auth/auto_sync"):
             music_routes.handle_post_auth_auto_sync(handler)
         elif clean_path == "/api/tidal/login/start":
-            music_routes.handle_post_tidal_login_start(handler)
+            music_routes.handle_post_tidal_login_start(handler, query_dict)
         elif clean_path == "/api/tidal/logout":
-            music_routes.handle_post_tidal_logout(handler)
+            music_routes.handle_post_tidal_logout(handler, query_dict)
         elif clean_path == "/api/update/start":
             try:
                 import updater

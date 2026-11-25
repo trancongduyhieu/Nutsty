@@ -125,9 +125,14 @@ class FakeSession:
 
 
 class Http401(Exception):
-    def __init__(self):
+    def __init__(self, sub_status=11003):
         super().__init__("401 Client Error")
         self.response = mock.Mock(status_code=401)
+        self.response.json = lambda: {"status": 401, "subStatus": sub_status, "userMessage": "x"}
+
+
+class AuthenticationError(Exception):
+    """Same name as tidalapi.exceptions.AuthenticationError: the token refresh itself failed."""
 
 
 def bts(bits=16, rate=44100, quality="LOSSLESS", url="https://fake/yellow.flac", encrypted=False):
@@ -271,6 +276,24 @@ class TidalSourceTest(unittest.TestCase):
         self.assertTrue(st["needs_relogin"])
         self.assertFalse(st["logged_in"])
 
+    def test_refresh_failure_marks_needs_relogin(self):
+        self.session.search_error = AuthenticationError("refresh failed")
+        self.assertIsNone(ts.resolve("vid1", "Yellow", "Coldplay", 266, "lossless"))
+        self.assertTrue(ts.status()["needs_relogin"])
+
+    def test_track_401_is_a_song_miss_not_a_sign_out(self):
+        # subStatus 4005: this one track cannot play in the region or on the plan
+        def unavailable(track):
+            raise Http401(sub_status=4005)
+        self.yellow._stream = unavailable
+        self.assertIsNone(ts.resolve("vid1", "Yellow", "Coldplay", 266, "lossless"))
+        st = ts.status()
+        self.assertFalse(st["needs_relogin"])
+        self.assertTrue(st["logged_in"])
+        calls = self.session.search_calls
+        self.assertIsNone(ts.resolve("vid1", "Yellow", "Coldplay", 266, "lossless"))
+        self.assertEqual(self.session.search_calls, calls)   # cached as a miss
+
     def test_not_logged_in_returns_none_without_network(self):
         ts.logout()
         self.assertIsNone(ts.resolve("vid1", "Yellow", "Coldplay", 266, "lossless"))
@@ -289,6 +312,27 @@ class TidalSourceTest(unittest.TestCase):
                 self.assertIn("_user2", str(p))
         for p in (ts.session_file(), ts.match_cache_file(), ts.mpd_dir(), ts.status_file()):
             self.assertNotIn("_user2", str(p))
+
+    def test_request_profile_overrides_process_profile(self):
+        # One route worker (NUTSTY_PROFILE "") serves every window; user2 must get its own session
+        with ts.using_profile("user2"):
+            self.assertIn("_user2", str(ts.session_file()))
+            self.assertFalse(ts.status()["logged_in"])
+            self.assertIsNone(ts._get_session())
+            other = FakeSession([])
+            ts._finish_login(other)
+            self.assertTrue(ts.status()["logged_in"])
+            self.assertIs(ts._get_session(), other)
+        self.assertNotIn("_user2", str(ts.session_file()))
+        self.assertIs(ts._get_session(), self.session)
+        with ts.using_profile("user2"):
+            ts.logout()
+        self.assertTrue(ts.status()["logged_in"])   # main profile untouched
+
+    def test_empty_request_profile_means_main(self):
+        with mock.patch.dict(os.environ, {"NUTSTY_PROFILE": "user1"}):
+            with ts.using_profile(""):
+                self.assertNotIn("_user1", str(ts.session_file()))
 
     def test_token_never_printed(self):
         out, err = io.StringIO(), io.StringIO()

@@ -5,11 +5,15 @@ const src = fs.readFileSync(__dirname + '/../components/lossless_logic.js', 'utf
 const L = vm.createContext({});
 vm.runInContext(src, L);
 
-assert.strictEqual(L.suspendTransition(false, true, true), "suspend");
-assert.strictEqual(L.suspendTransition(true, false, true), "resume");
-assert.strictEqual(L.suspendTransition(false, true, false), "");
-assert.strictEqual(L.suspendTransition(true, false, false), "");
-assert.strictEqual(L.suspendTransition(true, true, true), "");
+const st = (a, b, c) => JSON.parse(JSON.stringify(L.suspendTransition(a, b, c)));
+// The flag follows Listen Along whatever lossless is, so turning lossless on or off mid-session
+// cannot leave it stale or missing; only the notice depends on lossless being on.
+assert.deepStrictEqual(st(false, true, true), { command: "suspend", notify: true });
+assert.deepStrictEqual(st(true, false, true), { command: "resume", notify: true });
+assert.deepStrictEqual(st(false, true, false), { command: "suspend", notify: false });
+assert.deepStrictEqual(st(true, false, false), { command: "resume", notify: false });
+assert.deepStrictEqual(st(true, true, true), { command: "", notify: false });
+assert.deepStrictEqual(st(false, false, true), { command: "", notify: false });
 
 assert.deepStrictEqual(Array.from(L.dacModesFor(true)), ["shared", "exclusive"]);
 assert.deepStrictEqual(Array.from(L.dacModesFor(false)), ["shared", "rate_match", "exclusive"]);

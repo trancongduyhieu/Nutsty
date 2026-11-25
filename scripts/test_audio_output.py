@@ -144,6 +144,16 @@ class RestartKeepPositionTest(unittest.TestCase):
         self.assertTrue(self.pd.restart_mpv_keep_position()["restarted"])
         self.assertIn(["set_property", "volume", 70], self.cmds)
 
+    def test_restart_keeps_stream_user_agent_before_loadfile(self):
+        # A YouTube URL resolved with the Android client UA gets 403 on a fresh mpv without it
+        self.props["path"] = "https://rr1.googlevideo.com/videoplayback?x=1"
+        self.props["user-agent"] = "com.google.android.youtube/19.0"
+        self.pd.restart_mpv_keep_position()
+        ua_cmd = ["set_property", "user-agent", "com.google.android.youtube/19.0"]
+        self.assertIn(ua_cmd, self.cmds)
+        lf_idx = next(i for i, c in enumerate(self.cmds) if isinstance(c, dict) and c.get("name") == "loadfile")
+        self.assertLess(self.cmds.index(ua_cmd), lf_idx)
+
 
 if __name__ == "__main__":
     unittest.main()

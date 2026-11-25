@@ -4,10 +4,11 @@
 
 var QUALITIES = ["lossless", "hires"];
 
-// Co-listening changed. "suspend" when it starts with lossless on, "resume" when it stops.
+// Co-listening changed. The suspension flag follows Listen Along whatever lossless is, so
+// toggling lossless mid-session never leaves it stale or missing; notify only when lossless is on.
 function suspendTransition(wasActive, isActive, losslessEnabled) {
-    if (!losslessEnabled || !!wasActive === !!isActive) return "";
-    return isActive ? "suspend" : "resume";
+    if (!!wasActive === !!isActive) return { command: "", notify: false };
+    return { command: isActive ? "suspend" : "resume", notify: !!losslessEnabled };
 }
 
 // Windows has no PipeWire, so it cannot follow each song's sample rate.

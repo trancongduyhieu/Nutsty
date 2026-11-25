@@ -11,6 +11,8 @@ falls back to YouTube. Every process (player_daemon CLI, route worker) is short-
 state (session, pending login, match cache, stream cache, status) lives in files scoped by
 the profile suffix.
 """
+import contextlib
+import contextvars
 import difflib
 import json
 import os
@@ -34,7 +36,8 @@ QUALITY_MAP = {"hires": "HI_RES_LOSSLESS", "lossless": "LOSSLESS"}
 LOSSLESS_QUALITIES = ("LOSSLESS", "HI_RES_LOSSLESS", "HI_RES")
 
 _session_factory = None   # callable returning a tidalapi.Session (tests inject a fake)
-_session = None
+_sessions = {}           # profile suffix -> logged-in tidalapi.Session
+_profile_ctx = contextvars.ContextVar("tidal_profile", default=None)
 _bg_threads = []
 _lock = threading.Lock()
 
@@ -53,7 +56,21 @@ def _fetch_subscription(session):
 # --- files -----------------------------------------------------------------------------
 
 def _suffix():
-    return pc.get_profile_suffix()
+    """Profile of this request (route worker serving several windows), else of this process."""
+    p = _profile_ctx.get()
+    if p is None:
+        return pc.get_profile_suffix()
+    return pc.get_profile_suffix(p or "default")
+
+
+@contextlib.contextmanager
+def using_profile(profile):
+    """Scope every file and the session to one profile ("" is the main profile)."""
+    token = _profile_ctx.set(str(profile or "").strip().lower())
+    try:
+        yield
+    finally:
+        _profile_ctx.reset(token)
 
 
 def _temp_dir():
@@ -118,16 +135,16 @@ def _log(msg):
 
 def _get_session():
     """Logged-in session or None. Loads the saved session once per process."""
-    global _session
-    if _session is not None:
-        return _session
+    cached = _sessions.get(_suffix())
+    if cached is not None:
+        return cached
     if not session_file().exists() or _read_json(status_file(), {}).get("needs_relogin"):
         return None
     try:
         sess = (_session_factory or _default_session_factory)()
         if not sess.load_session_from_file(session_file()):
             return None
-        _session = sess
+        _sessions[_suffix()] = sess
         return sess
     except Exception as e:
         _log(f"session load failed: {type(e).__name__}")
@@ -136,7 +153,6 @@ def _get_session():
 
 def _finish_login(session):
     """Persist a freshly authorised session and its account summary."""
-    global _session
     path = session_file()
     path.parent.mkdir(parents=True, exist_ok=True)
     session.save_session_to_file(path)
@@ -160,20 +176,40 @@ def _finish_login(session):
         "account": account, "subscription": subscription,
         "can_hires": can_hires, "can_lossless": can_lossless, "needs_relogin": False,
     })
-    _session = session
+    _sessions[_suffix()] = session
 
 
 def _mark_needs_relogin():
-    global _session
     st = _read_json(status_file(), {})
     st["needs_relogin"] = True
     _write_private_json(status_file(), st)
-    _session = None
+    _sessions.pop(_suffix(), None)
+
+
+# 401 subStatus values that mean the session itself is gone. tidalapi refreshes an expired
+# token on its own and raises AuthenticationError only when that refresh fails. Other 401s
+# (4005 "asset not ready": region, plan) are about one track, not the account.
+AUTH_SUB_STATUSES = {6001, 6002, 6003, 6004, 11001, 11002, 11003}
+
+
+def _sub_status(e):
+    try:
+        return int(e.response.json().get("subStatus"))
+    except Exception:
+        return None
 
 
 def _is_auth_error(e):
-    status = getattr(getattr(e, "response", None), "status_code", None)
-    return status == 401 or type(e).__name__ == "AuthenticationError"
+    if type(e).__name__ == "AuthenticationError":
+        return True
+    if getattr(getattr(e, "response", None), "status_code", None) != 401:
+        return False
+    sub = _sub_status(e)
+    return sub is None or sub in AUTH_SUB_STATUSES
+
+
+def _is_track_unavailable(e):
+    return getattr(getattr(e, "response", None), "status_code", None) == 401 and not _is_auth_error(e)
 
 
 def login_start():
@@ -236,8 +272,7 @@ def _clear_pending():
 
 
 def logout():
-    global _session
-    _session = None
+    _sessions.pop(_suffix(), None)
     for p in (session_file(), status_file(), _stream_cache_file(), _pending_login_file()):
         try:
             Path(p).unlink()
@@ -426,6 +461,12 @@ def _work(video_id, title, artist, duration_s, quality_key):
         if _is_auth_error(e):
             _mark_needs_relogin()
             _log("authorisation rejected, re-login needed")
+        elif _is_track_unavailable(e):
+            with _lock:
+                matches = _read_json(match_cache_file(), {})
+                matches[video_id] = {"tidal_id": None, "ts": time.time()}
+                _write_private_json(match_cache_file(), matches)
+            _log(f"track not playable on this account (subStatus {_sub_status(e)})")
         else:
             _log(f"resolve failed: {type(e).__name__}")
         return None
@@ -445,7 +486,8 @@ def resolve(video_id, title, artist, duration_s, quality, budget_s=4.0):
     def run():
         box["result"] = _work(video_id, title, artist, duration_s, quality_key)
 
-    th = threading.Thread(target=run, name=f"tidal-resolve-{video_id}", daemon=False)
+    ctx = contextvars.copy_context()
+    th = threading.Thread(target=lambda: ctx.run(run), name=f"tidal-resolve-{video_id}", daemon=False)
     th.start()
     th.join(budget_s)
     if th.is_alive():
@@ -458,9 +500,9 @@ def resolve(video_id, title, artist, duration_s, quality, budget_s=4.0):
 # --- test hooks ------------------------------------------------------------------------
 
 def _reset_for_tests():
-    global _session, _session_factory
+    global _session_factory
     _join_background_for_tests(2.0)
-    _session = None
+    _sessions.clear()
     _session_factory = None
 
 

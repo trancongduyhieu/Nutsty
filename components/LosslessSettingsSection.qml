@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import Quickshell.Io
 import "."
 import "lossless_logic.js" as LosslessLogic
@@ -31,7 +32,9 @@ ColumnLayout {
 
     function request(method, path, onDone) {
         var xhr = new XMLHttpRequest();
-        xhr.open(method, root.apiUrl + path);
+        // One backend worker serves every profile, so name ours: the Tidal session is per profile.
+        var profile = (Quickshell.env("NUTSTY_PROFILE") || "").toLowerCase();
+        xhr.open(method, root.apiUrl + path + "?profile=" + encodeURIComponent(profile));
         xhr.onreadystatechange = function() {
             if (xhr.readyState !== XMLHttpRequest.DONE) return;
             var data = null;

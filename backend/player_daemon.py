@@ -382,11 +382,15 @@ def restart_mpv_keep_position():
     pos = (get_mpv_property("time-pos") or 0.0) if alive else 0.0
     paused = (get_mpv_property("pause") is True) if alive else False
     volume = get_mpv_property("volume") if alive else None
+    # Streams resolved with a client-specific UA (YouTube android) 403 on a fresh mpv without it
+    user_agent = get_mpv_property("user-agent") if alive else None
     if alive:
         _stop_main_mpv()
 
     def _load():
         if path:
+            if user_agent:
+                send_mpv_cmd(["set_property", "user-agent", user_agent])
             send_mpv_cmd({"name": "loadfile", "url": path, "flags": "replace", "index": -1,
                           "options": {"start": f"{max(0.0, float(pos)):.3f}", "pause": "yes" if paused else "no"}})
         if volume is not None and not (want_exclusive and not failed):
@@ -566,6 +570,8 @@ def resolve_media_path(file_path, title="", artist="", force_fresh=False, my_epo
                 if my_epoch > 0 and not is_play_epoch_active(my_epoch):
                     sys.stderr.write(f"[player_daemon] Abort after Tidal lookup for superseded epoch #{my_epoch}\n")
                     return ""
+                if tidal and tidal.get("url") and is_lossless_suspended():
+                    tidal = None   # Listen Along began while Tidal was answering
                 if tidal and tidal.get("url"):
                     if isinstance(source_out, dict):
                         source_out.update({"source": "tidal", "tidal": tidal})
@@ -967,6 +973,14 @@ def _reload_youtube_at(pos):
     return True
 
 
+def enforce_listen_along_suspension():
+    """Close the race with lossless_suspend: that command writes the flag, then reads the source;
+    play writes the source, then calls this to read the flag. One of the two always sees the other."""
+    if not is_lossless_suspended() or read_now_source().get("source") != "tidal":
+        return False
+    return _reload_youtube_at(get_mpv_property("time-pos") or 0.0)
+
+
 def _clear_prev_mpv_path(epoch):
     """loadfile has been sent: from here a file with the same path (cached stream URL when going back
     to the song mpv held) is the requested one. Only touches the state of this request's epoch."""
@@ -1179,6 +1193,8 @@ def execute_command(args):
 
         send_mpv_cmd(["loadfile", stream_target, "replace"])
         record_now_source(target_vid, src_box.get("source", "local"), src_box.get("tidal"))
+        if src_box.get("source") == "tidal":
+            enforce_listen_along_suspension()
         if is_online and state_payload.get("prev_mpv_path"):
             _clear_prev_mpv_path(my_req_id)
         send_mpv_cmd(["set_property", "loop-playlist", "no"])

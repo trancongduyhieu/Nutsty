@@ -419,29 +419,34 @@ def handle_post_spotify_cancel_import(handler):
 # --- Tidal lossless: the user's own account, signed in through the Tidal link page ---
 # Errors answer {"state": "error"} with a log line; the exception text stays out of the
 # response and out of the log, since tidalapi errors can carry request details.
-def _tidal_call(fn_name, fallback):
+# ?profile= names the Nutsty profile the UI runs as, since one worker serves every profile.
+# Without it the worker's own NUTSTY_PROFILE applies; "" is the main profile.
+def _tidal_call(fn_name, fallback, query=None):
     try:
         import tidal_source
+        if query and "profile" in query:
+            with tidal_source.using_profile(query["profile"][0]):
+                return getattr(tidal_source, fn_name)()
         return getattr(tidal_source, fn_name)()
     except Exception as e:
         print(f"[tidal] {fn_name} failed: {type(e).__name__}", file=sys.stderr)
         return dict(fallback, state="error")
 
 
-def handle_get_tidal_status(handler):
+def handle_get_tidal_status(handler, query=None):
     handler._send_json(_tidal_call("status", {"logged_in": False, "account": "", "subscription": "",
                                               "can_hires": False, "can_lossless": False,
-                                              "needs_relogin": False}), 200)
+                                              "needs_relogin": False}, query), 200)
 
 
-def handle_post_tidal_login_start(handler):
-    handler._send_json(_tidal_call("login_start", {"url": "", "code": "", "expires_in": 0}), 200)
+def handle_post_tidal_login_start(handler, query=None):
+    handler._send_json(_tidal_call("login_start", {"url": "", "code": "", "expires_in": 0}, query), 200)
 
 
-def handle_get_tidal_login_poll(handler):
-    handler._send_json(_tidal_call("login_poll", {"account": "", "subscription": ""}), 200)
+def handle_get_tidal_login_poll(handler, query=None):
+    handler._send_json(_tidal_call("login_poll", {"account": "", "subscription": ""}, query), 200)
 
 
-def handle_post_tidal_logout(handler):
-    res = _tidal_call("logout", {"success": False})
+def handle_post_tidal_logout(handler, query=None):
+    res = _tidal_call("logout", {"success": False}, query)
     handler._send_json(res if isinstance(res, dict) and res.get("state") == "error" else {"success": True}, 200)
