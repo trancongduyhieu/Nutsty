@@ -71,5 +71,5 @@ Daemon phát nhạc, IPC mpv, YouTube Music engine và vòng đời hàng đợi
 - **Resolve** (`resolve_media_path`): file đã tải > Tidal (bật, đã đăng nhập, không tạm tắt) > YouTube. Tidal lỗi/None/quá 4s → YouTube; epoch cũ bỏ kết quả. Nguồn thật ghi ở `now_source.json`.
 - **Nghe Cùng**: `lossless_suspend 1` tạo cờ, đang phát Tidal thì nạp YouTube đúng vị trí; `0` chỉ xóa cờ. Chỉ tài khoản của chính người dùng, không log token, session chmod 600.
 - **Nhãn**: `build_audio_specs` (Python) = `nutsty-bridge/src/audio_specs.rs`; không biết thì để trống, cấm bịa mặc định.
-- **DAC**: không cần Tidal; lưu thiếu `dacModeStandalone` chỉ tính khi lossless bật. `exclusive` restart mpv giữ vị trí, khóa AutoMix + âm lượng 100, ao lỗi → `shared` + toast. `rate_match` (Linux) chỉ ghi `90-nutsty-rates.conf` khi người dùng đồng ý, không đè `allowed-rates` có sẵn.
+- **DAC**: không cần Tidal; lưu thiếu `dacModeStandalone` chỉ tính khi lossless bật. `exclusive` (Windows) restart mpv giữ vị trí, khóa AutoMix + âm lượng 100, ao lỗi → `shared` + toast. `rate_match` (Linux) chỉ ghi `90-nutsty-rates.conf` khi người dùng đồng ý, không đè `allowed-rates` có sẵn.
 - **Footgun**: link FLAC/MPD hết hạn giữa bài → `stream_failed <pos>` nạp YouTube đúng vị trí, bỏ Tidal bài đó một lúc (`TIDAL_SKIP_FILE`). Test: `scripts/test_lossless_resolve.py`.

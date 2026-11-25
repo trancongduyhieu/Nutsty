@@ -186,6 +186,8 @@ class RestartKeepPositionTest(unittest.TestCase):
             p("ensure_mpv", lambda force_shared=False: self.events.append(("start", force_shared)) or True),
             p("_ao_failed_in_log", lambda wait_s=2.5: self.ao_failed),
             mock.patch.object(pd.pc, "connect_mpv_socket", lambda *a, **k: FakeSock()),
+            # exclusive is a Windows-only mode (PipeWire refuses it on Linux)
+            mock.patch.object(pd.pc, "IS_WINDOWS", True),
         ]
         for x in self.patches:
             x.start()

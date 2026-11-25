@@ -119,7 +119,9 @@ def get_lossless_settings():
     # Same rule as lossless_logic.normalizeLosslessSettings: a mode saved before it stood alone
     # (no dacModeStandalone) only counted while lossless was on.
     counts = s.get("dacModeStandalone") is True or s.get("losslessEnabled") is True
-    if not counts or dac_mode not in ("shared", "rate_match", "exclusive") or (dac_mode == "rate_match" and pc.IS_WINDOWS):
+    # Same modes as lossless_logic.dacModesFor: rate_match is Linux only, exclusive Windows only
+    allowed = ("shared", "exclusive") if pc.IS_WINDOWS else ("shared", "rate_match")
+    if not counts or dac_mode not in allowed:
         dac_mode = "shared"
     return {
         "enabled": bool(s.get("losslessEnabled", False)),

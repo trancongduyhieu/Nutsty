@@ -16,15 +16,17 @@ assert.deepStrictEqual(st(true, true, true), { command: "", notify: false });
 assert.deepStrictEqual(st(false, false, true), { command: "", notify: false });
 
 assert.deepStrictEqual(Array.from(L.dacModesFor(true)), ["shared", "exclusive"]);
-assert.deepStrictEqual(Array.from(L.dacModesFor(false)), ["shared", "rate_match", "exclusive"]);
+// PipeWire refuses an exclusive stream while the shell keeps its own stream on the DAC
+assert.deepStrictEqual(Array.from(L.dacModesFor(false)), ["shared", "rate_match"]);
 
 assert.strictEqual(L.normalizeLosslessSettings({dacOutputMode: "rate_match"}, true).dacOutputMode, "shared");
 assert.strictEqual(L.normalizeLosslessSettings({dacOutputMode: "rate_match", dacModeStandalone: true}, false).dacOutputMode, "rate_match");
 // DAC mode no longer needs Tidal: local FLAC goes to the DAC too. A mode saved before that
 // (no dacModeStandalone) only counted while lossless was on, so it stays off when lossless was off.
 assert.strictEqual(L.normalizeLosslessSettings({dacOutputMode: "exclusive", losslessEnabled: false}, false).dacOutputMode, "shared");
-assert.strictEqual(L.normalizeLosslessSettings({dacOutputMode: "exclusive", losslessEnabled: true}, false).dacOutputMode, "exclusive");
-assert.strictEqual(L.normalizeLosslessSettings({dacOutputMode: "exclusive", dacModeStandalone: true}, false).dacOutputMode, "exclusive");
+assert.strictEqual(L.normalizeLosslessSettings({dacOutputMode: "exclusive", losslessEnabled: true}, true).dacOutputMode, "exclusive");
+assert.strictEqual(L.normalizeLosslessSettings({dacOutputMode: "exclusive", dacModeStandalone: true}, true).dacOutputMode, "exclusive");
+assert.strictEqual(L.normalizeLosslessSettings({dacOutputMode: "exclusive", dacModeStandalone: true}, false).dacOutputMode, "shared");
 assert.strictEqual(L.normalizeLosslessSettings({losslessQuality: "ultra"}, false).losslessQuality, "lossless");
 assert.strictEqual(L.normalizeLosslessSettings({losslessQuality: "hires"}, false).losslessQuality, "hires");
 assert.deepStrictEqual(JSON.parse(JSON.stringify(L.normalizeLosslessSettings(null, false))),

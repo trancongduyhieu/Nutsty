@@ -219,13 +219,15 @@ ColumnLayout {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             height: 28
-            width: accountBtnText.implicitWidth + 24
-            radius: 8
+            // Signed in: plain rose "Log out" text, the same as the Google and Spotify rows
             readonly property bool danger: root.loggedIn && !root.st.needs_relogin
             readonly property color tone: danger ? root.roseColor : root.accentColor
-            color: Qt.rgba(tone.r, tone.g, tone.b, accountBtnMouse.containsMouse ? 0.22 : 0.12)
+            width: accountBtnText.implicitWidth + (danger ? 18 : 24)
+            radius: danger ? 6 : 8
+            color: danger ? (accountBtnMouse.containsMouse ? Qt.rgba(tone.r, tone.g, tone.b, 0.14) : "transparent")
+                          : Qt.rgba(tone.r, tone.g, tone.b, accountBtnMouse.containsMouse ? 0.22 : 0.12)
             border.color: Qt.rgba(tone.r, tone.g, tone.b, 0.35)
-            border.width: 1
+            border.width: danger ? 0 : 1
             Behavior on color { ColorAnimation { duration: 120 } }
 
             Text {
@@ -234,9 +236,10 @@ ColumnLayout {
                 font.family: Theme.fontFamily
                 font.pixelSize: 12
                 font.bold: true
-                color: "#ffffff"
+                color: accountBtn.danger ? (accountBtnMouse.containsMouse ? "#fda4af" : "#f87171") : "#ffffff"
+                Behavior on color { ColorAnimation { duration: 120 } }
                 text: root.loginState === "pending" ? I18n.tr("Hủy", "Cancel")
-                      : (accountBtn.danger ? I18n.tr("Đăng xuất", "Sign out")
+                      : (accountBtn.danger ? I18n.tr("Đăng xuất", "Log out")
                          : (root.loggedIn ? I18n.tr("Đăng nhập lại", "Sign in again") : I18n.tr("Đăng nhập Tidal", "Sign in to Tidal")))
             }
 

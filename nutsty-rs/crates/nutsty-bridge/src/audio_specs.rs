@@ -192,10 +192,11 @@ fn read_json(path: &Path) -> Value {
 
 /// Same rule as `get_lossless_settings` in player_daemon.py: the DAC mode stands alone, but one
 /// saved before that (no `dacModeStandalone`) only counted while lossless was on.
-pub fn effective_dac_mode(settings: &Value) -> String {
+/// rate_match is Linux only and exclusive Windows only (PipeWire refuses exclusive streams).
+pub fn effective_dac_mode(settings: &Value, is_windows: bool) -> String {
     let flag = |k: &str| settings.get(k).and_then(Value::as_bool) == Some(true);
     let mode = settings.get("dacOutputMode").and_then(Value::as_str).unwrap_or("shared");
-    let known = matches!(mode, "shared" | "rate_match" | "exclusive");
+    let known = if is_windows { matches!(mode, "shared" | "exclusive") } else { matches!(mode, "shared" | "rate_match") };
     if (flag("dacModeStandalone") || flag("losslessEnabled")) && known { mode.into() } else { "shared".into() }
 }
 
@@ -205,7 +206,7 @@ pub fn audio_specs_for(map: &Map<String, Value>, suffix: &str) -> AudioSpecs {
     let now_source = read_json(&tmp.join(format!("nutsty_now_source{suffix}.json")));
     let suspended = tmp.join(format!("nutsty_lossless_suspended{suffix}")).exists();
     let dac_mode = config_dir()
-        .map(|d| effective_dac_mode(&read_json(&d.join(format!("nutsty_settings{suffix}.json")))))
+        .map(|d| effective_dac_mode(&read_json(&d.join(format!("nutsty_settings{suffix}.json"))), cfg!(windows)))
         .unwrap_or_else(|| "shared".into());
     let is_windows = cfg!(windows);
     let alsa = if is_windows { None } else { read_alsa_running_rate(Path::new("/proc/asound")) };
@@ -227,10 +228,14 @@ mod tests {
     #[test]
     fn dac_mode_stands_alone_but_old_saves_need_lossless() {
         use serde_json::json;
-        assert_eq!(super::effective_dac_mode(&json!({"dacOutputMode": "exclusive", "dacModeStandalone": true})), "exclusive");
-        assert_eq!(super::effective_dac_mode(&json!({"dacOutputMode": "exclusive", "losslessEnabled": true})), "exclusive");
-        assert_eq!(super::effective_dac_mode(&json!({"dacOutputMode": "exclusive"})), "shared");
-        assert_eq!(super::effective_dac_mode(&json!({"dacOutputMode": "weird", "dacModeStandalone": true})), "shared");
+        assert_eq!(super::effective_dac_mode(&json!({"dacOutputMode": "exclusive", "dacModeStandalone": true}), true), "exclusive");
+        assert_eq!(super::effective_dac_mode(&json!({"dacOutputMode": "exclusive", "losslessEnabled": true}), true), "exclusive");
+        assert_eq!(super::effective_dac_mode(&json!({"dacOutputMode": "exclusive"}), true), "shared");
+        // Linux: no exclusive (PipeWire refuses it), Windows: no rate_match
+        assert_eq!(super::effective_dac_mode(&json!({"dacOutputMode": "exclusive", "dacModeStandalone": true}), false), "shared");
+        assert_eq!(super::effective_dac_mode(&json!({"dacOutputMode": "rate_match", "dacModeStandalone": true}), false), "rate_match");
+        assert_eq!(super::effective_dac_mode(&json!({"dacOutputMode": "rate_match", "dacModeStandalone": true}), true), "shared");
+        assert_eq!(super::effective_dac_mode(&json!({"dacOutputMode": "weird", "dacModeStandalone": true}), false), "shared");
     }
 
     use super::*;

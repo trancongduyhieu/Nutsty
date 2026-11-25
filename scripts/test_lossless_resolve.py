@@ -170,9 +170,19 @@ class LosslessResolveTest(unittest.TestCase):
 
     def test_dac_mode_without_tidal(self):
         # chosen in Settings with Tidal off: local FLAC still goes to the DAC that way
-        self.settings = {"losslessEnabled": False, "dacOutputMode": "exclusive", "dacModeStandalone": True}
+        self.settings = {"losslessEnabled": False, "dacOutputMode": "rate_match", "dacModeStandalone": True}
         self._write_settings()
-        self.assertEqual(pd.get_lossless_settings()["dac_mode"], "exclusive")
+        with mock.patch.object(pd.pc, "IS_WINDOWS", False):
+            self.assertEqual(pd.get_lossless_settings()["dac_mode"], "rate_match")
+
+    def test_exclusive_is_windows_only(self):
+        # Linux: PipeWire refuses an exclusive stream while the shell keeps one on the DAC
+        self.settings = {"dacOutputMode": "exclusive", "dacModeStandalone": True}
+        self._write_settings()
+        with mock.patch.object(pd.pc, "IS_WINDOWS", False):
+            self.assertEqual(pd.get_lossless_settings()["dac_mode"], "shared")
+        with mock.patch.object(pd.pc, "IS_WINDOWS", True):
+            self.assertEqual(pd.get_lossless_settings()["dac_mode"], "exclusive")
 
     def test_old_dac_mode_saved_with_tidal_off_stays_shared(self):
         # saved before the DAC mode stood alone, it only counted while lossless was on

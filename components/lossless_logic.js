@@ -11,9 +11,11 @@ function suspendTransition(wasActive, isActive, losslessEnabled) {
     return { command: isActive ? "suspend" : "resume", notify: !!losslessEnabled };
 }
 
-// Windows has no PipeWire, so it cannot follow each song's sample rate.
+// Windows has no PipeWire, so it cannot follow each song's sample rate. PipeWire refuses an
+// exclusive stream while any other app (the shell's own sounds) is on the DAC, so Linux has no
+// bit-perfect mode; the original sample rate at 100% volume is already untouched there.
 function dacModesFor(isWindows) {
-    return isWindows ? ["shared", "exclusive"] : ["shared", "rate_match", "exclusive"];
+    return isWindows ? ["shared", "exclusive"] : ["shared", "rate_match"];
 }
 
 // Values read from nutsty_settings.json; anything unknown falls back to the default.
