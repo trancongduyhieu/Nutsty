@@ -135,7 +135,9 @@ function trackKeyOf(trk) {
     return extractTrackVideoId(trk) || trk.path || trk.title || trk.name || "";
 }
 
-function dispatchPlay(win, path, title, artist, image, epoch) {
+function dispatchPlay(win, path, title, artist, image, epoch, durationSec) {
+    // Track length helps the backend match the song on Tidal (lossless); 0 when unknown
+    var dur = String(Math.round(Number(durationSec) || 0));
     var base = ["python3", win.appDir + "/backend/player_daemon.py"];
     var plan = win.crossfadeArmedPlan;
     var armed = win.crossfadeArmed && plan && (Date.now() - (win.crossfadeArmedAt || 0) < 4000);
@@ -143,10 +145,10 @@ function dispatchPlay(win, path, title, artist, image, epoch) {
     win.crossfadeArmedPlan = null;
     if (armed) {
         Quickshell.execDetached(base.concat(["crossfade_play", path, title, artist, image, String(epoch),
-            String(plan.fade_at), String(plan.duration), String(plan.in_start || 0)]));
+            String(plan.fade_at), String(plan.duration), String(plan.in_start || 0), dur]));
     } else {
         win.crossfadeHandoverUntil = 0;
-        Quickshell.execDetached(base.concat(["play", path, title, artist, image, String(epoch)]));
+        Quickshell.execDetached(base.concat(["play", path, title, artist, image, String(epoch), dur]));
     }
 }
 
@@ -465,7 +467,7 @@ function playOnlineTrack(win, trk, startRadio, radioProc, prewarmTimer, pollTime
     var tTitle = trk.title || trk.name || (localMatch ? (localMatch.title || localMatch.name || "") : "");
     var tArtist = trk.artist || (localMatch ? (localMatch.artist || "") : "");
     var tImage = trk.image || trk.cover || (localMatch ? (localMatch.image || "") : "");
-    dispatchPlay(win, streamPath, tTitle, tArtist, tImage, currentEpoch);
+    dispatchPlay(win, streamPath, tTitle, tArtist, tImage, currentEpoch, extractTrackDuration(trk));
     win.syncNowPlaying(true);
     if (!win.isSyncingFromFriend) {
         if (win.activeCoListeners && win.activeCoListeners.length > 0) {
@@ -554,7 +556,7 @@ function playTrack(win, trk, pollTimer) {
     var tTitle = trk.title || trk.name || "";
     var tArtist = trk.artist || "";
     var tImage = trk.image || "";
-    dispatchPlay(win, trk.path, tTitle, tArtist, tImage, currentEpoch);
+    dispatchPlay(win, trk.path, tTitle, tArtist, tImage, currentEpoch, extractTrackDuration(trk));
     win.syncNowPlaying(true);
     if (!win.isSyncingFromFriend) {
         if (win.activeCoListeners && win.activeCoListeners.length > 0) {
@@ -1041,6 +1043,27 @@ function trackPlayback(win, trk, playbackTrackingProc) {
     }
 }
 
+// The stream stopped mid-song: mpv went idle with no file while the song was playing well before
+// its end (an expired lossless link, a dropped connection). The end of a song belongs to auto-advance.
+function isMidSongDrop(win, s) {
+    if (!win.isPlaying || win.isLoadingAudio || win.mixActive) return false;
+    if (s.is_playing || s.is_paused || s.is_loading || s.path || s.filename) return false;
+    if (Date.now() - (win.trackChangeTimestamp || 0) < 6000) return false;
+    if (Date.now() - (win.lastSeekTimestamp || 0) < 2500) return false;
+    var dur = win.totalDuration || 0;
+    return win.currentTime > 1.0 && dur > 0 && win.currentTime < dur - 4.0;
+}
+
+// Ask the backend to carry on with YouTube from the same second, once per song. The backend only
+// acts when the song came from Tidal, so a YouTube drop keeps its old handling.
+function recoverMidSongDrop(win, s) {
+    var key = trackKeyOf(win.currentTrack);
+    if (!isMidSongDrop(win, s) || win.streamRecoverKey === key) return false;
+    win.streamRecoverKey = key;
+    Quickshell.execDetached(["python3", win.appDir + "/backend/player_daemon.py", "stream_failed", String(win.currentTime)]);
+    return true;
+}
+
 function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileView) {
     try {
         var s = JSON.parse(data);
@@ -1132,7 +1155,9 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
                 } else {
                     // MPV is buffering, seeking or demuxing transition
                     // Do NOT force isPlaying = false if MPV is not paused and track is active or during seek grace
-                    if (!s.is_paused && (s.filename || seekGrace || win.isPlaying)) {
+                    if (recoverMidSongDrop(win, s)) {
+                        // mpv went idle mid-song: the backend reloads from YouTube at this second
+                    } else if (!s.is_paused && (s.filename || seekGrace || win.isPlaying)) {
                         // Maintain playing intent while buffering
                     } else if (!s.filename && !s.path) {
                         var switchElapsed = Date.now() - (win.trackChangeTimestamp || 0);

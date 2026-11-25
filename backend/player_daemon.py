@@ -48,6 +48,11 @@ PLAYLIST_FILE = os.path.join(TEMP_DIR, f"nutsty_playlist{PROFILE_SUFFIX}.m3u")
 CURRENT_TRACK_FILE = os.path.join(TEMP_DIR, f"nutsty_current_track{PROFILE_SUFFIX}.json")
 PLAY_REQ_FILE = os.path.join(TEMP_DIR, f"nutsty_active_play{PROFILE_SUFFIX}.json")
 MPV_TITLE = f"nutsty-audio{PROFILE_SUFFIX}"
+# Lossless (Tidal): Listen Along suspension flag, what the main mpv is playing now, songs to keep off Tidal
+LOSSLESS_SUSPEND_FILE = os.path.join(TEMP_DIR, f"nutsty_lossless_suspended{PROFILE_SUFFIX}")
+NOW_SOURCE_FILE = os.path.join(TEMP_DIR, f"nutsty_now_source{PROFILE_SUFFIX}.json")
+TIDAL_SKIP_FILE = os.path.join(TEMP_DIR, f"nutsty_tidal_skip{PROFILE_SUFFIX}.json")
+TIDAL_SKIP_AFTER_FAILURE_S = 600
 
 def record_active_play_epoch(epoch, file_path, target_vid):
     payload = {
@@ -91,17 +96,88 @@ YTDL_FORMAT_MAP = {
     "low": "250/ba[abr<=70]/bestaudio/best"
 }
 
-def get_current_streaming_quality():
+def _read_settings():
     settings_path = os.path.join(CONFIG_DIR, f"nutsty_settings{PROFILE_SUFFIX}.json")
     if not os.path.exists(settings_path) and not PROFILE_SUFFIX:
         settings_path = os.path.join(CONFIG_DIR, "nutsty_settings.json")
     if os.path.exists(settings_path):
         try:
             with open(settings_path, "r", encoding="utf-8") as f:
-                return json.load(f).get("streamingQuality", "high_opus")
+                data = json.load(f)
+                return data if isinstance(data, dict) else {}
         except Exception:
             pass
-    return "high_opus"
+    return {}
+
+def get_current_streaming_quality():
+    return _read_settings().get("streamingQuality", "high_opus")
+
+def get_lossless_settings():
+    s = _read_settings()
+    quality = s.get("losslessQuality")
+    dac_mode = s.get("dacOutputMode")
+    if dac_mode not in ("shared", "rate_match", "exclusive") or (dac_mode == "rate_match" and pc.IS_WINDOWS):
+        dac_mode = "shared"
+    return {
+        "enabled": bool(s.get("losslessEnabled", False)),
+        "quality": quality if quality in ("lossless", "hires") else "lossless",
+        "dac_mode": dac_mode,
+    }
+
+def _load_tidal():
+    import tidal_source
+    return tidal_source
+
+def is_lossless_suspended():
+    return os.path.exists(LOSSLESS_SUSPEND_FILE)
+
+def _read_json_file(path, default):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return default
+
+def _write_json_file(path, data):
+    try:
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        os.replace(tmp, path)
+    except Exception:
+        pass
+
+def record_now_source(target_vid, source, tidal=None):
+    """What the main mpv plays: "tidal" | "youtube" | "local", with the TidalStream when Tidal."""
+    _write_json_file(NOW_SOURCE_FILE, {"target_vid": target_vid or "", "source": source,
+                                       "tidal": tidal, "timestamp": time.time()})
+
+def read_now_source():
+    return _read_json_file(NOW_SOURCE_FILE, {}) or {}
+
+def _tidal_skipped(vid):
+    until = (_read_json_file(TIDAL_SKIP_FILE, {}) or {}).get(vid, 0)
+    return float(until or 0) > time.time()
+
+def _skip_tidal_for(vid, seconds):
+    now = time.time()
+    data = {k: v for k, v in (_read_json_file(TIDAL_SKIP_FILE, {}) or {}).items() if float(v or 0) > now}
+    data[vid] = now + seconds
+    _write_json_file(TIDAL_SKIP_FILE, data)
+
+def _try_tidal(vid, title, artist, duration_s):
+    """TidalStream when lossless is on, not suspended for Listen Along, and Tidal finds the song."""
+    try:
+        settings = get_lossless_settings()
+        if not settings["enabled"] or is_lossless_suspended() or _tidal_skipped(vid):
+            return None
+        tidal = _load_tidal()
+        if not tidal.status().get("logged_in"):
+            return None
+        return tidal.resolve(vid, title, artist, duration_s, settings["quality"])
+    except Exception as e:
+        sys.stderr.write(f"[player_daemon] Tidal lookup failed, using YouTube: {type(e).__name__}\n")
+        return None
 
 DEFAULT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
 
@@ -355,10 +431,14 @@ def find_local_downloaded_file(vid="", title="", artist=""):
             pass
     return None
 
-def resolve_media_path(file_path, title="", artist="", force_fresh=False, my_epoch=0, ua_out=None):
-    """ua_out: pass a dict to receive the stream user-agent instead of applying it to the main mpv."""
+def resolve_media_path(file_path, title="", artist="", force_fresh=False, my_epoch=0, ua_out=None,
+                       skip_tidal=False, source_out=None, duration_s=0.0):
+    """ua_out: pass a dict to receive the stream user-agent instead of applying it to the main mpv.
+    source_out: pass a dict to receive {"source": "tidal"|"youtube"|"local", "tidal": TidalStream|None}."""
     if not file_path:
         return file_path
+    if isinstance(source_out, dict):
+        source_out.update({"source": "youtube", "tidal": None})
     if file_path.startswith("ytdl://") or "youtube.com/watch" in file_path or "youtu.be/" in file_path:
         try:
             sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -370,11 +450,24 @@ def resolve_media_path(file_path, title="", artist="", force_fresh=False, my_epo
             # 0. Priority #1: Check if track is already downloaded locally on disk!
             local_file = find_local_downloaded_file(vid, title, artist)
             if local_file and os.path.exists(local_file):
+                if isinstance(source_out, dict):
+                    source_out["source"] = "local"
                 return local_file
 
             if my_epoch > 0 and not is_play_epoch_active(my_epoch):
                 sys.stderr.write(f"[player_daemon] Early abort resolve for superseded epoch #{my_epoch}\n")
                 return ""
+
+            # Priority #2: lossless from the user's own Tidal account (falls through to YouTube on None)
+            if not skip_tidal:
+                tidal = _try_tidal(vid, title, artist, duration_s)
+                if my_epoch > 0 and not is_play_epoch_active(my_epoch):
+                    sys.stderr.write(f"[player_daemon] Abort after Tidal lookup for superseded epoch #{my_epoch}\n")
+                    return ""
+                if tidal and tidal.get("url"):
+                    if isinstance(source_out, dict):
+                        source_out.update({"source": "tidal", "tidal": tidal})
+                    return tidal["url"]
 
             streaming_quality = get_current_streaming_quality()
 
@@ -556,16 +649,19 @@ def _target_vid_of(file_path):
     return vid
 
 
-def _resolve_for_crossfade(file_path, title, artist, my_epoch=0):
+def _resolve_for_crossfade(file_path, title, artist, my_epoch=0, source_out=None, duration_s=0.0):
     """Resolve the incoming track without touching the main mpv's user-agent.
     Returns (stream_url, user_agent, local_or_original_path, target_vid)."""
     target_vid = _target_vid_of(file_path)
+    if isinstance(source_out, dict):
+        source_out.update({"source": "local", "tidal": None})
     if target_vid:
         local_match = find_local_downloaded_file(target_vid, title, artist)
         if local_match and os.path.exists(local_match):
             return local_match, DEFAULT_UA, local_match, target_vid
         ua_box = {}
-        url = resolve_media_path(file_path, title, artist, my_epoch=my_epoch, ua_out=ua_box)
+        url = resolve_media_path(file_path, title, artist, my_epoch=my_epoch, ua_out=ua_box,
+                                 source_out=source_out, duration_s=duration_s)
         return url, ua_box.get("user_agent") or DEFAULT_UA, file_path, target_vid
     return file_path, DEFAULT_UA, file_path, ""
 
@@ -654,7 +750,7 @@ def _switch_main_to(stream_target, in_ua, file_path, target_vid, meta, fade_in, 
         send_mpv_cmd(["set_property", "force-media-title", ""])
 
 
-def crossfade_play(file_path, title, artist, art, my_epoch, fade_at, fade_dur, in_start):
+def crossfade_play(file_path, title, artist, art, my_epoch, fade_at, fade_dur, in_start, track_dur=0.0):
     """Blend the playing track into file_path.
 
     Timeline: the tail mpv opens the outgoing stream paused at the blend point,
@@ -673,9 +769,12 @@ def crossfade_play(file_path, title, artist, art, my_epoch, fade_at, fade_dur, i
         return plain_play()
 
     record_active_play_epoch(my_epoch, file_path, _target_vid_of(file_path))
-    stream_target, in_ua, file_path, target_vid = _resolve_for_crossfade(file_path, title, artist, my_epoch)
+    src_box = {}
+    stream_target, in_ua, file_path, target_vid = _resolve_for_crossfade(file_path, title, artist, my_epoch,
+                                                                         source_out=src_box, duration_s=track_dur)
     if not is_play_epoch_active(my_epoch) or not stream_target:
         return
+    record_now_source(target_vid, src_box.get("source", "local"), src_box.get("tidal"))
     meta = update_current_track_metadata(file_path, title, artist, art)
 
     pos = float(get_mpv_property("time-pos") or 0.0)
@@ -744,6 +843,26 @@ def crossfade_play(file_path, title, artist, art, my_epoch, fade_at, fade_dur, i
                 xf.ipc_call(tail_type, tail_addr, ["set_property", "mute", bool(cur.get("mute"))], timeout=0.2)
     finally:
         xf.kill_tail(TEMP_DIR, PROFILE_SUFFIX)
+
+
+def _reload_youtube_at(pos):
+    """Swap the Tidal stream the main mpv plays for the YouTube one at the same position.
+    Only when the song playing is still the one last requested. Returns True when reloaded."""
+    now = read_now_source()
+    vid = now.get("target_vid") or ""
+    if now.get("source") != "tidal" or not vid:
+        return False
+    active = _read_json_file(PLAY_REQ_FILE, {}) or {}
+    if active.get("target_vid") and active.get("target_vid") != vid:
+        return False
+    url = resolve_media_path(f"ytdl://{vid}", skip_tidal=True)
+    if not url:
+        return False
+    paused = get_mpv_property("pause") is True
+    send_mpv_cmd({"name": "loadfile", "url": url, "flags": "replace", "index": -1,
+                  "options": {"start": f"{max(0.0, float(pos or 0.0)):.3f}", "pause": "yes" if paused else "no"}})
+    record_now_source(vid, "youtube")
+    return True
 
 
 def _clear_prev_mpv_path(epoch):
@@ -885,6 +1004,12 @@ def get_audio_specs_dict():
 def get_status_json():
     return json.dumps(get_status_dict())
 
+def _float_arg(args, i, default=0.0):
+    try:
+        return float(args[i]) if len(args) > i else default
+    except (TypeError, ValueError):
+        return default
+
 def handle_cli(args):
     """Entry point for thread-safe in-process execution without modifying sys.argv."""
     execute_command(list(args))
@@ -957,7 +1082,9 @@ def execute_command(args):
             send_mpv_cmd(["set_property", "pause", True])
 
         meta = update_current_track_metadata(file_path, title_arg, artist_arg, art_arg)
-        stream_target = resolve_media_path(file_path, title_arg, artist_arg, my_epoch=my_req_id) if is_online else file_path
+        src_box = {"source": "local", "tidal": None}
+        stream_target = resolve_media_path(file_path, title_arg, artist_arg, my_epoch=my_req_id,
+                                           source_out=src_box, duration_s=_float_arg(args, 6)) if is_online else file_path
 
         # Guard against stale concurrent play requests across all OS processes
         if not is_play_epoch_active(my_req_id) or not stream_target:
@@ -965,6 +1092,7 @@ def execute_command(args):
             return
 
         send_mpv_cmd(["loadfile", stream_target, "replace"])
+        record_now_source(target_vid, src_box.get("source", "local"), src_box.get("tidal"))
         if is_online and state_payload.get("prev_mpv_path"):
             _clear_prev_mpv_path(my_req_id)
         send_mpv_cmd(["set_property", "loop-playlist", "no"])
@@ -1163,7 +1291,8 @@ def execute_command(args):
         except ValueError:
             ep = int(time.time() * 1000)
         try:
-            crossfade_play(args[1], args[2], args[3], args[4], ep, float(args[6]), float(args[7]), float(args[8]))
+            crossfade_play(args[1], args[2], args[3], args[4], ep, float(args[6]), float(args[7]), float(args[8]),
+                           _float_arg(args, 9))
         except Exception as e:
             sys.stderr.write(f"[player_daemon] crossfade failed, falling back: {e}\n")
             xf.kill_tail(TEMP_DIR, PROFILE_SUFFIX)
@@ -1194,6 +1323,32 @@ def execute_command(args):
         ensure_mpv()
         specs = get_audio_specs_dict()
         print(json.dumps(specs))
+    elif action == "lossless_suspend" and len(args) > 1:
+        # Listen Along: both sides must hear the same YouTube version (Tidal's cut can differ)
+        on = args[1].lower() in ("1", "on", "true", "yes")
+        reloaded = False
+        if on:
+            try:
+                open(LOSSLESS_SUSPEND_FILE, "w").close()
+            except OSError:
+                pass
+            if read_now_source().get("source") == "tidal":
+                reloaded = _reload_youtube_at(get_mpv_property("time-pos") or 0.0)
+        else:
+            try:
+                os.remove(LOSSLESS_SUSPEND_FILE)
+            except OSError:
+                pass
+        print(json.dumps({"suspended": on, "reloaded": reloaded}))
+    elif action == "stream_failed":
+        # The Tidal stream stopped mid-song (expired link, network): carry on with YouTube from there
+        pos = _float_arg(args, 1)
+        reloaded = False
+        now = read_now_source()
+        if now.get("source") == "tidal" and now.get("target_vid"):
+            _skip_tidal_for(now["target_vid"], TIDAL_SKIP_AFTER_FAILURE_S)
+            reloaded = _reload_youtube_at(pos)
+        print(json.dumps({"reloaded": reloaded}))
     elif action == "set_streaming_quality" and len(args) > 1:
         ensure_mpv()
         qual = args[1]

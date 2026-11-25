@@ -248,6 +248,7 @@ Scope {
     property string lastMpvPath: ""
     property string lastMpvPathKey: ""      // track that lastMpvPath belongs to
     property string staleStatusPath: ""     // previous song's mpv path, ignored until mpv opens the new one
+    property string streamRecoverKey: ""    // song whose mid-song stream drop was already sent to the backend
     property var shuffleNextPick: null
     // AutoMix transition card state (Now Playing): the upcoming blend and the one in progress
     property var mixUpcoming: null

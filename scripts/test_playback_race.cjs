@@ -149,4 +149,27 @@ console.log("host clock offset is removed from the position estimate...");
     assert.ok(Math.abs(age - 0.6) < 0.01, "age " + age);
 }
 
+// --- Tidal lossless: track duration reaches the daemon, mid-song stream drop recovers ---
+{
+    execLog.length = 0;
+    PE.dispatchPlay({ appDir: "/app", crossfadeArmed: false, crossfadeArmedPlan: null, crossfadeHandoverUntil: 0 },
+                    "ytdl://abc", "T", "A", "img", 5, 266);
+    assert.strictEqual(execLog[execLog.length - 1], "/app/backend/player_daemon.py play ytdl://abc T A img 5 266");
+
+    const idle = JSON.stringify({ is_playing: false, is_paused: false, is_loading: false, path: "", filename: "" });
+    const w = makeWin(80);
+    w.streamRecoverKey = "";
+    assert.strictEqual(PE.isMidSongDrop(w, JSON.parse(idle)), true);
+    assert.strictEqual(PE.isMidSongDrop(w, { is_playing: true, path: PATH_A }), false);
+    assert.strictEqual(PE.isMidSongDrop(Object.assign({}, w, { currentTime: 258 }), JSON.parse(idle)), false); // auto-advance owns the end
+    assert.strictEqual(PE.isMidSongDrop(Object.assign({}, w, { trackChangeTimestamp: NOW }), JSON.parse(idle)), false);
+    assert.strictEqual(PE.isMidSongDrop(Object.assign({}, w, { isPlaying: false }), JSON.parse(idle)), false);
+
+    execLog.length = 0;
+    PE.handlePlayerStatus(w, idle, null, null);
+    assert.deepStrictEqual(execLog.filter(c => c.includes("stream_failed")), ["/app/backend/player_daemon.py stream_failed 80"]);
+    PE.handlePlayerStatus(w, idle, null, null);
+    assert.strictEqual(execLog.filter(c => c.includes("stream_failed")).length, 1, "once per song");
+}
+
 console.log("ALL PLAYBACK RACE TESTS PASSED");
