@@ -978,28 +978,12 @@ def get_status_dict():
     return st
 
 def get_audio_specs_dict():
-    codec = get_mpv_property("audio-codec-name") or ""
-    bitrate = get_mpv_property("audio-bitrate") or 0
-    params = get_mpv_property("audio-params") or {}
-
-    sample_rate = params.get("samplerate", 0) if isinstance(params, dict) else 0
-    channels = params.get("channel-count", 2) if isinstance(params, dict) else 2
-    channel_str = "Stereo (2ch)" if channels == 2 else (f"{channels}ch" if channels else "Stereo")
-
-    bitrate_kbps = round(bitrate / 1000) if bitrate > 1000 else int(bitrate)
-    if bitrate_kbps == 0:
-        bitrate_kbps = 192 if codec in ["opus", "aac"] else (320 if codec == "mp3" else 192)
-
-    samplerate_str = f"{sample_rate / 1000:.1f} kHz" if sample_rate > 0 else "48.0 kHz"
-
-    return {
-        "codec": (codec or "aac").upper(),
-        "bitrate": bitrate_kbps,
-        "bitrate_str": f"{bitrate_kbps} kbps" if bitrate_kbps > 0 else "192 kbps",
-        "sample_rate": sample_rate or 48000,
-        "sample_rate_str": samplerate_str,
-        "channels": channel_str
-    }
+    """Truthful quality label data. Fields the player cannot know yet stay None or empty."""
+    import audio_output
+    props = {k: get_mpv_property(k) for k in ("audio-codec-name", "audio-bitrate", "audio-params", "path")}
+    alsa_rate = None if pc.IS_WINDOWS else audio_output.read_alsa_running_rate()
+    return audio_output.build_audio_specs(props, read_now_source(), get_lossless_settings()["dac_mode"],
+                                          is_lossless_suspended(), pc.IS_WINDOWS, alsa_rate)
 
 def get_status_json():
     return json.dumps(get_status_dict())

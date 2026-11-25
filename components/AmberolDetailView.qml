@@ -5,6 +5,7 @@ import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import "."
+import "quality_label.js" as QualityLabel
 
 Rectangle {
     id: root
@@ -596,6 +597,7 @@ Rectangle {
 
                             // Codec Pill
                             Rectangle {
+                                visible: codecText.text !== ""
                                 height: 20
                                 width: codecText.implicitWidth + 12
                                 radius: 4
@@ -606,7 +608,7 @@ Rectangle {
                                 Text {
                                     id: codecText
                                     anchors.centerIn: parent
-                                    text: (root.audioSpecs ? root.audioSpecs.codec : "AAC") + " • " + (root.audioSpecs ? root.audioSpecs.bitrate_str : "192 kbps")
+                                    text: QualityLabel.formatQualityLabel(root.audioSpecs, I18n.tr)
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 10
                                     font.bold: true
@@ -687,7 +689,7 @@ Rectangle {
                                     color: Theme.textMuted
                                 }
                                 Text {
-                                    text: root.audioSpecs ? root.audioSpecs.codec : "AAC"
+                                    text: QualityLabel.dashIfEmpty(root.audioSpecs && root.audioSpecs.codec ? root.audioSpecs.codec + (root.audioSpecs.bit_depth ? " " + root.audioSpecs.bit_depth + "-bit" : "") : "")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 12
                                     font.bold: true
@@ -706,7 +708,7 @@ Rectangle {
                                     color: Theme.textMuted
                                 }
                                 Text {
-                                    text: root.audioSpecs ? root.audioSpecs.bitrate_str : "192 kbps"
+                                    text: QualityLabel.dashIfEmpty(root.audioSpecs ? root.audioSpecs.bitrate_str : "")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 12
                                     font.bold: true
@@ -725,7 +727,7 @@ Rectangle {
                                     color: Theme.textMuted
                                 }
                                 Text {
-                                    text: root.audioSpecs ? root.audioSpecs.sample_rate_str : "44.1 kHz"
+                                    text: QualityLabel.dashIfEmpty(root.audioSpecs ? root.audioSpecs.sample_rate_str : "")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 12
                                     font.bold: true
@@ -744,7 +746,7 @@ Rectangle {
                                     color: Theme.textMuted
                                 }
                                 Text {
-                                    text: root.audioSpecs ? root.audioSpecs.channels : I18n.tr("Nổi (2 kênh)", "Stereo (2ch)")
+                                    text: QualityLabel.dashIfEmpty(root.audioSpecs ? root.audioSpecs.channels_str : "")
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 12
                                     font.bold: true

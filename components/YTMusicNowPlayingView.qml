@@ -8,6 +8,7 @@ import Quickshell.Io
 import "."
 import "lyric_lines.js" as LyricLines
 import "playback_engine.js" as PlaybackEngine
+import "quality_label.js" as QualityLabel
 
 Item {
     id: root
@@ -201,22 +202,7 @@ Item {
         return s;
     }
 
-    readonly property string audioQualityText: {
-        if (!root.track) return "";
-        if (root.audioSpecs) {
-            var c = (root.audioSpecs.codec || "AAC").toUpperCase();
-            var b = root.audioSpecs.bitrate_str || "";
-            if (!b && root.audioSpecs.bitrate) b = root.audioSpecs.bitrate + " kbps";
-            if (c === "FLAC") {
-                return "FLAC • " + (root.audioSpecs.sample_rate_str || "Lossless");
-            }
-            if (b) return c + " • " + b;
-            return c;
-        }
-        if (root.track.path && (root.track.path.endsWith(".flac") || root.track.path.endsWith(".FLAC"))) return "FLAC • Lossless";
-        if (root.track.path && (root.track.path.endsWith(".mp3") || root.track.path.endsWith(".MP3"))) return "MP3 • 320 kbps";
-        return "AAC • 128 kbps";
-    }
+    readonly property string audioQualityText: root.track ? QualityLabel.formatQualityLabel(root.audioSpecs, I18n.tr) : ""
 
     // Lyrics credit, shown as a footer after the last lyric line (Mochy-like: it scrolls in as the song ends).
     // Audio quality moved to the middle of the progress bar (NowPlayingControls.qualityText).

@@ -2,7 +2,6 @@
 //! Directly connects to MPV Unix Domain Socket / Windows Named Pipe in sub-millisecond time,
 //! completely replacing the heavy `python3 player_daemon.py status` process-thrashing bottleneck.
 
-use serde::Serialize;
 use serde_json::{json, Value};
 use std::env;
 use std::fs::File;
@@ -15,15 +14,6 @@ use std::os::unix::net::UnixStream;
 
 mod palette;
 
-#[derive(Debug, Serialize)]
-struct AudioSpecs {
-    codec: String,
-    bitrate: u64,
-    bitrate_str: String,
-    sample_rate: u64,
-    sample_rate_str: String,
-    channels: String,
-}
 
 fn get_socket_path() -> PathBuf {
     let profile = env::var("NUTSTY_PROFILE").unwrap_or_default().trim().to_lowercase();
@@ -239,61 +229,6 @@ fn purge_memory() {
     println!(r#"{{"success":true,"purged":true}}"#);
 }
 
-fn parse_audio_specs_from_map(map: &serde_json::Map<String, Value>) -> AudioSpecs {
-    let codec = map
-        .get("audio-codec-name")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_uppercase();
-
-    let bitrate_raw = map
-        .get("audio-bitrate")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
-    let mut bitrate_kbps = if bitrate_raw > 1000.0 {
-        (bitrate_raw / 1000.0).round() as u64
-    } else {
-        bitrate_raw as u64
-    };
-    if bitrate_kbps == 0 && !codec.is_empty() {
-        bitrate_kbps = if codec == "MP3" { 320 } else { 192 };
-    }
-    let bitrate_str = if bitrate_kbps > 0 {
-        format!("{bitrate_kbps} kbps")
-    } else {
-        "192 kbps".to_string()
-    };
-
-    let mut sample_rate: u64 = 48000;
-    let mut sample_rate_str = "48.0 kHz".to_string();
-    let mut channels = "Stereo (2ch)".to_string();
-
-    if let Some(params) = map.get("audio-params").and_then(|v| v.as_object()) {
-        if let Some(sr) = params.get("samplerate").and_then(|v| v.as_u64()) {
-            sample_rate = sr;
-            sample_rate_str = format!("{:.1} kHz", (sr as f64) / 1000.0);
-        }
-        if let Some(ch) = params.get("channel-count").and_then(|v| v.as_u64()) {
-            channels = if ch == 2 {
-                "Stereo (2ch)".to_string()
-            } else if ch > 0 {
-                format!("{ch}ch")
-            } else {
-                "Stereo".to_string()
-            };
-        }
-    }
-
-    AudioSpecs {
-        codec: if codec.is_empty() { "AAC".to_string() } else { codec },
-        bitrate: bitrate_kbps,
-        bitrate_str,
-        sample_rate,
-        sample_rate_str,
-        channels,
-    }
-}
-
 /// One decision for both the CLI and nutsty-daemon: the library owns the status logic
 fn handle_status() {
     let status = nutsty_bridge::get_player_status_output();
@@ -369,17 +304,10 @@ fn main() {
         }
         "audio_specs" => {
             if let Some(map) = fetch_mpv_status_batch() {
-                let specs = parse_audio_specs_from_map(&map);
+                let specs = nutsty_bridge::parse_audio_specs_from_map(&map);
                 println!("{}", serde_json::to_string(&specs).unwrap());
             } else {
-                let default_specs = AudioSpecs {
-                    codec: "AAC".to_string(),
-                    bitrate: 192,
-                    bitrate_str: "192 kbps".to_string(),
-                    sample_rate: 48000,
-                    sample_rate_str: "48.0 kHz".to_string(),
-                    channels: "Stereo (2ch)".to_string(),
-                };
+                let default_specs = nutsty_bridge::AudioSpecs::default();
                 println!("{}", serde_json::to_string(&default_specs).unwrap());
             }
         }

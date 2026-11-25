@@ -4,6 +4,7 @@ import QtQuick.Controls.Basic
 import QtQuick.Effects
 import QtQuick.Shapes
 import "."
+import "quality_label.js" as QualityLabel
 
 Item {
     id: root
@@ -719,7 +720,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 4
                     opacity: 1.0 - root.cookT
-                    visible: opacity > 0.01
+                    visible: opacity > 0.01 && qualityLineText.text !== ""
 
                     AppIcon {
                         anchors.verticalCenter: parent.verticalCenter
@@ -730,19 +731,8 @@ Item {
 
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: {
-                            if (root.audioSpecs && (root.audioSpecs.bitrate_str || root.audioSpecs.bitrate)) {
-                                var codecName = (root.audioSpecs.codec || "AAC").toUpperCase();
-                                var bStr = root.audioSpecs.bitrate_str || (root.audioSpecs.bitrate + " kbps");
-                                return codecName + " • " + bStr;
-                            }
-                            if (root.currentTrack && root.currentTrack.path) {
-                                var p = root.currentTrack.path.toLowerCase();
-                                if (p.endsWith(".flac")) return "FLAC • Lossless";
-                                if (p.endsWith(".mp3")) return "MP3 • 320 kbps";
-                            }
-                            return "AAC • 128 kbps";
-                        }
+                        id: qualityLineText
+                        text: QualityLabel.formatQualityLabel(root.audioSpecs, I18n.tr)
                         font.family: "Segoe UI, Inter, sans-serif"
                         font.pixelSize: 11
                         color: Qt.rgba(1, 1, 1, 0.45)
