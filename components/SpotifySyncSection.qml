@@ -4,11 +4,11 @@ import "."
 
 // Settings > Account, under the Spotify account row: two-way sync with the user's own Spotify library.
 // `sync` is the SpotifySync object of shell.qml. Shown only while a Spotify cookie is saved.
-// Mochy's setting-card anatomy (DESIGN.md "Setting Card"): one card per setting, switch top-right,
-// the value in large type bottom-left, a preview of the effect on the right, options as sub-cards.
+// Two levels: each setting is a flat row with its switch (like the other Settings rows); its options
+// hang under it behind an accent rail, one size smaller, with a one-line summary and the synced covers.
 ColumnLayout {
     id: root
-    spacing: 12
+    spacing: 18
 
     property var sync: null
     property color accentColor: Theme.accent
@@ -144,56 +144,53 @@ ColumnLayout {
             onToggled: root.toggleSync()
         }
 
-        // Value bottom-left, what is kept in step fanned out on the right
+        // Summary line: the count (it spins like a slot machine while a sync runs) and its caption,
+        // then the synced covers in a small overlapping row
         RowLayout {
             Layout.fillWidth: true
+            Layout.leftMargin: 10
+            Layout.rightMargin: 10
+            Layout.bottomMargin: 2
             visible: root.on && !root.pickerOpen
-            spacing: 16
+            spacing: 8
 
-            // Mochy's figure layout: the count rolls (and spins like a slot machine while a sync runs),
-            // a monospace caption broken by hand sits beside it, never under it
-            Row {
-                Layout.fillWidth: true
-                Layout.alignment: Qt.AlignBottom
-                spacing: 14
-
-                // clipped: spinning reels would otherwise show the digits above and below
-                Item {
-                    id: countBox
-                    width: countOdo.implicitWidth
-                    height: countOdo.implicitHeight
-                    clip: true
-                    Odometer {
-                        id: countOdo
-                        text: String(root.syncedCount)
-                        pixelSize: 32
-                        spinning: !!(root.sync && root.sync.running)
-                    }
-                }
-
-                Text {
-                    anchors.verticalCenter: countBox.verticalCenter
-                    text: I18n.tr("mục\nđang khớp\nvới Spotify", "kept\nin step\nwith Spotify")
-                    font.family: "monospace"
-                    font.pixelSize: 11
-                    lineHeight: 0.95
-                    color: Theme.textSecondary
+            // clipped: spinning reels would otherwise show the digits above and below
+            Item {
+                id: countBox
+                Layout.alignment: Qt.AlignVCenter
+                implicitWidth: countOdo.implicitWidth
+                implicitHeight: countOdo.implicitHeight
+                clip: true
+                Odometer {
+                    id: countOdo
+                    text: String(root.syncedCount)
+                    pixelSize: 22
+                    spinning: !!(root.sync && root.sync.running)
                 }
             }
 
-            // Cover fan: Liked Songs first, then up to three synced covers, tilted like a hand of cards
+            Text {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                text: I18n.tr("mục đang khớp với Spotify", "kept in step with Spotify")
+                font.family: Theme.fontFamily
+                font.pixelSize: 11
+                color: Theme.textSecondary
+                elide: Text.ElideRight
+            }
+
+            // Liked Songs first, then up to three synced covers; while a sync runs they lift one after another
             Item {
                 id: fan
-                Layout.preferredWidth: 190
-                Layout.preferredHeight: 92
+                Layout.alignment: Qt.AlignVCenter
+                implicitWidth: covers.length > 0 ? 30 + (covers.length - 1) * 20 : 0
+                implicitHeight: 36
                 readonly property var covers: {
                     var out = [];
                     if (root.likedSynced) out.push({ liked: true, image: "", title: "" });
                     for (var i = 0; i < root.synced.length && out.length < 4; i++) out.push(root.synced[i]);
                     return out;
                 }
-                // The preview performs the setting: while a sync runs the covers lift one after another,
-                // left to right, as if passing through. Idle, hidden or in Lite mode it rests.
                 readonly property bool lite: (typeof win !== "undefined") ? !!win.liteMode : false
                 readonly property bool waving: !!(root.sync && root.sync.running) && fan.visible && !fan.lite
                 property real phase: 0
@@ -209,32 +206,28 @@ ColumnLayout {
                         id: fanCard
                         required property var modelData
                         required property int index
-                        readonly property real mid: (fan.covers.length - 1) / 2
-                        width: 72
-                        height: 72
+                        width: 30
+                        height: 30
                         z: index
-                        x: fan.width - 72 - 10 - (fan.covers.length - 1 - index) * 34
-                        // 0..1 bump that travels across the hand once per phase
+                        x: index * 20
                         readonly property real lift: {
                             if (!fan.waving) return 0;
                             var t = fan.phase - fanCard.index / Math.max(1, fan.covers.length) * 0.6;
                             t = t - Math.floor(t);
                             return t < 0.4 ? Math.sin(t / 0.4 * Math.PI) : 0;
                         }
-                        y: 10 + Math.abs(index - mid) * 4 - lift * 14
-                        rotation: (index - mid) * 7
-                        transformOrigin: Item.Bottom
+                        y: 3 - lift * 5
 
                         RoundedImage {
                             anchors.fill: parent
                             visible: !fanCard.modelData.liked
-                            radius: 12
+                            radius: 8
                             source: fanCard.modelData.image || ""
-                            sourceSize: Qt.size(152, 152)
+                            sourceSize: Qt.size(64, 64)
                             initialsText: fanCard.modelData.title || ""
                             fallbackIcon: "../assets/icons/media-playlist-consecutive-symbolic.svg"
                             fallbackIconColor: root.accentColor
-                            fallbackIconSize: 22
+                            fallbackIconSize: 14
                             borderColor: Qt.rgba(1, 1, 1, 0.14)
                             borderWidth: 1
                         }
@@ -242,7 +235,7 @@ ColumnLayout {
                         Rectangle {
                             anchors.fill: parent
                             visible: !!fanCard.modelData.liked
-                            radius: 12
+                            radius: 8
                             border.width: 1
                             border.color: Qt.rgba(1, 1, 1, 0.14)
                             gradient: Gradient {
@@ -252,7 +245,7 @@ ColumnLayout {
                             AppIcon {
                                 anchors.centerIn: parent
                                 source: "../assets/icons/emblem-favorite-symbolic.svg"
-                                iconSize: 24
+                                iconSize: 14
                                 color: "#ffffff"
                             }
                         }
@@ -328,7 +321,7 @@ ColumnLayout {
 
         Text {
             Layout.fillWidth: true
-            Layout.leftMargin: 2
+            Layout.leftMargin: 10
             visible: root.on && !root.pickerOpen && !!(root.sync && root.sync.unmatched > 0)
             text: root.sync ? I18n.tr("%1 bài chưa tìm được bản trên YouTube", "%1 songs not found on YouTube yet").arg(root.sync.unmatched) : ""
             font.family: Theme.fontFamily
@@ -339,7 +332,7 @@ ColumnLayout {
 
         Text {
             Layout.fillWidth: true
-            Layout.leftMargin: 2
+            Layout.leftMargin: 10
             visible: root.on && !root.pickerOpen && text !== ""
             text: root.sync ? root.errorText(root.sync.lastError) : ""
             font.family: Theme.fontFamily
@@ -410,7 +403,7 @@ ColumnLayout {
 
         Text {
             Layout.fillWidth: true
-            Layout.leftMargin: 2
+            Layout.leftMargin: 10
             visible: text !== ""
             text: root.backlogErr === "write_back_off" || root.backlogErr === "" ? "" : root.errorText(root.backlogErr)
             font.family: Theme.fontFamily

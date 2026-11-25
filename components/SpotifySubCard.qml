@@ -20,7 +20,7 @@ Rectangle {
     readonly property color tone: danger ? Qt.rgba(244 / 255, 63 / 255, 94 / 255, 1.0) : accentColor
 
     Layout.fillWidth: true
-    implicitHeight: Math.max(44, textCol.implicitHeight + 16)
+    implicitHeight: Math.max(40, textCol.implicitHeight + 14)
     radius: 10
     color: danger ? Qt.rgba(tone.r, tone.g, tone.b, 0.12)
                   : Qt.rgba(tone.r, tone.g, tone.b, clickable && subMouse.containsMouse ? 0.10 : 0.0)
@@ -38,7 +38,7 @@ Rectangle {
     Column {
         id: textCol
         anchors.left: parent.left
-        anchors.leftMargin: danger ? 12 : 0
+        anchors.leftMargin: 10
         anchors.right: trailingSlot.left
         anchors.rightMargin: 12
         anchors.verticalCenter: parent.verticalCenter
@@ -48,8 +48,8 @@ Rectangle {
             visible: sub.shimmer
             running: visible
             text: sub.title
-            pixelSize: 13
-            fontWeight: Font.Bold
+            pixelSize: 12
+            fontWeight: Font.DemiBold
             letterSpacing: 0
         }
 
@@ -58,8 +58,8 @@ Rectangle {
             width: parent.width
             text: sub.title
             font.family: Theme.fontFamily
-            font.pixelSize: 13
-            font.bold: true
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
             color: sub.danger ? "#fda4af" : Theme.textPrimary
             wrapMode: Text.WordWrap
         }
@@ -78,7 +78,7 @@ Rectangle {
     Item {
         id: trailingSlot
         anchors.right: parent.right
-        anchors.rightMargin: sub.danger ? 10 : 0
+        anchors.rightMargin: 10
         anchors.verticalCenter: parent.verticalCenter
         width: childrenRect.width
         height: childrenRect.height

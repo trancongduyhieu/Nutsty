@@ -24,7 +24,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.topMargin: 6
-        spacing: 10
+        spacing: 8
 
         RowLayout {
             Layout.fillWidth: true
@@ -66,11 +66,27 @@ Rectangle {
             }
         }
 
-        ColumnLayout {
-            id: bodyCol
+        // The body hangs under the switch it belongs to: indented behind a faint accent rail,
+        // so the eye reads the setting first and its options second
+        Item {
             Layout.fillWidth: true
-            spacing: 8
+            Layout.preferredHeight: bodyCol.implicitHeight
             visible: card.showBody
+
+            Rectangle {
+                width: 2
+                height: parent.height
+                radius: 1
+                color: Qt.rgba(card.accentColor.r, card.accentColor.g, card.accentColor.b, 0.35)
+            }
+
+            ColumnLayout {
+                id: bodyCol
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: 16
+                spacing: 4
+            }
         }
     }
 }

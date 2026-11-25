@@ -105,6 +105,15 @@ QtObject {
 
     function confirmSelection(ids, liked) {
         sp._post("set_selection", { ids: ids, liked: liked }, function(res) {
+            if (res && res.success !== false) {
+                // The counts in Settings read `choices`: mark the new picks now, not on the next loadChoices
+                var next = [];
+                var list = sp.choices || [];
+                for (var i = 0; i < list.length; i++)
+                    next.push(Object.assign({}, list[i], { selected: ids.indexOf(list[i].id) >= 0 }));
+                sp.likedChoice = !!liked;   // before choices: the picker re-seeds from both on choicesChanged
+                sp.choices = next;
+            }
             sp._applyStatus(res);
             if (sp.selectionConfirmed) {
                 if (!sp.enabled) sp.setEnabled(true);
