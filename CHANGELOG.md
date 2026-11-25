@@ -9,6 +9,10 @@ Số phiên bản có dạng `A.B.C`, ví dụ `1.2.0`:
 
 ## [Unreleased]
 
+### Added
+- **Tự cập nhật từ Spotify**: Đã đăng nhập Spotify trong Nutsty thì vào Cài đặt, bật "Tự cập nhật từ Spotify" rồi chạm vào ảnh bìa những playlist muốn giữ khớp (cả "Bài hát đã thích"). Từ đó bài bạn thêm hay bớt bên Spotify tự về Nutsty, cứ ba tiếng một lần hoặc ngay khi bấm "Đồng bộ ngay". Bài bạn đã xóa trong Nutsty không bị thêm lại. Nếu một lần cập nhật định xóa hơn nửa playlist, Nutsty tạm dừng và hỏi bạn trước. Playlist bạn đã nhập từ Spotify trước đây được nối vào luôn, không tạo bản trùng. Chỉ cần bật trên một máy, các máy khác nhận qua đồng bộ tài khoản.
+- **Ghi ngược lên Spotify**: Bật thêm "Ghi ngược lên Spotify" thì bài bạn thích, bỏ thích, thêm hoặc bớt trong playlist của chính bạn ở Nutsty cũng đổi theo bên Spotify. Chỉ những thay đổi sau khi bật mới được gửi đi, và Nutsty gửi chậm từng ít một cho an toàn. Muốn đưa cả những bài đã thích từ trước lên Spotify thì bấm "Đẩy các bài đã thích trước đó", xem tiến độ ngay tại đó và bấm "Dừng" lúc nào cũng được. Playlist của người khác mà bạn theo dõi không bao giờ bị đổi. Mặc định công tắc này tắt, vì cách làm này trái điều khoản của Spotify và có một chút rủi ro với tài khoản.
+
 ## [2.5.0] - 2026-11-25
 
 ### Added

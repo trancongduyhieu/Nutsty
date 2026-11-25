@@ -36,6 +36,25 @@ ColumnLayout {
     readonly property bool likedSynced: !!(sync && sync.likedChoice)
     readonly property int syncedCount: synced.length + (likedSynced ? 1 : 0)
 
+    readonly property bool writeBack: !!(sync && sync.writeBack)
+    readonly property var backlog: sync && sync.backlog ? sync.backlog : ({})
+    readonly property bool backlogRunning: !!backlog.running
+    readonly property int backlogDone: backlog.done || 0
+    readonly property int backlogTotal: backlog.total || 0
+    readonly property string backlogErr: backlog.error || ""
+    // Under the backlog row: what the last run did, or what the button is for
+    readonly property string backlogNote: {
+        if (root.backlogRunning)
+            return I18n.tr("Chạy chậm để an toàn cho tài khoản, có thể dừng bất cứ lúc nào", "Goes slowly to keep your account safe, stop it any time");
+        if (root.backlogTotal > 0 || (backlog.unmatched || 0) > 0) {
+            var t = I18n.tr("Lần trước đã đẩy %1/%2", "Last time pushed %1/%2").arg(root.backlogDone).arg(root.backlogTotal);
+            if ((backlog.unmatched || 0) > 0)
+                t += I18n.tr(", %1 bài không có trên Spotify", ", %1 songs not on Spotify").arg(backlog.unmatched);
+            return t;
+        }
+        return I18n.tr("Bài đã thích từ trước khi bật không tự lên Spotify", "Likes from before you turned this on stay off Spotify until you push them");
+    }
+
     function openPicker() {
         if (!root.sync) return;
         root.pickerOpen = true;
@@ -46,6 +65,7 @@ ColumnLayout {
         if (code === "auth_expired") return I18n.tr("Phiên Spotify đã hết hạn. Hãy đăng nhập Spotify lại.", "Your Spotify session expired. Sign in to Spotify again.");
         if (code === "rate_limited") return I18n.tr("Spotify đang giới hạn, sẽ thử lại sau.", "Spotify is rate limiting, will retry later.");
         if (code === "query_changed") return I18n.tr("Spotify vừa thay đổi, cần cập nhật Nutsty.", "Spotify changed something, Nutsty needs an update.");
+        if (code === "busy") return I18n.tr("Nutsty đang đồng bộ, thử lại sau ít phút.", "Nutsty is syncing, try again in a few minutes.");
         if (code === "") return "";
         return I18n.tr("Không kết nối được Spotify.", "Could not reach Spotify.");
     }
@@ -114,33 +134,10 @@ ColumnLayout {
         description: I18n.tr("Playlist và bài đã thích của bạn tự về Nutsty. Chỉ nên bật trên một máy, các máy khác nhận qua đồng bộ tài khoản.",
                              "Your playlists and likes arrive in Nutsty by themselves. Turn this on for one device only, your other devices get them through account sync.")
 
-        headerRight: Rectangle {
-            id: syncSwitch
-            width: 44
-            height: 24
-            radius: 12
-            readonly property bool lit: root.on || root.pickerOpen
-            color: lit ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18)
-            border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
-            border.width: 1
-            Behavior on color { ColorAnimation { duration: 150 } }
-
-            Rectangle {
-                width: 18
-                height: 18
-                radius: 9
-                color: "#ffffff"
-                anchors.verticalCenter: parent.verticalCenter
-                x: syncSwitch.lit ? parent.width - width - 3 : 3
-                Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                anchors.margins: -6
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.toggleSync()
-            }
+        headerRight: SpotifySwitch {
+            accentColor: root.accentColor
+            checked: root.on || root.pickerOpen
+            onToggled: root.toggleSync()
         }
 
         // Value bottom-left, what is kept in step fanned out on the right
@@ -341,6 +338,77 @@ ColumnLayout {
             Layout.leftMargin: 2
             visible: root.on && !root.pickerOpen && text !== ""
             text: root.sync ? root.errorText(root.sync.lastError) : ""
+            font.family: Theme.fontFamily
+            font.pixelSize: 11
+            color: "#fda4af"
+            wrapMode: Text.WordWrap
+        }
+    }
+
+    // --- Card 3: write-back, its own setting (spec 5.6). Off by default, risk said up front -----------
+    SpotifySettingCard {
+        id: wbCard
+        Layout.fillWidth: true
+        visible: root.on && !root.pickerOpen
+        accentColor: root.accentColor
+        showBody: root.writeBack
+        title: I18n.tr("Ghi ngược lên Spotify", "Write back to Spotify")
+        description: I18n.tr("Thích, thêm hoặc bớt bài trong Nutsty sẽ đổi cả bên Spotify. Cách này dùng phiên web của Spotify, trái điều khoản Spotify và có rủi ro nhỏ với tài khoản.",
+                             "Likes and playlist edits in Nutsty also change Spotify. This uses Spotify's web session, which breaks Spotify's terms and carries a small risk to your account.")
+
+        headerRight: SpotifySwitch {
+            accentColor: root.accentColor
+            checked: root.writeBack
+            onToggled: if (root.sync) root.sync.setWriteBack(!root.writeBack)
+        }
+
+        SpotifySubCard {
+            accentColor: root.accentColor
+            clickable: !root.backlogRunning
+            shimmer: root.backlogRunning
+            title: root.backlogRunning
+                   ? I18n.tr("Đã đẩy %1/%2", "Pushed %1/%2").arg(root.backlogDone).arg(root.backlogTotal)
+                   : I18n.tr("Đẩy các bài đã thích trước đó", "Push earlier likes")
+            description: root.backlogNote
+            onClicked: if (root.sync) root.sync.pushBacklog()
+
+            LosslessSmallButton {
+                visible: root.backlogRunning
+                accentColor: root.accentColor
+                label: I18n.tr("Dừng", "Stop")
+                onClicked: if (root.sync) root.sync.cancelBacklog()
+            }
+
+            AppIcon {
+                visible: !root.backlogRunning
+                source: "../assets/icons/go-up-symbolic.svg"
+                iconSize: 16
+                color: root.accentColor
+            }
+        }
+
+        // The preview performs the setting: one hairline per like going up, filling as they land
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 3
+            visible: root.backlogRunning && root.backlogTotal > 0
+            radius: 1.5
+            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18)
+
+            Rectangle {
+                height: parent.height
+                radius: parent.radius
+                width: parent.width * Math.min(1, root.backlogDone / Math.max(1, root.backlogTotal))
+                color: root.accentColor
+                Behavior on width { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
+            }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            Layout.leftMargin: 2
+            visible: text !== ""
+            text: root.backlogErr === "write_back_off" || root.backlogErr === "" ? "" : root.errorText(root.backlogErr)
             font.family: Theme.fontFamily
             font.pixelSize: 11
             color: "#fda4af"

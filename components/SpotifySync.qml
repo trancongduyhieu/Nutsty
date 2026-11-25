@@ -66,6 +66,7 @@ QtObject {
         sp._post("status", {}, function(res) {
             sp._applyStatus(res);
             if (sp.running && !pollTimer.running) pollTimer.start();
+            if (sp.backlogRunning && !backlogTimer.running) backlogTimer.start();
         });
     }
 
@@ -127,15 +128,32 @@ QtObject {
     }
 
     function setWriteBack(on) {
-        sp._post("set_write_back", { enabled: on }, function(res) { sp._applyStatus(res); });
+        sp._post("set_write_back", { on: on }, function(res) { sp._applyStatus(res); });
     }
 
+    // "Push earlier likes" runs in the background on the backend, paced; poll its progress until it ends
+    readonly property bool backlogRunning: !!(sp.backlog && sp.backlog.running)
+
     function pushBacklog() {
-        sp._post("start_backlog", {}, function(res) { sp._applyStatus(res); });
+        if (!sp.writeBack || sp.backlogRunning) return;
+        sp._post("backlog_start", {}, function(res) {
+            sp._applyStatus(res);
+            if (!res.success) sp.backlog = Object.assign({}, sp.backlog, { error: res.error || "network" });
+            if (sp.backlogRunning) backlogTimer.start();
+        });
     }
 
     function cancelBacklog() {
-        sp._post("cancel_backlog", {}, function(res) { sp._applyStatus(res); });
+        sp._post("backlog_cancel", {}, function(res) { sp._applyStatus(res); });
+    }
+
+    property Timer backlogTimer: Timer {
+        interval: 2000
+        repeat: true
+        onTriggered: sp._post("status", {}, function(res) {
+            sp._applyStatus(res);
+            if (!sp.backlogRunning) backlogTimer.stop();
+        })
     }
 
     // First run shortly after start, then every 3 hours

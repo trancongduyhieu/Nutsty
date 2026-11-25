@@ -125,5 +125,6 @@ LosslessSettingsSection 1.0 LosslessSettingsSection.qml
 SpotifyCoverPick 1.0 SpotifyCoverPick.qml
 SpotifySettingCard 1.0 SpotifySettingCard.qml
 SpotifySubCard 1.0 SpotifySubCard.qml
+SpotifySwitch 1.0 SpotifySwitch.qml
 SpotifySync 1.0 SpotifySync.qml
 SpotifySyncSection 1.0 SpotifySyncSection.qml
