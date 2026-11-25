@@ -4,8 +4,8 @@ import "."
 
 // Settings > Account, under the Spotify account row: two-way sync with the user's own Spotify library.
 // `sync` is the SpotifySync object of shell.qml. Shown only while a Spotify cookie is saved.
-// Two levels: each setting is a flat row with its switch (like the other Settings rows); its options
-// hang under it behind an accent rail, one size smaller, with a one-line summary and the synced covers.
+// One setting with its switch (like the other Settings rows); its options hang under it behind an accent
+// rail, one size smaller: a summary line, sync now, the playlists, and which way the sync runs.
 ColumnLayout {
     id: root
     spacing: 18
@@ -47,7 +47,9 @@ ColumnLayout {
         if (root.backlogRunning)
             return I18n.tr("Chạy chậm để an toàn cho tài khoản, có thể dừng bất cứ lúc nào", "Goes slowly to keep your account safe, stop it any time");
         if (root.backlogTotal > 0 || (backlog.unmatched || 0) > 0) {
-            var t = I18n.tr("Lần trước đã đẩy %1/%2", "Last time pushed %1/%2").arg(root.backlogDone).arg(root.backlogTotal);
+            var t = root.backlogTotal > 0
+                ? I18n.tr("Lần trước đã đẩy %1/%2", "Last time pushed %1/%2").arg(root.backlogDone).arg(root.backlogTotal)
+                : I18n.tr("Lần trước không có bài nào để đẩy", "Last time there was nothing to push");
             if ((backlog.unmatched || 0) > 0)
                 t += I18n.tr(", %1 bài không có trên Spotify", ", %1 songs not on Spotify").arg(backlog.unmatched);
             return t;
@@ -301,6 +303,79 @@ ColumnLayout {
             }
         }
 
+        // Which way the sync runs. One-way is the default; two-way (spec 5.6, write-back) says its risk up front
+        SpotifySubCard {
+            visible: root.on && !root.pickerOpen
+            accentColor: root.accentColor
+            title: I18n.tr("Chiều đồng bộ", "Sync direction")
+            description: root.writeBack
+                ? I18n.tr("Thích hoặc sửa playlist trong Nutsty thì Spotify cũng đổi theo. Cách này dùng phiên web của Spotify, có rủi ro nhỏ với tài khoản.",
+                          "Liking or editing a playlist in Nutsty changes Spotify too. This uses Spotify's web session and carries a small risk to your account.")
+                : I18n.tr("Chỉ lấy từ Spotify về, Nutsty không đổi gì bên Spotify.",
+                          "Only brings things in from Spotify, Nutsty changes nothing on Spotify.")
+
+            SpotifySegmented {
+                accentColor: root.accentColor
+                labels: [I18n.tr("Một chiều", "One way"), I18n.tr("Hai chiều", "Two way")]
+                currentIndex: root.writeBack ? 1 : 0
+                onPicked: function(index) { if (root.sync) root.sync.setWriteBack(index === 1) }
+            }
+        }
+
+        SpotifySubCard {
+            visible: root.on && !root.pickerOpen && root.writeBack
+            accentColor: root.accentColor
+            clickable: !root.backlogRunning
+            shimmer: root.backlogRunning
+            title: root.backlogRunning
+                   ? I18n.tr("Đã đẩy %1/%2", "Pushed %1/%2").arg(root.backlogDone).arg(root.backlogTotal)
+                   : I18n.tr("Đẩy các bài đã thích trước đó", "Push earlier likes")
+            description: root.backlogNote
+            onClicked: if (root.sync) root.sync.pushBacklog()
+
+            LosslessSmallButton {
+                visible: root.backlogRunning
+                accentColor: root.accentColor
+                label: I18n.tr("Dừng", "Stop")
+                onClicked: if (root.sync) root.sync.cancelBacklog()
+            }
+
+            AppIcon {
+                visible: !root.backlogRunning
+                source: "../assets/icons/go-up-symbolic.svg"
+                iconSize: 16
+                color: root.accentColor
+            }
+        }
+
+        // The preview performs the setting: one hairline per like going up, filling as they land
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 3
+            visible: root.on && !root.pickerOpen && root.writeBack && root.backlogRunning && root.backlogTotal > 0
+            radius: 1.5
+            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18)
+
+            Rectangle {
+                height: parent.height
+                radius: parent.radius
+                width: parent.width * Math.min(1, root.backlogDone / Math.max(1, root.backlogTotal))
+                color: root.accentColor
+                Behavior on width { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
+            }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            Layout.leftMargin: 10
+            visible: root.on && !root.pickerOpen && root.writeBack && text !== ""
+            text: root.backlogErr === "write_back_off" || root.backlogErr === "" ? "" : root.errorText(root.backlogErr)
+            font.family: Theme.fontFamily
+            font.pixelSize: 11
+            color: "#fda4af"
+            wrapMode: Text.WordWrap
+        }
+
         // Lists held back by the mass-delete guard
         Repeater {
             model: root.on && !root.pickerOpen && root.sync ? root.sync.blocked : []
@@ -335,77 +410,6 @@ ColumnLayout {
             Layout.leftMargin: 10
             visible: root.on && !root.pickerOpen && text !== ""
             text: root.sync ? root.errorText(root.sync.lastError) : ""
-            font.family: Theme.fontFamily
-            font.pixelSize: 11
-            color: "#fda4af"
-            wrapMode: Text.WordWrap
-        }
-    }
-
-    // --- Card 3: write-back, its own setting (spec 5.6). Off by default, risk said up front -----------
-    SpotifySettingCard {
-        id: wbCard
-        Layout.fillWidth: true
-        visible: root.on && !root.pickerOpen
-        accentColor: root.accentColor
-        showBody: root.writeBack
-        title: I18n.tr("Ghi ngược lên Spotify", "Write back to Spotify")
-        description: I18n.tr("Thích, thêm hoặc bớt bài trong Nutsty sẽ đổi cả bên Spotify. Cách này dùng phiên web của Spotify, trái điều khoản Spotify và có rủi ro nhỏ với tài khoản.",
-                             "Likes and playlist edits in Nutsty also change Spotify. This uses Spotify's web session, which breaks Spotify's terms and carries a small risk to your account.")
-
-        headerRight: SpotifySwitch {
-            accentColor: root.accentColor
-            checked: root.writeBack
-            onToggled: if (root.sync) root.sync.setWriteBack(!root.writeBack)
-        }
-
-        SpotifySubCard {
-            accentColor: root.accentColor
-            clickable: !root.backlogRunning
-            shimmer: root.backlogRunning
-            title: root.backlogRunning
-                   ? I18n.tr("Đã đẩy %1/%2", "Pushed %1/%2").arg(root.backlogDone).arg(root.backlogTotal)
-                   : I18n.tr("Đẩy các bài đã thích trước đó", "Push earlier likes")
-            description: root.backlogNote
-            onClicked: if (root.sync) root.sync.pushBacklog()
-
-            LosslessSmallButton {
-                visible: root.backlogRunning
-                accentColor: root.accentColor
-                label: I18n.tr("Dừng", "Stop")
-                onClicked: if (root.sync) root.sync.cancelBacklog()
-            }
-
-            AppIcon {
-                visible: !root.backlogRunning
-                source: "../assets/icons/go-up-symbolic.svg"
-                iconSize: 16
-                color: root.accentColor
-            }
-        }
-
-        // The preview performs the setting: one hairline per like going up, filling as they land
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 3
-            visible: root.backlogRunning && root.backlogTotal > 0
-            radius: 1.5
-            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18)
-
-            Rectangle {
-                height: parent.height
-                radius: parent.radius
-                width: parent.width * Math.min(1, root.backlogDone / Math.max(1, root.backlogTotal))
-                color: root.accentColor
-                Behavior on width { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
-            }
-        }
-
-        Text {
-            Layout.fillWidth: true
-            Layout.leftMargin: 10
-            visible: text !== ""
-            text: root.backlogErr === "write_back_off" || root.backlogErr === "" ? "" : root.errorText(root.backlogErr)
             font.family: Theme.fontFamily
             font.pixelSize: 11
             color: "#fda4af"

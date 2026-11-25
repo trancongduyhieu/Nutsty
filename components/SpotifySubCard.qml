@@ -72,6 +72,8 @@ Rectangle {
             font.pixelSize: 11
             color: Theme.textSecondary
             elide: Text.ElideRight
+            wrapMode: Text.WordWrap
+            maximumLineCount: 3
         }
     }
 
