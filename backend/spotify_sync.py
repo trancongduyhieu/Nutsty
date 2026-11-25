@@ -605,6 +605,134 @@ def sync_once(profile="", client=None, matcher=None, now=None, sleep=None):
         _RUN_LOCK.release()
 
 
+# ---------------------------------------------------------------------------
+# Backlog: "push earlier likes" (spec 5.6) - likes Nutsty held before write-back went on
+# ---------------------------------------------------------------------------
+BACKLOG_ROUND = PUSH_CAP      # tracks per round, then a longer rest, so a big library goes up slowly
+BACKLOG_REST_SEC = 60.0
+_BACKLOG_CANCEL = threading.Event()
+_BACKLOG_ACTIVE = set()
+
+
+def _backlog_progress(**kw):
+    st = sstate.load_state()
+    st["backlog"] = {"done": 0, "total": 0, "unmatched": 0, **(st.get("backlog") or {}), **kw}
+    sstate.save_state(st)
+
+
+def _backlog_commit(pairs):
+    """Record pushed (key, sid) pairs: liked entries get their id, base gains it, baseline loses the key."""
+    keys = {k for k, _s in pairs}
+    with pm.locked():
+        liked = pm._read_json(pm._liked_file(), {})
+        if isinstance(liked, dict):
+            dirty = False
+            for key, sid in pairs:
+                for k, v in liked.items():
+                    if isinstance(v, dict) and pm.get_track_unique_key(v) == key and v.get("spotifyId") != sid:
+                        v["spotifyId"] = sid
+                        dirty = True
+            if dirty:
+                pm._write_json(pm._liked_file(), liked)
+        st = sstate.load_state()
+        base = list(st.get("likedBase") or [])
+        base += [sid for _k, sid in pairs if sid not in set(base)]
+        st["likedBase"] = base
+        lb = dict(st.get("localBaseline") or {})
+        lb["liked"] = [k for k in lb.get("liked") or [] if k not in keys]
+        st["localBaseline"] = lb
+        sstate.save_state(st)
+
+
+def _backlog_run(client, sleep, now):
+    cache = sstate.MatchCache()
+    try:
+        fresh = client.liked_items()
+        if not merge.remote_is_valid(fresh):
+            raise sw.SpotifyNetworkError("liked songs read incomplete")
+        have = {i["spotifyId"] for i in fresh.items}
+        st = sstate.load_state()
+        keys = set((st.get("localBaseline") or {}).get("liked") or [])
+        liked = pm._read_json(pm._liked_file(), {})
+        queue, already, unmatched = [], [], 0
+        for v in (liked.values() if isinstance(liked, dict) else []):
+            if not isinstance(v, dict):
+                continue
+            key = pm.get_track_unique_key(v)
+            if key not in keys:
+                continue
+            sid = v.get("spotifyId") or reverse_match(v, client, cache, now)
+            if not sid:
+                unmatched += 1
+            elif sid in have:
+                already.append((key, sid))
+            elif sid not in {q for _k, q in queue}:
+                queue.append((key, sid))
+        if already:
+            _backlog_commit(already)
+        _backlog_progress(running=True, done=0, total=len(queue), unmatched=unmatched, error="")
+        done, calls, in_round = 0, 0, 0
+        while queue:
+            if in_round >= BACKLOG_ROUND:
+                sleep(BACKLOG_REST_SEC)
+                in_round = 0
+            elif calls:
+                sleep(PUSH_GAP_SEC)
+            if _BACKLOG_CANCEL.is_set() or not sstate.load_state().get("writeBack"):
+                break
+            batch, queue = queue[:PUSH_BATCH], queue[PUSH_BATCH:]
+            client.add_to_library([f"spotify:track:{sid}" for _k, sid in batch])
+            calls += 1
+            in_round += len(batch)
+            done += len(batch)
+            _backlog_commit(batch)
+            _backlog_progress(done=done)
+        _backlog_progress(running=False)
+    except sw.SpotifyError as e:
+        _backlog_progress(running=False, error=e.code)
+    finally:
+        if cache.dirty:
+            cache.save()
+
+
+def start_backlog(profile="", client=None, sleep=None, now=None, background=True):
+    """Push likes that were in Nutsty before write-back went on. Holds the sync lock while it runs,
+    so a sync cycle never interleaves with it; cancel_backlog stops it between writes."""
+    with pm.profile_scope(profile):
+        if not sstate.load_state().get("writeBack"):
+            return dict(status(profile), success=False, error="write_back_off")
+    if not _RUN_LOCK.acquire(blocking=False):
+        return dict(status(profile), success=False, error="busy")
+    _BACKLOG_CANCEL.clear()
+    _BACKLOG_ACTIVE.add(profile)
+
+    def work():
+        try:
+            with pm.profile_scope(profile):
+                try:
+                    c = client or _default_client()
+                except sw.SpotifyError as e:
+                    _backlog_progress(running=False, error=e.code)
+                    return
+                _backlog_run(c, sleep or time.sleep, time.time() if now is None else now)
+        except Exception as e:  # never let the backlog take the daemon down
+            sys.stderr.write(f"[spotify_sync] backlog failed: {e}\n")
+        finally:
+            _BACKLOG_ACTIVE.discard(profile)
+            _RUN_LOCK.release()
+
+    if background:
+        threading.Thread(target=work, name="spotify-backlog", daemon=True).start()
+    else:
+        work()
+    return dict(status(profile), success=True)
+
+
+def cancel_backlog(profile=""):
+    _BACKLOG_CANCEL.set()
+    return dict(status(profile), success=True)
+
+
 def list_choices(profile="", client=None):
     with pm.profile_scope(profile):
         st = sstate.load_state()
@@ -682,8 +810,11 @@ def force_apply(profile, pid):
 def status(profile=""):
     with pm.profile_scope(profile):
         st = sstate.load_state()
+        backlog = {"done": 0, "total": 0, "unmatched": 0, "error": "", **(st.get("backlog") or {})}
+        backlog["running"] = profile in _BACKLOG_ACTIVE
         return {k: st.get(k) for k in ("enabled", "selectionConfirmed", "likedSelected", "writeBack",
-                                       "lastSync", "lastError", "blocked", "unmatchedCount", "backlog")} | {
+                                       "lastSync", "lastError", "blocked", "unmatchedCount")} | {
+            "backlog": backlog,
             "selectedCount": len(st.get("selected") or []), "running": _RUN_LOCK.locked(),
             "blockedNames": _blocked_names(st.get("blocked") or [])}
 
@@ -732,6 +863,10 @@ def handle_http_path(handler, path, body):
             res = set_enabled(profile, body.get("enabled"))
         elif op == "set_write_back":
             res = set_write_back(profile, bool(body.get("on")))
+        elif op == "backlog_start":
+            res = start_backlog(profile)
+        elif op == "backlog_cancel":
+            res = cancel_backlog(profile)
         elif op == "force_apply":
             res = force_apply(profile, str(body.get("id") or ""))
         else:

@@ -891,6 +891,91 @@ class PushTests(SyncCase):
         self.assertEqual(cache.find_by_video("v2"), "g")
 
 
+class BacklogTests(SyncCase):
+    """'Push earlier likes' (spec 5.6): likes that were in Nutsty before write-back went on."""
+
+    def setup_liked(self, n, remote=()):
+        import spotify_sync as ss
+        self.enable([], liked=True)
+        self.set_liked({f"v{i}": yt(f"v{i}", spotifyId=f"s{i}") for i in range(n)})
+        c = FakeClient([], liked=remote_list(list(remote)))
+        self.sync(c)
+        ss.set_write_back("", True, now=self.NOW)
+        return c
+
+    def set_liked(self, data):
+        import playlist_manager as pm
+        pm._write_json(pm._liked_file(), data)
+
+    def run_backlog(self, c, sleep=None):
+        import spotify_sync as ss
+        return ss.start_backlog("", client=c, sleep=sleep or self.sleeps.append, background=False)
+
+    def test_backlog_pushes_pre_switch_likes(self):
+        import spotify_sync as ss
+        import spotify_sync_state as st
+        c = self.setup_liked(12, remote=["s0"])
+        self.run_backlog(c)
+        pushed = [u for _op, _t, uris in c.writes for u in uris]
+        self.assertEqual(sorted(pushed), sorted(f"spotify:track:s{i}" for i in range(1, 12)))
+        self.assertTrue(all(op == "add_to_library" for op, _t, _u in c.writes))
+        self.assertTrue(all(x >= 3 for x in self.sleeps))
+        self.assertEqual(len(self.sleeps), len(c.writes) - 1)
+        b = ss.status("")["backlog"]
+        self.assertEqual((b["running"], b["done"], b["total"], b["unmatched"]), (False, 11, 11, 0))
+        s = st.load_state()
+        self.assertEqual(s["localBaseline"]["liked"], [])
+        self.assertEqual(sorted(s["likedBase"]), sorted(f"s{i}" for i in range(12)))
+        # nothing left to push on the next cycle
+        before = len(c.writes)
+        self.sync(c)
+        self.assertEqual(len(c.writes), before)
+
+    def test_backlog_cancel_stops_between_writes(self):
+        import spotify_sync as ss
+        import spotify_sync_state as st
+        c = self.setup_liked(25)
+
+        def sleep(sec):
+            ss.cancel_backlog("")
+
+        self.run_backlog(c, sleep=sleep)
+        self.assertEqual(len(c.writes), 1)
+        b = ss.status("")["backlog"]
+        self.assertEqual((b["running"], b["done"], b["total"]), (False, 10, 25))
+        self.assertEqual(len(st.load_state()["localBaseline"]["liked"]), 15)
+
+    def test_backlog_requires_write_back_on(self):
+        import spotify_sync as ss
+        c = self.setup_liked(3)
+        ss.set_write_back("", False, now=self.NOW)
+        r = self.run_backlog(c)
+        self.assertFalse(r["success"])
+        self.assertEqual(r["error"], "write_back_off")
+        self.assertEqual(c.writes, [])
+
+    def test_backlog_counts_unmatched(self):
+        import spotify_sync as ss
+        self.enable([], liked=True)
+        self.set_liked({"vx": yt("vx", title="Nowhere")})
+        c = FakeClient([], liked=remote_list([]))
+        self.sync(c)
+        ss.set_write_back("", True, now=self.NOW)
+        self.run_backlog(c)
+        self.assertEqual(c.writes, [])
+        b = ss.status("")["backlog"]
+        self.assertEqual((b["done"], b["total"], b["unmatched"]), (0, 0, 1))
+
+    def test_backlog_routes(self):
+        import spotify_sync as ss
+        h = FakeHandler()
+        ss.handle_http_path(h, "/api/spotify/sync/backlog_start", {})
+        self.assertEqual(h.sent[0]["error"], "write_back_off")
+        ss.handle_http_path(h, "/api/spotify/sync/backlog_cancel", {})
+        self.assertEqual(h.sent[1], 200)
+        self.assertFalse(h.sent[0]["backlog"]["running"])
+
+
 class RouteTests(unittest.TestCase):
     def setUp(self):
         for f in CONFIG_DIR.glob("spotify_*"):
