@@ -57,6 +57,8 @@ rounded:
   card: "12px"
   pill: "16px"
   stat-card: "22px"
+  setting-card: "20px"
+  setting-sub: "12px"
   panel: "24px"
 spacing:
   xs: "4px"
@@ -92,6 +94,15 @@ components:
   card-stat:
     rounded: "{rounded.stat-card}"
     padding: "18px 22px"
+  card-setting:
+    rounded: "{rounded.setting-card}"
+    padding: "18px 20px"
+  card-setting-sub:
+    rounded: "{rounded.setting-sub}"
+    padding: "8px 12px"
+  value-display:
+    typography: "{typography.headline}"
+    textColor: "{colors.text-primary}"
   window:
     backgroundColor: "{colors.ink-app}"
     rounded: "{rounded.panel}"
@@ -110,6 +121,8 @@ The UI is dense and quiet, made of small type (11 to 13px), hairline borders and
 Motion is quick and soft. Most transitions run 100 to 160ms with `Easing.OutCubic`, or `InOutQuad` for opacity and colour. Playful entrances use `OutBack`. The backdrop crossfades over 400ms and the cover over 900ms. Long moves (page morphs, cards opening, charts growing, the welcome card's flight) use Mochy's emphasized decelerate `[0.2, 0, 0, 1]`: 420ms to open a card, 320ms for a chevron, 900ms for a chart to grow, 1400ms for a figure to roll. Older code still uses `[0.42, 0, 0.16, 1]`; new code uses the Mochy curve.
 
 **Design lineage: Mochy for motion and layout, Swiftify for icons, the glass is Nutsty's own.** New screens take their layout and choreography from Mochy (`references/Mochy-Music/`): big bold titles that a scroll can collapse, cards that open in place into the detail behind them, figures that roll in, charts that grow in, and Material 3's emphasized-decelerate curve `[0.2, 0, 0, 1]` for anything that moves a long way. Swiftify (`references/swiftify/`) has no glass at all; it only sets the toggle icons and a few Material You motions, such as icon morphs. The Liquid Glass surfaces are Nutsty's own and owe nothing to either app. Both references are studied and rebuilt in QML, never pasted: their palettes give way to Nutsty's borrowed accent.
+
+**Mochy's settings and library, as studied on the phone (Nov 2026).** Mochy's surfaces are opaque `#1C1C1E` cards on pure black and monochrome controls. Nutsty keeps Mochy's *structure* and swaps the *material*: every card is accent-tinted glass with a hairline, every lit control takes the accent. What Nutsty copies is the anatomy: one card per setting (never an iOS grouped list of thin rows), a bold title, a large live value, and a small preview of the result on the card's right half.
 
 Confirmed rejections: emoji anywhere in the UI, dead grey buttons, capsule shapes used by default, and box-in-a-box nesting.
 
@@ -184,7 +197,9 @@ Depth comes from layered translucency and blur, not from drop shadows. There are
 Corners are gentle and concentric. Badges use 4 to 6px, buttons 8px, cards 10 to 12px, side panels and modals 16 to 18px, and the main window 24px. A child's radius equals its parent's radius minus the padding between them. Every card, row, chip and cover image has a 1px hairline. Images get their corners only from `RoundedImage.qml`, which handles HiDPI `sourceSize`, lazy layers, fallback icons and the border. Circles are kept for round icon buttons (nav arrows, play buttons) and avatars.
 
 ### Named Rules
-**The Anti-Capsule Rule.** Never use `radius = height / 2` on buttons, cards or badges. Mood chips are the explicit exception.
+Settings cards (the Mochy anatomy, see Components) use 20px, and the sub-cards inside them 12px, which is 20 minus their 8px inset.
+
+**The Anti-Capsule Rule.** Never use `radius = height / 2` on buttons, cards or badges. The exceptions are mood chips and, from Mochy, switches, filter chips and the segmented control's track and selected pill: those are capsules by nature.
 
 ## Components
 
@@ -200,6 +215,18 @@ Corners are gentle and concentric. Badges use 4 to 6px, buttons 8px, cards 10 to
 ### Cards / Containers
 - **Track card:** dark ink card (`TrackCard.qml`) with a full-bleed cover (`PreserveAspectCrop`) and a concentric inner radius. The hairline steps from 7% to 18% white on hover and becomes the accent at 45% while the track plays.
 - **Popover / menu:** dark organic glass, `Qt.rgba(0.06 + a.r*0.08, 0.06 + a.g*0.08, 0.08 + a.b*0.12, 0.96)` with a 35% accent border. The selected item uses a 26% accent fill and a checkmark SVG. Hovered items use 14%.
+
+### Signature: Setting Card (from Mochy)
+The settings and sync screens are built from these, one card per setting, stacked with 12px gaps and grouped under a large bold section title (Headline) with a hairline divider between groups. Never an iOS grouped list of 60px rows with round icons: that read as generic and was rejected.
+- **Anatomy:** title top-left (Title, Bold 17 to 20px), an optional reset icon right after it, the description under it in Text Secondary (12px, at most three lines), the switch top-right. The left half carries words, the right half a **preview**: a small schematic of what the setting changes (wireframe lines, a blurred thumbnail, the real cover art), drawn in white at 15 to 40% or the real image.
+- **Value display:** a setting with a value shows it large at the bottom-left (Headline, Black 28 to 32px: "25px", "1x", "Flagship"). A slider setting puts the value right-aligned on the title line instead, with a 3px track (white 20%) filled with the accent, and min and max labels under its ends in 11px muted.
+- **Sub-cards:** options that only matter when the parent is on sit in sub-cards inside it, inset 8px, radius 12, fill accent at 8% with a 7% hairline. One level only; this is the one sanctioned box-in-a-box.
+- **Segmented control:** a capsule track (accent 12%) with a capsule selected pill (accent fill, white text), for two or three choices such as Low / High.
+- **Style picker:** a horizontal carousel of preview cards (name large at the bottom-left, a wireframe of the layout on the right). The chosen card gets a 2px accent outline, and a muted caption sits under the strip ("vuốt, rồi chạm vào một kiểu để dùng").
+- **Surface:** accent-tinted glass (accent at 8%, hairline white at 7%, 18% on hover), never Mochy's opaque grey.
+
+### Signature: Source Tiles (from Mochy's library)
+Content that comes from several services (Spotify, YouTube, Apple Music, Tidal) is a two-column grid of 16px tiles under an uppercase section label (Label, DemiBold 11px, tracking 0.08em). Each tile has the service mark and name in bold on top, a large count under it (Headline), and up to two covers peeking from the bottom-right corner. Service marks are the one place brand colour appears; the tile itself stays glass. Filter chips above the grid are capsules: glass at rest, accent fill when selected. A wide card with the service logos in a row invites an import when the library is empty.
 
 ### Navigation
 - **Carousel arrows:** `NavArrowButton.qml` is a circle tinted with the accent. It scales to 1.06 on hover and fades to 28% opacity, disabled, at the scroll limit.
@@ -231,11 +258,13 @@ A layer-shell overlay (Linux) or frameless overlay (Windows) with four presets: 
 - **Do** compute inner radii concentrically, and use `RoundedImage.qml` for every rounded image.
 - **Do** use SVG icons through `AppIcon.qml`, and pass all copy through `I18n.tr()`.
 - **Do** provide a Lite mode path for any continuous or whole-window effect.
+- **Do** give a setting card a preview of its effect and its value in large type, as Mochy does; words on the left, result on the right.
 
 ### Don't:
 - **Don't** use emoji anywhere in the interface.
 - **Don't** use dead grey buttons or popovers (white at 6 or 8%, `#18181b`, `#27272a`).
 - **Don't** make capsules (`radius = height / 2`) except for mood chips.
-- **Don't** nest boxes inside boxes. Separate with space and hairlines.
+- **Don't** nest boxes inside boxes. Separate with space and hairlines. The single exception is a setting card's sub-cards (one level, concentric).
+- **Don't** build settings as iOS grouped lists of thin rows with round icons. Use one setting card per setting, Mochy's anatomy.
 - **Don't** fake glass with a milky translucent rectangle, or hide the glass source with `visible: false`.
 - **Don't** give lyrics a white halo. Use cinematic shadows.
