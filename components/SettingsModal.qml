@@ -397,6 +397,7 @@ Rectangle {
 
     // components/AccountSync.qml, set by shell.qml (null in previews)
     property var accountSync: null
+    property var spotifySync: null
     property bool linkCodeEntry: false
     property bool detachConfirm: false
     // Friends of the account this device uses now (the warning before typing a link code)
@@ -1361,6 +1362,16 @@ Rectangle {
                             }
                         }
                     }
+                }
+
+                // Two-way Spotify sync, only once a cookie is saved
+                SpotifySyncSection {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 4
+                    Layout.rightMargin: 16
+                    visible: root.spotifySync !== null && root.spotifySpdc && root.spotifySpdc.length > 10
+                    sync: root.spotifySync
+                    accentColor: root.accentColor
                 }
 
                 // Spotify Browser Login Block (When NOT Logged In)

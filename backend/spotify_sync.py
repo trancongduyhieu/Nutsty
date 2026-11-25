@@ -414,7 +414,16 @@ def status(profile=""):
         st = sstate.load_state()
         return {k: st.get(k) for k in ("enabled", "selectionConfirmed", "likedSelected", "writeBack",
                                        "lastSync", "lastError", "blocked", "unmatchedCount", "backlog")} | {
-            "selectedCount": len(st.get("selected") or []), "running": _RUN_LOCK.locked()}
+            "selectedCount": len(st.get("selected") or []), "running": _RUN_LOCK.locked(),
+            "blockedNames": _blocked_names(st.get("blocked") or [])}
+
+
+def _blocked_names(blocked):
+    """Playlist title per blocked Spotify id, "" for Liked Songs or a list Nutsty no longer has."""
+    if not blocked:
+        return {}
+    titles = {p.get("id"): p.get("title") or "" for p in pm.load_playlists() if isinstance(p, dict)}
+    return {pid: ("" if pid == "liked" else titles.get(linked_id(pid), "")) for pid in blocked}
 
 
 # ---------------------------------------------------------------------------

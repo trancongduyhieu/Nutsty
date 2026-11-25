@@ -122,3 +122,6 @@ ResumeListeningToast 1.0 ResumeListeningToast.qml
 LosslessExplainModal 1.0 LosslessExplainModal.qml
 LosslessSmallButton 1.0 LosslessSmallButton.qml
 LosslessSettingsSection 1.0 LosslessSettingsSection.qml
+SpotifyChoiceRow 1.0 SpotifyChoiceRow.qml
+SpotifySync 1.0 SpotifySync.qml
+SpotifySyncSection 1.0 SpotifySyncSection.qml

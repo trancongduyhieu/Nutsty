@@ -676,6 +676,17 @@ class RouteTests(unittest.TestCase):
             httpd.shutdown()
             httpd.server_close()
 
+    def test_status_names_blocked_lists(self):
+        import spotify_sync as ss
+        import spotify_sync_state as sstate
+        import playlist_manager as pm
+        pm.save_playlists([{"id": ss.linked_id("P1"), "title": "Road trip", "tracks": []}])
+        st = sstate.load_state()
+        st["blocked"] = ["P1", "liked", "GONE"]
+        sstate.save_state(st)
+        names = ss.status("")["blockedNames"]
+        self.assertEqual(names, {"P1": "Road trip", "liked": "", "GONE": ""})
+
     def test_unknown_op_404(self):
         import spotify_sync as ss
         h = FakeHandler()

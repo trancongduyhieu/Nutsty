@@ -25,6 +25,9 @@ Rectangle {
     signal addTracksRequested(var playlist)
     signal reorderTrackRequested(string plId, int fromIndex, int toIndex)
 
+    // Kept in step with a Spotify playlist by Spotify sync (backend/spotify_sync.py)
+    readonly property bool spotifyLinked: !!(root.playlist && root.playlist.spotifyLink)
+
     readonly property var playlistTracks: {
         if (!playlist || !playlist.tracks) return [];
         if (playlist.tracks.length !== undefined) return playlist.tracks;
@@ -150,12 +153,45 @@ Rectangle {
                     }
 
                     // Personal Playlist Subtitle (No border, clean text under title - ui-layout-design-rules)
-                    Text {
-                        text: I18n.tr("Danh sách phát cá nhân", "Personal Playlist")
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 13
-                        font.weight: Font.Medium
-                        color: root.accentColor
+                    Row {
+                        spacing: 8
+
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: I18n.tr("Danh sách phát cá nhân", "Personal Playlist")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.weight: Font.Medium
+                            color: root.accentColor
+                        }
+
+                        // Linked to a Spotify playlist by Spotify sync
+                        Rectangle {
+                            visible: root.spotifyLinked
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 22
+                            height: 22
+                            radius: 11
+                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, linkBadgeMouse.containsMouse ? 0.22 : 0.12)
+                            border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
+                            border.width: 1
+
+                            AppIcon {
+                                anchors.centerIn: parent
+                                source: "../assets/icons/spotify-link.svg"
+                                iconSize: 12
+                                color: root.accentColor
+                            }
+
+                            MouseArea {
+                                id: linkBadgeMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                ToolTip.visible: containsMouse
+                                ToolTip.text: I18n.tr("Đồng bộ với Spotify", "Synced with Spotify")
+                                ToolTip.delay: 300
+                            }
+                        }
                     }
 
                     // Description (if present)
@@ -520,13 +556,27 @@ Rectangle {
                                         elide: Text.ElideRight
                                     }
 
-                                    Text {
+                                    RowLayout {
                                         Layout.fillWidth: true
-                                        text: trk ? (trk.artist || "") : ""
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 11
-                                        color: Theme.textSecondary
-                                        elide: Text.ElideRight
+                                        spacing: 6
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: trk ? (trk.artist || "") : ""
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 11
+                                            color: Theme.textSecondary
+                                            elide: Text.ElideRight
+                                        }
+
+                                        // Added in Nutsty, not on the Spotify side of a linked playlist
+                                        Text {
+                                            visible: root.spotifyLinked && trk && !trk.spotifyId
+                                            text: I18n.tr("Chỉ có trên Nutsty", "Only in Nutsty")
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 10
+                                            color: Theme.textMuted
+                                        }
                                     }
                                 }
 
