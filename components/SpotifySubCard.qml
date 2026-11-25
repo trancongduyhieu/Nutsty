@@ -11,6 +11,8 @@ Rectangle {
     property string description: ""
     property bool danger: false
     property bool clickable: false
+    // the title is a working verb ("Đang đồng bộ..."): a band of light sweeps it, as ShimmerText does elsewhere
+    property bool shimmer: false
     property color accentColor: Theme.accent
     default property alias trailing: trailingSlot.data
     signal clicked()
@@ -43,7 +45,17 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         spacing: 2
 
+        ShimmerText {
+            visible: sub.shimmer
+            running: visible
+            text: sub.title
+            pixelSize: 13
+            fontWeight: Font.DemiBold
+            letterSpacing: 0
+        }
+
         Text {
+            visible: !sub.shimmer
             width: parent.width
             text: sub.title
             font.family: Theme.fontFamily

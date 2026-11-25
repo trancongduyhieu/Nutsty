@@ -149,25 +149,34 @@ ColumnLayout {
             visible: root.on && !root.pickerOpen
             spacing: 16
 
-            ColumnLayout {
+            // Mochy's figure layout: the count rolls (and spins like a slot machine while a sync runs),
+            // a monospace caption broken by hand sits beside it, never under it
+            Row {
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignBottom
-                spacing: 0
+                spacing: 14
+
+                // clipped: spinning reels would otherwise show the digits above and below
+                Item {
+                    id: countBox
+                    width: countOdo.implicitWidth
+                    height: countOdo.implicitHeight
+                    clip: true
+                    Odometer {
+                        id: countOdo
+                        text: String(root.syncedCount)
+                        pixelSize: 44
+                        spinning: !!(root.sync && root.sync.running)
+                    }
+                }
 
                 Text {
-                    text: root.syncedCount
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 40
-                    font.weight: Font.Black
-                    color: Theme.textPrimary
-                }
-                Text {
-                    Layout.fillWidth: true
-                    text: I18n.tr("mục đang khớp với Spotify", "kept in step with Spotify")
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 12
+                    anchors.verticalCenter: countBox.verticalCenter
+                    text: I18n.tr("mục\nđang khớp\nvới Spotify", "kept\nin step\nwith Spotify")
+                    font.family: "monospace"
+                    font.pixelSize: 11
+                    lineHeight: 0.95
                     color: Theme.textSecondary
-                    wrapMode: Text.WordWrap
                 }
             }
 
@@ -182,6 +191,16 @@ ColumnLayout {
                     for (var i = 0; i < root.synced.length && out.length < 4; i++) out.push(root.synced[i]);
                     return out;
                 }
+                // The preview performs the setting: while a sync runs the covers lift one after another,
+                // left to right, as if passing through. Idle, hidden or in Lite mode it rests.
+                readonly property bool lite: (typeof win !== "undefined") ? !!win.liteMode : false
+                readonly property bool waving: !!(root.sync && root.sync.running) && fan.visible && !fan.lite
+                property real phase: 0
+                NumberAnimation on phase {
+                    from: 0; to: 1; duration: 1400; loops: Animation.Infinite
+                    running: fan.waving
+                }
+                onWavingChanged: if (!waving) phase = 0
 
                 Repeater {
                     model: fan.covers
@@ -194,7 +213,14 @@ ColumnLayout {
                         height: 72
                         z: index
                         x: fan.width - 72 - 10 - (fan.covers.length - 1 - index) * 34
-                        y: 10 + Math.abs(index - mid) * 4
+                        // 0..1 bump that travels across the hand once per phase
+                        readonly property real lift: {
+                            if (!fan.waving) return 0;
+                            var t = fan.phase - fanCard.index / Math.max(1, fan.covers.length) * 0.6;
+                            t = t - Math.floor(t);
+                            return t < 0.4 ? Math.sin(t / 0.4 * Math.PI) : 0;
+                        }
+                        y: 10 + Math.abs(index - mid) * 4 - lift * 14
                         rotation: (index - mid) * 7
                         transformOrigin: Item.Bottom
 
@@ -238,6 +264,7 @@ ColumnLayout {
             visible: root.on && !root.pickerOpen
             accentColor: root.accentColor
             clickable: !(root.sync && root.sync.running)
+            shimmer: !!(root.sync && root.sync.running)
             title: root.sync && root.sync.running ? I18n.tr("Đang đồng bộ...", "Syncing...") : I18n.tr("Đồng bộ ngay", "Sync now")
             description: !root.sync ? "" : (root.sync.lastSync > 0
                   ? I18n.tr("Lần cuối lúc %1", "Last synced at %1").arg(Qt.formatDateTime(new Date(root.sync.lastSync * 1000), "HH:mm dd/MM"))
