@@ -31,5 +31,8 @@ jobs:
       - name: Playlist writes (HTTP ops, profile scope, cross-process lock, both routers)
         run: python scripts/test_playlist_backend.py
 
+      - name: Spotify sync (web client, three-way merge, guards, both routers)
+        run: python scripts/test_spotify_sync.py
+
       - name: PlaylistStore behaviour (QML through compat, HTTP to a real auth_server)
         run: python scripts/test_playlist_store.py

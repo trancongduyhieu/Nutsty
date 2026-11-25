@@ -57,6 +57,8 @@ rounded:
   card: "12px"
   pill: "16px"
   stat-card: "22px"
+  setting-card: "20px"
+  setting-sub: "12px"
   panel: "24px"
 spacing:
   xs: "4px"
@@ -92,6 +94,15 @@ components:
   card-stat:
     rounded: "{rounded.stat-card}"
     padding: "18px 22px"
+  card-setting:
+    rounded: "{rounded.setting-card}"
+    padding: "18px 20px"
+  card-setting-sub:
+    rounded: "{rounded.setting-sub}"
+    padding: "8px 12px"
+  value-display:
+    typography: "{typography.headline}"
+    textColor: "{colors.text-primary}"
   window:
     backgroundColor: "{colors.ink-app}"
     rounded: "{rounded.panel}"
@@ -105,11 +116,13 @@ components:
 
 Nutsty is a sheet of glass resting on the user's desktop. While nothing plays, the window is a dark acrylic pane at 58% (`Qt.rgba(0.04, 0.04, 0.06, 0.58)`) and the wallpaper shows straight through. Once a song plays, a velvet backdrop fades in over 400ms, the album art blooms into a blurred aurora behind the content, and every interactive control takes on the song's colour. The interface never brings its own palette. It borrows one from the wallpaper and the cover art, through OKLAB chromatic salience extraction.
 
-The UI is dense and quiet, made of small type (11 to 13px), hairline borders and concentric rounded corners. Expression goes into the large moments: the Now Playing view, the Instrument Serif lyrics and the Spotify import stage. Controls stay translucent and tinted. They brighten on hover instead of rising off the surface.
+The UI is dense and quiet, made of small type (11 to 13px), hairline borders and concentric rounded corners. Expression goes into the large moments (the Now Playing view, the Instrument Serif lyrics, the recap, the listener card) and into previews that perform their setting live, as Mochy's customise screen does (see Signature Moments). Controls stay translucent and tinted. They brighten on hover instead of rising off the surface.
 
 Motion is quick and soft. Most transitions run 100 to 160ms with `Easing.OutCubic`, or `InOutQuad` for opacity and colour. Playful entrances use `OutBack`. The backdrop crossfades over 400ms and the cover over 900ms. Long moves (page morphs, cards opening, charts growing, the welcome card's flight) use Mochy's emphasized decelerate `[0.2, 0, 0, 1]`: 420ms to open a card, 320ms for a chevron, 900ms for a chart to grow, 1400ms for a figure to roll. Older code still uses `[0.42, 0, 0.16, 1]`; new code uses the Mochy curve.
 
 **Design lineage: Mochy for motion and layout, Swiftify for icons, the glass is Nutsty's own.** New screens take their layout and choreography from Mochy (`references/Mochy-Music/`): big bold titles that a scroll can collapse, cards that open in place into the detail behind them, figures that roll in, charts that grow in, and Material 3's emphasized-decelerate curve `[0.2, 0, 0, 1]` for anything that moves a long way. Swiftify (`references/swiftify/`) has no glass at all; it only sets the toggle icons and a few Material You motions, such as icon morphs. The Liquid Glass surfaces are Nutsty's own and owe nothing to either app. Both references are studied and rebuilt in QML, never pasted: their palettes give way to Nutsty's borrowed accent.
+
+**Mochy's settings and library, as studied on the phone (Nov 2026).** Mochy's surfaces are opaque `#1C1C1E` cards on pure black and monochrome controls. Nutsty keeps Mochy's *structure* and swaps the *material*: every card is accent-tinted glass with a hairline, every lit control takes the accent. What Nutsty copies is the anatomy: one card per setting (never an iOS grouped list of thin rows), a bold title, a large live value, and a small preview of the result on the card's right half.
 
 Confirmed rejections: emoji anywhere in the UI, dead grey buttons, capsule shapes used by default, and box-in-a-box nesting.
 
@@ -184,7 +197,9 @@ Depth comes from layered translucency and blur, not from drop shadows. There are
 Corners are gentle and concentric. Badges use 4 to 6px, buttons 8px, cards 10 to 12px, side panels and modals 16 to 18px, and the main window 24px. A child's radius equals its parent's radius minus the padding between them. Every card, row, chip and cover image has a 1px hairline. Images get their corners only from `RoundedImage.qml`, which handles HiDPI `sourceSize`, lazy layers, fallback icons and the border. Circles are kept for round icon buttons (nav arrows, play buttons) and avatars.
 
 ### Named Rules
-**The Anti-Capsule Rule.** Never use `radius = height / 2` on buttons, cards or badges. Mood chips are the explicit exception.
+Settings cards (the Mochy anatomy, see Components) use 20px, and the sub-cards inside them 12px, which is 20 minus their 8px inset.
+
+**The Anti-Capsule Rule.** Never use `radius = height / 2` on buttons, cards or badges. The exceptions are mood chips and, from Mochy, switches, filter chips and the segmented control's track and selected pill: those are capsules by nature.
 
 ## Components
 
@@ -200,6 +215,34 @@ Corners are gentle and concentric. Badges use 4 to 6px, buttons 8px, cards 10 to
 ### Cards / Containers
 - **Track card:** dark ink card (`TrackCard.qml`) with a full-bleed cover (`PreserveAspectCrop`) and a concentric inner radius. The hairline steps from 7% to 18% white on hover and becomes the accent at 45% while the track plays.
 - **Popover / menu:** dark organic glass, `Qt.rgba(0.06 + a.r*0.08, 0.06 + a.g*0.08, 0.08 + a.b*0.12, 0.96)` with a 35% accent border. The selected item uses a 26% accent fill and a checkmark SVG. Hovered items use 14%.
+
+### Signature: Setting Card (from Mochy)
+The settings and sync screens are built from these, one card per setting, stacked with 12px gaps and grouped under a large bold section title (Headline) with a hairline divider between groups. Never an iOS grouped list of 60px rows with round icons: that read as generic and was rejected.
+- **Anatomy:** title top-left (Title, Bold 17 to 20px), an optional reset icon right after it, the description under it in Text Secondary (12px, at most three lines), the switch top-right. The left half carries words, the right half a **preview**: a small schematic of what the setting changes (wireframe lines, a blurred thumbnail, the real cover art), drawn in white at 15 to 40% or the real image.
+- **Value display:** a setting with a value shows it large at the bottom-left (Headline, Black 28 to 32px: "25px", "1x", "Flagship"). A slider setting puts the value right-aligned on the title line instead, with a 3px track (white 20%) filled with the accent, and min and max labels under its ends in 11px muted.
+- **Sub-cards:** options that only matter when the parent is on sit in sub-cards inside it, inset 8px, radius 12, fill accent at 8% with a 7% hairline. One level only; this is the one sanctioned box-in-a-box.
+- **Segmented control:** a capsule track (accent 12%) with a capsule selected pill (accent fill, white text), for two or three choices such as Low / High.
+- **Style picker:** a horizontal carousel of preview cards (name large at the bottom-left, a wireframe of the layout on the right). The chosen card gets a 2px accent outline, and a muted caption sits under the strip ("vuốt, rồi chạm vào một kiểu để dùng").
+- **Surface:** accent-tinted glass (accent at 8%, hairline white at 7%, 18% on hover), never Mochy's opaque grey.
+
+### Signature: Source Tiles (from Mochy's library)
+Content that comes from several services (Spotify, YouTube, Apple Music, Tidal) is a two-column grid of 16px tiles under an uppercase section label (Label, DemiBold 11px, tracking 0.08em). Each tile has the service mark and name in bold on top, a large count under it (Headline), and up to two covers peeking from the bottom-right corner. Service marks are the one place brand colour appears; the tile itself stays glass. Filter chips above the grid are capsules: glass at rest, accent fill when selected. A wide card with the service logos in a row invites an import when the library is empty.
+
+### Signature Moments (read from Mochy's code, Nov 2026)
+Read from `references/Mochy-Music` (v8.3.2 source; the phone runs 8.4.2). Mochy is **not** animated everywhere: only 25 of its 1036 Kotlin files run an endless animation, and the settings list (`MochySettingsScreen.kt`) has just a 180ms fade. What it does is narrower and is the thing to copy:
+- **A preview performs the setting.** In the customise screen (`gesture/CustomisationLivePreviews.kt`) each card's right half shows the setting working: a dot hopping side to side at the chosen animation speed, a dot sharpening and blurring back like a lyric line, the real glass blurring a tiny screen, a lyric line singing in each style, the status bar sliding away when its switch goes off. Motion comes from the value, never decoration. The cover-rounding swatch is one big corner bleeding off the card's top-right edge, with a white arc hugging its bend, redrawn from the slider value.
+- **Loops run only while seen.** Every looping preview waits until it is on screen (`rememberOnScreen`) and pauses while held; the marquee "stops with the banner, which leaves composition as it scrolls away". Nutsty: a loop binds `running` to the item's visibility and Lite mode.
+- **Drifting strip** (`library/LibraryImport.kt`, `ProviderMarquee`): the four service icons as 56px squircles 14px apart, moving left linearly, 2.6s per icon, as many sets as cover the card plus one, so the wrap never shows; under it "Import your music here!" in Bold 21. While an import runs the banner crossfades into an 8px white bar (350ms) and "Adding 12 of 40 tracks from Spotify". Nutsty has only `spotify-symbolic.svg` so far; other marks are needed before building it.
+- **Version ring** (`update/VersionRing.kt`): not a progress ring. A 46px band at white 8% with the version in bold monospace at 30% running round it ("8.4.2 · " repeated, the leftover space is the visible gap), one turn every 26s; scrolling the sheet zooms it 1.42x, lifts it 72px and blurs it out, and the turn stops once it is gone.
+- **Nutsty already owns the rest of the kit**, ported from Mochy's recap and profile: `Odometer.qml` (Mochy's `OdometerNumber`), `ShapeLoader.qml`, `ShimmerText.qml`, the giant ghost word and dot grid, the card flight, scratch to reveal, the receipt. Settings, sync and import never used them; that, not the cards, is why they read generic.
+
+### Signature Type (Mochy's text layouts)
+From `settings/ProfileScreen.kt` (`ListeningTimeCard`, `TimeValue`, `VersionCard`) and the recap: a figure gets a layout of its own, never "Label: value".
+- **Figure with a shrunk unit:** the number Bold 44 at -2 tracking, rolling as an odometer; the unit Bold 18 on its bottom edge ("23h"). Two figures are split by a 1px rule at white 40%, 34px tall ("23h | 29m"). Figures scale with the card width (0.72 to 1.2x) and step down 10 to 20% for 3 to 4 digit values.
+- **Monospace side caption:** the caption in monospace 14, grey, right-aligned and broken by hand into lines, filling the space beside the figure ("Total Listening\ntime"). A hairline and a muted "View Stats  >" link close the card.
+- **Version as a figure:** a small SemiBold 13 label over the version in Bold 44, build suffix dropped.
+- **Tag on the title, story sentence, machine text, spaced-caps prompt:** as in the recap (`RecapStory.qml`): a small tag at the cap height beside a big title ("Thống kê" with "2026 Re'cap"); small lead line, one huge word, small follow-up; monospace IDs and timestamps, and a word turned 90 degrees along a card's edge; "CHẠM ĐỂ KẾT THÚC" tracked wide.
+- Still through `I18n.tr()`: each layout must hold in both languages, so test the long one.
 
 ### Navigation
 - **Carousel arrows:** `NavArrowButton.qml` is a circle tinted with the accent. It scales to 1.06 on hover and fades to 28% opacity, disabled, at the scroll limit.
@@ -231,11 +274,15 @@ A layer-shell overlay (Linux) or frameless overlay (Windows) with four presets: 
 - **Do** compute inner radii concentrically, and use `RoundedImage.qml` for every rounded image.
 - **Do** use SVG icons through `AppIcon.qml`, and pass all copy through `I18n.tr()`.
 - **Do** provide a Lite mode path for any continuous or whole-window effect.
+- **Do** give a setting card a preview of its effect and its value in large type, as Mochy does; words on the left, result on the right.
+- **Do** make a setting's preview perform the setting from its live value, and run any loop only while it is on screen and Lite mode is off.
 
 ### Don't:
 - **Don't** use emoji anywhere in the interface.
 - **Don't** use dead grey buttons or popovers (white at 6 or 8%, `#18181b`, `#27272a`).
 - **Don't** make capsules (`radius = height / 2`) except for mood chips.
-- **Don't** nest boxes inside boxes. Separate with space and hairlines.
+- **Don't** nest boxes inside boxes. Separate with space and hairlines. The single exception is a setting card's sub-cards (one level, concentric).
+- **Don't** build settings as iOS grouped lists of thin rows with round icons. Use one setting card per setting, Mochy's anatomy.
 - **Don't** fake glass with a milky translucent rectangle, or hide the glass source with `visible: false`.
 - **Don't** give lyrics a white halo. Use cinematic shadows.
+- **Don't** add motion as decoration: in Mochy every loop shows something real (a setting, the services, the version).

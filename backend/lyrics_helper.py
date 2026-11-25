@@ -38,23 +38,27 @@ import platform_compat as pc
 pc.configure_windows_ssl()
 
 CACHE_DIR = os.path.join(pc.get_cache_dir(), "lyrics")
-def _get_settings_path():
-    prof_suffix = pc.get_profile_suffix() if hasattr(pc, "get_profile_suffix") else ""
+def _get_settings_path(suffix=None):
+    """`suffix` picks a profile's file explicitly (the daemon serves every profile); None = this process's."""
+    if suffix is not None:
+        prof_suffix = suffix
+    else:
+        prof_suffix = pc.get_profile_suffix() if hasattr(pc, "get_profile_suffix") else ""
     return os.path.join(pc.get_config_dir(), f"nutsty_settings{prof_suffix}.json")
 
-def _load_settings():
+def _load_settings(suffix=None):
     try:
-        p = _get_settings_path()
-        if not os.path.exists(p):
+        p = _get_settings_path(suffix)
+        if not os.path.exists(p) and not suffix:
             p = os.path.join(pc.get_config_dir(), "nutsty_settings.json")
         with open(p, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return {}
 
-def get_spotify_spdc():
+def get_spotify_spdc(suffix=None):
     """Return sp_dc cookie string from nutsty_settings.json, or empty string."""
-    return _load_settings().get("spotifySpdc", "").strip()
+    return _load_settings(suffix).get("spotifySpdc", "").strip()
 
 def get_lyrics_source_preference():
     """Return user's preferred lyrics source: 'auto' (default), 'spotify', 'betterlyrics', 'lrclib', 'netease'."""
@@ -624,11 +628,12 @@ def fetch_betterlyrics_ttml(title, artist, duration_sec=None):
 # TẦNG 4: Spotify spclient (sp_dc cookie) — word-level & TOTP token
 # ──────────────────────────────────────────────────────────────────────────────
 
-_SPOTIFY_TOKEN_CACHE = {"token": "", "expires_at": 0}
+_SPOTIFY_TOKEN_CACHE = {"token": "", "expires_at": 0, "spdc": "", "anonymous": False}
 _SPOTIFY_SECRETS_CACHE = {"secrets": None, "fetched_at": 0}
 
-def get_spotify_access_token(spdc=None):
-    """Exchange sp_dc cookie for a valid Spotify personal access token via TOTP."""
+def get_spotify_access_token(spdc=None, require_user=False):
+    """Exchange sp_dc cookie for a valid Spotify personal access token via TOTP.
+    The cache holds one token for one cookie. require_user refuses an anonymous token (expired cookie)."""
     global _SPOTIFY_TOKEN_CACHE, _SPOTIFY_SECRETS_CACHE
     if not spdc:
         spdc = get_spotify_spdc()
@@ -636,8 +641,9 @@ def get_spotify_access_token(spdc=None):
         return ""
 
     now = time.time()
-    if _SPOTIFY_TOKEN_CACHE["token"] and (now < _SPOTIFY_TOKEN_CACHE["expires_at"] - 60):
-        return _SPOTIFY_TOKEN_CACHE["token"]
+    cached = _SPOTIFY_TOKEN_CACHE
+    if (cached.get("token") and cached.get("spdc") == spdc and now < cached.get("expires_at", 0) - 60):
+        return "" if (require_user and cached.get("anonymous")) else cached["token"]
 
     try:
         # 1. Fetch latest secret dict from xyloflake/spot-secrets-go
@@ -706,8 +712,10 @@ def get_spotify_access_token(spdc=None):
             acc_tok = data.get("accessToken", "")
             exp_ms = data.get("accessTokenExpirationTimestampMs", (now + 3600) * 1000)
             if acc_tok:
-                _SPOTIFY_TOKEN_CACHE = {"token": acc_tok, "expires_at": exp_ms / 1000}
-                return acc_tok
+                anonymous = bool(data.get("isAnonymous"))
+                _SPOTIFY_TOKEN_CACHE = {"token": acc_tok, "expires_at": exp_ms / 1000,
+                                        "spdc": spdc, "anonymous": anonymous}
+                return "" if (require_user and anonymous) else acc_tok
     except Exception as e:
         sys.stderr.write(f"[Spotify get_spotify_access_token error]: {e}\n")
 

@@ -13,17 +13,8 @@ Daemon phát nhạc, IPC mpv, YouTube Music engine và vòng đời hàng đợi
 
 ## 2. YouTube Music Streaming (4 module + facade `ytmusic_helper.py`)
 - `stream_resolver.py` (stream android, chặn 403), `catalog_engine.py` (shelves + continuation cho >10 mood), `song_enrichment.py` (metadata, lyrics, related), `ytmusic_auth.py` (OAuth/cookie).
-## 3. Phân Lập Luồng Duyệt (Browsing) & Hàng Đợi Phát Nhạc (Playback Queue)
-- **Hai thuộc tính độc lập tại `shell.qml`**:
-  - `win.browsingTracks`: Danh sách bài hát đang hiển thị trên giao diện duyệt (kết quả tìm kiếm, tab Downloads, danh sách bài của album/nghệ sĩ).
-  - `win.currentTracks`: Hàng đợi phát nhạc thực sự (Queue).
-- **Nguyên tắc**: duyệt playlist, tìm kiếm, mở tab Tải xuống **không ghi đè** `win.currentTracks`; chỉ bấm phát bài mới đổi.
-
-## 4. Tách Bạch Browsing Title & Playing Source Title
-- **Ràng buộc cốt lõi**:
-  - `win.mainSectionTitle`: Tiêu đề phục vụ giao diện duyệt (browsing UI).
-  - `win.playingSourceTitle`: Nguồn gốc thực tế của bài hát đang phát (album, playlist, artist hoặc queue).
-- **Mục đích**: nghe Album A mà mở xem Album B không làm đổi nguồn; `playingSourceTitle` chỉ gán khi thực sự phát nguồn mới.
+## 3. Duyệt ≠ Hàng Đợi, Tiêu Đề Duyệt ≠ Nguồn Phát (`shell.qml`)
+- `win.browsingTracks` (đang xem) tách khỏi `win.currentTracks` (hàng đợi thật); `win.mainSectionTitle` (đang xem) tách khỏi `win.playingSourceTitle` (đang phát). Duyệt, tìm kiếm, mở tab Tải xuống không ghi đè hàng đợi hay nguồn; chỉ bấm phát mới đổi.
 
 ## 5. Cơ Chế Snapshot & Reset Queue An Toàn Khi Chuyển Mood Chips
 - **Tệp**: `shell.qml`, `components/YTMusicNowPlayingView.qml`. Bài/album mới (`!isAlreadyInQueue` hoặc `playingPlaylistTitle` đổi) reset `originalAlbumQueue = []`, `selectedMoodIndex = 0`; ở tab "Tất cả" nó bám theo `queueTracks`.
@@ -32,13 +23,9 @@ Daemon phát nhạc, IPC mpv, YouTube Music engine và vòng đời hàng đợi
 ## 6. Download Manager Daemon
 - `backend/download_manager.py` thường trú, socket `/tmp/nutsty_download.sock`, trạng thái atomic JSON `/tmp/frostify_download_status.json`. Tải 192k AAC/M4A qua `yt-dlp`, nhúng tag + bìa, kèm `.lrc` vào `~/Music/Downloads_Phone`.
 - UI: `DownloadManager.qml` (`FileView` + timer 250ms), `DownloadQueuePopover.qml`.
-## 7. Kiến Trúc Modular Social & Music Engine (3 SSOT Chuẩn Hóa)
-- **Backend Modular**: `backend/auth_server.py` điều phối sang `backend/music_routes.py` và `backend/social_routes.py`. Toàn bộ logic mạng xã hội tập trung tại Deep Module `backend/social_relay_core.py` (caching, danh tính SSOT #2, phân phối event).
-- **Frontend Engines**: `components/social_engine.js` (Listen Along, bạn bè, Danmaku) và `components/playback_engine.js` (toàn bộ vòng đời phát nhạc, mutate queue, reconcile MPV status).
-- **3 Single Sources of Truth (SSOT)**:
-  1. **SSOT #1 (Config Path)**: `platform_compat.get_config_dir()` trả về `~/.config/noctalia` đồng nhất trên Linux & Windows.
-  2. **SSOT #2 (Canonical Identity)**: `social_relay_core.get_caller_identity()` lấy định danh chuẩn từ `nutsty_cloud_identity.json`.
-  3. **SSOT #3 (Peer Normalization)**: `SocialEngine.normalizePeer(raw)` chuẩn hóa mọi peer về `{ user_id, tag, email, name, avatar, is_online }`.
+## 7. Modular Social & Music Engine (3 SSOT)
+- `auth_server.py` → `music_routes.py` / `social_routes.py`; logic xã hội ở Deep Module `social_relay_core.py`. Frontend: `social_engine.js` (Listen Along, bạn bè, Danmaku), `playback_engine.js` (vòng đời phát, queue, MPV status).
+- **SSOT**: #1 `platform_compat.get_config_dir()` = `~/.config/noctalia` mọi OS; #2 `social_relay_core.get_caller_identity()` từ `nutsty_cloud_identity.json`; #3 `SocialEngine.normalizePeer(raw)` → `{ user_id, tag, email, name, avatar, is_online }`.
 
 ## 8. Friends 24h Notes, Listen Along & PlaybackEngine Consolidate
 - **PlaybackEngine (`components/playback_engine.js`)**: Tập trung toàn bộ logic `playOnlineTrack`, `playTrack`, `togglePlay`, `playNext`, `seekAudio`, `handlePlayerStatus` (bù trôi, sleep timer, auto-advance). `shell.qml` chỉ giữ 1-line delegates.
@@ -46,12 +33,15 @@ Daemon phát nhạc, IPC mpv, YouTube Music engine và vòng đời hàng đợi
 - **Bẫy lỗi**: Host khi pause vẫn phải gửi `now_playing` kèm `is_playing: false` thay vì `null`. Cờ `isSyncingFromFriend` chặn loop phản hồi ngược. **Sự kiện kèm bài**: `play`/`pause`/`seek` gửi `listenSyncData` = `{videoId, position}`; khách bỏ qua sự kiện của bài khác (`_eventIsForOtherTrack`), pause dừng đúng vị trí host. Giờ host lệch giờ khách: `hostStampAgeSec` trừ độ lệch nhỏ nhất của 20 mẫu gần nhất (lọc min kiểu NTP).
 - **Footgun đổi bài**: mpv còn giữ bài cũ (đang pause) suốt lúc yt-dlp resolve bài mới, daemon ghi `prev_mpv_path`, bridge (`loading_verdict`) giữ loading tới khi path đổi; JS `armStaleStatusGuard` ghi `staleStatusPath`, `handlePlayerStatus` bỏ qua status của đường dẫn đó cho tới khi mpv mở file khác. Gán `totalDuration` **trước** `currentTrack` (lyric đọc đồng bộ). Test: `node scripts/test_playback_race.cjs`, `cargo test -p nutsty-bridge loading_tests`. Chi tiết: `.agents/footguns/`.
 
-## 9. Lưu Trữ Cài Đặt (`nutsty_settings.json`) & Hiện Diện Thời Gian Thực (Presence)
-- **Cài đặt (`~/.config/noctalia/nutsty_settings.json`)**: `shell.qml` nạp qua `FileView` + timer `delayedSettingsRead` (100ms). Nút Shuffle/Repeat chỉ phát signal `toggleShuffle()` / `toggleRepeat()` để `shell.qml` xử lý và gọi `saveSettings()`.
-- **Presence & Liveness**: Cloudflare Edge Worker & local daemon áp dụng ngưỡng 25s (`ONLINE_THRESHOLD_MS = 25000`). Khi thoát app, `shell.qml` gọi `sendOfflineSignal()` tới `/api/users/offline` để xóa `now_playing` và đặt `last_active_at = 0` tức thì.
+## 9. Cài Đặt (`nutsty_settings.json`) & Presence
+- `shell.qml` nạp qua `FileView` + timer `delayedSettingsRead` (100ms); Shuffle/Repeat chỉ phát signal để `shell.qml` gọi `saveSettings()`.
+- Presence: ngưỡng online 25s (`ONLINE_THRESHOLD_MS`); thoát app gọi `/api/users/offline` xóa `now_playing`, `last_active_at = 0`.
 
-## 10. Spotify Embed Importer & 0-Friction Session Cache
-- **Embed không cần Token**: `backend/spotify_importer.py` đọc JSON `__NEXT_DATA__` từ `open.spotify.com/embed/playlist/{id}`, không dính 429, <0.5s. Auto-sync kiểm session trong `nutsty_settings.json` / `ytmusic_auth.json` trước khi mở browser.
+## 10. Spotify: Import Embed & Đồng Bộ Hai Chiều (`spotify_importer.py`, `spotify_sync*.py`, `spotify_web.py`)
+- **Import**: đọc `__NEXT_DATA__` của `open.spotify.com/embed/playlist/{id}`, không token, không 429.
+- **Đồng bộ**: GraphQL web-player bằng cookie `sp_dc` của chính người dùng. Playlist liên kết id cố định `custom_pl_spotify_{pid}`, `spotifyLink.base` nằm trong bản ghi (đi theo account_sync); công tắc, `likedBase`, match cache theo máy + profile. Merge 3 chiều `spotify_sync_merge.three_way`.
+- **Ghi ngược** (mặc định tắt): bật thì ghi mốc `localBaseline` + `writeBackAbsent`, chỉ thay đổi sau đó được đẩy. Ghi sau khi nhả khóa, đọc lại remote trước (xóa theo `uid`), 10 bài/lệnh, 3 s/lệnh, 30 bài/lượt; base chỉ nhận lệnh đã thành công. Backlog "đẩy bài thích cũ" giữ `_RUN_LOCK`, nghỉ 60 s mỗi 30 bài.
+- **Footgun**: remote rỗng/thiếu **không** có nghĩa là xóa (`remote_is_valid`: complete + đủ `total`); xóa > nửa và > 3 bài bị chặn cả hai chiều tới khi bấm "Vẫn áp dụng". Biến GraphQL sai tên trả 400 `missing variable` (`addToPlaylist` cần `playlistItemUris`). Test: `scripts/test_spotify_sync.py`; smoke thật: `spotify_sync_smoke.py [--write <playlist nháp>]`.
 
 ## 11. Warm Python Worker Pool (`nutsty-daemon` → `route_dispatcher.py --serve`)
 - **Tệp**: `nutsty-rs/crates/nutsty-daemon/src/main.rs` (`WorkerPool`), `backend/route_dispatcher.py` (`serve`). Daemon xử lý mỗi request trên 1 thread, giữ 2 worker Python sống (1 dòng JSON vào / 1 dòng ra); cache hit ~1 ms thay vì ~0,8 s spawn + import `ytmusicapi`.
@@ -64,7 +54,7 @@ Daemon phát nhạc, IPC mpv, YouTube Music engine và vòng đời hàng đợi
 - **Cơ chế**: Windows đọc central directory của zip release qua HTTP Range (CRC32 + size = manifest), chỉ tải tệp khác bản đang cài, kiểm CRC, tệp staged đúng thì bỏ qua (resume). Không có Range thì tải nguyên zip.
 - **Delta**: chỉ Windows (~40 MB thay vì ~381 MB); Linux tải nguyên gói. MB chỉ hiện khi đã biết (`sizeKnown`), chưa biết thì Odometer quay.
 - **API**: `/api/update/plan` (`planning`→`planned`), `/start`, `/cancel`, `/status`. UI: `UpdateModal.qml`, state ở `shell.qml` `updateState`.
-- **UI**: `UpdateModal.qml` không bật/tắt đột ngột: opacity + Behavior (OutExpo), `FadeText`, thời lượng nhân `root.motion`. Demo: `open_settings?mock=1`.
+- **UI**: opacity + Behavior (OutExpo), `FadeText`, thời lượng nhân `root.motion`. Demo: `open_settings?mock=1`.
 - **Footgun**: CI phải ghim mpv (mpv đổi = ~97 MB mỗi bản). Suffix Range `bytes=-N` bị CDN GitHub từ chối (501), luôn dùng khoảng tuyệt đối. `.source`/`*.part` bị loại khi robocopy. Chạy `scripts/test_update_delta.py`.
 
 ## 13. Tidal Lossless (`backend/tidal_source.py`, `audio_output.py`, `lossless_logic.js`)

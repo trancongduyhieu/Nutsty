@@ -150,6 +150,9 @@ def calculate_track_match_score(sp_track, yt_candidate):
     return score
 
 
+PLAYLIST_LIST_TTL_SEC = 6 * 3600
+
+
 def fetch_user_spotify_playlists(spdc=None, limit=50):
     """
     Fetches the authenticated user's Spotify playlists using the stored or provided sp_dc cookie.
@@ -164,8 +167,10 @@ def fetch_user_spotify_playlists(spdc=None, limit=50):
         try:
             with open(cached_p, "r", encoding="utf-8") as cf:
                 cdata = json.load(cf)
-            if isinstance(cdata, list) and len(cdata) > 0:
-                return {"success": True, "playlists": cdata}
+            # {"fetchedAt", "playlists"}; the old bare-list format counts as expired
+            if (isinstance(cdata, dict) and cdata.get("playlists")
+                    and time.time() - float(cdata.get("fetchedAt") or 0) < PLAYLIST_LIST_TTL_SEC):
+                return {"success": True, "playlists": cdata["playlists"]}
         except Exception:
             pass
 
@@ -200,7 +205,7 @@ def fetch_user_spotify_playlists(spdc=None, limit=50):
             if playlists:
                 try:
                     with open(cached_p, "w", encoding="utf-8") as cf:
-                        json.dump(playlists, cf, ensure_ascii=False)
+                        json.dump({"fetchedAt": time.time(), "playlists": playlists}, cf, ensure_ascii=False)
                 except Exception:
                     pass
             return {"success": True, "playlists": playlists}
@@ -589,7 +594,8 @@ def match_spotify_track_to_ytmusic(sp_track):
                 "videoId": vid,
                 "path": f"ytdl://{vid}",
                 "image": cand_image,
-                "source": "spotify_import"
+                "source": "spotify_import",
+                "spotifyId": sp_track.get("spotifyId") or sp_track.get("id") or "",
             }
     except Exception as e:
         sys.stderr.write(f"[spotify_importer] Track match error for '{query}': {e}\n")

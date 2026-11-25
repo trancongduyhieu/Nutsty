@@ -3894,6 +3894,7 @@ Scope {
             id: settingsModal
             objectName: "settingsModal"
             accountSync: accountSync
+            spotifySync: spotifySync
             friendsCount: (win.friendsList || []).length
             backgroundSourceItem: masterBackdropStack
             isLoggedIn: win.isAuthLoggedIn
@@ -5318,6 +5319,17 @@ Scope {
     }
 
     readonly property var favoritePlaylists: playlistStore.favoritePlaylists
+
+    // Two-way sync with the user's own Spotify library (only on the device where it is switched on)
+    SpotifySync {
+        id: spotifySync
+        hasCookie: win.spotifySpdc.length > 10
+        onRemoteChanged: changed => {
+            if (changed.playlists) playlistStore.reload();
+            if (changed.liked) likedSongsFileView.reload();
+            accountSync.schedule();
+        }
+    }
 
     // Same playlists, liked songs, plays and listening spot on every device of this account
     AccountSync {
