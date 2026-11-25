@@ -414,3 +414,34 @@ def handle_post_spotify_cancel_import(handler):
     handler._send_json({"success": True, "message": "Đã yêu cầu hủy."}, 200)
 
 
+
+
+# --- Tidal lossless: the user's own account, signed in through the Tidal link page ---
+# Errors answer {"state": "error"} with a log line; the exception text stays out of the
+# response and out of the log, since tidalapi errors can carry request details.
+def _tidal_call(fn_name, fallback):
+    try:
+        import tidal_source
+        return getattr(tidal_source, fn_name)()
+    except Exception as e:
+        print(f"[tidal] {fn_name} failed: {type(e).__name__}", file=sys.stderr)
+        return dict(fallback, state="error")
+
+
+def handle_get_tidal_status(handler):
+    handler._send_json(_tidal_call("status", {"logged_in": False, "account": "", "subscription": "",
+                                              "can_hires": False, "can_lossless": False,
+                                              "needs_relogin": False}), 200)
+
+
+def handle_post_tidal_login_start(handler):
+    handler._send_json(_tidal_call("login_start", {"url": "", "code": "", "expires_in": 0}), 200)
+
+
+def handle_get_tidal_login_poll(handler):
+    handler._send_json(_tidal_call("login_poll", {"account": "", "subscription": ""}), 200)
+
+
+def handle_post_tidal_logout(handler):
+    res = _tidal_call("logout", {"success": False})
+    handler._send_json(res if isinstance(res, dict) and res.get("state") == "error" else {"success": True}, 200)
