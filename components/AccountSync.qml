@@ -3,7 +3,8 @@ import Quickshell
 
 // AccountSync: keeps playlists, liked songs, plays and listening progress the same on every device of one
 // Nutsty account (backend/account_sync.py over POST /api/sync/<op>, nutsty-daemon on Linux, auth_server on Windows).
-// Runs on start, every 5 minutes and a few seconds after a local change. Declared once in shell.qml as
+// Runs once on start. Only while another device shares the account: every 5 minutes and a few seconds
+// after a local change; alone on it, it stays off the cloud (the code watch below finds a new device). Declared once in shell.qml as
 // `accountSync`; shell.qml reloads the stores when `remoteChanged` fires.
 QtObject {
     id: sync
@@ -75,7 +76,7 @@ QtObject {
     }
 
     // A local change: sync a moment later so a burst of edits goes out in one round
-    function schedule() { soonTimer.restart(); }
+    function schedule() { if (sync.linkedToOthers) soonTimer.restart(); }
 
     function refreshStatus() {
         sync._post("status", {}, function(res) {
@@ -169,7 +170,7 @@ QtObject {
     property Timer periodicTimer: Timer {
         interval: 300000
         repeat: true
-        running: true
+        running: sync.enabled && sync.linkedToOthers
         onTriggered: sync.run()
     }
 

@@ -649,7 +649,8 @@ def record_progress(profile, track, position, duration, playing):
                    "position": round(float(position or 0), 1), "duration": round(float(duration or 0), 1),
                    "playing": bool(playing), "updated_at": _now_ms(), "dirty": True}
     _write_atomic(_progress_path(suffix), pf)
-    ident = crc.load_cloud_identity(suffix) if is_enabled(profile) else None
+    # Alone on the account: nobody to hand it to, so keep it local (stays dirty, goes up after linking)
+    ident = crc.load_cloud_identity(suffix) if is_enabled(profile) and is_linked(st) else None
     sent = bool(ident) and _push_progress(st["device_id"], ident, suffix)
     return {"success": True, "sent": sent}
 
