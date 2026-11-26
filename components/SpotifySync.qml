@@ -171,6 +171,15 @@ QtObject {
         });
     }
 
+    // A linked list deleted in Nutsty: stop syncing it, and with two-way on remove it from Spotify soon
+    function forget(pid) {
+        if (!pid) return;
+        sp._post("forget", { id: pid }, function(res) {
+            sp._applyStatus(res);
+            if (res && res.queued) sp.schedule();
+        });
+    }
+
     function forceApply(pid) {
         sp._post("force_apply", { id: pid }, function(res) {
             sp._applyStatus(res);

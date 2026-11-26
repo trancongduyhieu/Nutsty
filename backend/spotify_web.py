@@ -19,10 +19,13 @@ import urllib.request
 from dataclasses import dataclass, field
 
 PATHFINDER_URL = "https://api-partner.spotify.com/pathfinder/v1/query"
-# The web player's own playlist endpoint, for the one write its queries do not cover: a playlist's name.
+# The web player's own playlist endpoints, for the writes its queries do not cover: a playlist's name, and
+# taking a playlist out of the library (removeFromLibrary refuses playlist URIs).
 # Not api.spotify.com: that refuses web-player tokens (429 QUOTA_EXCEEDED, Retry-After 86400).
 PLAYLIST_CHANGES_URL = "https://spclient.wg.spotify.com/playlist/v2/playlist/{}/changes"
-_UPDATE_LIST_ATTRIBUTES = 6   # playlist4 Op.Kind
+ROOTLIST_CHANGES_URL = "https://spclient.wg.spotify.com/playlist/v2/user/{}/rootlist/changes"
+_REM = 3                      # playlist4 Op.Kind
+_UPDATE_LIST_ATTRIBUTES = 6
 USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
 
@@ -443,6 +446,19 @@ class SpotifyWebClient:
         self._throttle()
         status, rheaders, _body = self.transport(PLAYLIST_CHANGES_URL.format(pid), payload, headers)
         self._raise_for_status("renamePlaylist", status, rheaders)
+
+    def remove_playlist(self, pid):
+        """Take a playlist out of the user's library, as the web player's Delete / Remove does: one REM
+        on their rootlist. Spotify keeps a deleted own playlist recoverable from the account page."""
+        payload = {"deltas": [{"ops": [{"kind": _REM, "rem": {
+                       "items": [{"uri": f"spotify:playlist:{pid}"}], "itemsAsKey": True}}],
+                   "info": {"source": {"client": 5}}}],
+                   "wantResultingRevisions": False, "wantSyncResult": False, "nonces": []}
+        url = ROOTLIST_CHANGES_URL.format(self.me()["id"])
+        headers = self._headers()
+        self._throttle()
+        status, rheaders, _body = self.transport(url, payload, headers)
+        self._raise_for_status("removePlaylist", status, rheaders)
 
     def remove_from_playlist(self, pid, uids):
         return self.query("removeFromPlaylist", {

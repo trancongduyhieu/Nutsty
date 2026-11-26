@@ -529,7 +529,20 @@ class FakeClient:
         ids = [u.rsplit(":", 1)[-1] for u in uris]
         self._write("add_to_library", None, uris, self.liked, lambda r: _grow(r, ids))
 
+    def remove_playlist(self, pid):
+        if self.write_error:
+            raise self.write_error
+        self.writes.append(("remove_playlist", pid))
+        self.library = [p for p in self.library if p["id"] != pid]
+
     def remove_from_library(self, uris):
+        if any(u.startswith("spotify:album:") for u in uris):
+            if self.write_error:
+                raise self.write_error
+            self.writes.append(("remove_album", None, list(uris)))
+            gone = {u.rsplit(":", 1)[-1] for u in uris}
+            self.albums = [a for a in self.albums if a["id"] not in gone]
+            return
         ids = {u.rsplit(":", 1)[-1] for u in uris}
         self._write("remove_from_library", None, uris, self.liked,
                     lambda r: _shrink(r, lambda i: i["spotifyId"] in ids))
@@ -1763,6 +1776,147 @@ class RenameClientTests(WebClientTests):
         c, _ = self.client({self.URL: [(403, {}, {})]})
         with self.assertRaises(sw.SpotifyError):
             c.rename_playlist("P", "x")
+
+
+class DeleteTests(SyncCase):
+    """Deleting a linked playlist on one side deletes it on the other: Spotify to Nutsty always,
+    Nutsty to Spotify only with write-back on. Guards keep a bad read or a lost file from wiping lists."""
+
+    def setup_lists(self, ids=("P",), write_back=False, albums=()):
+        import spotify_sync as ss
+        self.enable(list(ids) + [a["id"] for a in albums])
+        c = FakeClient([lib(i) for i in ids], {i: remote_list(["a"]) for i in ids}, albums=albums)
+        c.playlists.update({a["id"]: remote_list(["x"]) for a in albums})
+        self.sync(c)
+        if write_back:
+            ss.set_write_back("", True, now=self.NOW)
+        return c
+
+    def delete_local(self, pid, confirmed=True):
+        """The user deletes it in Nutsty; the delete dialog tells the sync (forget_playlist)."""
+        import playlist_manager as pm
+        import spotify_sync as ss
+        pm.save_playlists([p for p in pm.load_playlists() if p["id"] != f"custom_pl_spotify_{pid}"])
+        if confirmed:
+            ss.forget_playlist("", pid)
+
+    def test_spotify_delete_removes_nutsty_copy_after_second_check(self):
+        import spotify_sync_state as st
+        c = self.setup_lists(("P", "Q"))
+        c.library = [lib("Q")]
+        self.sync(c, now=self.NOW + 10)
+        self.assertIsNotNone(self.playlist("P"))   # one missing read is not enough
+        self.sync(c, now=self.NOW + 20)
+        self.assertIsNone(self.playlist("P"))
+        self.assertIsNotNone(self.playlist("Q"))
+        s = st.load_state()
+        self.assertNotIn("P", s["selected"])
+        self.assertNotIn("P", s["linked"])
+        self.assertEqual(c.writes, [])
+
+    def test_playlist_back_in_library_resets_the_count(self):
+        c = self.setup_lists(("P", "Q"))
+        c.library = [lib("Q")]
+        self.sync(c, now=self.NOW + 10)
+        c.library = [lib("P"), lib("Q")]
+        self.sync(c, now=self.NOW + 20)
+        c.library = [lib("Q")]
+        self.sync(c, now=self.NOW + 30)
+        self.assertIsNotNone(self.playlist("P"))
+
+    def test_spotify_delete_of_all_lists_is_followed(self):
+        c = self.setup_lists(("P", "Q", "R"))
+        c.library = []
+        self.sync(c, now=self.NOW + 10)
+        self.sync(c, now=self.NOW + 20)
+        self.assertEqual([self.playlist(i) for i in "PQR"], [None, None, None])
+
+    def test_other_account_never_deletes(self):
+        c = self.setup_lists(("P",))
+        c.me = lambda: {"id": "someone-else", "name": "X"}
+        c.library = []
+        self.sync(c, now=self.NOW + 10)
+        self.sync(c, now=self.NOW + 20)
+        self.assertIsNotNone(self.playlist("P"))
+
+    def test_album_kept_while_albums_cannot_be_read(self):
+        import spotify_web as sw
+        c = self.setup_lists(("P",), albums=[album("AL")])
+        def broken():
+            raise sw.SpotifyError("changed", code="query_changed")
+        c.library_albums = broken
+        self.sync(c, now=self.NOW + 10)
+        self.sync(c, now=self.NOW + 20)
+        self.assertIsNotNone(self.playlist("AL"))
+
+    def test_nutsty_delete_stays_local_without_write_back(self):
+        c = self.setup_lists(("P",))
+        self.delete_local("P")
+        self.sync(c, now=self.NOW + 10)
+        self.assertEqual(c.writes, [])
+        self.assertIn("P", [p["id"] for p in c.library])
+
+    def test_nutsty_delete_removes_spotify_playlist_with_write_back(self):
+        import spotify_sync_state as st
+        c = self.setup_lists(("P", "Q"), write_back=True)
+        self.delete_local("P")
+        self.sync(c, now=self.NOW + 10)
+        self.assertEqual(c.writes, [("remove_playlist", "P")])
+        self.sync(c, now=self.NOW + 20)
+        self.assertEqual(c.writes, [("remove_playlist", "P")])
+        self.assertIsNone(self.playlist("P"))
+        self.assertNotIn("P", st.load_state()["selected"])
+
+    def test_nutsty_delete_of_album_unsaves_it(self):
+        c = self.setup_lists(("P",), write_back=True, albums=[album("AL")])
+        self.delete_local("AL")
+        self.sync(c, now=self.NOW + 10)
+        self.assertEqual(c.writes, [("remove_album", None, ["spotify:album:AL"])])
+
+    def test_failed_remote_delete_is_retried(self):
+        import spotify_web as sw
+        c = self.setup_lists(("P", "Q"), write_back=True)
+        self.delete_local("P")
+        c.write_error = sw.SpotifyError("down", code="network")
+        self.sync(c, now=self.NOW + 10)
+        self.assertIn("P", [p["id"] for p in c.library])
+        c.write_error = None
+        self.sync(c, now=self.NOW + 20)
+        self.assertEqual(c.writes, [("remove_playlist", "P")])
+        self.assertIsNone(self.playlist("P"))
+
+    def test_lost_playlist_file_deletes_nothing_on_spotify(self):
+        import playlist_manager as pm
+        import spotify_sync_state as st
+        c = self.setup_lists(("P", "Q"), write_back=True)
+        pm.save_playlists([])
+        self.sync(c, now=self.NOW + 10)
+        self.assertEqual(c.writes, [])
+        self.assertEqual(sorted(p["id"] for p in c.library), ["P", "Q"])
+
+    def test_forget_unlinks_at_once(self):
+        import spotify_sync as ss
+        import spotify_sync_state as st
+        self.setup_lists(("P", "Q"))
+        self.delete_local("P")
+        s = st.load_state()
+        self.assertNotIn("P", s["selected"])
+        self.assertNotIn("P", s["linked"])
+        self.assertEqual(s.get("deleteRemote") or [], [])
+        self.assertFalse(ss.forget_playlist("", "nope")["queued"])
+
+
+class RemovePlaylistClientTests(WebClientTests):
+    URL = "https://spclient.wg.spotify.com/playlist/v2/user/me/rootlist/changes"
+
+    def test_remove_sends_rootlist_rem(self):
+        c, t = self.client({self.URL: [(200, {}, {})]})
+        c.remove_playlist("P")
+        self.assertEqual(t.calls[-1][0], self.URL)
+        op = t.bodies[-1]["deltas"][0]["ops"][0]
+        self.assertEqual(op["kind"], 3)
+        self.assertEqual(op["rem"]["items"], [{"uri": "spotify:playlist:P"}])
+        self.assertTrue(op["rem"]["itemsAsKey"])
 
 
 if __name__ == "__main__":

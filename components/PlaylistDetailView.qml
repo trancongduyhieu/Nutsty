@@ -382,8 +382,8 @@ Rectangle {
                             Layout.preferredHeight: 38
                             Layout.preferredWidth: delRow.implicitWidth + 20
                             radius: 19
-                            color: delArea.containsMouse ? Qt.rgba(244, 63, 94, 0.20) : Qt.rgba(255, 255, 255, 0.06)
-                            border.color: delArea.containsMouse ? Qt.rgba(244, 63, 94, 0.45) : Qt.rgba(255, 255, 255, 0.10)
+                            color: Qt.rgba(244 / 255, 63 / 255, 94 / 255, delArea.containsMouse ? 0.22 : 0.12)
+                            border.color: Qt.rgba(244 / 255, 63 / 255, 94 / 255, delArea.containsMouse ? 0.50 : 0.30)
                             border.width: 1
 
                             Behavior on color { ColorAnimation { duration: 150 } }
@@ -398,7 +398,7 @@ Rectangle {
                                     anchors.verticalCenter: parent.verticalCenter
                                     source: "../assets/icons/user-trash-symbolic.svg"
                                     iconSize: 13
-                                    color: delArea.containsMouse ? "#f43f5e" : Qt.rgba(244, 63, 94, 0.85)
+                                    color: delArea.containsMouse ? "#fb7185" : "#f43f5e"
                                 }
 
                                 Text {
@@ -407,7 +407,7 @@ Rectangle {
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 13
                                     font.weight: Font.Medium
-                                    color: delArea.containsMouse ? "#f43f5e" : Qt.rgba(244, 63, 94, 0.85)
+                                    color: delArea.containsMouse ? "#fb7185" : "#f43f5e"
                                 }
                             }
 

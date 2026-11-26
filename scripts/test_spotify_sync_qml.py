@@ -19,7 +19,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_QUICK_BACKEND", "software")
 sys.path.insert(0, str(ROOT_DIR))
 
-from PySide6.QtCore import QCoreApplication, QMetaObject, QObject, Slot  # noqa: E402
+from PySide6.QtCore import Q_ARG, QCoreApplication, QMetaObject, QObject, Slot  # noqa: E402
 from PySide6.QtQml import QQmlComponent, QQmlEngine  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
@@ -189,6 +189,22 @@ def main():
     QMetaObject.invokeMethod(sp2, "refreshStatus")
     wait_for(lambda: False, 0.3)
     check("backlog_start" not in CALLS, "Liked Songs not picked: no push")
+
+    # a linked list deleted in Nutsty: tell the sync, and with two-way on sync soon to remove it on Spotify
+    STATUS.update(writeBack=True, queued=True)
+    QMetaObject.invokeMethod(sp2, "refreshStatus")
+    wait_for(lambda: False, 0.2)
+    sp2.setProperty("quietUntil", 0)
+    sp2.setProperty("running", False)
+    CALLS.clear()
+    QMetaObject.invokeMethod(sp2, "forget", Q_ARG("QVariant", "P"))
+    wait_for(lambda: "run" in CALLS, 1.5)
+    check(CALLS[:1] == ["forget"] and "run" in CALLS, "delete in Nutsty: forget, then a sync")
+    STATUS.update(queued=False)
+    CALLS.clear()
+    QMetaObject.invokeMethod(sp2, "forget", Q_ARG("QVariant", "P"))
+    wait_for(lambda: False, 0.5)
+    check(CALLS == ["forget"], "nothing queued for Spotify: no extra sync")
 
     httpd.shutdown()
     print(f"\n{len(FAILURES)} failure(s)")

@@ -38,6 +38,9 @@ DEFAULT_STATE = {
     "blocked": [],
     "unmatchedCount": 0,
     "backlog": {},
+    "deleteRemote": [],      # Spotify ids the user deleted in Nutsty (write-back on): removed from Spotify next run
+    "missing": {},           # linked Spotify id -> runs in a row it was absent from the library; 2 deletes the copy
+    "account": "",           # the Spotify user the links belong to; another account never deletes anything
 }
 
 

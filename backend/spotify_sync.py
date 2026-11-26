@@ -311,6 +311,12 @@ def _push_pending(rec, st, pid):
 def _library(client):
     """Playlists, then saved albums. Albums are an extra: if Spotify changes their query, the
     playlists still sync."""
+    return _library_read(client)[0]
+
+
+def _library_read(client):
+    """(library, complete): complete is False when the albums could not be read, so a missing album
+    there says nothing about whether the user removed it."""
     library = client.library_playlists()
     try:
         albums = client.library_albums()
@@ -318,8 +324,8 @@ def _library(client):
         if e.code not in _SKIP_ONE + ("query_changed",):
             raise
         sys.stderr.write(f"[spotify_sync] saved albums skipped: {e.code}\n")
-        albums = []
-    return library + albums
+        return library, False
+    return library + albums, True
 
 
 def _fetch(st, client, match, cache, now, playlists_snapshot):
@@ -327,7 +333,7 @@ def _fetch(st, client, match, cache, now, playlists_snapshot):
     Returns (library, fetched {pid: (info, remote)}, liked_remote, reverse {(list, key): sid}, error_code)."""
     fetched, liked_remote, reverse = {}, None, {}
     baseline = st.get("localBaseline") or {}
-    library = _library(client)
+    library, complete = _library_read(client)
     seen = set(st.get("seen") or [])
     selected = list(st.get("selected") or [])
     for info in library:
@@ -340,6 +346,7 @@ def _fetch(st, client, match, cache, now, playlists_snapshot):
     present = {pid for pid in selected if _find_linked(playlists_snapshot, pid)}
     selected = [pid for pid in selected if pid in present or pid not in linked]
     st["seen"], st["selected"], st["linked"] = sorted(seen), selected, sorted((linked & set(selected)) | present)
+    gone = _gone_on_spotify(st, client, library, complete, selected, linked, present)
 
     force = set(st.get("forceApply") or [])
     error = ""
@@ -373,7 +380,67 @@ def _fetch(st, client, match, cache, now, playlists_snapshot):
     except sw.SpotifyError as e:
         _note_error(st, e, now)
         error = e.code
-    return library, fetched, liked_remote, reverse, error
+    return library, fetched, liked_remote, reverse, error, gone
+
+
+# A linked list absent from the library this many runs in a row was deleted (or removed) on Spotify
+MISSING_RUNS = 2
+
+
+def _gone_on_spotify(st, client, library, complete, selected, linked, present):
+    """Linked lists the user deleted on Spotify: absent from a complete library read twice running,
+    read as the account the links were made with. Returns their Spotify ids."""
+    account = client.me()["id"]
+    if not st.get("account"):
+        st["account"] = account
+    if st["account"] != account or not complete:
+        return []
+    ids = {info["id"] for info in library}
+    missing, gone = {}, []
+    for pid in selected:
+        if pid in linked and pid in present and pid not in ids:
+            runs = int((st.get("missing") or {}).get(pid) or 0) + 1
+            if runs >= MISSING_RUNS:
+                gone.append(pid)
+            else:
+                missing[pid] = runs
+    st["missing"] = missing
+    return gone
+
+
+def _drop_gone(playlists, st, gone):
+    """Delete the Nutsty copy of each list deleted on Spotify, and forget its sync state."""
+    gone = set(gone)
+    keep = [p for p in playlists if not (isinstance(p, dict) and ((p.get("spotifyLink") or {}).get("id") in gone))]
+    _forget_ids(st, gone)
+    return keep
+
+
+def _forget_ids(st, ids):
+    st["selected"] = [p for p in st.get("selected") or [] if p not in ids]
+    st["linked"] = [p for p in st.get("linked") or [] if p not in ids]
+    for key in ("localBaseline", "writeBackAbsent", "missing"):
+        st[key] = {k: v for k, v in (st.get(key) or {}).items() if k not in ids}
+
+
+def _push_deletes(client, library, st):
+    """Remove from Spotify the lists the user deleted in Nutsty with write-back on. One that is no longer
+    in the library is already gone; a failed call stays queued for the next run."""
+    kinds = {info["id"]: info.get("kind") for info in library}
+    queue = list(st.get("deleteRemote") or [])
+    for pid in list(queue):
+        if pid in kinds:
+            try:
+                if kinds[pid] == "album":
+                    client.remove_from_library([f"spotify:album:{pid}"])
+                else:
+                    client.remove_playlist(pid)
+            except sw.SpotifyError as e:
+                st["deleteRemote"] = queue
+                return e.code
+        queue.remove(pid)
+    st["deleteRemote"] = queue
+    return ""
 
 
 def _note_error(st, e, now):
@@ -776,7 +843,7 @@ def _patch_bases(st, done):
 def _cycle(st, client, match, cache, now, sleep=time.sleep):
     snapshot = pm.load_playlists()
     try:
-        library, fetched, liked_remote, reverse, error = _fetch(st, client, match, cache, now, snapshot)
+        library, fetched, liked_remote, reverse, error, gone = _fetch(st, client, match, cache, now, snapshot)
     except sw.SpotifyError as e:
         _note_error(st, e, now)
         return _result(False, e.code)
@@ -790,6 +857,9 @@ def _cycle(st, client, match, cache, now, sleep=time.sleep):
             if _apply_playlist(playlists, info, remote, st, cache, now, blocked, reverse, jobs):
                 changed["playlists"] = True
             unmatched += _matched_map(remote, cache)[1].__len__()
+        if gone:
+            playlists = _drop_gone(playlists, st, gone)
+            fetched = {pid: v for pid, v in fetched.items() if pid not in gone}
         renames = []
         if _merge_titles(playlists, library, st, renames):
             changed["playlists"] = True
@@ -805,6 +875,8 @@ def _cycle(st, client, match, cache, now, sleep=time.sleep):
         _patch_bases(st, done)
     if renames and not error:
         error = _push_renames(client, renames, st, now)
+    if st.get("deleteRemote") and not error:
+        error = _push_deletes(client, library, st)
     return _result(not error, error, changed=changed, blocked=blocked, unmatched=unmatched, pushed=pushed)
 
 
@@ -817,6 +889,8 @@ def _keep_user_changes(st, orig):
             st[k] = disk[k]
     consumed = set(orig.get("forceApply") or []) - set(st.get("forceApply") or [])
     st["forceApply"] = [p for p in disk.get("forceApply") or [] if p not in consumed]
+    sent = set(orig.get("deleteRemote") or []) - set(st.get("deleteRemote") or [])
+    st["deleteRemote"] = [p for p in disk.get("deleteRemote") or [] if p not in sent]
     st["seen"] = sorted(set(st.get("seen") or []) | set(disk.get("seen") or []))
     st["backlog"] = disk.get("backlog") or {}
 
@@ -1058,6 +1132,20 @@ def set_write_back(profile, on, now=None):
         return status(profile)
 
 
+def forget_playlist(profile, pid):
+    """The user deleted a linked list in Nutsty, after the delete dialog said what happens: stop syncing
+    it now, and with write-back on queue its removal from Spotify for the next run."""
+    with pm.profile_scope(profile):
+        with sstate.edit_state() as st:
+            known = pid in (st.get("linked") or []) or pid in (st.get("selected") or [])
+            queued = bool(known and st.get("enabled") and st.get("writeBack"))
+            if queued and pid not in st["deleteRemote"]:
+                st["deleteRemote"].append(pid)
+            if known:
+                _forget_ids(st, {pid})
+        return dict(status(profile), queued=queued)
+
+
 def force_apply(profile, pid):
     with pm.profile_scope(profile):
         with sstate.edit_state() as st:
@@ -1128,6 +1216,8 @@ def handle_http_path(handler, path, body):
             res = cancel_backlog(profile)
         elif op == "force_apply":
             res = force_apply(profile, str(body.get("id") or ""))
+        elif op == "forget":
+            res = forget_playlist(profile, str(body.get("id") or ""))
         else:
             handler._send_json({"success": False, "error": f"unknown_op: {op}"}, 404)
             return

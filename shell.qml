@@ -2206,6 +2206,18 @@ Scope {
         return PlaybackEngine.loadPlaylistTracks(win, pl);
     }
 
+    // Every delete goes through the confirm dialog first, which says whether Spotify loses it too
+    function requestDeletePlaylist(plId) {
+        if (!plId) return;
+        var pl = null;
+        for (var i = 0; i < win.customPlaylists.length; i++) {
+            var p = win.customPlaylists[i];
+            if (p && (p.id === plId || p.playlistId === plId)) { pl = p; break; }
+        }
+        if (!pl) return;
+        deletePlaylistModalLoader.ensure().openFor(pl);
+    }
+
     function deleteCustomPlaylist(plId) {
         if (!plId) return;
         if (win.selectedCustomPlaylist && (win.selectedCustomPlaylist.id === plId || win.selectedCustomPlaylist.playlistId === plId)) {
@@ -3098,7 +3110,7 @@ Scope {
                             onPlaylistSelected: pl => win.handleSelectPlaylist(pl)
                             onPlayPlaylistRequested: (pl, shuffle) => win.playCustomPlaylist(pl, shuffle)
                             onEditPlaylistRequested: pl => createPlaylistModalLoader.ensure().openEdit(pl)
-                            onDeletePlaylistRequested: plId => win.deleteCustomPlaylist(plId)
+                            onDeletePlaylistRequested: plId => win.requestDeletePlaylist(plId)
                             onSpotifyImportRequested: spotifyImportModal.openModal()
                         }
 
@@ -3235,7 +3247,7 @@ Scope {
                             onPlayAllRequested: trks => win.playCustomPlaylistTracks(trks, false)
                             onShuffleRequested: trks => win.playCustomPlaylistTracks(trks, true)
                             onEditRequested: pl => createPlaylistModalLoader.ensure().openEdit(pl)
-                            onDeleteRequested: plId => win.deleteCustomPlaylist(plId)
+                            onDeleteRequested: plId => win.requestDeletePlaylist(plId)
                             onTrackPlayRequested: (trk, index, trackList) => {
                                 if (win.isContextMenuActive) return;
                                 win.currentTracks = trackList.slice();
@@ -4287,6 +4299,23 @@ Scope {
                 playlists: win.customPlaylists
                 onAddRequested: (trk, plId) => win.addTrackToCustomPlaylist(plId, trk)
                 onCreateRequested: trk => createPlaylistModalLoader.ensure().openCreate([trk])
+            }
+        }
+
+        LazyModalLoader {
+            id: deletePlaylistModalLoader
+            anchors.fill: parent
+            z: 10010
+            sourceComponent: DeletePlaylistModal {
+                accentColor: win.accentColor
+                backgroundSourceItem: masterAppSurface
+                liteMode: win.liteMode
+                writeBack: spotifySync.writeBack && spotifySync.enabled
+                onConfirmed: pl => {
+                    // Unlink first: a sync between the two steps then cannot treat it as a lost file
+                    if (pl.spotifyLink && pl.spotifyLink.id) spotifySync.forget(pl.spotifyLink.id);
+                    win.deleteCustomPlaylist(pl.id || pl.playlistId);
+                }
             }
         }
 
