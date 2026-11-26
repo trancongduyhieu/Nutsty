@@ -10,7 +10,7 @@ Rectangle {
     id: root
 
     anchors.fill: parent
-    color: Qt.rgba(0, 0, 0, root.shown ? 0.6 : 0)
+    color: Qt.rgba(0, 0, 0, root.shown ? 0.45 : 0)
     visible: root.shown || fadeOut.running
     z: 10009
 
@@ -18,15 +18,16 @@ Rectangle {
     property var playlists: []
     property var track: null
     property bool shown: false
+    property Item backgroundSourceItem: null
+    property bool liteMode: false
 
     signal addRequested(var track, string playlistId)
     signal createRequested(var track)
 
-    // Same tinted ground as the create-playlist modal, keyed to the app accent
+    // Text tints keyed to the app accent, as in the create-playlist modal
     readonly property real accentHue: CoverArt.hexToOklch(accentColor.toString()).h
-    readonly property color ground: CoverArt.oklchToHex(0.18, 0.025, accentHue)
     readonly property color mutedText: CoverArt.oklchToHex(0.80, 0.03, accentHue)
-    readonly property color faintText: CoverArt.oklchToHex(0.62, 0.03, accentHue)
+    readonly property color faintText: Qt.rgba(1, 1, 1, 0.66)
 
     Behavior on color { ColorAnimation { id: fadeOut; duration: 180 } }
 
@@ -69,21 +70,52 @@ Rectangle {
         onClicked: root.closeModal()
     }
 
-    Rectangle {
+    // Liquid glass over the app backdrop, tinted by the accent. Lite mode skips the shader:
+    // without a backdrop LiquidGlass draws its tint as a plain fill, so the tint turns near opaque there.
+    LiquidGlass {
         id: panel
         width: Math.min(400, root.width - 48)
         height: Math.min(col.implicitHeight + 32, root.height - 64)
         anchors.centerIn: parent
         radius: 24
-        color: root.ground
-        border.color: Qt.rgba(1, 1, 1, 0.10)
-        border.width: 1
+        displacement: 18.0
+        aberration: 0.03
+        bevelWidth: 24.0
+        blurRadius: 0.9
+        backgroundSourceItem: root.liteMode ? null : root.backgroundSourceItem
+        tintColor: Qt.rgba(0.04 + root.accentColor.r * 0.10, 0.04 + root.accentColor.g * 0.10,
+                           0.06 + root.accentColor.b * 0.10, root.liteMode || !root.backgroundSourceItem ? 0.94 : 0.56)
+        isFlowActive: false
+        clip: true
         opacity: root.shown ? 1 : 0
         scale: root.shown ? 1 : 0.96
         Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
         Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
 
         MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton }
+
+        // Hairline, a touch brighter along the top edge where light hits the glass
+        Rectangle {
+            anchors.fill: parent
+            radius: panel.radius
+            color: "transparent"
+            z: 20
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.16)
+        }
+        Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: 0
+            width: parent.width - 2 * panel.radius
+            height: 1
+            z: 21
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0) }
+                GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0.38) }
+                GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0) }
+            }
+        }
 
         ColumnLayout {
             id: col
@@ -172,7 +204,7 @@ Rectangle {
                     width: ListView.view.width
                     height: 60
                     radius: 12
-                    color: rowMouse.containsMouse && !already ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12) : "transparent"
+                    color: rowMouse.containsMouse && !already ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16) : "transparent"
                     Behavior on color { ColorAnimation { duration: 120 } }
 
                     RowLayout {

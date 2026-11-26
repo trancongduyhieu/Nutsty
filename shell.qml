@@ -4276,6 +4276,8 @@ Scope {
             z: 10009
             sourceComponent: AddToPlaylistModal {
                 accentColor: win.accentColor
+                backgroundSourceItem: masterBackdropStack
+                liteMode: win.liteMode
                 playlists: win.customPlaylists
                 onAddRequested: (trk, plId) => win.addTrackToCustomPlaylist(plId, trk)
                 onCreateRequested: trk => createPlaylistModalLoader.ensure().openCreate([trk])
