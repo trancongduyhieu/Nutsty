@@ -239,29 +239,51 @@ Rectangle {
                         }
                     }
 
-                    // Why edits here stay here: Spotify does not let anyone change an album or another user's list
-                    RowLayout {
+                    // Why edits here stay here: Spotify does not let anyone change an album or another user's list.
+                    // A quiet accent chip: the fact in white, the consequence muted after it.
+                    Rectangle {
                         visible: root.spotifyReadOnly
-                        Layout.fillWidth: true
-                        spacing: 6
-                        AppIcon {
-                            Layout.alignment: Qt.AlignTop
-                            Layout.topMargin: 1
-                            source: "../assets/icons/spotify-symbolic.svg"
-                            iconSize: 13
-                            color: root.accentColor
-                        }
-                        Text {
-                            Layout.fillWidth: true
-                            text: root.spotifyAlbum
-                                  ? I18n.tr("Spotify không cho sửa album, nên bài bạn thêm hay xóa ở đây chỉ đổi trong Nutsty.",
-                                            "Spotify doesn't let anyone edit an album, so songs you add or remove here change only in Nutsty.")
-                                  : I18n.tr("Đây là playlist của người khác, nên bài bạn thêm hay xóa ở đây chỉ đổi trong Nutsty.",
-                                            "This is someone else's playlist, so songs you add or remove here change only in Nutsty.")
-                            wrapMode: Text.WordWrap
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 12
-                            color: Theme.textSecondary
+                        Layout.topMargin: 2
+                        Layout.maximumWidth: parent.width
+                        implicitWidth: roRow.implicitWidth + 22
+                        implicitHeight: 28
+                        radius: 14
+                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.10)
+                        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.26)
+                        border.width: 1
+
+                        Row {
+                            id: roRow
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: 11
+                            spacing: 7
+                            AppIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                source: "../assets/icons/spotify-symbolic.svg"
+                                iconSize: 12
+                                color: root.accentColor
+                            }
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: root.spotifyAlbum ? I18n.tr("Album không sửa được trên Spotify", "Albums can't be edited on Spotify")
+                                                        : I18n.tr("Playlist này không phải của bạn", "This playlist isn't yours")
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                font.weight: Font.DemiBold
+                                color: "#ffffff"
+                            }
+                            Rectangle {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 3; height: 3; radius: 1.5
+                                color: Qt.rgba(1, 1, 1, 0.35)
+                            }
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: I18n.tr("Thay đổi chỉ lưu trong Nutsty", "Changes stay in Nutsty")
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                color: Qt.rgba(1, 1, 1, 0.62)
+                            }
                         }
                     }
 
