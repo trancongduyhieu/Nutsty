@@ -4387,6 +4387,8 @@ Scope {
             z: 10010
             sourceComponent: CreatePlaylistModal {
                 accentColor: win.accentColor
+                backgroundSourceItem: masterAppSurface
+                liteMode: win.liteMode
                 appDir: win.appDir
                 songCover: win.currentTrack ? (win.currentResolvedCover || win.currentTrack.image || win.currentTrack.cover || win.currentTrack.thumbnail || "") : ""
                 onPlaylistCreated: (title, desc, cover, tracks) => win.createCustomPlaylist(title, desc, cover, tracks)

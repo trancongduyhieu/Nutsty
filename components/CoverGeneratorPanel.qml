@@ -14,7 +14,7 @@ Rectangle {
     id: root
 
     anchors.fill: parent
-    color: Qt.rgba(0, 0, 0, 0.55)
+    color: Qt.rgba(0, 0, 0, 0.45)
     visible: false
 
     property color accentColor: Theme.accent
@@ -37,6 +37,9 @@ Rectangle {
     property var songColors: []
     property string coverDir: ""
     property bool saving: false
+    // Glass: what the card bends (masterAppSurface from shell.qml); Lite mode draws a plain tint instead
+    property Item backgroundSourceItem: null
+    property bool liteMode: false
 
     readonly property var activeColors: swatches.slice(0, count)
     readonly property string seedName: seedFor(seedKey)
@@ -373,18 +376,52 @@ Rectangle {
         return out;
     }
 
-    Rectangle {
+    LiquidGlass {
         id: card
         width: Math.min(880, root.width - 32)
         height: Math.min(Math.max(stage.implicitHeight, controls.implicitHeight + 48) + 16, root.height - 32)
         anchors.centerIn: parent
         radius: 24
-        color: root.ground
-        border.color: root.hairline
-        border.width: 1
-        Behavior on color { ColorAnimation { duration: 260 } }
+        displacement: 30.0
+        aberration: 0.06
+        bevelWidth: 30.0
+        blurRadius: 1.1
+        frost: 24
+        opaque: true
+        isFlowActive: false
+        backgroundSourceItem: root.liteMode ? null : root.backgroundSourceItem
+        tintColor: Qt.rgba(root.ground.r, root.ground.g, root.ground.b, root.liteMode || !root.backgroundSourceItem ? 0.96 : 0.5)
 
         MouseArea { anchors.fill: parent }
+
+        // Readability wash over the frosted glass, and the hairline (brighter along the top edge)
+        Rectangle {
+            anchors.fill: parent
+            radius: card.radius
+            visible: !root.liteMode && !!root.backgroundSourceItem
+            color: Qt.rgba(0.02, 0.02, 0.04, 0.30)
+            z: -1
+        }
+        Rectangle {
+            anchors.fill: parent
+            radius: card.radius
+            color: "transparent"
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.16)
+            z: 20
+        }
+        Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width - 2 * card.radius
+            height: 1
+            z: 21
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0) }
+                GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0.38) }
+                GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0) }
+            }
+        }
 
         // ---------- stage: the cover, large, on its own blurred light ----------
         Item {
