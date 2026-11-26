@@ -16,6 +16,10 @@ Item {
     property real blurRadius: 0.5
     property real colorBleed: 0.94
     property color tintColor: Qt.rgba(0.12, 0.14, 0.18, 0.45)
+    // Opt-in, off by default so existing glass looks the same: a frosted interior (blur radius px,
+    // mipmapped source) and full coverage of what is behind, for panels over busy text
+    property real frost: 0.0
+    property bool opaque: false
     property bool interactive: false
     property real extraDependency: 0.0
 
@@ -54,7 +58,7 @@ Item {
         hideSource: false
         visible: false
         smooth: true
-        mipmap: false
+        mipmap: root.frost > 0
     }
 
     // Hardware-accelerated GLSL Liquid Glass Refraction Shader with 9-Tap Frosted Blur
@@ -79,6 +83,8 @@ Item {
         )
         property vector2d u_sourceOffset: Qt.vector2d(root.globalOffset.x, root.globalOffset.y)
         property color u_tint: root.tintColor
+        property real u_frost: root.frost
+        property real u_opaque: root.opaque ? 1.0 : 0.0
 
         fragmentShader: Qt.resolvedUrl("../assets/shaders/liquid_glass.frag.qsb")
         visible: root.isEffectActive && root.backgroundSourceItem !== null

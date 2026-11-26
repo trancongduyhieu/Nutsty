@@ -86,6 +86,8 @@ Rectangle {
         tintColor: Qt.rgba(0.04 + root.accentColor.r * 0.10, 0.04 + root.accentColor.g * 0.10,
                            0.06 + root.accentColor.b * 0.10, root.liteMode || !root.backgroundSourceItem ? 0.94 : 0.56)
         isFlowActive: false
+        frost: 24
+        opaque: true
         clip: true
         opacity: root.shown ? 1 : 0
         scale: root.shown ? 1 : 0.96

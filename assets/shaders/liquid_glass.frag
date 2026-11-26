@@ -19,6 +19,8 @@ layout(std140, binding = 0) uniform buf {
     vec2 u_sourceSize;    // Kích thước texture giao diện nền phía sau
     vec2 u_sourceOffset;  // Tọa độ bù của PlayerBar trên giao diện nền
     vec4 u_tint;          // Sắc thái màu động từ bài hát và độ trong suốt
+    float u_frost;        // >0: frosted interior, blur radius in px (Kyant backdrop order: blur, then lens)
+    float u_opaque;       // 1: the glass fully covers what is behind it (no unrefracted ghost of the content)
 };
 
 layout(binding = 1) uniform sampler2D source;
@@ -144,6 +146,21 @@ void main() {
         crystalSample = crystalSample * 0.80 + diagSample;
     }
     
+    // Frosted interior (opt-in): 12-tap Vogel disk over a mipmapped source, so text behind the glass
+    // turns to soft colour instead of a readable double. The lens offset above still bends it at the rim.
+    float lodBias = 0.0;
+    if (u_frost > 0.5) {
+        lodBias = max(0.0, log2(u_frost / 3.0));
+        vec3 acc = vec3(0.0);
+        for (int i = 0; i < 12; i++) {
+            float fi = float(i) + 0.5;
+            float r = sqrt(fi / 12.0) * u_frost;
+            float ang = fi * 2.39996323;
+            acc += texture(source, clamp(uvCenter + vec2(cos(ang), sin(ang)) * r * pixelStep, vec2(0.001), vec2(0.999)), lodBias).rgb;
+        }
+        crystalSample = acc / 12.0;
+    }
+
     // Tăng cường độ tươi tắn mọng nước (Vibrancy) cho ảnh nền khúc xạ
     vec3 vibrantBase = applyVibrancy(crystalSample);
     
@@ -156,8 +173,8 @@ void main() {
     vec3 refractedColor = vibrantBase;
     if (chromaAmt > 0.02 && depthInside < bezelWidth) {
         vec2 dispVec = normalOutward * chromaAmt * pixelStep;
-        float rBand = texture(source, uvCenter + dispVec).r;
-        float bBand = texture(source, uvCenter - dispVec).b;
+        float rBand = texture(source, uvCenter + dispVec, lodBias).r;
+        float bBand = texture(source, uvCenter - dispVec, lodBias).b;
         refractedColor.r = mix(vibrantBase.r, applyVibrancy(vec3(rBand)).r, 0.40);
         refractedColor.b = mix(vibrantBase.b, applyVibrancy(vec3(bBand)).b, 0.40);
     }
@@ -212,7 +229,7 @@ void main() {
     // =========================================================================
     // 7. Xuất màu chuẩn Premultiplied Alpha
     // =========================================================================
-    float glassAlpha = clamp(u_tint.a > 0.0 ? u_tint.a : 0.74, 0.55, 0.85);
+    float glassAlpha = u_opaque > 0.5 ? 1.0 : clamp(u_tint.a > 0.0 ? u_tint.a : 0.74, 0.55, 0.85);
     float outAlpha = glassAlpha * mask * qt_Opacity;
     
     fragColor = vec4(clamp(finalColor, 0.0, 1.0) * outAlpha, outAlpha);
