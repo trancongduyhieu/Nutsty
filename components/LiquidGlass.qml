@@ -86,7 +86,7 @@ Item {
         property real u_frost: root.frost
         property real u_opaque: root.opaque ? 1.0 : 0.0
 
-        fragmentShader: Qt.resolvedUrl("../assets/shaders/liquid_glass.frag.qsb")
+        fragmentShader: Qt.resolvedUrl("../assets/shaders/liquid_glass_frost.frag.qsb")
         visible: root.isEffectActive && root.backgroundSourceItem !== null
     }
 

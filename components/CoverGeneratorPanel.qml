@@ -14,7 +14,7 @@ Rectangle {
     id: root
 
     anchors.fill: parent
-    color: Qt.rgba(0, 0, 0, 0.45)
+    color: "transparent"
     visible: false
 
     property color accentColor: Theme.accent
@@ -386,7 +386,7 @@ Rectangle {
         aberration: 0.06
         bevelWidth: 30.0
         blurRadius: 1.1
-        frost: 24
+        frost: 40
         opaque: true
         isFlowActive: false
         backgroundSourceItem: root.liteMode ? null : root.backgroundSourceItem
@@ -399,7 +399,7 @@ Rectangle {
             anchors.fill: parent
             radius: card.radius
             visible: !root.liteMode && !!root.backgroundSourceItem
-            color: Qt.rgba(0.02, 0.02, 0.04, 0.30)
+            color: Qt.rgba(0.02, 0.02, 0.04, 0.40)
             z: -1
         }
         Rectangle {

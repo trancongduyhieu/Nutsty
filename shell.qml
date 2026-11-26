@@ -2739,7 +2739,7 @@ Scope {
         // Note: masterBackdropStack serves as the Single Source of Truth (SSOT) backdrop
         // for all Liquid Glass components (PlayerBarBottom, Modals, Popovers, and ShinyCardContainer).
         // This eliminates nested ShaderEffectSources, prevents infinite FBO dirty-render loops,
-        // keeps RAM stable (~180-220 MB), and ensures full vibrant colors are sampled by liquid_glass.frag.
+        // keeps RAM stable (~180-220 MB), and ensures full vibrant colors are sampled by liquid_glass_frost.frag.
 
 
         // 1. Main Application Backdrop & Scrolling Content

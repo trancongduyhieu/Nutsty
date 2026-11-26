@@ -12,7 +12,7 @@ Rectangle {
     id: root
 
     anchors.fill: parent
-    color: Qt.rgba(0, 0, 0, 0.45)
+    color: "transparent"
     visible: false
     z: 10010
 
@@ -153,13 +153,28 @@ Rectangle {
         color: root.mutedText
     }
 
+    // Text field on the glass: a clear pane tinted by the accent, no opaque fill. Focus lifts the tint,
+    // brightens the hairline to the accent and lays a soft accent halo around the field.
     component FieldBox: Rectangle {
+        id: fb
         property bool focused: false
         radius: 12
-        color: root.field
+        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, focused ? 0.12 : 0.07)
         border.width: 1
-        border.color: focused ? root.accentColor : root.hairline
-        Behavior on border.color { ColorAnimation { duration: 120 } }
+        border.color: focused ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.75)
+                              : Qt.rgba(1, 1, 1, 0.12)
+        Behavior on color { ColorAnimation { duration: 140 } }
+        Behavior on border.color { ColorAnimation { duration: 140 } }
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: -3
+            radius: fb.radius + 3
+            color: "transparent"
+            border.width: 3
+            border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18)
+            opacity: fb.focused ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 160 } }
+        }
     }
 
     MouseArea {
@@ -188,7 +203,7 @@ Rectangle {
         aberration: 0.06
         bevelWidth: 30.0
         blurRadius: 1.1
-        frost: 24
+        frost: 40
         opaque: true
         isFlowActive: false
         backgroundSourceItem: root.liteMode ? null : root.backgroundSourceItem
@@ -201,7 +216,7 @@ Rectangle {
             anchors.fill: parent
             radius: card.radius
             visible: !root.liteMode && !!root.backgroundSourceItem
-            color: Qt.rgba(0.02, 0.02, 0.04, 0.30)
+            color: Qt.rgba(0.02, 0.02, 0.04, 0.40)
             z: -1
         }
         Rectangle {

@@ -3,15 +3,15 @@ import QtQuick.Layouts
 import "."
 import "cover_art.js" as CoverArt
 
-// "Add to playlist" picker, opened from the track context menu: the screen dims and one panel lists the
+// "Add to playlist" picker, opened from the track context menu: one glass panel over the page lists the
 // user's playlists by cover and name. A playlist that already holds the track is ticked and not clickable.
 // The first row makes a new playlist with the track. Closes on the backdrop, Esc or the close button.
 Rectangle {
     id: root
 
     anchors.fill: parent
-    color: Qt.rgba(0, 0, 0, root.shown ? 0.45 : 0)
-    visible: root.shown || fadeOut.running
+    color: "transparent"
+    visible: root.shown || panel.opacity > 0
     z: 10009
 
     property color accentColor: Theme.accent
@@ -29,7 +29,6 @@ Rectangle {
     readonly property color mutedText: CoverArt.oklchToHex(0.80, 0.03, accentHue)
     readonly property color faintText: Qt.rgba(1, 1, 1, 0.66)
 
-    Behavior on color { ColorAnimation { id: fadeOut; duration: 180 } }
 
     function openFor(t) {
         root.track = t;
@@ -86,7 +85,7 @@ Rectangle {
         tintColor: Qt.rgba(0.04 + root.accentColor.r * 0.10, 0.04 + root.accentColor.g * 0.10,
                            0.06 + root.accentColor.b * 0.10, root.liteMode || !root.backgroundSourceItem ? 0.94 : 0.56)
         isFlowActive: false
-        frost: 24
+        frost: 40
         opaque: true
         clip: true
         opacity: root.shown ? 1 : 0
@@ -101,7 +100,7 @@ Rectangle {
             anchors.fill: parent
             radius: panel.radius
             visible: !root.liteMode && !!root.backgroundSourceItem
-            color: Qt.rgba(0.02, 0.02, 0.04, 0.30)
+            color: Qt.rgba(0.02, 0.02, 0.04, 0.40)
             z: 1
         }
 
