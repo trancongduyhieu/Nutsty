@@ -17,7 +17,7 @@ Item {
     property real colorBleed: 0.94
     property color tintColor: Qt.rgba(0.12, 0.14, 0.18, 0.45)
     // Opt-in, off by default so existing glass looks the same: a frosted interior (blur radius px,
-    // mipmapped source) and full coverage of what is behind, for panels over busy text
+    // Gaussian blur of the backdrop patch) and full coverage of what is behind, for panels over busy text
     property real frost: 0.0
     property bool opaque: false
     property bool interactive: false
@@ -50,8 +50,8 @@ Item {
     }
 
     // Frosted glass only needs the patch of backdrop under it (plus room for the rim to bend and the blur
-    // to reach), and the blur hides detail, so it captures that patch at half resolution. Plain glass keeps
-    // the whole backdrop at full resolution as before. An empty rect means "the whole item".
+    // to reach) instead of the whole page every frame. Full resolution: a half-size capture showed as blocky
+    // grain once blurred. Plain glass keeps the whole backdrop as before. An empty rect means "the whole item".
     readonly property rect captureRect: {
         var src = root.backgroundSourceItem;
         if (root.frost <= 0 || !src) return Qt.rect(0, 0, 0, 0);
@@ -69,14 +69,34 @@ Item {
         id: bgSource
         sourceItem: root.isEffectActive ? root.backgroundSourceItem : null
         sourceRect: root.captureRect
-        textureSize: root.cropped ? Qt.size(Math.ceil(root.captureRect.width / 2), Math.ceil(root.captureRect.height / 2))
-                                  : Qt.size(0, 0)
         recursive: false
         live: root.isEffectActive
         hideSource: false
         visible: false
         smooth: true
-        mipmap: root.frost > 0
+    }
+
+    // Frost: a real Gaussian blur of the captured patch (Qt's MultiEffect blurs on a downscaled mip chain,
+    // smooth and light on the GPU), layered offscreen and handed to the glass shader as its source
+    MultiEffect {
+        id: frostBlur
+        visible: root.frost > 0 && root.isEffectActive && root.backgroundSourceItem !== null
+        width: root.captureRect.width
+        height: root.captureRect.height
+        source: visible ? bgSource : null
+        autoPaddingEnabled: false
+        blurEnabled: true
+        blur: 1.0
+        blurMax: Math.round(Math.max(1, root.frost) * 1.6)
+        blurMultiplier: 0.4
+    }
+    ShaderEffectSource {
+        id: frostSource
+        sourceItem: frostBlur.visible ? frostBlur : null
+        hideSource: true
+        live: true
+        visible: false
+        smooth: true
     }
 
     // Hardware-accelerated GLSL Liquid Glass Refraction Shader with 9-Tap Frosted Blur
@@ -84,7 +104,7 @@ Item {
         id: glassShader
         anchors.fill: parent
 
-        property variant source: bgSource
+        property variant source: root.frost > 0 ? frostSource : bgSource
         property real u_blur: root.blurRadius
         property vector2d u_resolution: Qt.vector2d(root.width, root.height)
         property real u_radius: root.radius

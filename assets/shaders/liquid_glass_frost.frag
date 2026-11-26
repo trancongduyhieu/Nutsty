@@ -146,19 +146,10 @@ void main() {
         crystalSample = crystalSample * 0.80 + diagSample;
     }
     
-    // Frosted interior (opt-in): 12-tap Vogel disk over a mipmapped source, so text behind the glass
-    // turns to soft colour instead of a readable double. The lens offset above still bends it at the rim.
-    float lodBias = 0.0;
+    // Frosted interior (opt-in): the source arrives already Gaussian-blurred (MultiEffect in LiquidGlass.qml),
+    // so one smooth sample replaces the small blur above. The lens offset still bends it at the rim.
     if (u_frost > 0.5) {
-        lodBias = max(0.0, log2(u_frost / 5.0));   // the frosted capture is half resolution
-        vec3 acc = vec3(0.0);
-        for (int i = 0; i < 24; i++) {
-            float fi = float(i) + 0.5;
-            float r = sqrt(fi / 24.0) * u_frost;
-            float ang = fi * 2.39996323;
-            acc += texture(source, clamp(uvCenter + vec2(cos(ang), sin(ang)) * r * pixelStep, vec2(0.001), vec2(0.999)), lodBias).rgb;
-        }
-        crystalSample = acc / 24.0;
+        crystalSample = texture(source, uvCenter).rgb;
     }
 
     // Tăng cường độ tươi tắn mọng nước (Vibrancy) cho ảnh nền khúc xạ
@@ -173,8 +164,8 @@ void main() {
     vec3 refractedColor = vibrantBase;
     if (chromaAmt > 0.02 && depthInside < bezelWidth) {
         vec2 dispVec = normalOutward * chromaAmt * pixelStep;
-        float rBand = texture(source, uvCenter + dispVec, lodBias).r;
-        float bBand = texture(source, uvCenter - dispVec, lodBias).b;
+        float rBand = texture(source, uvCenter + dispVec).r;
+        float bBand = texture(source, uvCenter - dispVec).b;
         refractedColor.r = mix(vibrantBase.r, applyVibrancy(vec3(rBand)).r, 0.40);
         refractedColor.b = mix(vibrantBase.b, applyVibrancy(vec3(bBand)).b, 0.40);
     }
@@ -185,7 +176,7 @@ void main() {
     // =========================================================================
     // Lấy mẫu màu sắc nền cục bộ ngay tại mép viền bo (chính xác nơi tia sáng đi vào)
     vec2 rimSampleUv = clamp((u_sourceOffset + pixelPos - normalOutward * 2.5) / u_sourceSize, vec2(0.001), vec2(0.999));
-    vec3 localBorderColor = texture(source, rimSampleUv, lodBias).rgb;
+    vec3 localBorderColor = texture(source, rimSampleUv).rgb;
     vec3 vibrantBorderColor = applyVibrancy(localBorderColor);
     
     // Viền phản xạ ánh sáng: hòa trộn linh hoạt giữa vệt sáng trắng và màu sắc nền cục bộ
