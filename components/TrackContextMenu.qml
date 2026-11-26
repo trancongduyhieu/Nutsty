@@ -44,6 +44,9 @@ Item {
         return lyricsSourceOptions[0].name;
     }
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
+    // The live page to frost behind the menu (masterAppSurface, a sibling, so not recursive)
+    property Item backgroundSourceItem: null
+    property bool liteMode: false
 
     // ---- Lyrics source probe (Mochy-like): every source is asked as soon as the menu opens and each
     // row says what it found. Only sources that actually have lyrics for this song can be picked.
@@ -181,16 +184,19 @@ Item {
     }
 
     // Context Menu Card
-    Rectangle {
+    // Frosted glass like the playlist panels (GlassPanel); lite mode draws it as a solid fill
+    GlassPanel {
         id: menuCard
         width: 230
         // Never taller than the window: with the lyrics sources expanded the list scrolls instead
         height: Math.min(menuCol.implicitHeight + 16, root.height - 24)
-        radius: 10
+        radius: 14
+        displacement: 18.0
+        bevelWidth: 18.0
         clip: true
-        color: Qt.rgba(0.11, 0.11, 0.13, 0.96)
-        border.color: Qt.rgba(1, 1, 1, 0.12)
-        border.width: 1
+        glassSource: root.backgroundSourceItem
+        liteMode: root.liteMode
+        ground: Qt.rgba(0.04 + root.accentColor.r * 0.10, 0.04 + root.accentColor.g * 0.10, 0.06 + root.accentColor.b * 0.10, 1)
 
         // Clamping to avoid window borders
         x: Math.max(12, Math.min(root.targetX, root.width - width - 12))
@@ -242,8 +248,8 @@ Item {
                     Rectangle {
                         Layout.preferredWidth: 32
                         Layout.preferredHeight: 32
-                        radius: 4
-                        color: "#222"
+                        radius: 6
+                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
                         clip: true
 
                         Image {
@@ -605,8 +611,9 @@ Item {
         width: parent ? parent.width - 8 : 214
         height: 32
         anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
-        radius: 6
-        color: btnHover.hovered ? Qt.rgba(1, 1, 1, 0.09) : "transparent"
+        radius: 10
+        color: btnHover.hovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16) : "transparent"
+        Behavior on color { ColorAnimation { duration: 110 } }
 
         property string text: ""
         property string iconSource: ""

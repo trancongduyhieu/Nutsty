@@ -4238,6 +4238,9 @@ Scope {
         TrackContextMenu {
             id: trackContextMenu
             dlMgr: downloadManager
+            // masterAppSurface is a sibling of this menu inside masterContainer, so sampling it is not recursive
+            backgroundSourceItem: masterAppSurface
+            liteMode: win.liteMode
             customPlaylists: win.customPlaylists
             onPlayNextRequested: trk => win.insertTrackPlayNext(trk)
             onAddToQueueRequested: trk => win.appendTrackToQueue(trk)
