@@ -4251,6 +4251,7 @@ Scope {
             onDeleteTrackRequested: trk => win.deleteLocalTrack(trk)
             onAddToPlaylistRequested: (trk, plId) => win.addTrackToCustomPlaylist(plId, trk)
             onCreatePlaylistWithTrackRequested: trk => createPlaylistModalLoader.ensure().openCreate([trk])
+            onPickPlaylistRequested: trk => addToPlaylistModalLoader.ensure().openFor(trk)
             onViewArtistRequested: trk => win.loadArtistDetails(trk.artist || trk.author)
             onToggleFavoriteRequested: trk => {
                 if (win.isTrackLiked(trk)) win.removeTrackFromLiked(trk);
@@ -4266,6 +4267,18 @@ Scope {
                 win.lyricsSource = src;
                 win.saveSettings();
                 ytNowPlayingView.applyLyricsSource(src);
+            }
+        }
+
+        LazyModalLoader {
+            id: addToPlaylistModalLoader
+            anchors.fill: parent
+            z: 10009
+            sourceComponent: AddToPlaylistModal {
+                accentColor: win.accentColor
+                playlists: win.customPlaylists
+                onAddRequested: (trk, plId) => win.addTrackToCustomPlaylist(plId, trk)
+                onCreateRequested: trk => createPlaylistModalLoader.ensure().openCreate([trk])
             }
         }
 

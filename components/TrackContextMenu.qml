@@ -23,7 +23,6 @@ Item {
     property real targetY: 0
     property var dlMgr: null
     property var customPlaylists: []
-    property bool isPlaylistSubmenuOpen: false
     // Lyrics source picker: only offered when opened from the Now Playing "more" button
     property bool showLyricsSource: false
     property bool isLyricsSourceSubmenuOpen: false
@@ -129,6 +128,7 @@ Item {
     signal deleteTrackRequested(var track)
     signal addToPlaylistRequested(var track, string playlistId)
     signal createPlaylistWithTrackRequested(var track)
+    signal pickPlaylistRequested(var track)
     signal viewArtistRequested(var track)
     signal toggleFavoriteRequested(var track)
     signal likeRequested(var track)
@@ -149,7 +149,6 @@ Item {
     function openAt(posTrack, xPos, yPos, queueItem, withLyricsSource) {
         closeTimer.stop();
         root.closingGuard = false;
-        root.isPlaylistSubmenuOpen = false;
         root.isLyricsSourceSubmenuOpen = false;
         root.showLyricsSource = !!withLyricsSource;
         root.track = posTrack;
@@ -488,45 +487,14 @@ Item {
                 }
             }
 
-            // Action: Add to playlist
+            // Action: Add to playlist. Opens the playlist picker (AddToPlaylistModal in shell.qml)
             MenuItemButton {
                 text: I18n.tr("Thêm vào danh sách phát", "Add to playlist")
-                iconSource: "../assets/icons/folder-music-symbolic.svg"
+                iconSource: "../assets/icons/material/ms-queue_music.svg"
                 onClicked: {
-                    root.isPlaylistSubmenuOpen = !root.isPlaylistSubmenuOpen;
-                }
-            }
-
-            // Expandable Playlist choices
-            Column {
-                visible: root.isPlaylistSubmenuOpen
-                width: parent.width
-                spacing: 2
-
-                MenuItemButton {
-                    text: I18n.tr("+ Danh sách phát mới", "+ New Playlist")
-                    iconSource: "../assets/icons/media-playlist-consecutive-symbolic.svg"
-                    textColor: root.accentColor
-                    iconColor: root.accentColor
-                    onClicked: {
-                        var t = root.track;
-                        root.closeMenu();
-                        if (t) root.createPlaylistWithTrackRequested(t);
-                    }
-                }
-
-                Repeater {
-                    model: root.customPlaylists || []
-                    delegate: MenuItemButton {
-                        text: modelData.title || modelData.name || I18n.tr("Danh sách phát", "Playlist")
-                        iconSource: "../assets/icons/folder-music-symbolic.svg"
-                        onClicked: {
-                            var t = root.track;
-                            var pid = modelData.id;
-                            root.closeMenu();
-                            if (t && pid) root.addToPlaylistRequested(t, pid);
-                        }
-                    }
+                    var t = root.track;
+                    root.closeMenu();
+                    if (t) root.pickPlaylistRequested(t);
                 }
             }
 
