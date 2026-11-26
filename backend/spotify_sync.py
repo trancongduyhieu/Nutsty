@@ -521,6 +521,10 @@ def _apply_playlist(playlists, info, remote, st, cache, now, blocked, reverse=No
                "createdAt": int(now * 1000)}
         playlists.insert(0, rec)
         new_base = [s for s in remote_ids if s in matched]
+        if _wb_on(st, info):
+            # Two-way already on: the copy is exactly Spotify's, so anything added here from now on is
+            # the user's own edit. Noting it later would swallow the edits made in between.
+            _note_baseline(st, pid, ordered, new_base)
     elif info.get("spotifyMade"):
         rec["tracks"] = ordered
         new_base = [s for s in remote_ids if s in matched]

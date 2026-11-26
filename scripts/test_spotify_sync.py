@@ -838,6 +838,17 @@ class PushTests(SyncCase):
         self.sync(c)
         return c
 
+    def test_list_made_on_spotify_after_switch_on_pushes_first_edit(self):
+        # Two-way already on; a new Spotify playlist is pulled, then songs are added in Nutsty
+        self.write_back(True)
+        self.enable(["P"])
+        c = FakeClient([lib("P")], {"P": remote_list(["a"])}, search={"New": [cand("n1", "New")]})
+        self.sync(c)
+        self.edit_playlist(add=[yt("vn", title="New")])
+        c.library = [lib("P", rev="r2")]
+        self.sync(c, now=self.NOW + 10)
+        self.assertEqual(c.writes, [("add_to_playlist", "P", ["spotify:track:n1"])])
+
     def test_write_back_off_pushes_nothing(self):
         c = self.owned_p(["a", "b"], search={"New": [cand("n1", "New")]})
         self.edit_playlist(drop=["vb"], add=[yt("vn", title="New")])
