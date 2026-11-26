@@ -4276,7 +4276,9 @@ Scope {
             z: 10009
             sourceComponent: AddToPlaylistModal {
                 accentColor: win.accentColor
-                backgroundSourceItem: masterBackdropStack
+                // The whole app surface (pages + backdrop), so the glass bends the cards behind it.
+                // The modal lives in masterContainer, outside this item, so the capture never contains itself.
+                backgroundSourceItem: masterAppSurface
                 liteMode: win.liteMode
                 playlists: win.customPlaylists
                 onAddRequested: (trk, plId) => win.addTrackToCustomPlaylist(plId, trk)
