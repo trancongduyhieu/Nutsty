@@ -107,9 +107,26 @@ Rectangle {
         radius: height / 2
         color: primary
                ? (btnArea.containsMouse ? Qt.lighter(root.accentColor, 1.10) : root.accentColor)
-               : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, btnArea.containsMouse ? 0.24 : 0.14)
+               : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, btnArea.containsMouse ? 0.22 : 0.10)
+        // Secondary pills are clear glass like the fields: an accent hairline and a light top edge
+        border.width: primary ? 0 : 1
+        border.color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, btnArea.containsMouse ? 0.55 : 0.30)
         opacity: enabledState ? 1.0 : 0.4
         Behavior on color { ColorAnimation { duration: 120 } }
+        Behavior on border.color { ColorAnimation { duration: 120 } }
+        Rectangle {
+            visible: !btn.primary
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: 1
+            width: parent.width - 2 * btn.radius
+            height: 1
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0) }
+                GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0.22) }
+                GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0) }
+            }
+        }
         Accessible.role: Accessible.Button
         Accessible.name: label !== "" ? label : hint
         ToolTip.visible: hint !== "" && btnArea.containsMouse
@@ -192,53 +209,17 @@ Rectangle {
         onAccepted: coverInput.text = String(selectedFile)
     }
 
-    LiquidGlass {
+    GlassPanel {
         id: card
         readonly property bool wide: width >= 540
         width: Math.min(600, root.width - 32)
         height: formCol.implicitHeight
         anchors.centerIn: parent
-        radius: 24
-        displacement: 30.0
-        aberration: 0.06
-        bevelWidth: 30.0
-        blurRadius: 1.1
-        frost: 40
-        opaque: true
-        isFlowActive: false
-        backgroundSourceItem: root.liteMode ? null : root.backgroundSourceItem
-        tintColor: Qt.rgba(root.ground.r, root.ground.g, root.ground.b, root.liteMode || !root.backgroundSourceItem ? 0.96 : 0.5)
+        glassSource: root.backgroundSourceItem
+        liteMode: root.liteMode
+        ground: root.ground
 
         MouseArea { anchors.fill: parent }
-
-        // Readability wash over the frosted glass, and the hairline (brighter along the top edge)
-        Rectangle {
-            anchors.fill: parent
-            radius: card.radius
-            visible: !root.liteMode && !!root.backgroundSourceItem
-            color: Qt.rgba(0.02, 0.02, 0.04, 0.40)
-            z: -1
-        }
-        Rectangle {
-            anchors.fill: parent
-            radius: card.radius
-            color: "transparent"
-            border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.16)
-            z: 20
-        }
-        Rectangle {
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: parent.width - 2 * card.radius
-            height: 1
-            z: 21
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0) }
-                GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0.38) }
-                GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0) }
-            }
-        }
 
         ColumnLayout {
             id: formCol

@@ -49,10 +49,28 @@ Item {
         return root.mapToItem(backgroundSourceItem, 0, 0);
     }
 
+    // Frosted glass only needs the patch of backdrop under it (plus room for the rim to bend and the blur
+    // to reach), and the blur hides detail, so it captures that patch at half resolution. Plain glass keeps
+    // the whole backdrop at full resolution as before. An empty rect means "the whole item".
+    readonly property rect captureRect: {
+        var src = root.backgroundSourceItem;
+        if (root.frost <= 0 || !src) return Qt.rect(0, 0, 0, 0);
+        var pad = root.displacement + root.frost + 4;
+        var x0 = Math.max(0, Math.floor(root.globalOffset.x - pad));
+        var y0 = Math.max(0, Math.floor(root.globalOffset.y - pad));
+        var x1 = Math.min(src.width, Math.ceil(root.globalOffset.x + root.width + pad));
+        var y1 = Math.min(src.height, Math.ceil(root.globalOffset.y + root.height + pad));
+        return Qt.rect(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
+    }
+    readonly property bool cropped: root.captureRect.width > 0
+
     // Capture the background item as a GPU texture with linear filtering
     ShaderEffectSource {
         id: bgSource
         sourceItem: root.isEffectActive ? root.backgroundSourceItem : null
+        sourceRect: root.captureRect
+        textureSize: root.cropped ? Qt.size(Math.ceil(root.captureRect.width / 2), Math.ceil(root.captureRect.height / 2))
+                                  : Qt.size(0, 0)
         recursive: false
         live: root.isEffectActive
         hideSource: false
@@ -77,11 +95,13 @@ Item {
         property real u_time: root.time
         property real u_flowActive: root.flowProgress
         property real _pad: 0.0
-        property vector2d u_sourceSize: Qt.vector2d(
+        property vector2d u_sourceSize: root.cropped ? Qt.vector2d(root.captureRect.width, root.captureRect.height)
+                                                     : Qt.vector2d(
             root.backgroundSourceItem ? Math.max(1, root.backgroundSourceItem.width) : 1,
             root.backgroundSourceItem ? Math.max(1, root.backgroundSourceItem.height) : 1
         )
-        property vector2d u_sourceOffset: Qt.vector2d(root.globalOffset.x, root.globalOffset.y)
+        property vector2d u_sourceOffset: Qt.vector2d(root.globalOffset.x - root.captureRect.x,
+                                                      root.globalOffset.y - root.captureRect.y)
         property color u_tint: root.tintColor
         property real u_frost: root.frost
         property real u_opaque: root.opaque ? 1.0 : 0.0

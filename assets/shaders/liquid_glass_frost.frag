@@ -150,7 +150,7 @@ void main() {
     // turns to soft colour instead of a readable double. The lens offset above still bends it at the rim.
     float lodBias = 0.0;
     if (u_frost > 0.5) {
-        lodBias = max(0.0, log2(u_frost / 2.5));
+        lodBias = max(0.0, log2(u_frost / 5.0));   // the frosted capture is half resolution
         vec3 acc = vec3(0.0);
         for (int i = 0; i < 24; i++) {
             float fi = float(i) + 0.5;

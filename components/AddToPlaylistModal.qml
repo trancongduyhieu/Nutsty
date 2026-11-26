@@ -69,24 +69,16 @@ Rectangle {
         onClicked: root.closeModal()
     }
 
-    // Liquid glass over the app backdrop, tinted by the accent. Lite mode skips the shader:
+    // Frosted glass over the app backdrop, tinted by the accent (GlassPanel). Lite mode skips the shader:
     // without a backdrop LiquidGlass draws its tint as a plain fill, so the tint turns near opaque there.
-    LiquidGlass {
+    GlassPanel {
         id: panel
         width: Math.min(400, root.width - 48)
         height: Math.min(col.implicitHeight + 32, root.height - 64)
         anchors.centerIn: parent
-        radius: 24
-        displacement: 30.0
-        aberration: 0.06
-        bevelWidth: 30.0
-        blurRadius: 1.1
-        backgroundSourceItem: root.liteMode ? null : root.backgroundSourceItem
-        tintColor: Qt.rgba(0.04 + root.accentColor.r * 0.10, 0.04 + root.accentColor.g * 0.10,
-                           0.06 + root.accentColor.b * 0.10, root.liteMode || !root.backgroundSourceItem ? 0.94 : 0.56)
-        isFlowActive: false
-        frost: 40
-        opaque: true
+        glassSource: root.backgroundSourceItem
+        liteMode: root.liteMode
+        ground: Qt.rgba(0.04 + root.accentColor.r * 0.10, 0.04 + root.accentColor.g * 0.10, 0.06 + root.accentColor.b * 0.10, 1)
         clip: true
         opacity: root.shown ? 1 : 0
         scale: root.shown ? 1 : 0.96
@@ -94,38 +86,6 @@ Rectangle {
         Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
 
         MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton }
-
-        // Readability: a light dark wash over the bent content, thin enough that it still shows
-        Rectangle {
-            anchors.fill: parent
-            radius: panel.radius
-            visible: !root.liteMode && !!root.backgroundSourceItem
-            color: Qt.rgba(0.02, 0.02, 0.04, 0.40)
-            z: 1
-        }
-
-        // Hairline, a touch brighter along the top edge where light hits the glass
-        Rectangle {
-            anchors.fill: parent
-            radius: panel.radius
-            color: "transparent"
-            z: 20
-            border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.16)
-        }
-        Rectangle {
-            anchors.horizontalCenter: parent.horizontalCenter
-            y: 0
-            width: parent.width - 2 * panel.radius
-            height: 1
-            z: 21
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0) }
-                GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0.38) }
-                GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0) }
-            }
-        }
 
         ColumnLayout {
             id: col

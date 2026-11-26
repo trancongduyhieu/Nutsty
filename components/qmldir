@@ -130,3 +130,4 @@ SpotifySubCard 1.0 SpotifySubCard.qml
 SpotifySwitch 1.0 SpotifySwitch.qml
 SpotifySync 1.0 SpotifySync.qml
 SpotifySyncSection 1.0 SpotifySyncSection.qml
+GlassPanel 1.0 GlassPanel.qml
