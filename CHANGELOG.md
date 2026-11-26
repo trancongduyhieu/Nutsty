@@ -19,6 +19,7 @@ Số phiên bản có dạng `A.B.C`, ví dụ `1.2.0`:
 
 ### Changed
 - **Bảng kính mờ cho danh sách phát**: Ba bảng "Thêm vào danh sách phát", "Danh sách phát mới" và "Tạo ảnh bìa" giờ là một tấm kính mờ mịn: phía sau mờ hẳn nên chữ trong bảng dễ đọc, mép kính hơi bẻ cong ánh sáng, và màn hình không bị tối đi khi mở bảng. Ô nhập tên, mô tả và nút "Tạo ảnh bìa" cũng trong như kính, sáng viền theo màu nhấn khi bấm vào. Khi bật Lite mode, các bảng này là nền đặc, không có hiệu ứng nên rất nhẹ cho máy.
+- **Nút trong Cài đặt gọn và trong hơn**: Các nút "Đồng bộ ngay", "Thêm máy", "Nhập mã", "Xuất file", "Nhập file" giờ là viên kính trong có viền mảnh theo màu nhấn thay cho mảng màu đục, và biểu tượng nào cũng sáng rõ.
 
 ### Fixed
 - **Đổi được tài khoản Google**: Trước đây đăng xuất rồi bấm "Đăng nhập Google" thì chỉ vài giây sau Nutsty đã tự đăng nhập lại tài khoản cũ, không kịp chọn tài khoản khác. Giờ cửa sổ đăng nhập hiện danh sách các tài khoản Google đã lưu và chờ bạn bấm chọn. Muốn dùng tài khoản mới thì bấm "Use another account". Tài khoản đã lưu vẫn được nhớ nên không phải gõ lại mật khẩu mỗi lần, và Nutsty đăng nhập đúng tài khoản bạn chọn kể cả khi trình duyệt có nhiều tài khoản.

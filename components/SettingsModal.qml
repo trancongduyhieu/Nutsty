@@ -478,7 +478,8 @@ Rectangle {
         }
     }
 
-    // Accent-tinted pill used by the playlist backup row (icon + label, spinner while busy)
+    // Clear glass pill of the Settings rows (icon + label, spinner while busy), same look as the
+    // secondary buttons of the playlist panels: faint accent fill, accent hairline, light top edge
     component BackupPillButton: Rectangle {
         id: pill
         property string label: ""
@@ -489,16 +490,33 @@ Rectangle {
         // Muted Rose for a step that is hard to undo
         property bool danger: false
         signal activated()
+        readonly property color tone: pill.danger ? Qt.rgba(244 / 255, 63 / 255, 94 / 255, 1) : root.accentColor
+        readonly property bool hot: pillMouse.containsMouse && !pill.locked
         height: 32
         width: pillRow.implicitWidth + 26
         radius: 16
-        color: pill.danger ? Qt.rgba(244 / 255, 63 / 255, 94 / 255, pillMouse.containsMouse ? 0.24 : 0.14)
-                           : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, pillMouse.containsMouse ? 0.24 : 0.14)
-        opacity: pill.locked ? 0.5 : 1.0
+        color: Qt.rgba(pill.tone.r, pill.tone.g, pill.tone.b, pill.hot ? 0.20 : 0.08)
+        border.width: 1
+        border.color: Qt.rgba(pill.tone.r, pill.tone.g, pill.tone.b, pill.hot ? 0.60 : 0.32)
+        opacity: pill.locked ? 0.45 : 1.0
         scale: pillMouse.pressed ? 0.96 : 1.0
         Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
         Behavior on color { ColorAnimation { duration: 150 } }
+        Behavior on border.color { ColorAnimation { duration: 150 } }
         Behavior on opacity { NumberAnimation { duration: 150 } }
+
+        Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: 1
+            width: parent.width - 2 * pill.radius
+            height: 1
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0) }
+                GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0.22) }
+                GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0) }
+            }
+        }
 
         Row {
             id: pillRow
@@ -510,23 +528,21 @@ Rectangle {
                 height: 15
                 anchors.verticalCenter: parent.verticalCenter
 
-                Image {
+                // AppIcon, not a colorized Image: it lifts dark (currentColor) icons before tinting
+                AppIcon {
                     anchors.centerIn: parent
                     source: pill.iconSource
-                    sourceSize: Qt.size(15, 15)
-                    width: 15
-                    height: 15
+                    iconSize: 15
+                    color: pill.danger ? Qt.lighter(pill.tone, 1.25) : "#ffffff"
                     opacity: pill.busy ? 0 : 1
                     Behavior on opacity { NumberAnimation { duration: 180 } }
-                    layer.enabled: true
-                    layer.effect: MultiEffect { colorization: 1.0; colorizationColor: "#ffffff" }
                 }
 
                 CircularSpinner {
                     anchors.centerIn: parent
                     size: 14
                     strokeWidth: 2
-                    color: "#ffffff"
+                    color: Qt.lighter(pill.tone, 1.35)
                     running: pill.busy
                     opacity: pill.busy ? 1 : 0
                     Behavior on opacity { NumberAnimation { duration: 180 } }
@@ -539,7 +555,7 @@ Rectangle {
                 font.family: Theme.fontFamily
                 font.pixelSize: 12
                 font.weight: Font.DemiBold
-                color: "#ffffff"
+                color: pill.danger ? Qt.lighter(pill.tone, 1.25) : "#ffffff"
             }
         }
 
