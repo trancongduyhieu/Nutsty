@@ -5,7 +5,7 @@ Spotify web-player GraphQL client used by two-way sync (backend/spotify_sync.py)
 Talks to the same private endpoint the open.spotify.com web player uses, with the
 user's OWN sp_dc cookie (never a shared pool). Read ops: me, library playlists,
 playlist items, liked songs, search. Write ops (only when the user turns on
-write-back): add/remove playlist items, add/remove liked songs.
+write-back): add/remove playlist items, add/remove liked songs, rename a playlist.
 
 Persisted-query hashes rotate when Spotify ships a new web player; a rotated hash
 surfaces as SpotifyQueryChanged so the UI can say "Spotify changed, update Nutsty"
@@ -19,6 +19,10 @@ import urllib.request
 from dataclasses import dataclass, field
 
 PATHFINDER_URL = "https://api-partner.spotify.com/pathfinder/v1/query"
+# The web player's own playlist endpoint, for the one write its queries do not cover: a playlist's name.
+# Not api.spotify.com: that refuses web-player tokens (429 QUOTA_EXCEEDED, Retry-After 86400).
+PLAYLIST_CHANGES_URL = "https://spclient.wg.spotify.com/playlist/v2/playlist/{}/changes"
+_UPDATE_LIST_ATTRIBUTES = 6   # playlist4 Op.Kind
 USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
 
@@ -79,6 +83,14 @@ class RemoteList:
     complete: bool = False
 
 
+def _json_or_empty(raw):
+    """A reply that is not JSON (spclient answers in protobuf) reads as an empty body."""
+    try:
+        return json.loads(raw) if raw.strip() else {}
+    except ValueError:
+        return {}
+
+
 def _urllib_transport(url, payload, headers):
     """Default transport: POST JSON, return (status, headers, body-dict)."""
     try:
@@ -91,7 +103,7 @@ def _urllib_transport(url, payload, headers):
     try:
         with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
             raw = resp.read().decode("utf-8", "replace")
-            return resp.status, dict(resp.headers), (json.loads(raw) if raw.strip() else {})
+            return resp.status, dict(resp.headers), _json_or_empty(raw)
     except urllib.error.HTTPError as e:
         try:
             raw = e.read().decode("utf-8", "replace")
@@ -208,6 +220,17 @@ class SpotifyWebClient:
         headers = self._headers()
         self._throttle()
         status, rheaders, body = self.transport(PATHFINDER_URL, payload, headers)
+        if status in (400, 404) and self._looks_like_query_changed(body):
+            raise SpotifyQueryChanged(f"{op}: persisted query not found")
+        self._raise_for_status(op, status, rheaders)
+        body = body or {}
+        if self._looks_like_query_changed(body):
+            raise SpotifyQueryChanged(f"{op}: persisted query not found")
+        if body.get("errors") and not body.get("data"):
+            raise SpotifyError(f"{op}: {body['errors'][0].get('message', '')}", code="graphql_error")
+        return body.get("data") or {}
+
+    def _raise_for_status(self, op, status, rheaders):
         if status == 401:
             self._token = ""
             raise SpotifyAuthError(f"{op}: 401")
@@ -218,18 +241,10 @@ class SpotifyWebClient:
             except (TypeError, ValueError):
                 retry = 60.0
             raise SpotifyRateLimited(f"{op}: 429", retry_after=retry)
-        if status in (400, 404) and self._looks_like_query_changed(body):
-            raise SpotifyQueryChanged(f"{op}: persisted query not found")
         if status >= 500 or status == 0:
             raise SpotifyNetworkError(f"{op}: HTTP {status}")
         if status >= 400:
             raise SpotifyError(f"{op}: HTTP {status}", code="http_error")
-        body = body or {}
-        if self._looks_like_query_changed(body):
-            raise SpotifyQueryChanged(f"{op}: persisted query not found")
-        if body.get("errors") and not body.get("data"):
-            raise SpotifyError(f"{op}: {body['errors'][0].get('message', '')}", code="graphql_error")
-        return body.get("data") or {}
 
     @staticmethod
     def _looks_like_query_changed(body):
@@ -417,6 +432,17 @@ class SpotifyWebClient:
             "playlistItemUris": list(uris), "playlistUri": f"spotify:playlist:{pid}",
             "newPosition": {"moveType": "BOTTOM_OF_PLAYLIST", "fromUid": None},
         })
+
+    def rename_playlist(self, pid, name):
+        """One UPDATE_LIST_ATTRIBUTES change, as the web player sends it; a list the user may not edit gets 4xx."""
+        payload = {"deltas": [{"ops": [{"kind": _UPDATE_LIST_ATTRIBUTES, "updateListAttributes": {
+                       "newAttributes": {"values": {"name": name}, "noValue": []}}}],
+                   "info": {"source": {"client": 5}}}],
+                   "wantResultingRevisions": False, "wantSyncResult": False, "nonces": []}
+        headers = self._headers()
+        self._throttle()
+        status, rheaders, _body = self.transport(PLAYLIST_CHANGES_URL.format(pid), payload, headers)
+        self._raise_for_status("renamePlaylist", status, rheaders)
 
     def remove_from_playlist(self, pid, uids):
         return self.query("removeFromPlaylist", {

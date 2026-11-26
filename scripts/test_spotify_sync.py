@@ -60,8 +60,9 @@ class FakeTransport:
         self.calls = []
 
     def __call__(self, url, payload, headers):
-        op = payload.get("operationName")
+        op = payload.get("operationName") or url
         self.calls.append((op, payload.get("variables")))
+        self.bodies = getattr(self, "bodies", []) + [payload]
         queue = self.script[op]
         resp = queue.pop(0) if len(queue) > 1 else queue[0]
         if isinstance(resp, Exception):
@@ -511,6 +512,14 @@ class FakeClient:
         ids = [u.rsplit(":", 1)[-1] for u in uris]
         self._write("add_to_playlist", pid, uris, self.playlists.get(pid),
                     lambda r: _grow(r, ids))
+
+    def rename_playlist(self, pid, name):
+        if self.write_error:
+            raise self.write_error
+        self.writes.append(("rename_playlist", pid, name))
+        for p in self.library:
+            if p["id"] == pid:
+                p["title"] = name
 
     def remove_from_playlist(self, pid, uids):
         self._write("remove_from_playlist", pid, uids, self.playlists.get(pid),
@@ -1232,6 +1241,7 @@ class FinalReviewTests(SyncCase):
         pm.save_playlists(pls)
         self.sync(c)
         self.assertEqual(c.writes, [("add_to_playlist", "P", ["spotify:track:n1"])])
+        self.assertEqual(self.playlist()["title"], "PL P")   # Spotify's later name, not pushed back
 
     # I2: the worker must not recycle itself while a sync or backlog holds the lock
     def test_worker_busy_while_sync_lock_held(self):
@@ -1624,6 +1634,113 @@ class FakeHandler:
 
     def _send_json(self, data, status=200):
         self.sent = (data, status)
+
+
+class RenameTests(SyncCase):
+    """A playlist's name follows the side that changed it; Nutsty's goes to Spotify only with write-back on."""
+
+    def setup_p(self, owned=True):
+        self.enable(["P"])
+        c = FakeClient([lib("P", owned=owned)], {"P": remote_list(["a"])})
+        self.sync(c)
+        return c
+
+    def rename_local(self, name, drop_base=False):
+        import playlist_manager as pm
+        pls = pm.load_playlists()
+        rec = next(p for p in pls if p["id"] == "custom_pl_spotify_P")
+        rec["title"] = rec["name"] = name
+        if drop_base:
+            rec["spotifyLink"].pop("title", None)
+        pm.save_playlists(pls)
+
+    def test_spotify_rename_is_pulled_even_without_new_revision(self):
+        c = self.setup_p()
+        c.library[0]["title"] = "Renamed on Spotify"
+        self.sync(c, now=self.NOW + 10)
+        pl = self.playlist()
+        self.assertEqual((pl["title"], pl["name"]), ("Renamed on Spotify", "Renamed on Spotify"))
+        self.assertEqual(c.writes, [])
+
+    def test_nutsty_rename_stays_local_without_write_back(self):
+        c = self.setup_p()
+        self.rename_local("ahihi")
+        self.sync(c, now=self.NOW + 10)
+        self.assertEqual(self.playlist()["title"], "ahihi")
+        self.assertEqual(c.writes, [])
+
+    def test_nutsty_rename_is_pushed_with_write_back(self):
+        import spotify_sync as ss
+        c = self.setup_p()
+        ss.set_write_back("", True, now=self.NOW)
+        self.rename_local("ahihi")
+        self.sync(c, now=self.NOW + 10)
+        self.assertEqual(c.writes, [("rename_playlist", "P", "ahihi")])
+        self.sync(c, now=self.NOW + 20)
+        self.assertEqual(c.writes, [("rename_playlist", "P", "ahihi")])
+        self.assertEqual(self.playlist()["title"], "ahihi")
+
+    def test_not_editable_playlist_is_never_renamed_on_spotify(self):
+        import spotify_sync as ss
+        c = self.setup_p(owned=False)
+        ss.set_write_back("", True, now=self.NOW)
+        self.rename_local("mine")
+        self.sync(c, now=self.NOW + 10)
+        self.assertEqual(c.writes, [])
+        self.assertEqual(self.playlist()["title"], "mine")
+
+    def test_link_from_before_names_were_tracked_keeps_nutsty_name(self):
+        import spotify_sync as ss
+        c = self.setup_p()
+        ss.set_write_back("", True, now=self.NOW)
+        self.rename_local("ahihi", drop_base=True)
+        self.sync(c, now=self.NOW + 10)
+        self.assertEqual(c.writes, [("rename_playlist", "P", "ahihi")])
+
+    def test_both_renamed_spotify_wins(self):
+        import spotify_sync as ss
+        c = self.setup_p()
+        ss.set_write_back("", True, now=self.NOW)
+        self.rename_local("nutsty name")
+        c.library[0]["title"] = "spotify name"
+        self.sync(c, now=self.NOW + 10)
+        self.assertEqual(self.playlist()["title"], "spotify name")
+        self.assertEqual(c.writes, [])
+
+    def test_failed_rename_is_retried_next_cycle(self):
+        import spotify_sync as ss
+        import spotify_web as sw
+        c = self.setup_p()
+        ss.set_write_back("", True, now=self.NOW)
+        self.rename_local("ahihi")
+        c.write_error = sw.SpotifyNetworkError("down")
+        r = self.sync(c, now=self.NOW + 10)
+        self.assertEqual(r["error"], "network")
+        c.write_error = None
+        self.sync(c, now=self.NOW + 20)
+        self.assertEqual(c.writes, [("rename_playlist", "P", "ahihi")])
+
+
+class RenameClientTests(WebClientTests):
+    URL = "https://spclient.wg.spotify.com/playlist/v2/playlist/P/changes"
+
+    def test_rename_sends_list_attribute_change(self):
+        c, t = self.client({self.URL: [(200, {}, {})]})
+        c.rename_playlist("P", "ahihi")
+        self.assertEqual(t.calls[-1][0], self.URL)
+        op = t.bodies[-1]["deltas"][0]["ops"][0]
+        self.assertEqual(op["kind"], 6)
+        self.assertEqual(op["updateListAttributes"]["newAttributes"]["values"], {"name": "ahihi"})
+
+    def test_protobuf_reply_is_not_a_network_error(self):
+        import spotify_web as sw
+        self.assertEqual(sw._json_or_empty("\n\x08rev"), {})
+
+    def test_rename_on_playlist_not_ours_raises(self):
+        import spotify_web as sw
+        c, _ = self.client({self.URL: [(403, {}, {})]})
+        with self.assertRaises(sw.SpotifyError):
+            c.rename_playlist("P", "x")
 
 
 if __name__ == "__main__":

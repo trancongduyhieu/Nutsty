@@ -117,8 +117,10 @@ def migrate_legacy_imports(playlists, remote_by_pid, match, cache, now=None):
         new_id = linked_id(pid)
         pl.update({
             "id": new_id, "playlistId": new_id, "tracks": tracks, "trackCount": len(tracks),
+            # its name came from Spotify at import: agreed, so a later Spotify rename is pulled, not overwritten
             "spotifyLink": {"id": pid, "owned": False, "spotifyMade": False, "base": base,
-                            "revision": remote.revision or "", "syncedAt": now, "unmatched": 0},
+                            "revision": remote.revision or "", "syncedAt": now, "unmatched": 0,
+                            "title": str(pl.get("title") or pl.get("name") or "").strip()},
         })
     return playlists
 
@@ -511,6 +513,8 @@ def _apply_playlist(playlists, info, remote, st, cache, now, blocked, reverse=No
             "spotifyMade": bool(info.get("spotifyMade")),
             "base": new_base, "revision": remote.revision or "",
             "libRevision": info.get("revision") or "", "syncedAt": now, "unmatched": len(unmatched)}
+    if "title" in old_link:
+        link["title"] = old_link["title"]   # the agreed name, kept by _merge_titles
     if (before is not None and rec["tracks"] == before and old_count == rec["trackCount"]
             and dict(old_link, syncedAt=now) == link):
         # Nothing moved: leave the record byte-identical, so account_sync does not see a fresh
@@ -518,6 +522,55 @@ def _apply_playlist(playlists, info, remote, st, cache, now, blocked, reverse=No
         return False
     rec["spotifyLink"] = link
     return True
+
+
+def _merge_titles(playlists, library, st, renames):
+    """Names merge like tracks, against the last agreed name kept in spotifyLink.title: a Spotify
+    rename is pulled; a Nutsty rename is queued in `renames` when write-back may touch the list,
+    else it stays local. Both renamed: Spotify wins. A link from before names were tracked takes
+    Spotify's name as agreed, so a name the user gave in Nutsty is kept. Returns True on a change."""
+    changed = False
+    for info in library:
+        rec = _find_linked(playlists, info["id"])
+        link = (rec or {}).get("spotifyLink")
+        remote = str(info.get("title") or "").strip()
+        if not link or not remote:
+            continue
+        base = link.get("title") or remote
+        local = str(rec.get("title") or "").strip()
+        if remote != base or not local:
+            if rec.get("title") != remote or rec.get("name") != remote:
+                rec["title"] = rec["name"] = remote
+                changed = True
+            agreed = remote
+        else:
+            agreed = base
+            if local != base and _wb_on(st, info):
+                renames.append((info["id"], local))
+        if link.get("title") != agreed:
+            link["title"] = agreed
+            changed = True
+    return changed
+
+
+def _push_renames(client, renames, st, now):
+    """Rename on Spotify, then record the name as agreed. Stops at the first error: the rename is
+    still pending (agreed name unchanged) and goes again next cycle."""
+    for pid, name in renames:
+        if not sstate.load_state().get("writeBack"):
+            return ""
+        try:
+            client.rename_playlist(pid, name)
+        except sw.SpotifyError as e:
+            _note_error(st, e, now)
+            return e.code
+        with pm.locked():
+            playlists = pm.load_playlists()
+            rec = _find_linked(playlists, pid)
+            if rec and rec.get("spotifyLink"):
+                rec["spotifyLink"]["title"] = name
+                pm.save_playlists(playlists)
+    return ""
 
 
 def _apply_liked(remote, st, cache, now, blocked, reverse=None, jobs=None):
@@ -723,7 +776,7 @@ def _patch_bases(st, done):
 def _cycle(st, client, match, cache, now, sleep=time.sleep):
     snapshot = pm.load_playlists()
     try:
-        _library, fetched, liked_remote, reverse, error = _fetch(st, client, match, cache, now, snapshot)
+        library, fetched, liked_remote, reverse, error = _fetch(st, client, match, cache, now, snapshot)
     except sw.SpotifyError as e:
         _note_error(st, e, now)
         return _result(False, e.code)
@@ -737,6 +790,9 @@ def _cycle(st, client, match, cache, now, sleep=time.sleep):
             if _apply_playlist(playlists, info, remote, st, cache, now, blocked, reverse, jobs):
                 changed["playlists"] = True
             unmatched += _matched_map(remote, cache)[1].__len__()
+        renames = []
+        if _merge_titles(playlists, library, st, renames):
+            changed["playlists"] = True
         if changed["playlists"] or [p.get("id") if isinstance(p, dict) else None for p in playlists] != before:
             pm.save_playlists(playlists)
         st["linked"] = sorted(set(st.get("linked") or []) | {pid for pid in fetched if _find_linked(playlists, pid)})
@@ -747,6 +803,8 @@ def _cycle(st, client, match, cache, now, sleep=time.sleep):
     if jobs and not error:
         done, error, pushed = _push(client, jobs, sleep, st, now)
         _patch_bases(st, done)
+    if renames and not error:
+        error = _push_renames(client, renames, st, now)
     return _result(not error, error, changed=changed, blocked=blocked, unmatched=unmatched, pushed=pushed)
 
 
