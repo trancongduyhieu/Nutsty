@@ -1051,8 +1051,9 @@ def set_write_back(profile, on, now=None):
             if isinstance(v, dict):
                 have.update(track_ids(v) or [cache.find_by_video(v.get("videoId") or k)])
         absent["liked"] = [s for s in st.get("likedBase") or [] if s not in have]
+        # backlog {} = the earlier-likes push of this switch-on has not run yet (the app starts it)
         st.update(writeBack=True, writeBackSince=time.time() if now is None else now,
-                  localBaseline=baseline, writeBackAbsent=absent)
+                  localBaseline=baseline, writeBackAbsent=absent, backlog={})
         sstate.save_state(st)
         return status(profile)
 
@@ -1072,7 +1073,7 @@ def status(profile=""):
         backlog["running"] = profile in _BACKLOG_ACTIVE
         return {k: st.get(k) for k in ("enabled", "selectionConfirmed", "likedSelected", "writeBack",
                                        "lastSync", "lastError", "blocked", "unmatchedCount")} | {
-            "backlog": backlog,
+            "backlog": backlog, "backlogRan": bool(st.get("backlog")),
             "selectedCount": len(st.get("selected") or []), "running": _RUN_LOCK.locked(),
             "blockedNames": _blocked_names(st.get("blocked") or [])}
 

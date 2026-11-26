@@ -88,6 +88,7 @@ Scope {
             } else {
                 unfocusedPurgeTimer.stop();
                 win.triggerUserActiveBoost();
+                spotifySync.windowActivated();
                 if (win.currentView === "home") win.refreshFriendsFeedNow();
                 if (typeof ytNowPlayingView !== "undefined" && ytNowPlayingView) {
                     ytNowPlayingView.updateActiveLyric(true);
@@ -5332,7 +5333,10 @@ Scope {
 
     PlaylistStore {
         id: playlistStore
-        onWrote: op => accountSync.schedule()
+        onWrote: op => {
+            accountSync.schedule();
+            spotifySync.schedule();   // two-way: the edit or rename goes up to Spotify shortly
+        }
         onWriteFailed: (op, error) => {
             win.showToast(error === "offline"
                 ? I18n.tr("Không lưu được danh sách phát: dịch vụ nền chưa chạy", "Could not save the playlist: the background service is not running")
@@ -5411,7 +5415,10 @@ Scope {
         onTriggered: win.reportListeningProgress()
     }
 
-    onLikedSongsMapChanged: accountSync.schedule()
+    onLikedSongsMapChanged: {
+        accountSync.schedule();
+        spotifySync.schedule();
+    }
 
     function loadFavoritePlaylists() {
         playlistStore.reload();

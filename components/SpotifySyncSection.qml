@@ -42,20 +42,8 @@ ColumnLayout {
     readonly property int backlogDone: backlog.done || 0
     readonly property int backlogTotal: backlog.total || 0
     readonly property string backlogErr: backlog.error || ""
-    // Under the backlog row: what the last run did, or what the button is for
-    readonly property string backlogNote: {
-        if (root.backlogRunning)
-            return I18n.tr("Chạy chậm để an toàn cho tài khoản, có thể dừng bất cứ lúc nào", "Goes slowly to keep your account safe, stop it any time");
-        if (root.backlogTotal > 0 || (backlog.unmatched || 0) > 0) {
-            var t = root.backlogTotal > 0
-                ? I18n.tr("Lần trước đã đẩy %1/%2", "Last time pushed %1/%2").arg(root.backlogDone).arg(root.backlogTotal)
-                : I18n.tr("Lần trước không có bài nào để đẩy", "Last time there was nothing to push");
-            if ((backlog.unmatched || 0) > 0)
-                t += I18n.tr(", %1 bài không có trên Spotify", ", %1 songs not on Spotify").arg(backlog.unmatched);
-            return t;
-        }
-        return I18n.tr("Bài đã thích từ trước khi bật không tự lên Spotify", "Likes from before you turned this on stay off Spotify until you push them");
-    }
+    readonly property string backlogNote: I18n.tr("Bài bạn thích từ trước khi bật Hai chiều. Chạy chậm để an toàn cho tài khoản",
+                                                   "Songs you liked before turning on two way. Goes slowly to keep your account safe")
 
     function openPicker() {
         if (!root.sync) return;
@@ -323,29 +311,21 @@ ColumnLayout {
             }
         }
 
+        // Earlier likes go up on their own once two-way is on (SpotifySync._autoBacklog): shown only
+        // while they go, with a way to stop
         SpotifySubCard {
-            visible: root.on && !root.pickerOpen && root.writeBack
+            visible: root.on && !root.pickerOpen && root.writeBack && root.backlogRunning
             accentColor: root.accentColor
-            clickable: !root.backlogRunning
-            shimmer: root.backlogRunning
-            title: root.backlogRunning
-                   ? I18n.tr("Đã đẩy %1/%2", "Pushed %1/%2").arg(root.backlogDone).arg(root.backlogTotal)
-                   : I18n.tr("Đẩy các bài đã thích trước đó", "Push earlier likes")
+            clickable: false
+            shimmer: true
+            title: I18n.tr("Đang đưa bài đã thích lên Spotify %1/%2", "Sending your likes to Spotify %1/%2")
+                   .arg(root.backlogDone).arg(root.backlogTotal)
             description: root.backlogNote
-            onClicked: if (root.sync) root.sync.pushBacklog()
 
             LosslessSmallButton {
-                visible: root.backlogRunning
                 accentColor: root.accentColor
                 label: I18n.tr("Dừng", "Stop")
                 onClicked: if (root.sync) root.sync.cancelBacklog()
-            }
-
-            AppIcon {
-                visible: !root.backlogRunning
-                source: "../assets/icons/go-up-symbolic.svg"
-                iconSize: 16
-                color: root.accentColor
             }
         }
 

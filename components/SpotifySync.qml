@@ -26,7 +26,10 @@ QtObject {
     property bool choicesLoading: false
     property string choicesError: ""
     property bool writeBack: false
+    property bool likedSelected: false
     property var backlog: ({})
+    // The earlier-likes push of this switch-on has run (or runs): the app starts it once on its own
+    property bool backlogRan: true
 
     signal remoteChanged(var changed)
 
@@ -58,8 +61,44 @@ QtObject {
         sp.blockedNames = s.blockedNames || ({});
         sp.unmatched = s.unmatchedCount || 0;
         sp.writeBack = !!s.writeBack;
+        sp.likedSelected = !!s.likedSelected;
         sp.backlog = s.backlog || ({});
+        sp.backlogRan = s.backlogRan !== false;
         sp.running = !!s.running;
+        sp._autoBacklog();
+    }
+
+    // Two-way with Liked Songs picked: likes Nutsty held before the switch go up once, slowly, without a button
+    function _autoBacklog() {
+        if (sp.hasCookie && sp.enabled && sp.writeBack && sp.likedSelected && !sp.backlogRan
+                && !sp.backlogRunning && !sp.running) {
+            sp.backlogRan = true;   // not twice while the start call is in flight
+            sp.pushBacklog();
+        }
+    }
+
+    // ---- Automatic runs ----------------------------------------------------------------------
+    // Two-way: a change made in Nutsty (playlist edit, like, rename) goes up shortly after, one run
+    // for a burst of changes. One way pulls only, so local changes wait for the regular check.
+    property int soonDelay: 20000
+    readonly property int periodMinutes: 15
+    // A sync's own reload of the stores looks like a local change: ignore those until this time (ms)
+    property double quietUntil: 0
+
+    function schedule() {
+        if (!sp.hasCookie || !sp.enabled || !sp.selectionConfirmed || !sp.writeBack) return;
+        if (Date.now() < sp.quietUntil) return;
+        soonTimer.restart();
+    }
+
+    // Back at the window after a while: Spotify may have changed meanwhile
+    function windowActivated() {
+        if (Date.now() / 1000 - sp.lastSync > 120) sp.run();
+    }
+
+    property Timer soonTimer: Timer {
+        interval: sp.soonDelay
+        onTriggered: sp.run()
     }
 
     function refreshStatus() {
@@ -88,7 +127,10 @@ QtObject {
             pollTimer.stop();
             sp._applyStatus(res);
             var last = res.last;
-            if (last && last.changed && (last.changed.playlists || last.changed.liked)) sp.remoteChanged(last.changed);
+            if (last && last.changed && (last.changed.playlists || last.changed.liked)) {
+                sp.quietUntil = Date.now() + 10000;
+                sp.remoteChanged(last.changed);
+            }
         })
     }
 
@@ -161,11 +203,16 @@ QtObject {
         repeat: true
         onTriggered: sp._post("status", {}, function(res) {
             sp._applyStatus(res);
-            if (!sp.backlogRunning) backlogTimer.stop();
+            if (!sp.backlogRunning) {
+                backlogTimer.stop();
+                // its likes landed in the liked file: let the stores pick them up
+                sp.quietUntil = Date.now() + 10000;
+                sp.remoteChanged({ liked: true });
+            }
         })
     }
 
-    // First run shortly after start, then every 3 hours
+    // First run shortly after start, then every periodMinutes
     property Timer firstTimer: Timer {
         interval: 20000
         running: sp.hasCookie && sp.enabled && sp.selectionConfirmed
@@ -173,7 +220,7 @@ QtObject {
     }
 
     property Timer periodicTimer: Timer {
-        interval: 3 * 3600 * 1000
+        interval: sp.periodMinutes * 60 * 1000
         repeat: true
         running: sp.hasCookie && sp.enabled && sp.selectionConfirmed
         onTriggered: sp.run()

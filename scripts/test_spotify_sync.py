@@ -1721,6 +1721,28 @@ class RenameTests(SyncCase):
         self.assertEqual(c.writes, [("rename_playlist", "P", "ahihi")])
 
 
+class AutoBacklogTests(SyncCase):
+    """The earlier-likes push runs on its own once per switch-on: status says whether it has run."""
+
+    def test_never_run_then_run(self):
+        import spotify_sync as ss
+        import spotify_sync_state as st
+        self.enable([], liked=True)
+        ss.set_write_back("", True, now=self.NOW)
+        self.assertFalse(ss.status("")["backlogRan"])
+        ss._backlog_progress(running=False, done=0, total=0)
+        self.assertTrue(ss.status("")["backlogRan"])
+
+    def test_switching_on_again_runs_it_again(self):
+        import spotify_sync as ss
+        self.enable([], liked=True)
+        ss.set_write_back("", True, now=self.NOW)
+        ss._backlog_progress(running=False, done=3, total=3)
+        ss.set_write_back("", False, now=self.NOW)
+        ss.set_write_back("", True, now=self.NOW + 5)
+        self.assertFalse(ss.status("")["backlogRan"])
+
+
 class RenameClientTests(WebClientTests):
     URL = "https://spclient.wg.spotify.com/playlist/v2/playlist/P/changes"
 
