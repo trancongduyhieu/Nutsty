@@ -5634,7 +5634,18 @@ Scope {
     function removeTrackFromCustomPlaylist(plId, track) {
         if (!plId || !track) return;
         var targetIdent = track.path || track.videoId || "";
-        playlistStore.removeTrack(plId, track, () => win.showToast(I18n.tr("Đã xóa khỏi danh sách", "Removed from playlist")));
+        var link = null;
+        for (var i = 0; i < win.customPlaylists.length; i++) {
+            var p = win.customPlaylists[i];
+            if (p && (p.id === plId || p.playlistId === plId)) { link = p.spotifyLink || null; break; }
+        }
+        var readOnly = !!link && (link.editable === false || (link.editable === undefined && !link.owned));
+        var msg = readOnly
+            ? (link.kind === "album"
+               ? I18n.tr("Đã xóa trong Nutsty. Album trên Spotify thì không sửa được", "Removed in Nutsty. Albums on Spotify can't be edited")
+               : I18n.tr("Đã xóa trong Nutsty. Playlist của người khác thì không sửa được trên Spotify", "Removed in Nutsty. Someone else's playlist can't be edited on Spotify"))
+            : I18n.tr("Đã xóa khỏi danh sách", "Removed from playlist");
+        playlistStore.removeTrack(plId, track, () => win.showToast(msg));
         if (targetIdent && win.playingPlaylistId === plId && win.currentTracks && win.currentTracks.length > 0) {
             win.currentTracks = win.currentTracks.filter(t => t.path !== targetIdent && t.videoId !== targetIdent);
         }

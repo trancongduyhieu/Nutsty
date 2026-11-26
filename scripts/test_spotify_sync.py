@@ -617,6 +617,13 @@ class AlbumTests(SyncCase):
         self.assertEqual(self.playlist("AL")["title"], "AL AL")
         self.assertNotIn("P", c.fetched)
 
+    def test_album_link_says_album(self):
+        c = FakeClient([lib("P")], {"P": remote_list(["a"]), "AL": remote_list(["x"])}, albums=[album("AL")])
+        self.enable(["P", "AL"], seen=["P", "AL"])
+        self.sync(c)
+        self.assertEqual(self.playlist("AL")["spotifyLink"].get("kind"), "album")
+        self.assertNotIn("kind", self.playlist("P")["spotifyLink"])   # playlists keep their record as it was
+
     def test_album_never_written_back(self):
         import spotify_sync as ss
         import playlist_manager as pm

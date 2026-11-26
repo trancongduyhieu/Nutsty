@@ -27,6 +27,11 @@ Rectangle {
 
     // Kept in step with a Spotify playlist by Spotify sync (backend/spotify_sync.py)
     readonly property bool spotifyLinked: !!(root.playlist && root.playlist.spotifyLink)
+    readonly property var spotifyLink: root.spotifyLinked ? root.playlist.spotifyLink : null
+    // A saved album, or a playlist someone else owns: Spotify lets nobody change it from here
+    readonly property bool spotifyAlbum: root.spotifyLinked && root.spotifyLink.kind === "album"
+    readonly property bool spotifyReadOnly: root.spotifyLinked
+        && (root.spotifyLink.editable === false || (root.spotifyLink.editable === undefined && !root.spotifyLink.owned))
 
     readonly property var playlistTracks: {
         if (!playlist || !playlist.tracks) return [];
@@ -158,7 +163,9 @@ Rectangle {
 
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: I18n.tr("Danh sách phát cá nhân", "Personal Playlist")
+                            text: root.spotifyAlbum ? I18n.tr("Album trên Spotify", "Album on Spotify")
+                                  : root.spotifyReadOnly ? I18n.tr("Playlist của người khác trên Spotify", "Someone else's Spotify playlist")
+                                  : I18n.tr("Danh sách phát cá nhân", "Personal Playlist")
                             font.family: Theme.fontFamily
                             font.pixelSize: 13
                             font.weight: Font.Medium
@@ -228,6 +235,32 @@ Rectangle {
                             text: root.totalDurationFormatted
                             font.family: Theme.fontFamily
                             font.pixelSize: 13
+                            color: Theme.textSecondary
+                        }
+                    }
+
+                    // Why edits here stay here: Spotify does not let anyone change an album or another user's list
+                    RowLayout {
+                        visible: root.spotifyReadOnly
+                        Layout.fillWidth: true
+                        spacing: 6
+                        AppIcon {
+                            Layout.alignment: Qt.AlignTop
+                            Layout.topMargin: 1
+                            source: "../assets/icons/spotify-symbolic.svg"
+                            iconSize: 13
+                            color: root.accentColor
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: root.spotifyAlbum
+                                  ? I18n.tr("Spotify không cho sửa album, nên bài bạn thêm hay xóa ở đây chỉ đổi trong Nutsty.",
+                                            "Spotify doesn't let anyone edit an album, so songs you add or remove here change only in Nutsty.")
+                                  : I18n.tr("Đây là playlist của người khác, nên bài bạn thêm hay xóa ở đây chỉ đổi trong Nutsty.",
+                                            "This is someone else's playlist, so songs you add or remove here change only in Nutsty.")
+                            wrapMode: Text.WordWrap
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 12
                             color: Theme.textSecondary
                         }
                     }

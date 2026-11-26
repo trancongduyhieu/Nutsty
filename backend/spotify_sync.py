@@ -584,6 +584,8 @@ def _apply_playlist(playlists, info, remote, st, cache, now, blocked, reverse=No
             "spotifyMade": bool(info.get("spotifyMade")),
             "base": new_base, "revision": remote.revision or "",
             "libRevision": info.get("revision") or "", "syncedAt": now, "unmatched": len(unmatched)}
+    if info.get("kind") == "album":
+        link["kind"] = "album"              # the page says Spotify does not let anyone edit it
     if "title" in old_link:
         link["title"] = old_link["title"]   # the agreed name, kept by _merge_titles
     if (before is not None and rec["tracks"] == before and old_count == rec["trackCount"]
