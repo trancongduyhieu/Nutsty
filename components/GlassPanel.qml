@@ -3,7 +3,8 @@ import "."
 
 // Frosted liquid glass panel shared by the playlist picker, New playlist and Make a cover: the page behind is
 // blurred out of reading, the rim bends it, and a thin wash, a hairline and a top highlight sit over it.
-// `glassSource` is the item to sample (masterAppSurface); lite mode or no source draws `ground` as a plain fill.
+// `glassSource` is the item to sample (masterAppSurface); lite mode or no source draws `ground` as a solid fill
+// (fully opaque, so nothing behind shows through and no shader runs).
 // Own file, not an inline component: Quickshell hot reload cannot resolve an inline component added later.
 LiquidGlass {
     id: panel
@@ -22,7 +23,7 @@ LiquidGlass {
     opaque: true
     isFlowActive: false
     backgroundSourceItem: panel.glassOn ? panel.glassSource : null
-    tintColor: Qt.rgba(panel.ground.r, panel.ground.g, panel.ground.b, panel.glassOn ? 0.40 : 0.96)
+    tintColor: Qt.rgba(panel.ground.r, panel.ground.g, panel.ground.b, panel.glassOn ? 0.40 : 1.0)
 
     // Readability wash under the content, kept light so the glass reads bright
     Rectangle {
