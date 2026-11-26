@@ -7,6 +7,7 @@ so a song removed in Nutsty is never re-added and an incomplete read never delet
 Linked playlists keep a fixed id `custom_pl_spotify_{pid}` and a `spotifyLink` record that
 account_sync carries to the user's other devices. The switch and liked-songs base are per device.
 """
+import re
 import time
 
 try:
@@ -203,6 +204,21 @@ def _importer():
     return spotify_importer
 
 
+def _artist_agrees(candidate, track):
+    """One of the Spotify artists is named in the Nutsty track's artist or title. YouTube titles are
+    long ("05 (Không Phai) | @tangduytan x T.R.I x Phong Max"), so a short Spotify title ("PHONG")
+    alone matches by accident; the artist is what tells them apart."""
+    def words(text):  # every word, one letter too: "T.R.I" is t, r, i
+        return set(re.findall(r"\w+", str(text).lower()))
+
+    have = words(f"{track.get('artist') or ''} {track.get('title') or track.get('name') or ''}")
+    for name in str(candidate.get("artist") or "").split(","):
+        toks = words(name)
+        if toks and toks <= have:
+            return True
+    return False
+
+
 def reverse_match(track, client, cache, now=None):
     """Nutsty track -> Spotify id via search, scored like the importer; None below the threshold.
     A miss is cached under rev:<track key> and retried after the usual window."""
@@ -225,7 +241,7 @@ def reverse_match(track, client, cache, now=None):
               "duration_ms": int(si.parse_duration_to_seconds(track.get("duration") or 0) * 1000)}
     best, best_score = None, None
     for c in client.search_tracks(title, artist):
-        if not c.get("spotifyId"):
+        if not c.get("spotifyId") or not _artist_agrees(c, track):
             continue
         score = si.calculate_track_match_score(
             wanted, {"title": c.get("name"), "artist": c.get("artist"), "durationMs": c.get("duration_ms") or 0})
@@ -290,12 +306,26 @@ def _push_pending(rec, st, pid):
     return bool(local - base) or bool(base - local - absent)
 
 
+def _library(client):
+    """Playlists, then saved albums. Albums are an extra: if Spotify changes their query, the
+    playlists still sync."""
+    library = client.library_playlists()
+    try:
+        albums = client.library_albums()
+    except sw.SpotifyError as e:
+        if e.code not in _SKIP_ONE + ("query_changed",):
+            raise
+        sys.stderr.write(f"[spotify_sync] saved albums skipped: {e.code}\n")
+        albums = []
+    return library + albums
+
+
 def _fetch(st, client, match, cache, now, playlists_snapshot):
     """Network phase: read everything first so a failure never leaves a half-written file.
     Returns (library, fetched {pid: (info, remote)}, liked_remote, reverse {(list, key): sid}, error_code)."""
     fetched, liked_remote, reverse = {}, None, {}
     baseline = st.get("localBaseline") or {}
-    library = client.library_playlists()
+    library = _library(client)
     seen = set(st.get("seen") or [])
     selected = list(st.get("selected") or [])
     for info in library:
@@ -363,7 +393,7 @@ def _fetch_one(st, info, client, match, cache, now, playlists_snapshot, force, b
             and not link.get("unmatched") and pid not in force
             and not (wb and _push_pending(rec, st, pid))):
         return
-    remote = client.playlist_items(pid)
+    remote = client.album_items(pid) if info.get("kind") == "album" else client.playlist_items(pid)
     if not merge.remote_is_valid(remote):
         return
     base = set(link.get("base") or [])
@@ -904,7 +934,7 @@ def list_choices(profile="", client=None):
     with pm.profile_scope(profile):
         st = sstate.load_state()
         client = client or _default_client()
-        library = client.library_playlists()
+        library = _library(client)
         chosen = set(st.get("selected") or [])
         out = []
         for info in library:

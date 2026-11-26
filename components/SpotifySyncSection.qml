@@ -83,6 +83,7 @@ ColumnLayout {
     }
 
     function ownerText(item) {
+        if (item.kind === "album") return item.ownerName ? I18n.tr("Album · %1", "Album · %1").arg(item.ownerName) : I18n.tr("Album", "Album");
         if (item.spotifyMade) return I18n.tr("Spotify tự tạo, thay mới mỗi lần", "Made by Spotify, replaced each time");
         if (item.owned) return I18n.tr("Của bạn", "Yours");
         return I18n.tr("Của %1", "By %1").arg(item.ownerName || "Spotify");

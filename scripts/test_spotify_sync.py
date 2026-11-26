@@ -84,6 +84,43 @@ class WebClientTests(unittest.TestCase):
                                 client_token_provider=lambda: "ct")
         return c, t
 
+    def test_library_albums_parsed(self):
+        node = {"__typename": "Album", "name": "SUMMERTIDE", "uri": "spotify:album:al1",
+                "artists": {"items": [{"profile": {"name": "Alohaii"}}]},
+                "coverArt": {"sources": [{"url": "https://i/al1.jpg"}]}}
+        c, t = self.client({"libraryV3": [ok({"data": {"me": {"libraryV3": {
+            "totalCount": 1, "items": [{"item": {"_uri": "spotify:album:al1", "data": node}}]}}}})]})
+        out = c.library_albums()
+        self.assertEqual(len(out), 1)
+        a = out[0]
+        self.assertEqual((a["id"], a["title"], a["kind"], a["ownerName"], a["image"]),
+                         ("al1", "SUMMERTIDE", "album", "Alohaii", "https://i/al1.jpg"))
+        self.assertFalse(a["owned"] or a["editable"] or a["spotifyMade"])
+        self.assertEqual(t.calls[-1][1]["filters"], ["Albums"])
+
+    def test_album_items_paginated_with_album_art(self):
+        def page(ids, total):
+            return ok({"data": {"albumUnion": {"__typename": "Album", "name": "AL",
+                "coverArt": {"sources": [{"url": "https://i/al.jpg"}]},
+                "tracksV2": {"totalCount": total, "items": [
+                    {"uid": f"u-{s}", "track": {"uri": f"spotify:track:{s}", "name": f"Song {s}",
+                     "artists": {"items": [{"profile": {"name": "Artist"}}]},
+                     "duration": {"totalMilliseconds": 200000}}} for s in ids]}}}})
+        c, _ = self.client({"getAlbum": [page(["a", "b"], 3), page(["c"], 3)]})
+        r = c.album_items("al")
+        self.assertEqual([i["spotifyId"] for i in r.items], ["a", "b", "c"])
+        self.assertTrue(r.complete)
+        self.assertEqual(r.total, 3)
+        self.assertEqual((r.items[0]["album"], r.items[0]["image"], r.items[0]["duration_ms"]),
+                         ("AL", "https://i/al.jpg", 200000))
+
+    def test_album_gone_is_not_found(self):
+        import spotify_web as sw
+        c, _ = self.client({"getAlbum": [ok({"data": {"albumUnion": {"__typename": "NotFound"}}})]})
+        with self.assertRaises(sw.SpotifyError) as cm:
+            c.album_items("gone")
+        self.assertEqual(cm.exception.code, "not_found")
+
     def test_paginates_until_total(self):
         ids = [f"t{i}" for i in range(220)]
         c, _ = self.client({"fetchPlaylist": [
@@ -417,8 +454,9 @@ class FakeClient:
     consumed in order (last repeats). Writes are recorded in `writes` and applied to a RemoteList value;
     `write_error` raises on every write while set. `search` maps a title to candidate items."""
 
-    def __init__(self, library=(), playlists=None, liked=None, error=None, search=None):
+    def __init__(self, library=(), playlists=None, liked=None, error=None, search=None, albums=()):
         self.library = list(library)
+        self.albums = list(albums)
         self.playlists = dict(playlists or {})
         self.liked = liked if liked is not None else remote_list([])
         self.error = error
@@ -435,6 +473,13 @@ class FakeClient:
         if self.error:
             raise self.error
         return [dict(p) for p in self.library]
+
+    def library_albums(self):
+        return [dict(a) for a in self.albums]
+
+    def album_items(self, aid):
+        self.fetched.append(aid)
+        return self._next(self.playlists[aid])
 
     @staticmethod
     def _next(value):
@@ -522,6 +567,47 @@ class SyncCase(unittest.TestCase):
     def liked(self):
         import playlist_manager as pm
         return pm._read_json(pm._liked_file(), {})
+
+
+def album(aid):
+    return {"id": aid, "title": f"AL {aid}", "image": "", "ownerId": "", "ownerName": "Band",
+            "owned": False, "editable": False, "spotifyMade": False, "revision": "", "trackCount": 0,
+            "kind": "album"}
+
+
+class AlbumTests(SyncCase):
+    """Saved albums are choices like playlists: pulled into a Nutsty playlist, never written back."""
+
+    def test_album_offered_unpicked(self):
+        import spotify_sync as ss
+        c = FakeClient([lib("P")], albums=[album("AL")])
+        ch = ss.list_choices("", client=c)
+        by = {p["id"]: p for p in ch["playlists"]}
+        self.assertTrue(by["P"]["selected"])
+        self.assertFalse(by["AL"]["selected"])
+        self.assertEqual(by["AL"]["kind"], "album")
+
+    def test_picked_album_is_pulled(self):
+        c = FakeClient([lib("P")], {"P": remote_list(["a"]), "AL": remote_list(["x", "y"])}, albums=[album("AL")])
+        self.enable(["AL"], seen=["P", "AL"])
+        self.sync(c)
+        self.assertEqual(self.vids("AL"), ["vx", "vy"])
+        self.assertEqual(self.playlist("AL")["title"], "AL AL")
+        self.assertNotIn("P", c.fetched)
+
+    def test_album_never_written_back(self):
+        import spotify_sync as ss
+        import playlist_manager as pm
+        c = FakeClient([], {"AL": remote_list(["x"])}, albums=[album("AL")], search={"New": [cand("n1", "New")]})
+        self.enable(["AL"])
+        self.sync(c)
+        ss.set_write_back("", True, now=self.NOW)
+        pls = pm.load_playlists()
+        rec = next(p for p in pls if p["id"] == "custom_pl_spotify_AL")
+        rec["tracks"].append(yt("vnew", title="New"))
+        pm.save_playlists(pls)
+        self.sync(c, now=self.NOW + 10)
+        self.assertEqual(c.writes, [])
 
 
 class PullTests(SyncCase):
@@ -889,6 +975,19 @@ class PushTests(SyncCase):
         self.assertEqual(ss.reverse_match(yt("v2", title="Good", artist="Me", duration=200), c, cache,
                                           now=self.NOW), "g")
         self.assertEqual(cache.find_by_video("v2"), "g")
+
+    def test_reverse_match_needs_the_artist(self):
+        """A long YouTube title holding a short Spotify title ("PHONG" in "... Phong Max ...") is not
+        a match unless an artist agrees: write-back would add the wrong song to the user's Spotify."""
+        import spotify_sync as ss
+        import spotify_sync_state as st
+        cache = st.MatchCache()
+        title = "05 (Không Phai) | @tangduytan  x T.R.I x Phong Max ( phiên bản Phong Max )"
+        c = FakeClient(search={title: [cand("p", "PHONG", "VSTRA, TGSN, Tyronee")]})
+        self.assertIsNone(ss.reverse_match(yt("v3", title=title, artist="Phong Max"), c, cache, now=self.NOW))
+        # The artist named in the YouTube title counts as the artist
+        c.search[title] = [cand("p", "PHONG", "VSTRA, TGSN, Tyronee"), cand("k", "05 (Không Phai)", "tangduytan, T.R.I")]
+        self.assertEqual(ss.reverse_match(yt("v4", title=title, artist="Phong Max"), c, cache, now=self.NOW), "k")
 
 
 class BacklogTests(SyncCase):

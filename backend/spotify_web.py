@@ -29,6 +29,7 @@ PERSISTED_QUERIES = {
     "profileAttributes": "53bcb064f6cd18c23f752bc324a791194d20df612d8e1239c735144ab0399ced",
     "libraryV3": "973e511ca44261fda7eebac8b653155e7caee3675abb4fb110cc1b8c78b091c3",
     "fetchPlaylist": "7982b11e21535cd2594badc40030b745671b61a1fa66766e569d45e6364f3422",
+    "getAlbum": "b9bfabef66ed756e5e13f68a942deb60bd4125ec1f1be8cc42769dc0259b4b10",
     "fetchLibraryTracks": "087278b20b743578a6262c2b0b4bcd20d879c503cc359a2285baf083ef944240",
     "searchTracks": "bc1ca2fcd0ba1013a0fc88e6cc4f190af501851e3dafd3e1ef85840297694428",
     "addToPlaylist": "47b2a1234b17748d332dd0431534f22450e9ecbb3d5ddcdacbd83368636a0990",
@@ -291,6 +292,63 @@ class SpotifyWebClient:
             if not items or offset >= total:
                 break
         return out
+
+    def library_albums(self):
+        """Saved albums, as read-only choices next to the playlists (kind "album", never editable)."""
+        out, offset = [], 0
+        while True:
+            data = self.query("libraryV3", {
+                "filters": ["Albums"], "order": None, "textFilter": "",
+                "features": ["LIKED_SONGS", "YOUR_EPISODES_V2", "PRERELEASES", "EVENTS"],
+                "limit": LIBRARY_PAGE, "offset": offset, "flatten": True,
+                "expandedFolders": [], "folderUri": None, "includeFoldersWhenFlattening": False,
+            })
+            lib = _required(data, "me", "libraryV3", op="libraryV3")
+            total = int(lib.get("totalCount") or 0)
+            items = lib.get("items") or []
+            for wrap in items:
+                item = (wrap or {}).get("item") or {}
+                node = item.get("data") or {}
+                if node.get("__typename") != "Album":
+                    continue
+                artists = [((a or {}).get("profile") or {}).get("name", "")
+                           for a in ((node.get("artists") or {}).get("items") or [])]
+                out.append({
+                    "id": _tail(item.get("_uri") or node.get("uri") or ""),
+                    "title": node.get("name", ""),
+                    "image": _first_source(node.get("coverArt") or {}),
+                    "ownerId": "",
+                    "ownerName": ", ".join(a for a in artists if a),
+                    "owned": False, "editable": False, "spotifyMade": False,
+                    "revision": "", "trackCount": 0, "kind": "album",
+                })
+            offset += len(items)
+            if not items or offset >= total:
+                break
+        return out
+
+    def album_items(self, aid):
+        items, offset, total = [], 0, 0
+        while True:
+            data = self.query("getAlbum", {"uri": f"spotify:album:{aid}", "locale": "",
+                                           "offset": offset, "limit": PLAYLIST_PAGE})
+            al = data.get("albumUnion")
+            if not al or (al.get("__typename") and al["__typename"] != "Album"):
+                raise SpotifyError(f"album {aid} unavailable", code="not_found")
+            tracks = _required(al, "tracksV2", op="getAlbum")
+            total = int(tracks.get("totalCount") or 0)
+            page = tracks.get("items") or []
+            for row in page:
+                t = (row or {}).get("track") or {}
+                # album tracks carry no album of their own: the album's name and cover stand in
+                it = parse_track(dict(t, albumOfTrack={"name": al.get("name", ""),
+                                                       "coverArt": al.get("coverArt") or {}}))
+                it["uid"] = (row or {}).get("uid") or ""
+                items.append(it)
+            offset += len(page)
+            if not page or offset >= total:
+                break
+        return RemoteList(items=items, total=total, revision="", complete=offset >= total)
 
     def playlist_items(self, pid):
         items, offset, total, revision, skipped = [], 0, None, "", 0
