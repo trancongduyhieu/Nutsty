@@ -1571,7 +1571,7 @@ Rectangle {
                             Text {
                                 width: parent.width
                                 text: !root.discordPresenceEnabled
-                                      ? I18n.tr("Bạn bè thấy tên bài, ca sĩ, ảnh bìa và thời gian bài", "Friends see the song, artist, artwork and time")
+                                      ? I18n.tr("Để bài đang nghe hiện trên Discord, cần mở app Discord chạy nền trên máy này, hoặc đăng nhập Discord để không cần mở app", "To show your song on Discord, keep the Discord app running on this computer, or sign in with Discord so the app isn't needed")
                                       : root.discordPresenceStatus === "live"
                                         ? I18n.tr("Đang hiện trên Discord qua app trên máy này", "Showing on Discord through the app on this computer")
                                         : root.discordPresenceStatus === "live_web"
