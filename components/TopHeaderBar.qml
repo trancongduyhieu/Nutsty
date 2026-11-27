@@ -262,7 +262,7 @@ Rectangle {
         visible: headerRoot.notchMode && height > 0
         // the Nutsty mark (home) always, then the collapse chevron while Now Playing is open
         leftContentWidth: headerRoot.notchMode
-            ? logoNotchBtn.width + (collapseNotchBtn.shown ? 2 + headerRoot.navBox : 0) + 8 : 0
+            ? logoNotchBtn.width + (collapseNotchBtn.shown ? 1 + headerRoot.navBox : 0) + 6 : 0
         // one morph progress drives width, depth and tint together, so the island grows as one shape
         // the closed row: nav icons, or the Now Playing mode switcher, morphing between the two
         readonly property real closedW: navCluster.implicitWidth + 8
@@ -300,9 +300,10 @@ Rectangle {
     Rectangle {
         id: logoNotchBtn
         visible: headerRoot.notchMode
-        x: notchFrame.leftContentX + 2
+        x: notchFrame.leftContentX + 1
+        // as big as the notch allows (its full 30px depth below the band, 1px clear at the bottom)
         y: notchFrame.band
-        width: headerRoot.navBox; height: headerRoot.navBox
+        width: 30; height: 29
         radius: 8
         color: logoH.hovered ? Qt.rgba(headerRoot.accentColor.r, headerRoot.accentColor.g, headerRoot.accentColor.b, 0.22) : "transparent"
         Behavior on color { ColorAnimation { duration: 140 } }
@@ -313,7 +314,7 @@ Rectangle {
         AppIcon {
             anchors.centerIn: parent
             source: "../assets/icons/nutsty-outline-symbolic.svg"
-            iconSize: 22
+            iconSize: 27
             color: "#ffffff"
             opacity: logoH.hovered || (headerRoot.currentView === "home" && !headerRoot.isNowPlayingOpen) ? 1.0 : 0.8
             scale: logoMouse.pressed ? 0.9 : (logoH.hovered ? 1.06 : 1.0)
@@ -328,7 +329,7 @@ Rectangle {
         id: collapseNotchBtn
         readonly property bool shown: headerRoot.notchMode && headerRoot.isNowPlayingOpen
         visible: shown
-        x: logoNotchBtn.x + logoNotchBtn.width + 2
+        x: logoNotchBtn.x + logoNotchBtn.width + 1
         y: notchFrame.band
         width: headerRoot.navBox; height: headerRoot.navBox
         radius: 8
