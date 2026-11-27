@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import QtQuick.Shapes
 import QtQuick.Layouts
 import QtQuick.Controls.Basic
 import "."
@@ -127,6 +128,70 @@ Rectangle {
         }
     }
 
+    // Open mood notch glass: the window's own backdrop (wallpaper / cover, the source the player bar's
+    // liquid glass samples) cropped behind the notch, blurred and cut to the notch shape, so the open
+    // island is frosted glass instead of flat black and the page text under it is gone. Under the
+    // frame (z -2), whose band fill and tint darken it for the chips. Built only while it is open.
+    Item {
+        id: notchGlass
+        z: -2
+        readonly property bool active: headerRoot.notchMode && headerRoot.backgroundSourceItem !== null
+                                       && headerRoot.moodMorph > 0.001 && notchFrame.centerVisible
+        visible: active
+        opacity: Math.min(1, Math.max(0, headerRoot.moodMorph * 1.5))
+        width: headerRoot.width
+        height: notchFrame.band + Frame.H + headerRoot.moodRowH + 6 + 4
+
+        readonly property point cropPos: {
+            var _dep = headerRoot.x + headerRoot.y + headerRoot.width + headerRoot.height;
+            return headerRoot.backgroundSourceItem ? headerRoot.mapToItem(headerRoot.backgroundSourceItem, 0, 0) : Qt.point(0, 0);
+        }
+
+        Loader {
+            anchors.fill: parent
+            active: notchGlass.active
+            sourceComponent: Item {
+                ShaderEffectSource {
+                    id: notchCrop
+                    sourceItem: headerRoot.backgroundSourceItem
+                    sourceRect: Qt.rect(notchGlass.cropPos.x, notchGlass.cropPos.y, notchGlass.width, notchGlass.height)
+                    width: notchGlass.width; height: notchGlass.height
+                    visible: false
+                    live: true
+                    smooth: true
+                }
+                Item {
+                    id: notchGlassMask
+                    width: notchGlass.width; height: notchGlass.height
+                    visible: false
+                    layer.enabled: true
+                    Shape {
+                        anchors.fill: parent
+                        preferredRendererType: Shape.CurveRenderer
+                        ShapePath {
+                            fillColor: "white"
+                            strokeWidth: -1
+                            PathSvg { path: Frame.centerNotchPath(Math.round(notchFrame.width), notchFrame.leftContentWidth, notchFrame.centerContentWidth,
+                                                                  notchFrame.rightContentWidth, notchFrame.centerExtraHeight, notchFrame.centerBottomRadius) }
+                        }
+                    }
+                }
+                MultiEffect {
+                    width: notchGlass.width; height: notchGlass.height
+                    source: notchCrop
+                    blurEnabled: true
+                    blur: 1.0
+                    blurMax: Theme.blurAtmosphere
+                    saturation: 1.55
+                    brightness: -0.08
+                    maskEnabled: true
+                    maskSource: notchGlassMask
+                    autoPaddingEnabled: false
+                }
+            }
+        }
+    }
+
     // Frame + notches, under this header's buttons but over the page (the header stacks above it)
     WindowFrameNotches {
         id: notchFrame
@@ -141,8 +206,9 @@ Rectangle {
         readonly property real openW: Math.max(navCluster.implicitWidth, dynamicMoodIsland.expandedTargetWidth) + 8
         centerContentWidth: closedW + (openW - closedW) * headerRoot.moodMorph
         centerExtraHeight: (headerRoot.moodRowH + 6) * Math.max(0, headerRoot.moodMorph)
-        // open it reads as a solid black island (fill 0.35 + tint 0.92 ~ 0.95), like the real notch
-        centerTint: 0.92 * Math.min(1, Math.max(0, headerRoot.moodMorph))
+        // open: a dark smoked layer over the frosted backdrop (fill 0.35 + tint 0.5 ~ 0.68), dark
+        // enough for the chips, still showing the blurred colour underneath
+        centerTint: (notchGlass.active ? 0.5 : 0.92) * Math.min(1, Math.max(0, headerRoot.moodMorph))
         // bottom corners round out as it opens (boring.notch: 14 -> 24)
         centerBottomRadius: Frame.BR + 7 * Math.min(1, Math.max(0, headerRoot.moodMorph))
         rightContentWidth: headerRoot.navBox * 2 + 2 + 8
