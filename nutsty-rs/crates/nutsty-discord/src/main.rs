@@ -48,7 +48,7 @@ fn say(status: &str) {
 }
 
 fn say_account(token: Option<&auth::Token>) {
-    say_json(&json!({ "account": token.map(|t| json!({ "name": t.user_name })) }));
+    say_json(&json!({ "account": token.map(|t| json!({ "name": t.user_name, "avatar": t.avatar_url })) }));
 }
 
 /// The way the status is reaching Discord right now.
@@ -230,7 +230,7 @@ impl Presence {
         let token = match auth::usable(&self.client_id) {
             Ok(t) => t,
             Err(auth::Fail::SignedOut) => return None,
-            Err(auth::Fail::Network) => return None,
+            Err(_) => return None,
         };
         match gateway::Session::open(&token.access) {
             Ok(session) => Some(self.account_link(session, token.access)),
@@ -246,7 +246,7 @@ impl Presence {
                     say_account(None);
                     None
                 }
-                Err(auth::Fail::Network) => None,
+                Err(_) => None,
             },
             Err(gateway::OpenError::Other) => None,
         }
@@ -283,6 +283,7 @@ impl Presence {
             // a sign-in that is still waiting gives its port up within a moment
             std::thread::sleep(Duration::from_millis(400));
             let result = auth::login(&client_id, vi, cancel, |url| say_json(&json!({ "open_url": url })));
+            let mut detail = String::new();
             let reason = match result {
                 Ok(token) => {
                     say_account(Some(&token));
@@ -291,11 +292,14 @@ impl Presence {
                 }
                 Err(auth::LoginError::Cancelled) => return,
                 Err(auth::LoginError::Port) => "port",
-                Err(auth::LoginError::Denied) => "denied",
+                Err(auth::LoginError::Denied(why)) => {
+                    detail = why;
+                    "denied"
+                }
                 Err(auth::LoginError::Timeout) => "timeout",
                 Err(auth::LoginError::Network) => "network",
             };
-            say_json(&json!({ "login": "failed", "reason": reason }));
+            say_json(&json!({ "login": "failed", "reason": reason, "detail": detail }));
         });
     }
 
@@ -361,7 +365,16 @@ fn main() {
         last_status: "",
     };
     p.status("idle");
-    say_account(auth::load().as_ref());
+    let saved = auth::load();
+    say_account(saved.as_ref());
+    // the name and picture may have changed on Discord since the sign-in
+    if saved.is_some() {
+        std::thread::spawn(|| {
+            if let Some(t) = auth::refresh_profile() {
+                say_account(Some(&t));
+            }
+        });
+    }
     let mut wait_ms = 1_000;
     loop {
         let mut ended = false;

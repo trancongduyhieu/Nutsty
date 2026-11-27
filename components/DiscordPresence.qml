@@ -24,6 +24,7 @@ Item {
 
     // "Sign in with Discord": the account used when the Discord app is not on this computer
     property string accountName: ""
+    property string accountAvatar: ""
     property bool signedIn: false
     property bool signingIn: false
     // "" | "port" | "denied" | "timeout" | "network"
@@ -47,6 +48,7 @@ Item {
         if (helper.running) helper.write("{\"logout\":true}\n");
         root.signedIn = false;
         root.accountName = "";
+        root.accountAvatar = "";
     }
 
     // after the switch goes off, the helper stays a moment to take the status down itself
@@ -125,6 +127,7 @@ Item {
                     if (msg.hasOwnProperty("account")) {
                         root.signedIn = msg.account !== null;
                         root.accountName = msg.account && msg.account.name ? String(msg.account.name) : "";
+                        root.accountAvatar = msg.account && msg.account.avatar ? String(msg.account.avatar) : "";
                         if (root.signedIn) { root.signingIn = false; root.loginError = ""; }
                     }
                     if (msg.open_url) root.openUrlRequested(String(msg.open_url));

@@ -3935,6 +3935,7 @@ Scope {
             discordPresenceStatus: discordPresence.status
             discordSignedIn: discordPresence.signedIn
             discordAccountName: discordPresence.accountName
+            discordAccountAvatar: discordPresence.accountAvatar
             discordSigningIn: discordPresence.signingIn
             discordLoginError: discordPresence.loginError
             taskbarLyricsPlacement: win.taskbarLyricsPlacement

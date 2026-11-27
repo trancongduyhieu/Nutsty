@@ -39,6 +39,8 @@ pub struct Token {
     pub refresh: String,
     pub expires_at_ms: i64,
     pub user_name: String,
+    /// the account's picture on Discord's CDN (or the default one Discord gives), may be empty
+    pub avatar_url: String,
 }
 
 #[derive(Debug, PartialEq)]
@@ -47,6 +49,8 @@ pub enum Fail {
     SignedOut,
     /// no answer, or an answer that says nothing about the sign-in itself
     Network,
+    /// the token endpoint said no to a new sign-in, with Discord's reason
+    Refused(String),
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -83,6 +87,7 @@ impl Token {
             refresh: v.get("refresh_token")?.as_str()?.to_string(),
             expires_at_ms: v.get("expires_at_ms")?.as_i64()?,
             user_name: v.get("user_name").and_then(Value::as_str).unwrap_or("").to_string(),
+            avatar_url: v.get("avatar_url").and_then(Value::as_str).unwrap_or("").to_string(),
         })
     }
 
@@ -90,16 +95,18 @@ impl Token {
         json!({
             "access_token": self.access, "refresh_token": self.refresh,
             "expires_at_ms": self.expires_at_ms, "user_name": self.user_name,
+            "avatar_url": self.avatar_url,
         })
     }
 
     /// From the token endpoint's answer, read at `now`.
-    fn from_reply(v: &Value, now: i64, user_name: &str) -> Option<Token> {
+    fn from_reply(v: &Value, now: i64, old: Option<&Token>) -> Option<Token> {
         Some(Token {
             access: v.get("access_token")?.as_str()?.to_string(),
             refresh: v.get("refresh_token")?.as_str()?.to_string(),
             expires_at_ms: now + v.get("expires_in").and_then(Value::as_i64).unwrap_or(604_800) * 1000,
-            user_name: user_name.to_string(),
+            user_name: old.map(|t| t.user_name.clone()).unwrap_or_default(),
+            avatar_url: old.map(|t| t.avatar_url.clone()).unwrap_or_default(),
         })
     }
 
@@ -161,19 +168,34 @@ fn post_form(path: &str, fields: &[(&str, &str)]) -> Result<(u16, Value), Fail> 
     Ok((status, serde_json::from_str(&body).unwrap_or(Value::Null)))
 }
 
-/// The name Discord shows for this account, best effort.
-fn user_name(access: &str) -> String {
-    let Ok(mut resp) = agent().get(format!("{API}/users/@me")).header("Authorization", format!("Bearer {access}")).call() else {
-        return String::new();
-    };
+/// The name and picture Discord shows for this account, best effort: None when Discord says no.
+pub fn profile(access: &str) -> Option<(String, String)> {
+    let mut resp = agent().get(format!("{API}/users/@me")).header("Authorization", format!("Bearer {access}")).call().ok()?;
     if resp.status().as_u16() != 200 {
-        return String::new();
+        return None;
     }
-    let v: Value = serde_json::from_str(&resp.body_mut().read_to_string().unwrap_or_default()).unwrap_or(Value::Null);
-    v.get("global_name").and_then(Value::as_str).filter(|s| !s.is_empty())
-        .or_else(|| v.get("username").and_then(Value::as_str))
-        .unwrap_or("")
-        .to_string()
+    let v: Value = serde_json::from_str(&resp.body_mut().read_to_string().ok()?).ok()?;
+    let text = |k: &str| v.get(k).and_then(Value::as_str).filter(|s| !s.is_empty()).map(str::to_string);
+    let id = text("id")?;
+    let name = text("global_name").or_else(|| text("username")).unwrap_or_default();
+    let avatar = match text("avatar") {
+        Some(hash) => format!("https://cdn.discordapp.com/avatars/{id}/{hash}.png?size=128"),
+        // accounts without a picture get one of Discord's six coloured defaults
+        None => format!("https://cdn.discordapp.com/embed/avatars/{}.png", (id.parse::<u64>().unwrap_or(0) >> 22) % 6),
+    };
+    Some((name, avatar))
+}
+
+/// The saved sign-in with its name and picture read again from Discord, saved when they changed.
+pub fn refresh_profile() -> Option<Token> {
+    let mut token = load()?;
+    let (name, avatar) = profile(&token.access)?;
+    if token.user_name != name || token.avatar_url != avatar {
+        token.user_name = name;
+        token.avatar_url = avatar;
+        let _ = save(&token);
+    }
+    Some(token)
 }
 
 fn exchange(client_id: &str, code: &str, verifier: &str) -> Result<Token, Fail> {
@@ -186,11 +208,19 @@ fn exchange(client_id: &str, code: &str, verifier: &str) -> Result<Token, Fail> 
         ("code_verifier", verifier),
     ])?;
     if status != 200 {
-        eprintln!("[nutsty-discord] sign-in turned down: HTTP {status} {}", v.get("error").unwrap_or(&Value::Null));
-        return Err(Fail::SignedOut);
+        let why = format!(
+            "token HTTP {status} {} {}",
+            v.get("error").and_then(Value::as_str).unwrap_or(""),
+            v.get("error_description").and_then(Value::as_str).unwrap_or("")
+        );
+        eprintln!("[nutsty-discord] sign-in turned down: {why}");
+        return Err(Fail::Refused(why.trim().to_string()));
     }
-    let mut token = Token::from_reply(&v, now_ms(), "").ok_or(Fail::Network)?;
-    token.user_name = user_name(&token.access);
+    let mut token = Token::from_reply(&v, now_ms(), None).ok_or(Fail::Network)?;
+    if let Some((name, avatar)) = profile(&token.access) {
+        token.user_name = name;
+        token.avatar_url = avatar;
+    }
     Ok(token)
 }
 
@@ -201,7 +231,7 @@ pub fn renew(client_id: &str, old: &Token) -> Result<Token, Fail> {
         ("refresh_token", &old.refresh),
     ])?;
     match status {
-        200 => Token::from_reply(&v, now_ms(), &old.user_name).ok_or(Fail::Network),
+        200 => Token::from_reply(&v, now_ms(), Some(old)).ok_or(Fail::Network),
         400 | 401 => Err(Fail::SignedOut),
         _ => Err(Fail::Network),
     }
@@ -353,8 +383,8 @@ fn answer(stream: &mut TcpStream, status: &str, html: &str) {
 pub enum LoginError {
     /// the port for the redirect is taken by something else
     Port,
-    /// the user said no in the browser, or Discord refused
-    Denied,
+    /// the user said no in the browser, or Discord refused; Discord's reason (never a token)
+    Denied(String),
     Timeout,
     Cancelled,
     Network,
@@ -398,10 +428,11 @@ pub fn login(client_id: &str, vi: bool, cancel: Arc<AtomicBool>, open: impl FnOn
         };
         let outcome = match result {
             Ok(code) => exchange(client_id, &code, &verifier).map_err(|e| match e {
-                Fail::SignedOut => LoginError::Denied,
+                Fail::SignedOut => LoginError::Denied(String::new()),
+                Fail::Refused(why) => LoginError::Denied(why),
                 Fail::Network => LoginError::Network,
             }),
-            Err(_) => Err(LoginError::Denied),
+            Err(e) => Err(LoginError::Denied(format!("authorize {e}"))),
         };
         let outcome = outcome.and_then(|t| save(&t).map(|_| t).map_err(|_| LoginError::Network));
         answer(&mut stream, "200 OK", &page(vi, outcome.is_ok()));
@@ -440,7 +471,7 @@ mod tests {
 
     #[test]
     fn token_round_trips_and_renews_early() {
-        let t = Token::from_reply(&json!({"access_token":"a","refresh_token":"r","expires_in":604800}), 0, "Duy").unwrap();
+        let t = Token::from_reply(&json!({"access_token":"a","refresh_token":"r","expires_in":604800}), 0, None).unwrap();
         assert_eq!(Token::from_json(&t.to_json()), Some(t.clone()));
         assert!(!t.needs_renewal(0));
         assert!(t.needs_renewal(604_800_000 - 5 * 60_000));

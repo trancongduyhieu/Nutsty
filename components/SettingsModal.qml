@@ -68,6 +68,7 @@ Rectangle {
     // the Discord account used when the Discord app is not on this computer
     property bool discordSignedIn: false
     property string discordAccountName: ""
+    property string discordAccountAvatar: ""
     property bool discordSigningIn: false
     property string discordLoginError: ""
     property string taskbarLyricsPlacement: "taskbar"
@@ -1572,13 +1573,13 @@ Rectangle {
                                 text: !root.discordPresenceEnabled
                                       ? I18n.tr("Bạn bè thấy tên bài, ca sĩ, ảnh bìa và thời gian bài", "Friends see the song, artist, artwork and time")
                                       : root.discordPresenceStatus === "live"
-                                        ? I18n.tr("Đang hiện trên Discord", "Showing on Discord")
+                                        ? I18n.tr("Đang hiện trên Discord qua app trên máy này", "Showing on Discord through the app on this computer")
                                         : root.discordPresenceStatus === "live_web"
                                           ? I18n.tr("Đang hiện trên Discord qua tài khoản của bạn", "Showing on Discord through your account")
                                           : root.discordPresenceStatus === "waiting"
                                             ? (root.discordSignedIn
                                                ? I18n.tr("Đang kết nối tới Discord", "Connecting to Discord")
-                                               : I18n.tr("Đang chờ Discord mở trên máy này", "Waiting for Discord to open on this computer"))
+                                               : I18n.tr("Đang chờ app Discord mở trên máy này", "Waiting for the Discord app to open on this computer"))
                                             : I18n.tr("Sẽ hiện khi bạn phát nhạc", "Shows up when music plays")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: 12
@@ -1619,65 +1620,132 @@ Rectangle {
                     }
                 }
 
-                // Discord account: for when the Discord app is not on this computer (browser, phone)
+                // Discord account, under the switch and aligned with its text. Signed out: the status
+                // needs the Discord app open on this computer. Signed in: no app needed at all.
                 Item {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: discordAccountCol.implicitHeight + 4
+                    Layout.preferredHeight: Math.max(36, discordAccountRow.implicitHeight) + 2
                     visible: root.discordPresenceEnabled
 
-                    Column {
-                        id: discordAccountCol
+                    Row {
+                        id: discordAccountRow
                         anchors.left: parent.left
                         anchors.leftMargin: 58
                         anchors.right: discordAccountBtn.left
-                        anchors.rightMargin: 12
+                        anchors.rightMargin: 14
                         anchors.verticalCenter: parent.verticalCenter
-                        spacing: 2
+                        spacing: 10
 
-                        Text {
-                            width: parent.width
-                            text: root.discordSignedIn
-                                  ? (root.discordAccountName
-                                     ? I18n.tr("Đã đăng nhập: ", "Signed in as ") + root.discordAccountName
-                                     : I18n.tr("Đã đăng nhập Discord", "Signed in to Discord"))
-                                  : root.discordSigningIn
-                                    ? I18n.tr("Đang chờ bạn đồng ý trên trình duyệt...", "Waiting for you to allow it in the browser...")
-                                    : I18n.tr("Không dùng app Discord trên máy này?", "Not using the Discord app on this computer?")
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: Theme.textPrimary
-                            elide: Text.ElideRight
+                        // Discord picture of the signed-in account (32x32, radius 9 = 12 - padding)
+                        Item {
+                            width: 32
+                            height: 32
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: root.discordSignedIn
+
+                            Rectangle {
+                                id: discordAvatarMask
+                                anchors.fill: parent
+                                radius: 9
+                                color: "#ffffff"
+                                visible: false
+                                layer.enabled: true
+                            }
+
+                            Item {
+                                anchors.fill: parent
+                                layer.enabled: true
+                                layer.effect: MultiEffect {
+                                    maskEnabled: true
+                                    maskSource: discordAvatarMask
+                                    autoPaddingEnabled: false
+                                }
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    color: "#5865f2"
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: root.discordAccountName ? root.discordAccountName.substring(0, 1).toUpperCase() : "D"
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 14
+                                        font.bold: true
+                                        color: "#ffffff"
+                                    }
+                                }
+
+                                Image {
+                                    anchors.fill: parent
+                                    sourceSize: Qt.size(64, 64)
+                                    source: root.discordAccountAvatar
+                                    fillMode: Image.PreserveAspectCrop
+                                    visible: root.discordAccountAvatar !== "" && status === Image.Ready
+                                    asynchronous: true
+                                    cache: true
+                                }
+                            }
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 9
+                                color: "transparent"
+                                border.color: Qt.rgba(255, 255, 255, 0.20)
+                                border.width: 1
+                            }
                         }
 
-                        Text {
-                            width: parent.width
-                            text: root.discordLoginError === "port"
-                                  ? I18n.tr("Một ứng dụng khác đang giữ cổng đăng nhập. Hãy thử lại sau.", "Another app is holding the sign-in port. Try again later.")
-                                  : root.discordLoginError === "denied"
-                                    ? I18n.tr("Discord chưa cho phép đăng nhập. Hãy thử lại.", "Discord didn't allow the sign-in. Try again.")
-                                    : root.discordLoginError === "timeout"
-                                      ? I18n.tr("Hết thời gian chờ trình duyệt. Hãy thử lại.", "The browser took too long. Try again.")
-                                      : root.discordLoginError === "network"
-                                        ? I18n.tr("Không kết nối được tới Discord. Hãy thử lại.", "Couldn't reach Discord. Try again.")
-                                        : root.discordSignedIn
-                                          ? I18n.tr("Vẫn hiện khi bạn mở Discord trên trình duyệt, điện thoại hoặc không mở", "Still shows with Discord in a browser, on a phone or not open at all")
-                                          : I18n.tr("Đăng nhập một lần để vẫn hiện khi mở Discord trên trình duyệt hoặc điện thoại", "Sign in once so it still shows with Discord in a browser or on a phone")
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 11
-                            color: root.discordLoginError !== "" ? "#f87171" : Theme.textSecondary
-                            wrapMode: Text.Wrap
+                        Column {
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 2
+                            width: parent.width - (root.discordSignedIn ? 42 : 0)
+
+                            Text {
+                                width: parent.width
+                                text: root.discordSignedIn
+                                      ? (root.discordAccountName || I18n.tr("Tài khoản Discord", "Discord account"))
+                                      : root.discordSigningIn
+                                        ? I18n.tr("Đang chờ bạn đồng ý trên trình duyệt", "Waiting for you to allow it in the browser")
+                                        : I18n.tr("Chưa đăng nhập: cần mở app Discord trên máy này", "Not signed in: the Discord app must be open here")
+                                font.family: Theme.fontFamily
+                                font.pixelSize: root.discordSignedIn ? 13 : 12
+                                font.bold: true
+                                color: Theme.textPrimary
+                                wrapMode: root.discordSignedIn ? Text.NoWrap : Text.Wrap
+                                elide: root.discordSignedIn ? Text.ElideRight : Text.ElideNone
+                            }
+
+                            Text {
+                                width: parent.width
+                                text: root.discordLoginError === "port"
+                                      ? I18n.tr("Một ứng dụng khác đang giữ cổng đăng nhập. Hãy thử lại sau.", "Another app is holding the sign-in port. Try again later.")
+                                      : root.discordLoginError === "denied"
+                                        ? I18n.tr("Discord chưa cho phép đăng nhập. Hãy thử lại.", "Discord didn't allow the sign-in. Try again.")
+                                        : root.discordLoginError === "timeout"
+                                          ? I18n.tr("Hết thời gian chờ trình duyệt. Hãy thử lại.", "The browser took too long. Try again.")
+                                          : root.discordLoginError === "network"
+                                            ? I18n.tr("Không kết nối được tới Discord. Hãy thử lại.", "Couldn't reach Discord. Try again.")
+                                            : root.discordSignedIn
+                                              ? I18n.tr("Đã đăng nhập nên không cần mở app Discord, kể cả khi bạn dùng Discord trên trình duyệt hay điện thoại", "Signed in, so the Discord app doesn't need to be open, even if you use Discord in a browser or on a phone")
+                                              : root.discordSigningIn
+                                                ? I18n.tr("Bấm Ủy quyền trên trang Discord vừa mở rồi quay lại đây", "Press Authorize on the Discord page that just opened, then come back")
+                                                : I18n.tr("Đăng nhập một lần để vẫn hiện khi không mở app, như khi dùng Discord trên trình duyệt hay điện thoại", "Sign in once so it shows without the app too, like when you use Discord in a browser or on a phone")
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 11
+                                color: root.discordLoginError !== "" ? "#f87171" : Theme.textSecondary
+                                wrapMode: Text.Wrap
+                            }
                         }
                     }
 
-                    // Sign in (accent) / Cancel and Log out (Muted Rose), like the Spotify row
+                    // Sign in (accent) / Cancel and Log out (Muted Rose)
                     Rectangle {
                         id: discordAccountBtn
                         readonly property bool rose: root.discordSignedIn || root.discordSigningIn
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        height: 28
-                        width: discordAccountTxt.implicitWidth + 22
+                        height: 30
+                        width: discordAccountTxt.implicitWidth + 24
                         radius: 8
                         color: rose
                                ? (discordAccountMouse.containsMouse ? Qt.rgba(244, 63, 94, 0.22) : Qt.rgba(244, 63, 94, 0.12))
