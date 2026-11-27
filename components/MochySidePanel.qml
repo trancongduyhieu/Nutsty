@@ -67,8 +67,8 @@ Item {
     readonly property real cardRadius: 14
     // Style 2 swaps the big word tabs at the bottom for liner's queue header at the top
     readonly property real headerSpace: cardLook ? 64 : 0
-    // The lyrics tab drops its cover and lyrics by the header plus the room the word tabs left
-    readonly property real coverDrop: cardLook ? headerSpace + actionDock.height : 0
+    // The lyrics tab starts its cover right under the header
+    readonly property real coverDrop: cardLook ? headerSpace : 0
     readonly property real dockSpace: cardLook ? dockInset : actionDock.height + actionDock.anchors.bottomMargin + dockInset
     property var currentTracks: []
     readonly property real targetPanelWidth: Math.max(380, Math.min(460, Math.round((parent ? parent.width : 1200) * 0.34)))
