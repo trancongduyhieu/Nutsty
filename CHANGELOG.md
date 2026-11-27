@@ -7,7 +7,7 @@ Số phiên bản có dạng `A.B.C`, ví dụ `1.2.0`:
 - **B (số thứ 2)** tăng khi có tính năng mới mà mọi thứ cũ vẫn dùng bình thường. Số thứ 3 về 0, ví dụ `2.1.3` lên `2.2.0`.
 - **A (số đầu tiên)** tăng khi có thay đổi lớn buộc bạn làm lại gì đó hoặc dữ liệu, cài đặt của bản cũ không dùng được nữa. Hai số sau về 0, ví dụ `2.4.1` lên `3.0.0`.
 
-## [2.5.0] - 2026-11-26
+## [2.5.0] - 2026-11-27
 
 ### Added
 - **Nghe nhạc lossless qua Tidal**: Nếu bạn có gói Tidal nghe được lossless, vào Cài đặt, mục "Lossless", đăng nhập tài khoản Tidal của chính bạn rồi bật lên. Bài nào tìm được trên Tidal sẽ phát bản FLAC (16-bit, hoặc Hi-Res nếu gói của bạn có), bài không có trên Tidal vẫn phát bản YouTube như cũ. Trước khi bật, Nutsty nói rõ những gì sẽ thay đổi, ví dụ mỗi bài tốn khoảng 30-50 MB dữ liệu thay vì 3-5 MB. Khi Nghe Cùng, Nutsty tạm phát bản YouTube để hai bên nghe khớp nhau, dừng Nghe Cùng thì lossless trở lại. Tài khoản Tidal gói miễn phí không có lossless nên Nutsty vẫn phát YouTube như bình thường.
