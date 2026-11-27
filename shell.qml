@@ -198,6 +198,8 @@ Scope {
     // Desktop lyrics on screen (not covered by other apps), so worth a 25 FPS clock
     readonly property bool desktopLyricsLive: desktopLyricsEnabled && !desktopLyrics.occluded
     property bool taskbarLyricsEnabled: Qt.platform.os === "windows"
+    // Discord "Listening to Nutsty" status; off until the user turns it on (it is public)
+    property bool discordPresenceEnabled: false
     property string taskbarLyricsPlacement: "above" // "above" | "taskbar"
     property string taskbarLyricsAlign: "center"      // "center" | "left" | "right"
     property string taskbarLyricsVPos: "bottom"       // "bottom" | "top"
@@ -1400,6 +1402,17 @@ Scope {
         }
         welcomeOverlayLoader.active = true;
         welcomeOverlayLoader.item.open(win.settingsEverParsed);
+    }
+
+    DiscordPresence {
+        id: discordPresence
+        active: win.discordPresenceEnabled
+        appDir: win.appDir
+        track: win.currentTrack
+        coverUrl: win.getTrackCoverUrl(win.currentTrack)
+        playing: win.isPlaying
+        position: win.currentTime
+        duration: win.totalDuration
     }
 
     ListeningTracker {
@@ -3917,6 +3930,8 @@ Scope {
             syncHistoryToGoogle: win.syncHistoryToGoogle
             desktopLyricsEnabled: win.desktopLyricsEnabled
             taskbarLyricsEnabled: win.taskbarLyricsEnabled
+            discordPresenceEnabled: win.discordPresenceEnabled
+            discordPresenceStatus: discordPresence.status
             taskbarLyricsPlacement: win.taskbarLyricsPlacement
             taskbarLyricsAlign: win.taskbarLyricsAlign
             lyricsRomanizationEnabled: win.lyricsRomanizationEnabled
@@ -4049,6 +4064,10 @@ Scope {
             }
             onToggleTaskbarLyricsRequested: enabled => {
                 win.taskbarLyricsEnabled = enabled;
+                win.saveSettings();
+            }
+            onToggleDiscordPresenceRequested: enabled => {
+                win.discordPresenceEnabled = enabled;
                 win.saveSettings();
             }
             onChangeTaskbarLyricsPlacementRequested: placement => {
@@ -4730,6 +4749,7 @@ Scope {
             if (obj.widgetY !== undefined) win.widgetY = Number(obj.widgetY);
             if (obj.desktopLyricsEnabled !== undefined) win.desktopLyricsEnabled = !!obj.desktopLyricsEnabled;
             if (obj.taskbarLyricsEnabled !== undefined) win.taskbarLyricsEnabled = !!obj.taskbarLyricsEnabled;
+            if (obj.discordPresenceEnabled !== undefined) win.discordPresenceEnabled = !!obj.discordPresenceEnabled;
             if (obj.taskbarLyricsPlacement !== undefined && typeof obj.taskbarLyricsPlacement === "string") win.taskbarLyricsPlacement = obj.taskbarLyricsPlacement;
             if (obj.taskbarLyricsAlign !== undefined && typeof obj.taskbarLyricsAlign === "string") win.taskbarLyricsAlign = obj.taskbarLyricsAlign;
             if (obj.lyricsRomanizationEnabled !== undefined) win.lyricsRomanizationEnabled = !!obj.lyricsRomanizationEnabled;
@@ -4834,6 +4854,7 @@ Scope {
             widgetY: win.widgetY,
             desktopLyricsEnabled: win.desktopLyricsEnabled,
             taskbarLyricsEnabled: win.taskbarLyricsEnabled,
+            discordPresenceEnabled: win.discordPresenceEnabled,
             taskbarLyricsPlacement: win.taskbarLyricsPlacement,
             taskbarLyricsAlign: win.taskbarLyricsAlign,
             lyricsRomanizationEnabled: win.lyricsRomanizationEnabled,

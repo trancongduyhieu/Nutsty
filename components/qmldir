@@ -18,6 +18,7 @@ CoverGeneratorPanel 1.0 CoverGeneratorPanel.qml
 CreatePlaylistModal 1.0 CreatePlaylistModal.qml
 DeletePlaylistModal 1.0 DeletePlaylistModal.qml
 DesktopLyricsWidget 1.0 DesktopLyricsWidget.qml
+DiscordPresence 1.0 DiscordPresence.qml
 DesktopMusicWidget 1.0 DesktopMusicWidget.qml
 DualRotateIcon 1.0 DualRotateIcon.qml
 DownloadManager 1.0 DownloadManager.qml

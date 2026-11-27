@@ -1,0 +1,12 @@
+[package]
+name = "nutsty-discord"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde_json.workspace = true
+
+[[bin]]
+name = "nutsty-discord"
+path = "src/main.rs"

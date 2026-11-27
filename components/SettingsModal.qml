@@ -62,6 +62,9 @@ Rectangle {
     onCurrentTabChanged: if (typeof settingsFlickable !== "undefined") settingsFlickable.contentY = 0
     property bool desktopLyricsEnabled: true
     property bool taskbarLyricsEnabled: true
+    property bool discordPresenceEnabled: false
+    // "off" | "idle" | "waiting" | "live", from DiscordPresence.qml
+    property string discordPresenceStatus: "off"
     property string taskbarLyricsPlacement: "taskbar"
     property string taskbarLyricsAlign: "center"
     property bool lyricsRomanizationEnabled: true
@@ -571,6 +574,7 @@ Rectangle {
     signal saveCanvasPreferenceRequested(string pref)
     signal toggleDesktopLyricsRequested(bool enabled)
     signal toggleTaskbarLyricsRequested(bool enabled)
+    signal toggleDiscordPresenceRequested(bool enabled)
     signal changeTaskbarLyricsPlacementRequested(string placement)
     signal changeTaskbarLyricsAlignRequested(string align)
     signal toggleLyricsRomanizationRequested(bool enabled)
@@ -2085,6 +2089,85 @@ Rectangle {
                                 root.syncHistoryToGoogle = !root.syncHistoryToGoogle;
                                 root.toggleSyncHistoryRequested(root.syncHistoryToGoogle);
                             }
+                        }
+                    }
+                }
+
+                // Discord: "Listening to Nutsty" on the user's profile (Frameless Row, Toggle Pinned to Right)
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: discordCol.implicitHeight + 16
+
+                    Column {
+                        id: discordCol
+                        anchors.left: parent.left
+                        anchors.right: toggleDiscordPresence.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Hiện bài đang nghe trên Discord", "Show what you're listening to on Discord")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                            wrapMode: Text.Wrap
+                        }
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Bạn bè trên Discord thấy tên bài, ca sĩ, ảnh bìa và thời gian bài. Cần mở ứng dụng Discord trên máy này.",
+                                          "Friends on Discord see the song, artist, artwork and time. Needs the Discord app open on this computer.")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                            wrapMode: Text.Wrap
+                        }
+
+                        Text {
+                            width: parent.width
+                            visible: root.discordPresenceEnabled
+                            text: root.discordPresenceStatus === "live"
+                                  ? I18n.tr("Đang hiện trên Discord", "Showing on Discord")
+                                  : root.discordPresenceStatus === "waiting"
+                                    ? I18n.tr("Đang chờ Discord mở", "Waiting for Discord to open")
+                                    : I18n.tr("Sẽ hiện khi bạn phát nhạc", "Shows up when music plays")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            font.bold: root.discordPresenceStatus === "live"
+                            color: root.discordPresenceStatus === "live" ? root.accentColor : Theme.textSecondary
+                            wrapMode: Text.Wrap
+                        }
+                    }
+
+                    // Toggle Switch Pill (Pinned to Right)
+                    Rectangle {
+                        id: toggleDiscordPresence
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 44
+                        height: 24
+                        radius: 12
+                        color: root.discordPresenceEnabled ? root.accentColor : Qt.rgba(255, 255, 255, 0.14)
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        Rectangle {
+                            width: 18
+                            height: 18
+                            radius: 9
+                            color: "#ffffff"
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: root.discordPresenceEnabled ? parent.width - width - 3 : 3
+                            Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            preventStealing: false
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.toggleDiscordPresenceRequested(!root.discordPresenceEnabled)
                         }
                     }
                 }

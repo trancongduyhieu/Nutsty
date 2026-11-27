@@ -63,3 +63,8 @@ Daemon phát nhạc, IPC mpv, YouTube Music engine và vòng đời hàng đợi
 - **Nhãn**: `build_audio_specs` (Python) = `nutsty-bridge/src/audio_specs.rs`; không biết thì để trống, cấm bịa mặc định.
 - **DAC**: không cần Tidal; lưu thiếu `dacModeStandalone` chỉ tính khi lossless bật. `exclusive` (Windows) restart mpv giữ vị trí, khóa AutoMix + âm lượng 100, ao lỗi → `shared` + toast. `rate_match` (Linux) chỉ ghi `90-nutsty-rates.conf` khi người dùng đồng ý, không đè `allowed-rates` có sẵn.
 - **Footgun**: link FLAC/MPD hết hạn giữa bài → `stream_failed <pos>` nạp YouTube đúng vị trí, bỏ Tidal bài đó một lúc (`TIDAL_SKIP_FILE`). Test: `scripts/test_lossless_resolve.py`.
+
+## 14. Discord Rich Presence (`nutsty-rs/crates/nutsty-discord`, `components/DiscordPresence.qml`)
+- **Cơ chế**: IPC cục bộ của Discord (`discord-ipc-0..9`: Unix socket Linux gồm cả Flatpak/Snap/Vesktop, named pipe Windows), không token/đăng nhập. Client ID app "Nutsty" nằm trong `main.rs`. Activity type 2 (Listening), ảnh bìa là URL https, bài local dùng logo trên GitHub raw.
+- **Vòng đời**: `bin/nutsty-discord` chạy suốt khi bật công tắc (`discordPresenceEnabled`, mặc định tắt), nhận một dòng JSON mỗi thay đổi qua stdin, trả `{"status":...}` qua stdout. Stdin đóng → xóa status rồi thoát; bị kill thì Discord tự xóa khi socket đóng. Windows: compat `Process` có `stdinEnabled` → `__NutstyBridge.startStream/writeStream/stopStream`.
+- **Footgun**: giới hạn 5 lần/20 s (`SendBudget`), lệch < 2,5 s không gửi (`looks_like`). Windows: đọc chặn trên pipe đồng bộ chặn luôn ghi qua handle clone, nên reader `PeekNamedPipe` trước. Test: `cargo test -p nutsty-discord`.

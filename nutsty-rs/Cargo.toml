@@ -7,6 +7,7 @@ members = [
     "crates/nutsty-ui",
     "crates/nutsty-bridge",
     "crates/nutsty-daemon",
+    "crates/nutsty-discord",
 ]
 resolver = "3"
 

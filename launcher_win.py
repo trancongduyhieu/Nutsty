@@ -563,6 +563,9 @@ def panel_box_covered(hwnd):
 
 class NutstyBridge(QObject):
     processFinished = Signal(int, str, str, int)
+    # Long-lived helpers QML talks to over stdin (compat Process with stdinEnabled)
+    streamLine = Signal(int, str)
+    streamExited = Signal(int, int)
     openSettingsRequested = Signal(int)
     taskbarLyricsToggled = Signal(bool)
 
@@ -721,6 +724,8 @@ class NutstyBridge(QObject):
         self._cb_id = 0
         self._cb_lock = threading.Lock()
         self.processFinished.connect(self._onProcessFinished)
+        self._streams = {}
+        self._stream_id = 0
         # frameSwapped fires on the scene-graph render thread; hop to the GUI thread.
         self._panelFirstFrame.connect(self._onPanelFirstFrame, Qt.ConnectionType.QueuedConnection)
         # Desktop panels sit at the bottom of the z-order; DWM composes them even when
@@ -769,9 +774,74 @@ class NutstyBridge(QObject):
             return os.path.dirname(os.path.abspath(sys.executable))
         return os.path.abspath(os.path.dirname(__file__))
 
+    @Slot(list, result=int)
+    def startStream(self, args: list) -> int:
+        """Start a helper that stays up and reads stdin (Quickshell Process with stdinEnabled).
+        Each stdout line comes back as streamLine; when it ends, streamExited."""
+        if not args:
+            return -1
+        cmd = [str(a) for a in args]
+        if not cmd[0].lower().endswith((".exe", ".bat", ".cmd")) and os.path.isfile(cmd[0] + ".exe"):
+            cmd[0] = cmd[0] + ".exe"
+        try:
+            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                    stderr=subprocess.DEVNULL, **pc.get_daemon_popen_kwargs())
+        except Exception as e:
+            sys.stderr.write(f"startStream failed: {e}\n")
+            return -1
+        self._stream_id += 1
+        sid = self._stream_id
+        self._streams[sid] = proc
+
+        def _pump():
+            try:
+                for raw in proc.stdout:
+                    self.streamLine.emit(sid, raw.decode("utf-8", "replace").rstrip("\r\n"))
+            except Exception:
+                pass
+            code = proc.wait()
+            self._streams.pop(sid, None)
+            self.streamExited.emit(sid, int(code or 0))
+        threading.Thread(target=_pump, daemon=True).start()
+        return sid
+
+    @Slot(int, str)
+    def writeStream(self, sid: int, data: str):
+        proc = self._streams.get(sid)
+        if proc is None or proc.stdin is None:
+            return
+        try:
+            proc.stdin.write(data.encode("utf-8"))
+            proc.stdin.flush()
+        except Exception:
+            pass
+
+    @Slot(int)
+    def stopStream(self, sid: int):
+        """Close the helper's stdin so it can tidy up (Discord status cleared) and exit by itself."""
+        proc = self._streams.get(sid)
+        if proc is None:
+            return
+        try:
+            proc.stdin.close()
+        except Exception:
+            pass
+
+        def _reap():
+            try:
+                proc.wait(timeout=2)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+        threading.Thread(target=_reap, daemon=True).start()
+
     @Slot()
     def quitApp(self):
         global _nutsty_daemon_proc
+        for sid in list(self._streams):
+            self.stopStream(sid)
         if _nutsty_daemon_proc is not None:
             try:
                 _nutsty_daemon_proc.terminate()
