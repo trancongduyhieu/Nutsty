@@ -812,6 +812,26 @@ def _resolve_for_crossfade(file_path, title, artist, my_epoch=0, source_out=None
     return file_path, DEFAULT_UA, file_path, ""
 
 
+def _bass_envelope(path, title, artist):
+    """{"ok", "key", "slots"}: one 0..255 pulse per 25 ms of the track; Tidal lossless is not measured."""
+    import bass_envelope as be
+    key = path
+    hit = be.cached(key)
+    if hit is None:
+        box = {}
+        try:
+            url, ua, _, _ = _resolve_for_crossfade(path, title, artist, source_out=box)
+        except Exception as e:
+            return {"ok": False, "key": key, "reason": str(e)}
+        if box.get("source") == "tidal":
+            return {"ok": False, "key": key, "reason": "tidal"}
+        fmt = YTDL_FORMAT_MAP.get(get_current_streaming_quality(), "774/141/251/140/bestaudio/best")
+        hit = be.measure(url, _mpv_stream_args(fmt, ua), key)
+        if hit is None:
+            return {"ok": False, "key": key, "reason": "decode"}
+    return {"ok": True, "key": key, "slots": list(hit)}
+
+
 def _media_duration(url):
     """Duration of the incoming track without opening it: the 'dur' parameter of a
     googlevideo stream URL, or the tags of a local file. 0.0 when unknown."""
@@ -1454,6 +1474,10 @@ def execute_command(args):
         except Exception as e:
             plan = {"ok": False, "reason": str(e)}
         print(json.dumps(plan))
+
+    elif action == "bass_envelope" and len(args) > 1:
+        # The bass pulse of a whole track for the artwork backdrop: measured once, then read from the cache
+        print(json.dumps(_bass_envelope(args[1], args[2] if len(args) > 2 else "", args[3] if len(args) > 3 else "")))
 
     elif action == "status":
         print(get_status_json())
