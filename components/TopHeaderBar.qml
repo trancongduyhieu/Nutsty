@@ -56,6 +56,12 @@ Rectangle {
             headerRoot.npMorph = done ? headerRoot.npMorphTarget : s[0];
         }
     }
+    // the switcher row's width, eased when it grows or shrinks in place (lyrics controls come and go)
+    property real npRowW: npNotchHost.childrenRect.width
+    Behavior on npRowW {
+        enabled: headerRoot.npMorph > 0.99
+        NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+    }
     // where the Now Playing view parents its mode switcher while in notch mode
     readonly property Item nowPlayingNotchHost: notchMode ? npNotchHost : null
     signal collapseRequested()
@@ -244,7 +250,7 @@ Rectangle {
         // one morph progress drives width, depth and tint together, so the island grows as one shape
         // the closed row: nav icons, or the Now Playing mode switcher, morphing between the two
         readonly property real closedW: navCluster.implicitWidth + 8
-            + (Math.max(npNotchHost.childrenRect.width, 1) - navCluster.implicitWidth) * Math.min(1, Math.max(0, headerRoot.npMorph))
+            + (Math.max(headerRoot.npRowW, 1) - navCluster.implicitWidth) * Math.min(1, Math.max(0, headerRoot.npMorph))
         readonly property real openW: Math.max(navCluster.implicitWidth, dynamicMoodIsland.expandedTargetWidth) + 8
         centerContentWidth: closedW + (openW - closedW) * headerRoot.moodMorph
         // whole pixels: a bottom edge between pixel rows smears into a soft bright line while it moves

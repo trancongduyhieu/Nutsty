@@ -9,6 +9,7 @@ import "./components"
 import "components/social_engine.js" as SocialEngine
 import "components/playback_engine.js" as PlaybackEngine
 import "components/lossless_logic.js" as LosslessLogic
+import "components/lyrics_offset_logic.js" as LyricsOffset
 
 Scope {
     id: appScope
@@ -324,6 +325,19 @@ Scope {
     property string downloadQuality: "high_opus"
     property string spotifySpdc: ""
     property string lyricsSource: "auto"
+    // per-song lyrics offset (liner "Lyrics offset"), ms keyed by LyricsOffset.trackKey; + = later
+    property var lyricsOffsets: ({})
+    readonly property int lyricsOffsetMs: LyricsOffset.offsetFor(lyricsOffsets, LyricsOffset.trackKey(currentTrack))
+    readonly property real lyricsTime: LyricsOffset.lyricTime(currentTime, lyricsOffsetMs)
+    function setLyricsOffset(ms) {
+        var key = LyricsOffset.trackKey(win.currentTrack);
+        if (!key) return;
+        win.lyricsOffsets = LyricsOffset.withOffset(win.lyricsOffsets, key, ms);
+        lyricsOffsetSaveTimer.restart();
+    }
+    function adjustLyricsOffset(deltaMs) { win.setLyricsOffset(win.lyricsOffsetMs + deltaMs); }
+    // a burst of +/- clicks is written once
+    Timer { id: lyricsOffsetSaveTimer; interval: 600; repeat: false; onTriggered: win.saveSettings() }
     property string canvasPreference: "apple_first"
     property real liquidGlassBlur: 0.5
     property real liquidGlassDisplacement: 30.0
@@ -3464,6 +3478,13 @@ Scope {
                     anchors.fill: parent
                     chromeInNotch: topHeader.notchMode
                     notchHost: topHeader.nowPlayingNotchHost
+                    lyricsOffsetMs: win.lyricsOffsetMs
+                    onLyricsOffsetRequested: ms => win.setLyricsOffset(ms)
+                    onLyricsSourcePicked: key => {
+                        win.lyricsSource = key;
+                        win.saveSettings();
+                        ytNowPlayingView.applyLyricsSource(key);
+                    }
                     visible: revealReach > 0.0
                     enabled: win.isNowPlayingOpen
 
@@ -4851,6 +4872,9 @@ Scope {
             if (obj.spotifySpdc !== undefined) {
                 win.spotifySpdc = obj.spotifySpdc.toString();
             }
+            if (obj.lyricsOffsets && typeof obj.lyricsOffsets === "object") {
+                win.lyricsOffsets = obj.lyricsOffsets;
+            }
             if (obj.lyricsSource !== undefined && typeof obj.lyricsSource === "string") {
                 win.lyricsSource = obj.lyricsSource;
             }
@@ -4927,6 +4951,7 @@ Scope {
             downloadQuality: win.downloadQuality,
             spotifySpdc: win.spotifySpdc,
             lyricsSource: win.lyricsSource,
+            lyricsOffsets: win.lyricsOffsets,
             crossfadeEnabled: win.crossfadeEnabled,
             crossfadeSeconds: win.crossfadeSeconds,
             scrollEdgeFadeEnabled: Theme.scrollEdgeFadeEnabled,
@@ -6661,7 +6686,7 @@ Scope {
         id: desktopLyrics
         visible: win.desktopLyricsEnabled
         activeLyrics: win.activeLyrics
-        currentTime: win.currentTime
+        currentTime: win.lyricsTime
         isPlaying: win.isPlaying
         currentTrack: win.currentTrack
         enabled: win.desktopLyricsEnabled

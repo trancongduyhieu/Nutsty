@@ -9,12 +9,17 @@ import "."
 import "lyric_lines.js" as LyricLines
 import "playback_engine.js" as PlaybackEngine
 import "quality_label.js" as QualityLabel
+import "lyrics_offset_logic.js" as LyricsOffset
 
 Item {
     id: root
 
     property var track: null
     property real currentTime: 0.0
+    // this song's lyrics offset (ms, + = later); every lyric animation follows lyricTime, the
+    // controls keep the real song time
+    property int lyricsOffsetMs: 0
+    readonly property real lyricTime: LyricsOffset.lyricTime(currentTime, lyricsOffsetMs)
     property real totalDuration: 1.0
     property bool isPlaying: false
     property bool isLoadingAudio: false
@@ -159,7 +164,7 @@ Item {
     readonly property int anchorLyricIndex: {
         var cur = root.currentLyricIndex;
         if (cur <= 0 || !root.activeLyrics || cur >= root.activeLyrics.length) return cur;
-        var pos = root.currentTime;
+        var pos = root.lyricTime;
         var i = cur;
         while (i > 0) {
             var prev = i - 1;
@@ -290,6 +295,15 @@ Item {
     signal squareCoverResolved(string url, bool isSquare)
 
     signal seekRequested(real seconds)
+    // the notch's lyrics controls: pick a source, set this song's offset (ms, + = later)
+    signal lyricsSourcePicked(string key)
+    signal lyricsOffsetRequested(int ms)
+    readonly property bool lyricsAreSynced: {
+        var l = root.activeLyrics;
+        if (!l) return false;
+        for (var i = 0; i < l.length; ++i) if ((l[i].time || 0) > 0) return true;
+        return false;
+    }
     signal playTrackRequested(var trk, int index)
     signal trackContextMenuRequested(var trk, real globalX, real globalY, bool isQueue)
     // The cover "more" button: same menu plus the lyrics source picker
@@ -450,7 +464,7 @@ Item {
         }
     }
 
-    onCurrentTimeChanged: {
+    onLyricTimeChanged: {
         if (root.visible) {
             updateActiveLyric(false);
         }
@@ -834,7 +848,7 @@ Item {
             currentLyricIndex = -1;
             return;
         }
-        var cur = root.currentTime;
+        var cur = root.lyricTime;
         // 1:1 Mochy-Music line lead-in (LineLeadInMs = 300L): line becomes active 300ms before start,
         // allowing interlude dots to collapse smoothly in step with the recenter scroll!
         var leadIn = 0.3;
@@ -1578,7 +1592,7 @@ Item {
                                 font.pixelSize: 14
                                 font.weight: Font.DemiBold
                                 color: Qt.rgba(1, 1, 1, 0.5)
-                                opacity: root.currentTime >= parent.lastLineTime - 1.5 ? 1.0 : 0.0
+                                opacity: root.lyricTime >= parent.lastLineTime - 1.5 ? 1.0 : 0.0
                                 Behavior on opacity { NumberAnimation { duration: 600; easing.type: Easing.OutCubic } }
                             }
                         }
@@ -1636,7 +1650,7 @@ Item {
                                 ? modelData.endTime
                                 : ((index + 1 < root.activeLyrics.length) ? root.activeLyrics[index + 1].time : (lineStartTime + 5.0))
                             readonly property real duration: Math.max(0.6, lineEndTime - lineStartTime)
-                            readonly property real lineProgress: isCurrent ? Math.min(1.0, Math.max(0.0, (root.currentTime - lineStartTime) / duration)) : 0.0
+                            readonly property real lineProgress: isCurrent ? Math.min(1.0, Math.max(0.0, (root.lyricTime - lineStartTime) / duration)) : 0.0
 
                             // Backing vocal separation (1:1 Mochy-Music splitBackingVocal)
                             readonly property var lineParts: root.splitBackingVocal(modelData ? (modelData.text || "") : "", (modelData && modelData.words) ? modelData.words : null)
@@ -1735,7 +1749,7 @@ Item {
                                         readonly property real gapStart: (modelData && modelData.time !== undefined) ? modelData.time : 0.0
                                         readonly property real gapEnd: (modelData && modelData.endTime !== undefined) ? modelData.endTime : (gapStart + 4.0)
                                         readonly property real gapSpan: Math.max(0.1, gapEnd - gapStart)
-                                        readonly property real gapProgress: lyricRow.isCurrent ? Math.max(0.0, Math.min(1.0, (root.currentTime - gapStart) / gapSpan)) : 0.0
+                                        readonly property real gapProgress: lyricRow.isCurrent ? Math.max(0.0, Math.min(1.0, (root.lyricTime - gapStart) / gapSpan)) : 0.0
 
                                         function smoothstep(t) {
                                             var x = Math.max(0.0, Math.min(1.0, t));
@@ -1780,7 +1794,7 @@ Item {
                                                 opacity: (0.3 + 0.7 * Math.max(fill, interludeBeadsRow.finaleNow)) * pop
 
                                                 // Idle bobbing: one slow breath up and down (BobPeriodMs = 2600ms, BobHeight = 1.8px, BobPhaseStep = 0.9)
-                                                readonly property real bobPhase: (root.currentTime / 2.6) * 2.0 * Math.PI - index * 0.9
+                                                readonly property real bobPhase: (root.lyricTime / 2.6) * 2.0 * Math.PI - index * 0.9
                                                 readonly property real bobY: lyricRow.isCurrent ? (Math.sin(bobPhase) * 1.8) : 0.0
 
                                                 transform: Translate {
@@ -1838,7 +1852,7 @@ Item {
                                                 anchors.left: parent.left
                                                 anchors.right: parent.right
                                                 words: (modelData.hasWords && !modelData.isSynthetic && lyricRow.leadWords) ? lyricRow.leadWords : []
-                                                currentTime: root.currentTime
+                                                currentTime: root.lyricTime
                                                 isLineActive: lyricRow.isCurrent
                                                 fontSize: 28
                                                 accentColor: "#ffffff"
@@ -1875,7 +1889,7 @@ Item {
                                     visible: lyricRow.hasBackingVocal && (smoothExpand > 0.001)
                                     text: lyricRow.backingText
                                     words: lyricRow.backingWords
-                                    currentTime: root.currentTime
+                                    currentTime: root.lyricTime
                                     lineIsActive: lyricRow.isCurrent
                                     slide: lyricRow.leadText.length > 0
                                     isAnsweringVoice: lyricRow.isAnsweringVoice
@@ -1914,7 +1928,7 @@ Item {
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
                                     if (modelData && modelData.time !== undefined) {
-                                        root.seekRequested(modelData.time);
+                                        root.seekRequested(Math.max(0, modelData.time + root.lyricsOffsetMs / 1000));
                                         root.followPlayback = true;
                                         userScrollTimer.stop();
                                         Qt.callLater(function() {
@@ -2049,6 +2063,37 @@ Item {
                 }
                 active: root.activeTab === "sleep"; accent: root.accentColor
                 onClicked: root.activeTab = "sleep"
+            }
+
+            // Lyrics tab in the notch: source picker and offset sit right after the mode icons (liner)
+            Rectangle {
+                visible: lyricsIsland.visible
+                anchors.verticalCenter: parent.verticalCenter
+                width: 1; height: 14
+                color: Qt.rgba(1, 1, 1, 0.15)
+            }
+            Item { visible: lyricsIsland.visible; width: 2; height: 1 }
+            LyricsProviderIsland {
+                id: lyricsIsland
+                readonly property bool wanted: modeSwitcher.inNotch && root.activeTab === "lyrics" && root.visible
+                active: wanted
+                visible: wanted && (currentSourceTag !== "" || available.length > 0)
+                track: root.track
+                trackVid: {
+                    var t = root.track;
+                    if (!t) return "";
+                    if (t.videoId) return t.videoId;
+                    var p = t.path ? String(t.path) : "";
+                    return p.indexOf("ytdl://") === 0 ? p.substring(7) : "";
+                }
+                appDir: root.appDir
+                totalDuration: root.totalDuration
+                currentSourceTag: root.hasLyrics ? root.lyricsSource : ""
+                synced: root.hasLyrics && root.lyricsAreSynced
+                offsetMs: root.lyricsOffsetMs
+                accentColor: root.accentColor
+                onSourcePicked: key => root.lyricsSourcePicked(key)
+                onOffsetRequested: ms => root.lyricsOffsetRequested(ms)
             }
         }
     }
