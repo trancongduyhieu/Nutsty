@@ -175,7 +175,26 @@ def get_music_dir() -> str:
                 return m
     return os.path.expanduser("~/Music")
 
-APP_VERSION = "2.7.0"
+def _read_app_version():
+    """The single version source is the VERSION file at the app root (bundled next to the exe on Windows)."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidates = [os.path.join(APP_ROOT, "VERSION"), os.path.join(here, "..", "VERSION")]
+    if getattr(sys, "_MEIPASS", None):
+        candidates.append(os.path.join(sys._MEIPASS, "VERSION"))
+    if getattr(sys, "frozen", False):
+        candidates.append(os.path.join(os.path.dirname(os.path.abspath(sys.executable)), "VERSION"))
+    for path in candidates:
+        try:
+            with open(path, encoding="utf-8") as f:
+                value = f.read().strip().lstrip("vV")
+            if value:
+                return value
+        except OSError:
+            continue
+    return "0.0.0"
+
+
+APP_VERSION = _read_app_version()
 GITHUB_REPO = "trancongduyhieu/Nutsty"
 
 if IS_WINDOWS:

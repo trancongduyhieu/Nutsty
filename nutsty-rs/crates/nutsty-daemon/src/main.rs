@@ -19,6 +19,9 @@ use std::time::Duration;
 use tiny_http::{Header, Method, Response, Server, StatusCode};
 use url::Url;
 
+/// Single version source: the VERSION file at the repo root, baked in at compile time.
+const APP_VERSION: &str = include_str!("../../../../VERSION");
+
 const PORT: u16 = 17890;
 const HOST: &str = "127.0.0.1";
 
@@ -471,8 +474,8 @@ fn handle_request(state: Arc<AppState>, mut request: tiny_http::Request) {
                     "action": "open_settings",
                     "tab": tab,
                     "mock_update": mock,
-                    "current_version": "2.7.0",
-                    "latest_version": "v2.7.0",
+                    "current_version": APP_VERSION.trim(),
+                    "latest_version": format!("v{}", APP_VERSION.trim()),
                     "release_url": "https://github.com/trancongduyhieu/Nutsty/releases"
                 });
 
@@ -504,8 +507,8 @@ fn handle_request(state: Arc<AppState>, mut request: tiny_http::Request) {
                     "action": "open_settings",
                     "tab": tab,
                     "mock_update": false,
-                    "current_version": "2.7.0",
-                    "latest_version": "v2.7.0",
+                    "current_version": APP_VERSION.trim(),
+                    "latest_version": format!("v{}", APP_VERSION.trim()),
                     "release_url": "https://github.com/trancongduyhieu/Nutsty/releases"
                 });
                 *state.pending_ui_action.lock().unwrap() = Some(action_obj);

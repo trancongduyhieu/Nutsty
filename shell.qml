@@ -409,9 +409,12 @@ Scope {
     property NotificationStore notificationStore: NotificationStore {}
     property string localApiUrl: "http://127.0.0.1:17890"
     property string notesApiUrl: Quickshell.env("NUTSTY_WORKER_URL") || "http://127.0.0.1:17890"
-    property string appVersion: "2.7.0"
-    property string latestVersion: "2.7.0"
-    property string lastSeenVersion: "2.7.0"
+    // Single version source: the VERSION file at the app root. Read blocking so it is set before settings load
+    // (loadSettings compares lastSeenVersion with it to decide on the "What's new" dialog)
+    readonly property string bundledVersion: versionFile.text().trim().replace(/^[vV]/, "") || "0.0.0"
+    property string appVersion: bundledVersion
+    property string latestVersion: appVersion
+    property string lastSeenVersion: appVersion
     property bool hasAppUpdate: false
     property bool isCheckingUpdate: false
     property string updateUrl: ""
@@ -1601,7 +1604,7 @@ Scope {
                                 if (res.mock_update) {
                                     win.updateDemo = true;
                                     win.appVersion = "2.3.0";
-                                    win.latestVersion = "v2.7.0";
+                                    win.latestVersion = "v" + win.bundledVersion;
                                     win.hasAppUpdate = true;
                                     win.updatePackageBytes = 399087882;
                                     win.updateReleaseNotes = "- **Cập nhật chỉ tải phần thay đổi**: Chỉ tải những tệp khác bản bạn đang dùng.\n- **Hộp thoại cập nhật mới**: Vòng chữ xoay quanh số phiên bản, tốc độ và thời gian còn lại.\n- **Giữ nguyên trình phát mpv**: Không đổi giữa các bản.";
@@ -4621,6 +4624,12 @@ Scope {
         onTriggered: {
             win.loadSettings();
         }
+    }
+
+    FileView {
+        id: versionFile
+        path: win.appDir + "/VERSION"
+        blockLoading: true
     }
 
     FileView {

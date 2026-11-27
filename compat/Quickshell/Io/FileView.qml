@@ -4,6 +4,8 @@ Item {
     id: root
     property string path: ""
     property bool watchChanges: false
+    // Real Quickshell loads async unless this is set; this reader is always synchronous, so it is accepted and ignored
+    property bool blockLoading: false
     property bool loaded: false
     property string _content: ""
 

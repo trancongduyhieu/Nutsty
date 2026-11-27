@@ -5,7 +5,7 @@ Checks:
 1. Python syntax compilation (`py_compile`) across `backend/*.py` and `launcher_win.py`.
 2. AST Scope & Symbol Resolution across `backend/*.py` to catch any undefined globals (`NameError`).
 3. QML/JS Module Contract Verification (`shell.qml` <-> `components/social_engine.js` & `components/playback_engine.js`).
-4. Version consistency: APP_VERSION, the newest CHANGELOG.md heading and the version literals agree.
+4. Version: VERSION is the only source; the newest CHANGELOG.md heading matches it and no file hardcodes it.
 """
 
 import ast
@@ -202,37 +202,38 @@ def verify_qml_js_contracts() -> list[str]:
     return errors
 
 
-# Places that carry the version as a literal; all must match backend/platform_compat.py APP_VERSION
-VERSION_LITERALS = (
-    ("shell.qml", r'property string appVersion:\s*"([^"]+)"'),
-    ("components/SettingsModal.qml", r'property string appVersion:\s*"([^"]+)"'),
-    ("components/WhatsNewModal.qml", r'win\.appVersion\s*:\s*"([^"]+)"'),
-    ("backend/auth_server.py", r'"current_version":\s*"([^"]+)"'),
-    ("nutsty-rs/crates/nutsty-daemon/src/main.rs", r'"current_version":\s*"([^"]+)"'),
+# Files that used to hardcode the version; they must read it from VERSION instead (one edit per release)
+VERSION_READERS = (
+    "shell.qml",
+    "components/SettingsModal.qml",
+    "components/WhatsNewModal.qml",
+    "backend/platform_compat.py",
+    "backend/auth_server.py",
+    "nutsty-rs/crates/nutsty-daemon/src/main.rs",
 )
 
 
 def verify_version_consistency() -> list[str]:
     errors = []
-    compat = (BACKEND_DIR / "platform_compat.py").read_text(encoding="utf-8")
-    m = re.search(r'^APP_VERSION\s*=\s*"([^"]+)"', compat, re.M)
-    if not m:
-        return ["[Version] APP_VERSION not found in backend/platform_compat.py"]
-    version = m.group(1)
+    vfile = ROOT_DIR / "VERSION"
+    if not vfile.exists():
+        return ["[Version] VERSION file missing at the repo root"]
+    version = vfile.read_text(encoding="utf-8").strip()
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
-        errors.append(f"[Version] APP_VERSION '{version}' is not MAJOR.MINOR.PATCH")
+        errors.append(f"[Version] VERSION '{version}' is not MAJOR.MINOR.PATCH")
     changelog = (ROOT_DIR / "CHANGELOG.md").read_text(encoding="utf-8")
     top = re.search(r"^##\s+\[?v?([0-9][^\]\s]*)\]?", changelog, re.M)
     if not top or top.group(1) != version:
         found = top.group(1) if top else "none"
-        errors.append(f"[Version] newest CHANGELOG.md heading is {found}, APP_VERSION is {version}")
-    for rel, pattern in VERSION_LITERALS:
+        errors.append(f"[Version] newest CHANGELOG.md heading is {found}, VERSION is {version}")
+    literal = re.compile(r'["\']v?' + re.escape(version) + r'["\']')
+    for rel in VERSION_READERS:
         path = ROOT_DIR / rel
         if not path.exists():
             continue
-        for lit in re.findall(pattern, path.read_text(encoding="utf-8")):
-            if lit.lstrip("vV") != version:
-                errors.append(f"[Version] {rel} says {lit}, APP_VERSION is {version}")
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if literal.search(line):
+                errors.append(f"[Version] {rel}:{n} hardcodes {version}; read it from VERSION")
     return errors
 
 

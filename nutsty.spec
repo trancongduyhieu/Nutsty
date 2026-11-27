@@ -10,6 +10,7 @@ added_datas = [
     ('assets', 'assets'),
     ('backend', 'backend'),
     ('shell.qml', '.'),
+    ('VERSION', '.'),
     ('bin', 'bin'),
 ]
 if os.path.exists('CHANGELOG.md'):

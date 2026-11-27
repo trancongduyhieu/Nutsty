@@ -22,7 +22,7 @@ Item {
     property bool closingGuard: false
     property color accentColor: (typeof win !== "undefined" && win.accentColor) ? win.accentColor : Theme.accent
     property Item backgroundSourceItem: null
-    property string versionString: (typeof win !== "undefined" && win.appVersion) ? win.appVersion : "2.7.0"
+    property string versionString: (typeof win !== "undefined" && win.appVersion) ? win.appVersion : ""
     property string customReleaseNotes: ""
     property var changelogItems: []
     // Every version's notes, kept on GitHub
@@ -274,7 +274,7 @@ Item {
                         Text {
                             id: verTagTxt
                             anchors.centerIn: parent
-                            text: "v" + (root.versionString || "2.7.0")
+                            text: root.versionString ? "v" + root.versionString : ""
                             font.family: Theme.fontFamily
                             font.pixelSize: 10
                             font.bold: true
