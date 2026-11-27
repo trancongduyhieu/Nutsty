@@ -21,13 +21,33 @@ Item {
     // Time counter for serene fluid 2D warping wave (50s period)
     property real animTime: 0.0
 
-    NumberAnimation on animTime {
+    // ---- Bass pulse -------------------------------------------------------------------------
+    // pulseSlots: one 0..255 value per 25 ms of the playing song (backend/bass_envelope.py).
+    // The caller hands over the last known position (playhead, seconds) and when it was read
+    // (playheadStampMs, Date.now()); each frame looks the pulse up at the position now. A hit makes
+    // the backdrop swell up to 7% and the warp run up to 4x faster, then it settles over ~140 ms.
+    property var pulseSlots: null
+    property bool pulseOn: false
+    property real playhead: 0
+    property real playheadStampMs: 0
+    property real pulse: 0
+
+    function pulseTarget() {
+        if (!pulseOn || !pulseSlots || pulseSlots.length === 0) return 0;
+        var t = playhead + Math.max(0, Date.now() - playheadStampMs) / 1000;
+        var i = Math.floor(t * 40);
+        return (i >= 0 && i < pulseSlots.length) ? pulseSlots[i] / 255 : 0;
+    }
+
+    FrameAnimation {
         running: root.visible && root.running && root.isWindowActive && !root.liteMode
-        loops: Animation.Infinite
-        from: 0.0
-        to: 62.831853
-        duration: 50000
-        easing.type: Easing.Linear
+        onTriggered: {
+            var dt = Math.min(0.1, Math.max(0, frameTime));
+            var p = Math.max(root.pulseTarget(), root.pulse * Math.exp(-dt / 0.14));
+            root.pulse = p < 0.002 ? 0 : p;
+            root.animTime = (root.animTime + dt * (62.831853 / 50) * (1 + 3 * root.pulse)) % 62.831853;
+        }
+        onRunningChanged: if (!running) root.pulse = 0
     }
 
     // ---- Artwork hand-over ------------------------------------------------------------------
@@ -137,6 +157,7 @@ Item {
         width: root.width
         height: root.height
         source: warpEffect
+        scale: 1 + 0.07 * root.pulse
         visible: root.frontImg.status === Image.Ready
         blurEnabled: true
         blur: 1.0
