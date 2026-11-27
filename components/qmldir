@@ -94,6 +94,7 @@ SpringBounce 1.0 SpringBounce.qml
 SuggestTrackToast 1.0 SuggestTrackToast.qml
 singleton Theme 1.0 Theme.qml
 TopHeaderBar 1.0 TopHeaderBar.qml
+WindowFrameNotches 1.0 WindowFrameNotches.qml
 TrackCard 1.0 TrackCard.qml
 TrackContextMenu 1.0 TrackContextMenu.qml
 TrackRow 1.0 TrackRow.qml

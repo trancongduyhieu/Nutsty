@@ -1,13 +1,22 @@
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Layouts
+import QtQuick.Controls.Basic
 import "."
 
 Rectangle {
     id: headerRoot
-    height: 64
+    // Maximized: the header folds into notches hanging from a thin frame (liner style). On the home
+    // feed the mood island hangs below the center notch, so the header keeps room for it there.
+    height: notchMode ? ((currentView === "home" && !isNowPlayingOpen) ? 90 : 44) : 64
     color: "transparent"
     z: 100
+
+    property bool notchMode: false
+    // full window height: the frame is drawn from this item, which sits at the window's top-left
+    property real frameHeight: 0
+    readonly property real navBox: notchMode ? 26 : 32
+    signal collapseRequested()
 
     property string currentTab: "all"
     property string currentView: "home"
@@ -63,7 +72,7 @@ Rectangle {
     // true when the open mood island's span reaches over this header item (with a small gap);
     // positions only change with the window width, which re-runs this through the island's width
     function moodCovers(item) {
-        if (!isMoodIslandExpanded || !dynamicMoodIsland.visible || !item) return false;
+        if (notchMode || !isMoodIslandExpanded || !dynamicMoodIsland.visible || !item) return false;
         var left = (headerRoot.width - dynamicMoodIsland.expandedTargetWidth) / 2 - 10;
         var right = item.mapToItem(headerRoot, item.width, 0).x;
         return right > left;
@@ -96,15 +105,73 @@ Rectangle {
         }
     }
 
+    // Frame + notches, under this header's buttons but over the page (the header stacks above it)
+    WindowFrameNotches {
+        id: notchFrame
+        z: -1
+        x: 0; y: 0
+        width: headerRoot.width
+        height: headerRoot.frameHeight
+        visible: headerRoot.notchMode && height > 0
+        leftContentWidth: collapseNotchBtn.shown ? headerRoot.navBox + 8 : 0
+        centerContentWidth: navCluster.implicitWidth + 8
+        rightContentWidth: headerRoot.navBox * 2 + 2 + 8
+    }
+
+    // The top band and the gaps between notches still move the window and restore it on double click
+    MouseArea {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        height: headerRoot.notchMode ? notchFrame.band + notchFrame.contentHeight + 4 : parent.height
+        z: -1
+        onPressed: {
+            if (headerRoot.isMoodIslandExpanded) headerRoot.isMoodIslandExpanded = false;
+            if (typeof win !== "undefined" && win && typeof win.startSystemMove === "function") win.startSystemMove();
+        }
+        onDoubleClicked: headerRoot.maximizeWindowRequested()
+    }
+
+    // Left notch (maximized Now Playing only): collapse back to the page underneath
+    Rectangle {
+        id: collapseNotchBtn
+        readonly property bool shown: headerRoot.notchMode && headerRoot.isNowPlayingOpen
+        visible: shown
+        x: notchFrame.leftContentX + 2
+        y: notchFrame.band
+        width: headerRoot.navBox; height: headerRoot.navBox
+        radius: 8
+        color: collapseNotchH.hovered ? Qt.rgba(headerRoot.accentColor.r, headerRoot.accentColor.g, headerRoot.accentColor.b, 0.22) : "transparent"
+        Behavior on color { ColorAnimation { duration: 140 } }
+        HoverHandler { id: collapseNotchH }
+        ToolTip.visible: collapseNotchH.hovered
+        ToolTip.text: I18n.tr("Thu nhỏ", "Collapse")
+        ToolTip.delay: 400
+        AppIcon {
+            anchors.centerIn: parent
+            source: "../assets/icons/material/ms-expand_more.svg"
+            iconSize: 18
+            color: "#ffffff"
+            opacity: collapseNotchH.hovered ? 1.0 : 0.75
+        }
+        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: headerRoot.collapseRequested() }
+    }
+
     RowLayout {
-        anchors.fill: parent
-        anchors.leftMargin: 20
-        anchors.rightMargin: 20
-        spacing: 14
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.topMargin: headerRoot.notchMode ? notchFrame.band : 0
+        height: headerRoot.notchMode ? notchFrame.contentHeight : 64
+        // notch mode: the nav cluster starts inside the center notch, the window buttons end inside the right one
+        anchors.leftMargin: headerRoot.notchMode ? notchFrame.centerContentX + 4 : 20
+        anchors.rightMargin: headerRoot.notchMode ? notchFrame.band + 2 : 20
+        spacing: headerRoot.notchMode ? 2 : 14
 
         // Top Navigation Cluster: Home, Search, Library, Downloads, Settings (Pure Borderless Icons matching wallpaper accent)
         RowLayout {
-            spacing: 14
+            id: navCluster
+            spacing: headerRoot.notchMode ? 6 : 14
 
             // Profile: the user's own avatar opens the listener card page
             Item {
@@ -116,8 +183,8 @@ Rectangle {
                 enabled: !underMood
                 Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                 Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
-                Layout.preferredWidth: 32
-                Layout.preferredHeight: 32
+                Layout.preferredWidth: headerRoot.navBox
+                Layout.preferredHeight: headerRoot.navBox
                 readonly property bool isActive: headerRoot.currentView === "profile"
 
                 Item {
@@ -182,8 +249,8 @@ Rectangle {
                 enabled: !underMood
                 Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                 Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
-                Layout.preferredWidth: 32
-                Layout.preferredHeight: 32
+                Layout.preferredWidth: headerRoot.navBox
+                Layout.preferredHeight: headerRoot.navBox
 
                 AppIcon {
                     anchors.centerIn: parent
@@ -215,8 +282,8 @@ Rectangle {
                 enabled: !underMood
                 Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                 Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
-                Layout.preferredWidth: 32
-                Layout.preferredHeight: 32
+                Layout.preferredWidth: headerRoot.navBox
+                Layout.preferredHeight: headerRoot.navBox
 
                 AppIcon {
                     anchors.centerIn: parent
@@ -248,8 +315,8 @@ Rectangle {
                 enabled: !underMood
                 Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                 Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
-                Layout.preferredWidth: 32
-                Layout.preferredHeight: 32
+                Layout.preferredWidth: headerRoot.navBox
+                Layout.preferredHeight: headerRoot.navBox
 
                 readonly property bool isLibActive: headerRoot.currentView === "library" || headerRoot.currentView === "custom_playlist_detail" || (headerRoot.currentView === "playlist" && typeof win !== "undefined" && win.previousView === "library")
 
@@ -283,8 +350,8 @@ Rectangle {
                 enabled: !underMood
                 Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                 Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
-                Layout.preferredWidth: 32
-                Layout.preferredHeight: 32
+                Layout.preferredWidth: headerRoot.navBox
+                Layout.preferredHeight: headerRoot.navBox
                 readonly property bool hasActive: typeof downloadManager !== "undefined" && downloadManager && downloadManager.activeTasksCount > 0
                 visible: true
 
@@ -330,8 +397,8 @@ Rectangle {
                 enabled: !underMood
                 Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                 Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
-                Layout.preferredWidth: 32
-                Layout.preferredHeight: 32
+                Layout.preferredWidth: headerRoot.navBox
+                Layout.preferredHeight: headerRoot.navBox
 
                 AppIcon {
                     anchors.centerIn: parent
@@ -363,8 +430,8 @@ Rectangle {
                 enabled: !underMood
                 Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                 Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
-                Layout.preferredWidth: 32
-                Layout.preferredHeight: 32
+                Layout.preferredWidth: headerRoot.navBox
+                Layout.preferredHeight: headerRoot.navBox
 
                 AppIcon {
                     id: bellIcon
@@ -440,10 +507,11 @@ Rectangle {
         // Window Maximize / Restore Button [ ◻ ]
         Rectangle {
             id: maxBtn
-            Layout.preferredWidth: 32
-            Layout.preferredHeight: 32
-            radius: 16
-            color: maxMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+            Layout.preferredWidth: headerRoot.navBox
+            Layout.preferredHeight: headerRoot.navBox
+            radius: headerRoot.notchMode ? 8 : 16
+            color: !maxMouse.containsMouse ? "transparent"
+                : (headerRoot.notchMode ? Qt.rgba(headerRoot.accentColor.r, headerRoot.accentColor.g, headerRoot.accentColor.b, 0.22) : Qt.rgba(1, 1, 1, 0.12))
             Behavior on color { ColorAnimation { duration: 150 } }
 
             AppIcon {
@@ -465,10 +533,11 @@ Rectangle {
         // Window Close Button [ ✕ ] (Closes / Minimizes to Desktop Widget)
         Rectangle {
             id: closeBtn
-            Layout.preferredWidth: 32
-            Layout.preferredHeight: 32
-            radius: 16
-            color: closeMouse.containsMouse ? "#E81123" : "transparent"
+            Layout.preferredWidth: headerRoot.navBox
+            Layout.preferredHeight: headerRoot.navBox
+            radius: headerRoot.notchMode ? 8 : 16
+            color: !closeMouse.containsMouse ? "transparent"
+                : (headerRoot.notchMode ? Qt.rgba(244 / 255, 63 / 255, 94 / 255, 0.55) : "#E81123")
             Behavior on color { ColorAnimation { duration: 150 } }
 
             AppIcon {
@@ -495,6 +564,8 @@ Rectangle {
         id: dynamicMoodIsland
         anchors.horizontalCenter: headerRoot.horizontalCenter
         anchors.verticalCenter: headerRoot.verticalCenter
+        // notch mode: hang just below the center notch (header 90: top 44 -> center 63, offset 18)
+        anchors.verticalCenterOffset: headerRoot.notchMode ? 18 : 0
         // Same frosted pill as the Now Playing mode switcher: light translucent fill + hairline,
         // the active mood is a solid segment in the cover / wallpaper accent
         height: 38

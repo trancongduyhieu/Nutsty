@@ -2823,6 +2823,9 @@ Scope {
                 isSidebarVisible: win.showSidebar
                 isNowPlayingOpen: win.isNowPlayingOpen
                 isMaximized: Boolean(win.visibility === 4 || win.maximized)
+                notchMode: Boolean(win.visibility === 4 || win.maximized || win.fullscreen)
+                frameHeight: masterContainer.height
+                onCollapseRequested: win.isNowPlayingOpen = false
                 accentColor: win.accentColor
                 backgroundSourceItem: masterBackdropStack
                 userAvatar: win.currentUserAvatar
@@ -3456,6 +3459,7 @@ Scope {
                     id: ytNowPlayingView
                     objectName: "ytMusicNowPlayingView"
                     anchors.fill: parent
+                    chromeInNotch: topHeader.notchMode
                     visible: revealReach > 0.0
                     enabled: win.isNowPlayingOpen
 

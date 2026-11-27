@@ -20,6 +20,8 @@ Item {
     property bool isLoadingAudio: false
     // True while AutoMix is blending two songs (drives the "Cooking" labels here and on the player bar)
     readonly property bool autoMixing: autoMix.mixing
+    // Maximized window: the collapse button lives in the frame's left notch instead
+    property bool chromeInNotch: false
     property bool isShuffle: false
     property string repeatMode: "off"
     property real volume: 100
@@ -1967,6 +1969,7 @@ Item {
     Rectangle {
         id: collapseBtn
         z: 5
+        visible: !root.chromeInNotch
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.leftMargin: root.width >= 1200 ? 40 : 18
