@@ -6018,7 +6018,7 @@ Scope {
                                     key: PlaybackEngine.trackKeyOf(win.currentTrack), slots: slots ? slots.length : 0,
                                     measuring: bassProc.running ? bassProc.forKey : "", cached: Object.keys(win.bassSlotsByKey),
                                     prefetch: win.bassPrefetchKey, t: win.currentTime, dur: win.totalDuration,
-                                    pulse: songAtmosphereEffect.pulse, scale: 1 + 0.07 * songAtmosphereEffect.pulse });
+                                    pulse: songAtmosphereEffect.pulse, scale: 1 + songAtmosphereEffect.pulseZoom * songAtmosphereEffect.pulse });
         }
         // Preview the AutoMix card without waiting for a track end: "upcoming" | "active" | "clear"
         function testAutoMixCard(phase: string): string {

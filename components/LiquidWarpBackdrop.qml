@@ -25,12 +25,19 @@ Item {
     // pulseSlots: one 0..255 value per 25 ms of the playing song (backend/bass_envelope.py).
     // The caller hands over the last known position (playhead, seconds) and when it was read
     // (playheadStampMs, Date.now()); each frame looks the pulse up at the position now. A hit makes
-    // the backdrop swell up to 7% and the warp run up to 4x faster, then it settles over ~140 ms.
+    // the backdrop swell and the warp run faster for a moment (strength below).
     property var pulseSlots: null
     property bool pulseOn: false
     property real playhead: 0
     property real playheadStampMs: 0
     property real pulse: 0
+    // Strength, tuned for a desktop window (SimpMusic's phone numbers, 8% / 4x / instant / 140 ms, read
+    // as too strong here): a hit eases in over ~40 ms, swells up to 3.5%, warps up to 2.5x and fades over
+    // ~220 ms; the level is shaped by ^1.5 so moderate hits swell little and only the hardest swell fully
+    readonly property real pulseZoom: 0.035
+    readonly property real pulseWarp: 1.5
+    readonly property real pulseAttackS: 0.04
+    readonly property real pulseDecayS: 0.22
     property int lastSlot: -1
 
     // The strongest slot passed since the last frame, so a slow frame (or 30 fps) never skips a hit.
@@ -45,16 +52,19 @@ Item {
         var best = 0;
         for (var k = Math.max(0, from); k <= i && k < pulseSlots.length; k++)
             if (pulseSlots[k] > best) best = pulseSlots[k];
-        return best / 255;
+        return Math.pow(best / 255, 1.5);
     }
 
     FrameAnimation {
         running: root.visible && root.running && root.isWindowActive && !root.liteMode
         onTriggered: {
             var dt = Math.min(0.1, Math.max(0, frameTime));
-            var p = Math.max(root.pulseTarget(), root.pulse * Math.exp(-dt / 0.14));
+            var target = root.pulseTarget();
+            var p = target > root.pulse
+                    ? root.pulse + (target - root.pulse) * (1 - Math.exp(-dt / root.pulseAttackS))
+                    : Math.max(target, root.pulse * Math.exp(-dt / root.pulseDecayS));
             root.pulse = p < 0.002 ? 0 : p;
-            root.animTime = (root.animTime + dt * (62.831853 / 50) * (1 + 3 * root.pulse)) % 62.831853;
+            root.animTime = (root.animTime + dt * (62.831853 / 50) * (1 + root.pulseWarp * root.pulse)) % 62.831853;
         }
         onRunningChanged: if (!running) root.pulse = 0
     }
@@ -166,7 +176,7 @@ Item {
         width: root.width
         height: root.height
         source: warpEffect
-        scale: 1 + 0.07 * root.pulse
+        scale: 1 + root.pulseZoom * root.pulse
         visible: root.frontImg.status === Image.Ready
         blurEnabled: true
         blur: 1.0
