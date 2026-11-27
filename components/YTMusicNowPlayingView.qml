@@ -1345,8 +1345,8 @@ Item {
                     ColumnLayout {
                         id: queueColumn
                         anchors.fill: parent
-                        // In a short window the list rises into the empty header room above the tab
-                        anchors.topMargin: Math.max(-(tabContentStack.y + mainArea.anchors.topMargin), Math.min(0, wantGap))
+                        // In a short window the list rises into the empty header room above the tab; +8 settles it a touch lower
+                        anchors.topMargin: Math.max(-(tabContentStack.y + mainArea.anchors.topMargin), Math.min(0, wantGap)) + 8
                         spacing: 8
 
                         // The first row starts one row (70 px + 10 px spacing) above the top of the cover on the left
