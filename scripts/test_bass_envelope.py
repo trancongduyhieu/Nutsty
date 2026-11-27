@@ -71,6 +71,32 @@ def held_bass_breathes_instead_of_holding_the_pulse():
     assert peak(body, 300, 1900) < 0.2, peak(body, 300, 1900)          # spaced kicks do not
 
 
+def dense_long_kicks_each_hit():
+    # jumpstyle/hardstyle: 400 ms kicks every 450 ms, the gap between them only 50 ms
+    samples = []
+    for n in range(RATE * 6):
+        ms = n * 1000 // RATE
+        samples.append(0.8 * math.sin(2 * math.pi * 60 * n / RATE) if ms % 450 < 400 else 0.0)
+    hit, _ = analyze(samples)
+    for k in range(2, 12):
+        start = k * 450
+        assert peak(hit, start, start + 75) > 0.6, (start, peak(hit, start, start + 75))
+        assert peak(hit, start + 150, start + 375) < 0.1, (start, peak(hit, start + 150, start + 375))
+
+
+def kicks_over_a_bass_line_each_hit():
+    # a kick comes in from silence, then every 450 ms a kick on top of a held bass line at half its level
+    samples = []
+    for n in range(RATE * 6):
+        ms = n * 1000 // RATE
+        amp = 0.0 if ms < 900 else (0.8 if ms % 450 < 100 else 0.4)
+        samples.append(amp * math.sin(2 * math.pi * 60 * n / RATE))
+    hit, _ = analyze(samples)
+    for start in range(1350, 5500, 450):
+        assert peak(hit, start, start + 75) > 0.6, (start, peak(hit, start, start + 75))
+        assert peak(hit, start + 175, start + 400) < 0.1, (start, peak(hit, start + 175, start + 400))
+
+
 def silence_and_short():
     hit, body = analyze([0.0] * (RATE // 2))
     assert not any(hit) and not any(body)
@@ -127,6 +153,7 @@ def missing_file():
 def main():
     for case in (pulses_on_hits_and_rests_between, high_frequencies_do_not_pulse,
                  drop_hits_harder_but_verse_still_pulses, held_bass_breathes_instead_of_holding_the_pulse,
+                 dense_long_kicks_each_hit, kicks_over_a_bass_line_each_hit,
                  silence_and_short,
                  local_wav_end_to_end, missing_file):
         case()

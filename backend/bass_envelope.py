@@ -4,8 +4,8 @@ The level comes from SimpMusic's BassEnvelope (core/domain/.../player/BassEnvelo
 through two one-pole low-passes at 150 Hz and each 25 ms slot keeps the RMS of what passed. From those
 levels two channels are stored, one byte (0..255) per slot each:
 
-- hit: how sharply the bass just rose (against its own last ~150 ms), judged against the sharpest rise
-  within 2 s either side, then weighted by how loud that stretch is against the whole track. A kick hits;
+- hit: how sharply the bass just rose (from its dip in the last 100 ms), judged against the sharpest rise
+  within 2 s either side (a rise of 60% of the track's loud level always counts in full), then weighted by how loud that stretch is against the whole track. A kick hits;
   a held 808 hits once when it starts, not for as long as it rings; a drop hits harder than a verse, and a
   quiet verse still hits (SimpMusic judged the level itself, so a held bass kept the pulse at full and a
   verse hit as hard as the drop).
@@ -22,8 +22,9 @@ from collections import deque
 
 SLOTS_PER_SECOND = 40
 CUTOFF_HZ = 150.0
-FLOOR = 0.5
-RISE_FOLLOW_S = 0.15     # a rise is measured against the bass of about the last 150 ms
+RISE_BASE_SLOTS = 4      # a rise is measured from the quietest of the last 100 ms (the dip before a kick)
+HIT_FLOOR = 0.25         # rises under a quarter of the sharpest nearby one do not hit
+RISE_FULL = 0.6          # a rise of 60% of the track's loud level is a full hit, whatever rose more nearby
 SECTION_MIN = 0.45       # a stretch at a quarter of the track's loud level still hits at ~0.59 of a drop
 BODY_HALF_SLOTS = 6      # body: the quietest slot within 150 ms either side
 REFERENCE_PERCENTILE = 0.95
@@ -139,19 +140,22 @@ def channels_from_levels(levels):
     if reference <= 0 or n == 0:
         return bytes(n), bytes(n)
     quiet = reference * QUIET_SHARE
-    keep = math.exp(-1.0 / (SLOTS_PER_SECOND * RISE_FOLLOW_S))
+    # From the dip just before, not an average: dense kicks (jumpstyle, hardstyle, ~0.25 s apart) leave
+    # the last one's tail in any average, and each new kick would barely count as a rise
     rises = [0.0] * n
-    follow = 0.0
     for i, v in enumerate(levels):
-        rises[i] = max(0.0, v - follow)
-        follow = keep * follow + (1.0 - keep) * v
+        base = min(levels[max(0, i - RISE_BASE_SLOTS):i]) if i > 0 else 0.0
+        rises[i] = max(0.0, v - base)
     local_rise = _window_max(rises, WINDOW_SLOTS)
     local_level = _window_max(levels, WINDOW_SLOTS)
+    # Kicks over a held bass line rise less than the one kick that came in from silence; without the
+    # cap that single entry would turn every kick after it into a third of a hit for 2 s
+    norm = [max(quiet, min(r, reference * RISE_FULL)) for r in local_rise]
     lows = [-v for v in _window_max([-v for v in levels], BODY_HALF_SLOTS)]
     hit = bytearray(n)
     body = bytearray(n)
     for i in range(n):
-        sharp = (rises[i] / max(quiet, local_rise[i]) - FLOOR) / (1.0 - FLOOR)
+        sharp = (rises[i] / norm[i] - HIT_FLOOR) / (1.0 - HIT_FLOOR)
         section = SECTION_MIN + (1.0 - SECTION_MIN) * min(1.0, local_level[i] / reference)
         hit[i] = _byte(sharp * section)
         body[i] = _byte(lows[i] / reference)
