@@ -1698,7 +1698,9 @@ Item {
                 tracks: root.currentTracks
                 currentTrack: root.currentTrack
                 sameTrack: root.isSameTrack
-                backdrop: glassCard
+                glassSource: root.glassSource
+                glassScrim: root.glassScrim
+                liteMode: root.liteMode
                 onPlayRequested: (trk, idx) => root.trackPlayRequested(trk, idx)
                 onMenuRequested: (trk, gx, gy) => root.trackContextMenuRequested(trk, gx, gy)
                 onMoveRequested: (from, to) => root.queueMoveRequested(from, to)

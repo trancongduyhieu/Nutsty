@@ -18,8 +18,10 @@ Item {
     property var sameTrack: function (a, b) { return a === b; }
     // Gate for scroll-to-current and the edge fade while the tab is hidden
     property bool active: true
-    // The panel's frosted glass, so the dragged card can show it blurred behind the rows
-    property Item backdrop: null
+    // Mochy's glass sources (wallpaper stack and scrim), so the dragged card is the same frosted glass
+    property Item glassSource: null
+    property Item glassScrim: null
+    property bool liteMode: false
 
     signal playRequested(var track, int index)
     signal menuRequested(var track, real gx, real gy)
@@ -302,48 +304,75 @@ Item {
         width: list.width - root.padX * 2
         height: root.rowH - 4
 
+        // No size of its own: the glass strip sets its own (larger) size and offset
         Loader {
-            anchors.fill: parent
             active: root.dragging
+            // Blurred over a strip wider than the card on every side, then cut back to the card:
+            // the blur fades to clear at its own edges, and that fade must fall outside the card
+            // or the sharp rows behind show through its top and bottom.
             sourceComponent: Item {
-                // What sits under the card: the panel's frosted backdrop (opaque, so the sharp rows
-                // behind the card are hidden) with the list's rows on top. Both are cut to the card.
+                id: glassArea
+                readonly property real margin: 32
+                x: -margin
+                y: -margin
+                width: dragCard.width + margin * 2
+                height: dragCard.height + margin * 2
+                // Mochy's glass, rebuilt for the card: the wallpaper and scrim behind this spot plus
+                // the rows passing under it, all blurred together, so nothing under the card stays sharp.
                 Item {
                     id: underCard
                     anchors.fill: parent
                     visible: false
                     layer.enabled: true
-                    Rectangle {
-                        anchors.fill: parent
-                        visible: root.backdrop === null
-                        color: Qt.rgba(0.07, 0.07, 0.08, 0.94)
+                    readonly property bool glassOn: !root.liteMode && root.glassSource !== null
+                    readonly property rect sampleRect: {
+                        if (!underCard.glassOn) return Qt.rect(0, 0, 0, 0);
+                        var p = dragCard.parent.mapToItem(root.glassSource, dragCard.x - glassArea.margin, dragCard.y - glassArea.margin);
+                        return Qt.rect(p.x, p.y, glassArea.width, glassArea.height);
                     }
                     ShaderEffectSource {
                         anchors.fill: parent
-                        visible: root.backdrop !== null
-                        sourceItem: root.backdrop
-                        live: true
-                        recursive: false
-                        sourceRect: {
-                            if (!root.backdrop) return Qt.rect(0, 0, 0, 0);
-                            var p = dragCard.parent.mapToItem(root.backdrop, dragCard.x, dragCard.y);
-                            return Qt.rect(p.x, p.y, dragCard.width, dragCard.height);
-                        }
+                        // Gate on glassOn, not `visible`: inside the hidden layer source `visible` reads false
+                        visible: underCard.glassOn
+                        live: underCard.glassOn
+                        sourceItem: underCard.glassOn ? root.glassSource : null
+                        sourceRect: underCard.sampleRect
+                    }
+                    ShaderEffectSource {
+                        anchors.fill: parent
+                        visible: underCard.glassOn && root.glassScrim !== null
+                        live: underCard.glassOn
+                        sourceItem: underCard.glassOn ? root.glassScrim : null
+                        sourceRect: underCard.sampleRect
+                    }
+                    // Lite mode or no backdrop: a flat fill, as Mochy's card does
+                    Rectangle {
+                        anchors.fill: parent
+                        visible: !underCard.glassOn
+                        color: Qt.rgba(0.06, 0.06, 0.07, 1.0)
+                    }
+                    Rectangle {
+                        anchors.fill: parent
+                        color: Qt.rgba(70 / 255, 70 / 255, 70 / 255, 0.2)
                     }
                     ShaderEffectSource {
                         anchors.fill: parent
                         sourceItem: list
                         live: true
                         recursive: false
-                        sourceRect: Qt.rect(dragCard.x - list.x, dragCard.y - list.y, dragCard.width, dragCard.height)
+                        sourceRect: Qt.rect(dragCard.x - list.x - glassArea.margin, dragCard.y - list.y - glassArea.margin, glassArea.width, glassArea.height)
                     }
                 }
-                Rectangle {
+                Item {
                     id: cardMask
                     anchors.fill: parent
-                    radius: 12
                     visible: false
                     layer.enabled: true
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: glassArea.margin
+                        radius: 12
+                    }
                 }
                 MultiEffect {
                     anchors.fill: parent
