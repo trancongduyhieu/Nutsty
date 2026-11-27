@@ -64,8 +64,12 @@ RowLayout {
     }
     readonly property bool hasMultiple: available.length > 1
     // eases in as the notch widens around it
-    onVisibleChanged: if (visible) fadeIn.restart()
-    NumberAnimation { id: fadeIn; target: root; property: "opacity"; from: 0; to: 1; duration: 320; easing.type: Easing.OutCubic }
+    // shown: whether the owner wants it. It fades in while the notch widens around it, and on the
+    // way out fades first, staying in the row until gone, so the notch closes after it
+    property bool shown: false
+    visible: shown || opacity > 0.01
+    opacity: shown ? 1 : 0
+    Behavior on opacity { NumberAnimation { duration: root.shown ? 340 : 170; easing.type: Easing.OutCubic } }
 
     function step(delta) {
         if (!hasMultiple) return;

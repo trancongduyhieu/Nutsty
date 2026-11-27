@@ -2068,6 +2068,7 @@ Item {
             // Lyrics tab in the notch: source picker and offset sit right after the mode icons (liner)
             Rectangle {
                 visible: lyricsIsland.visible
+                opacity: lyricsIsland.opacity
                 anchors.verticalCenter: parent.verticalCenter
                 width: 1; height: 14
                 color: Qt.rgba(1, 1, 1, 0.15)
@@ -2077,7 +2078,7 @@ Item {
                 id: lyricsIsland
                 readonly property bool wanted: modeSwitcher.inNotch && root.activeTab === "lyrics" && root.visible
                 active: wanted
-                visible: wanted && (currentSourceTag !== "" || available.length > 0)
+                shown: wanted && (currentSourceTag !== "" || available.length > 0)
                 track: root.track
                 trackVid: {
                     var t = root.track;

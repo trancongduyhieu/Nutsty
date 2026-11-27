@@ -57,10 +57,24 @@ Rectangle {
         }
     }
     // the switcher row's width, eased when it grows or shrinks in place (lyrics controls come and go)
-    property real npRowW: npNotchHost.childrenRect.width
-    Behavior on npRowW {
-        enabled: headerRoot.npMorph > 0.99
-        NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+    // Springs like the notch itself: grows with a small bounce (0.42, 0.8), shrinks a touch slower
+    // and without one (0.55, 1.0). The host clips to it, so the new controls are uncovered as the
+    // notch widens instead of popping in at full width.
+    readonly property real npRowTarget: npNotchHost.childrenRect.width
+    property real npRowW: 0
+    property real npRowVel: 0
+    FrameAnimation {
+        running: Math.abs(headerRoot.npRowW - headerRoot.npRowTarget) > 0.25 || Math.abs(headerRoot.npRowVel) > 0.5
+        onTriggered: {
+            // while the nav icons and the switcher swap, npMorph already carries the width
+            if (headerRoot.npMorph < 0.99) { headerRoot.npRowW = headerRoot.npRowTarget; headerRoot.npRowVel = 0; return; }
+            var grow = headerRoot.npRowTarget > headerRoot.npRowW;
+            var s = Frame.springStep(headerRoot.npRowW, headerRoot.npRowVel, headerRoot.npRowTarget,
+                                     grow ? 0.42 : 0.55, grow ? 0.8 : 1.0, frameTime);
+            var done = Math.abs(s[0] - headerRoot.npRowTarget) <= 0.25 && Math.abs(s[1]) <= 0.5;
+            headerRoot.npRowVel = done ? 0 : s[1];
+            headerRoot.npRowW = done ? headerRoot.npRowTarget : s[0];
+        }
     }
     // where the Now Playing view parents its mode switcher while in notch mode
     readonly property Item nowPlayingNotchHost: notchMode ? npNotchHost : null
@@ -309,7 +323,8 @@ Rectangle {
         id: npNotchHost
         visible: headerRoot.notchMode && notchFrame.centerVisible && headerRoot.npMorph > 0.01
         enabled: headerRoot.isNowPlayingOpen
-        width: childrenRect.width
+        width: Math.max(0, headerRoot.npRowW)
+        clip: true
         height: notchFrame.contentHeight
         x: Math.round(notchFrame.centerMid - width / 2)
         y: notchFrame.band
