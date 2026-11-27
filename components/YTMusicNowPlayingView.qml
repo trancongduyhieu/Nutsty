@@ -1343,17 +1343,30 @@ Item {
                     Layout.fillHeight: true
 
                     ColumnLayout {
+                        id: queueColumn
                         anchors.fill: parent
+                        // In a short window the list rises into the empty header room above the tab
+                        anchors.topMargin: Math.max(-(tabContentStack.y + mainArea.anchors.topMargin), Math.min(0, wantGap))
                         spacing: 8
 
-                        Item { Layout.fillHeight: true }
+                        // The first row starts one row (70 px + 10 px spacing) above the top of the cover on the left
+                        readonly property real coverTop: {
+                            var slot = coverArtworkWrapper.parent;
+                            return leftColumn.y + slot.y + (slot.height - coverArtworkWrapper.height) / 2;
+                        }
+                        readonly property real wantGap: coverTop - tabContentStack.y - queueListView.topMargin - spacing - 8 - 80
+                        Item {
+                            id: queueTopGap
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: Math.max(0, queueColumn.wantGap)
+                        }
 
                         ListView {
                             id: queueListView
                             Layout.fillWidth: true
                             Layout.maximumWidth: 640
-                            // Swiftify-like: a compact window (about six rows) centred beside the cover
-                            Layout.preferredHeight: Math.min(parent.height, 80 * 6.5 + topMargin + bottomMargin)
+                            // Swiftify-like: a compact window (about six rows) beside the cover
+                            Layout.preferredHeight: Math.max(0, Math.min(parent.height - queueTopGap.Layout.preferredHeight - queueColumn.spacing, 80 * 6.5 + topMargin + bottomMargin))
                             clip: true
                             spacing: 10
                             topMargin: 24
@@ -1377,7 +1390,11 @@ Item {
                                 return -1;
                             }
                             function focusCurrent() {
-                                if (currentQueueIndex >= 0) positionViewAtIndex(currentQueueIndex, ListView.Beginning);
+                                if (currentQueueIndex < 0) return;
+                                positionViewAtIndex(currentQueueIndex, ListView.Beginning);
+                                // Keep the top margin above the current row so it lines up with the cover and stays out of the edge fade
+                                var maxY = originY + contentHeight + bottomMargin - height;
+                                contentY = Math.max(originY - topMargin, Math.min(maxY, contentY - topMargin));
                             }
                             onCurrentQueueIndexChanged: if (!moving && root.shownPanel === "up_next") Qt.callLater(focusCurrent)
 
