@@ -150,6 +150,50 @@ impl Activity {
         act.insert("instance".into(), json!(false));
         Value::Object(act)
     }
+
+    /// The web addresses of the pictures, big first, as `to_gateway_json` wants them registered.
+    pub fn picture_urls(&self) -> Vec<&str> {
+        let mut urls = vec![self.large_image.as_str()];
+        if self.large_image != LOGO_URL {
+            urls.push(LOGO_URL);
+        }
+        urls
+    }
+
+    /// The activity as the gateway's PRESENCE_UPDATE takes it: it names the app itself, the
+    /// pictures are registered assets (`mp:...`, None when Discord turned one down), and button
+    /// addresses go in the metadata.
+    pub fn to_gateway_json(&self, application_id: &str, large: Option<String>, small: Option<String>) -> Value {
+        let mut v = self.to_json();
+        let act = v.as_object_mut().expect("to_json builds an object");
+        act.insert("name".into(), json!("Nutsty"));
+        act.insert("application_id".into(), json!(application_id));
+        act.remove("instance");
+        match large {
+            Some(large) => {
+                let assets = act.get_mut("assets").and_then(Value::as_object_mut).expect("to_json adds assets");
+                assets.insert("large_image".into(), json!(large));
+                match small {
+                    Some(small) if assets.contains_key("small_image") => {
+                        assets.insert("small_image".into(), json!(small));
+                    }
+                    _ => {
+                        assets.remove("small_image");
+                        assets.remove("small_text");
+                    }
+                }
+            }
+            // Discord only shows the small picture next to a big one
+            None => {
+                act.remove("assets");
+            }
+        }
+        if let Some((label, url)) = &self.button {
+            act.insert("buttons".into(), json!([label]));
+            act.insert("metadata".into(), json!({ "button_urls": [url] }));
+        }
+        v
+    }
 }
 
 /// Discord closes the connection past five activity updates in twenty seconds.
@@ -253,6 +297,21 @@ mod tests {
         assert!(!a.looks_like(&seek));
         let paused = Activity::from_report(&report(false, 12.0), 102_000).unwrap();
         assert!(!a.looks_like(&paused));
+    }
+
+    #[test]
+    fn gateway_activity_uses_registered_pictures() {
+        let a = Activity::from_report(&report(true, 0.0), 0).unwrap();
+        assert_eq!(a.picture_urls().len(), 2);
+        let j = a.to_gateway_json("42", Some("mp:external/big".into()), Some("mp:external/logo".into()));
+        assert_eq!(j["application_id"], "42");
+        assert_eq!(j["name"], "Nutsty");
+        assert_eq!(j["assets"]["large_image"], "mp:external/big");
+        assert_eq!(j["assets"]["small_image"], "mp:external/logo");
+        assert_eq!(j["buttons"][0], "Listen on YouTube Music");
+        assert_eq!(j["metadata"]["button_urls"][0], "https://music.youtube.com/watch?v=x");
+        let no_pic = a.to_gateway_json("42", None, Some("mp:external/logo".into()));
+        assert!(no_pic.get("assets").is_none());
     }
 
     #[test]

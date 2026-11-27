@@ -1413,6 +1413,7 @@ Scope {
         playing: win.isPlaying
         position: win.currentTime
         duration: win.totalDuration
+        onOpenUrlRequested: url => win.openExternalUrl(url)
     }
 
     ListeningTracker {
@@ -3932,6 +3933,10 @@ Scope {
             taskbarLyricsEnabled: win.taskbarLyricsEnabled
             discordPresenceEnabled: win.discordPresenceEnabled
             discordPresenceStatus: discordPresence.status
+            discordSignedIn: discordPresence.signedIn
+            discordAccountName: discordPresence.accountName
+            discordSigningIn: discordPresence.signingIn
+            discordLoginError: discordPresence.loginError
             taskbarLyricsPlacement: win.taskbarLyricsPlacement
             taskbarLyricsAlign: win.taskbarLyricsAlign
             lyricsRomanizationEnabled: win.lyricsRomanizationEnabled
@@ -4070,6 +4075,9 @@ Scope {
                 win.discordPresenceEnabled = enabled;
                 win.saveSettings();
             }
+            onDiscordLoginRequested: discordPresence.login()
+            onDiscordLoginCancelRequested: discordPresence.cancelLogin()
+            onDiscordLogoutRequested: discordPresence.logout()
             onChangeTaskbarLyricsPlacementRequested: placement => {
                 win.taskbarLyricsPlacement = placement;
                 win.saveSettings();

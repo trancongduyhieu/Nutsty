@@ -18,8 +18,36 @@ Item {
     property real position: 0
     property real duration: 0
 
-    // "off" | "idle" | "waiting" (Discord not open) | "live"
+    // "off" | "idle" | "waiting" (Discord not open) | "live" (through the Discord app)
+    // | "live_web" (through the signed-in account, no Discord app needed)
     property string status: "off"
+
+    // "Sign in with Discord": the account used when the Discord app is not on this computer
+    property string accountName: ""
+    property bool signedIn: false
+    property bool signingIn: false
+    // "" | "port" | "denied" | "timeout" | "network"
+    property string loginError: ""
+
+    signal openUrlRequested(string url)
+
+    function login() {
+        if (!root.active || !helper.running) return;
+        root.loginError = "";
+        root.signingIn = true;
+        helper.write(JSON.stringify({ login: true, lang: I18n.locale === "en" ? "en" : "vi" }) + "\n");
+    }
+
+    function cancelLogin() {
+        if (helper.running) helper.write("{\"login_cancel\":true}\n");
+        root.signingIn = false;
+    }
+
+    function logout() {
+        if (helper.running) helper.write("{\"logout\":true}\n");
+        root.signedIn = false;
+        root.accountName = "";
+    }
 
     // after the switch goes off, the helper stays a moment to take the status down itself
     property bool draining: false
@@ -75,6 +103,7 @@ Item {
             root.draining = true;
             drainTimer.restart();
             root.status = "off";
+            root.signingIn = false;
         }
     }
     onDrainingChanged: root.syncHelper()
@@ -91,12 +120,24 @@ Item {
             onRead: data => {
                 try {
                     var msg = JSON.parse(data);
-                    if (msg && msg.status && root.active) root.status = msg.status;
+                    if (!msg) return;
+                    if (msg.status && root.active) root.status = msg.status;
+                    if (msg.hasOwnProperty("account")) {
+                        root.signedIn = msg.account !== null;
+                        root.accountName = msg.account && msg.account.name ? String(msg.account.name) : "";
+                        if (root.signedIn) { root.signingIn = false; root.loginError = ""; }
+                    }
+                    if (msg.open_url) root.openUrlRequested(String(msg.open_url));
+                    if (msg.login === "failed") {
+                        root.signingIn = false;
+                        root.loginError = String(msg.reason || "network");
+                    }
                 } catch (e) {}
             }
         }
         onRunningChanged: if (running) firstPush.restart()
         onExited: (code, status) => {
+            root.signingIn = false;
             if (root.active) {
                 root.status = "waiting";
                 restartTimer.restart();
