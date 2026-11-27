@@ -17,6 +17,8 @@ Item {
     property real centerExtraHeight: 0
     // extra darkness over the center notch alone (0..1): it deepens while open so it reads as one island
     property real centerTint: 0
+    // the center notch's bottom corner radius (0 = the closed default); grows while it is open
+    property real centerBottomRadius: 0
     property color fillColor: Qt.rgba(0, 0, 0, 0.35)
     property color hairlineColor: Qt.rgba(1, 1, 1, 0.10)
 
@@ -33,9 +35,9 @@ Item {
 
     readonly property bool sized: width > 0 && height > 0
     readonly property string holePath: sized
-        ? Frame.innerPath(Math.round(width), Math.round(height), leftContentWidth, centerContentWidth, rightContentWidth, cornerRadius, centerExtraHeight) : ""
+        ? Frame.innerPath(Math.round(width), Math.round(height), leftContentWidth, centerContentWidth, rightContentWidth, cornerRadius, centerExtraHeight, centerBottomRadius) : ""
     readonly property string bandPath: sized
-        ? Frame.framePath(Math.round(width), Math.round(height), leftContentWidth, centerContentWidth, rightContentWidth, cornerRadius, centerExtraHeight) : ""
+        ? Frame.framePath(Math.round(width), Math.round(height), leftContentWidth, centerContentWidth, rightContentWidth, cornerRadius, centerExtraHeight, centerBottomRadius) : ""
 
     Shape {
         anchors.fill: parent
@@ -51,7 +53,7 @@ Item {
             fillColor: Qt.rgba(0, 0, 0, root.centerTint)
             strokeWidth: -1
             PathSvg { path: root.centerTint > 0.001 && root.sized
-                ? Frame.centerNotchPath(Math.round(root.width), root.leftContentWidth, root.centerContentWidth, root.rightContentWidth, root.centerExtraHeight) : "" }
+                ? Frame.centerNotchPath(Math.round(root.width), root.leftContentWidth, root.centerContentWidth, root.rightContentWidth, root.centerExtraHeight, root.centerBottomRadius) : "" }
         }
         ShapePath {
             fillColor: "transparent"

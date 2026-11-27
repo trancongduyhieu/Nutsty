@@ -3,6 +3,7 @@ import QtQuick.Effects
 import QtQuick.Layouts
 import QtQuick.Controls.Basic
 import "."
+import "window_frame_logic.js" as Frame
 
 Rectangle {
     id: headerRoot
@@ -18,22 +19,25 @@ Rectangle {
     readonly property real navBox: notchMode ? 26 : 32
     readonly property bool moodShown: currentView === "home" && !isNowPlayingOpen
     readonly property bool moodOpenInNotch: notchMode && moodShown && isMoodIslandExpanded
-    // Island morph (timings from V-Notch): opens on Apple's ease-out (0.32, 0.72, 0, 1) over 500 ms,
-    // closes on a fast-start expo-out over 420 ms; the chip row fades in after the shape starts
-    // growing and fades out before it shrinks. Started by hand so each direction keeps its curve.
+    // Island morph, as boring.notch opens its MacBook notch: a spring with a small bounce to open
+    // (SwiftUI response 0.42, damping 0.8) and a critically damped one to close (0.45, 1.0). It is
+    // stepped per frame so a click mid-flight reverses from the current speed instead of jumping.
     property real moodMorph: 0
-    NumberAnimation {
-        id: moodMorphAnim
-        target: headerRoot; property: "moodMorph"
+    property real moodMorphVel: 0
+    readonly property real moodMorphTarget: moodOpenInNotch ? 1 : 0
+    FrameAnimation {
+        running: Math.abs(headerRoot.moodMorph - headerRoot.moodMorphTarget) > 0.0005 || Math.abs(headerRoot.moodMorphVel) > 0.002
+        onTriggered: {
+            var open = headerRoot.moodMorphTarget > 0.5;
+            var s = Frame.springStep(headerRoot.moodMorph, headerRoot.moodMorphVel, headerRoot.moodMorphTarget,
+                                     open ? 0.42 : 0.45, open ? 0.8 : 1.0, frameTime);
+            var done = Math.abs(s[0] - headerRoot.moodMorphTarget) <= 0.0005 && Math.abs(s[1]) <= 0.002;
+            headerRoot.moodMorphVel = done ? 0 : s[1];
+            headerRoot.moodMorph = done ? headerRoot.moodMorphTarget : s[0];
+        }
     }
-    onMoodOpenInNotchChanged: {
-        moodMorphAnim.stop();
-        moodMorphAnim.to = moodOpenInNotch ? 1 : 0;
-        moodMorphAnim.duration = moodOpenInNotch ? 500 : 420;
-        moodMorphAnim.easing.type = Easing.BezierSpline;
-        moodMorphAnim.easing.bezierCurve = moodOpenInNotch ? [0.32, 0.72, 0.0, 1.0, 1, 1] : [0.16, 1.0, 0.3, 1.0, 1, 1];
-        moodMorphAnim.start();
-    }
+    // the chip row's full height inside the open notch (island pill height)
+    readonly property real moodRowH: 38
     signal collapseRequested()
 
     property string currentTab: "all"
@@ -136,8 +140,11 @@ Rectangle {
         readonly property real closedW: navCluster.implicitWidth + 8
         readonly property real openW: Math.max(navCluster.implicitWidth, dynamicMoodIsland.expandedTargetWidth) + 8
         centerContentWidth: closedW + (openW - closedW) * headerRoot.moodMorph
-        centerExtraHeight: (dynamicMoodIsland.height + 6) * headerRoot.moodMorph
-        centerTint: 0.45 * Math.min(1, Math.max(0, headerRoot.moodMorph))
+        centerExtraHeight: (headerRoot.moodRowH + 6) * Math.max(0, headerRoot.moodMorph)
+        // open it reads as a solid black island (fill 0.35 + tint 0.92 ~ 0.95), like the real notch
+        centerTint: 0.92 * Math.min(1, Math.max(0, headerRoot.moodMorph))
+        // bottom corners round out as it opens (boring.notch: 14 -> 24)
+        centerBottomRadius: Frame.BR + 7 * Math.min(1, Math.max(0, headerRoot.moodMorph))
         rightContentWidth: headerRoot.navBox * 2 + 2 + 8
         // windowed: concentric with the 24px window corner; maximized: liner's 12px
         cornerRadius: headerRoot.isMaximized ? 12 : 24 - band
@@ -639,25 +646,22 @@ Rectangle {
         anchors.horizontalCenterOffset: headerRoot.notchMode ? notchFrame.centerMid - headerRoot.width / 2 : 0
         // Same frosted pill as the Now Playing mode switcher: light translucent fill + hairline,
         // the active mood is a solid segment in the cover / wallpaper accent
-        height: 38
+        height: headerRoot.notchMode ? Math.max(0, Math.min(headerRoot.moodRowH, notchFrame.centerExtraHeight - 3)) : headerRoot.moodRowH
         radius: 19
         z: 12
         clip: true
-        visible: opacity > 0.01
-        // notch mode: only the open chip row shows here; the closed mood is the label in the icon row
-        // notch mode: the row follows the morph, it only shows once the shape is most of the way open
-        // (and is gone early on close), dropping in from the icon row with a slight scale-up
-        readonly property real revealT: Math.min(1, Math.max(0, (headerRoot.moodMorph - 0.62) / 0.38))
-        opacity: !headerRoot.moodShown ? 0.0 : (headerRoot.notchMode ? revealT : 1.0)
+        visible: opacity > 0.01 && height > 0.5
+        // notch mode: only the open chip row shows here (the closed mood is the label in the icon row).
+        // The island is a window onto the notch as it grows: as wide and deep as the notch is at that
+        // moment, clipping the chip row like the notch shape clips boring.notch's content, so no chip
+        // ever sits outside the notch mid-animation.
+        // closing, the row is gone in the first part of the shrink (boring.notch removes content
+        // with a plain fade, ahead of the shape)
+        readonly property real revealT: headerRoot.moodOpenInNotch
+            ? Math.min(1, Math.max(0, (headerRoot.moodMorph - 0.25) / 0.6))
+            : Math.min(1, Math.max(0, (headerRoot.moodMorph - 0.6) / 0.4))
+        opacity: !headerRoot.moodShown ? 0.0 : 1.0
         Behavior on opacity { enabled: !headerRoot.notchMode; NumberAnimation { duration: 180 } }
-        transform: [
-            Scale {
-                origin.x: dynamicMoodIsland.width / 2; origin.y: 0
-                xScale: headerRoot.notchMode ? 0.94 + 0.06 * dynamicMoodIsland.revealT : 1
-                yScale: xScale
-            },
-            Translate { y: headerRoot.notchMode ? -8 * (1 - dynamicMoodIsland.revealT) : 0 }
-        ]
 
         readonly property bool isExpanded: headerRoot.isMoodIslandExpanded
         // Selected chip takes the cover / wallpaper accent; text flips dark on light accents
@@ -682,7 +686,8 @@ Rectangle {
             }
             moodTextSum = sum;
         }
-        width: (isExpanded || headerRoot.notchMode) ? expandedTargetWidth : compactWidth
+        width: headerRoot.notchMode ? Math.max(0, Math.min(expandedTargetWidth, notchFrame.centerContentWidth - 8))
+                                    : (isExpanded ? expandedTargetWidth : compactWidth)
         // Once the island has finished opening, bring the selected mood into view (it may sit past
         // the right end, e.g. "Tâm trạng"). Until then hover never scrolls: chips sliding under the
         // still cursor (it rests where the compact pill was clicked) would drag the row back to 0.
@@ -700,7 +705,9 @@ Rectangle {
             }
         }
 
+        // notch mode: the width already follows the notch's spring frame by frame
         Behavior on width {
+            enabled: !headerRoot.notchMode
             NumberAnimation {
                 duration: 320
                 easing.type: Easing.BezierSpline
@@ -723,7 +730,7 @@ Rectangle {
             radius: height / 2
             color: Qt.rgba(headerRoot.accentColor.r, headerRoot.accentColor.g, headerRoot.accentColor.b, 0.95)
             Behavior on color { ColorAnimation { duration: 400 } }
-            opacity: dynamicMoodIsland.isExpanded ? 0.0 : 1.0
+            opacity: dynamicMoodIsland.isExpanded || headerRoot.notchMode ? 0.0 : 1.0
             Behavior on opacity { NumberAnimation { duration: 160 } }
         }
 
@@ -737,7 +744,7 @@ Rectangle {
             font.bold: true
             color: dynamicMoodIsland.chipTextColor
             visible: opacity > 0.01
-            opacity: dynamicMoodIsland.isExpanded ? 0.0 : 1.0
+            opacity: dynamicMoodIsland.isExpanded || headerRoot.notchMode ? 0.0 : 1.0
             Behavior on opacity { NumberAnimation { duration: 160 } }
         }
 
@@ -783,9 +790,11 @@ Rectangle {
         // Layer 2: Expanded View (Full Moods Palette with Liquid Tint Glass)
         Flickable {
             id: topMoodFlickable
-            anchors.fill: parent
-            anchors.leftMargin: 4
-            anchors.rightMargin: 4
+            // notch mode: full row size, centered, so the growing island reveals it without moving it
+            width: headerRoot.notchMode ? dynamicMoodIsland.expandedTargetWidth - 8 : parent.width - 8
+            height: headerRoot.moodRowH
+            x: Math.round((parent.width - width) / 2)
+            y: 0
             contentWidth: moodRow.width
             contentHeight: height
             boundsBehavior: Flickable.StopAtBounds
@@ -794,7 +803,9 @@ Rectangle {
             clip: true
             // A square clip lets chips scrolled to either end poke past the pill's round caps;
             // mask to a capsule concentric with the pill (R 19 - inset 4 = 15, same as a chip)
-            layer.enabled: visible
+            // kept on while the mood is on screen: creating the layer on the first frame of the
+            // reveal flashed the unmasked row for a frame
+            layer.enabled: headerRoot.moodShown
             layer.effect: MultiEffect {
                 maskEnabled: true
                 maskSource: moodScrollMask
@@ -804,8 +815,11 @@ Rectangle {
             interactive: contentWidth > width && dynamicMoodIsland.isExpanded
             enabled: dynamicMoodIsland.isExpanded
             visible: opacity > 0.01
-            opacity: dynamicMoodIsland.isExpanded ? 1.0 : 0.0
-            Behavior on opacity { NumberAnimation { duration: 200 } }
+            // notch mode: fades and drops in from under the icon row as the notch opens
+            // (boring.notch inserts content with opacity + move from the top edge)
+            opacity: headerRoot.notchMode ? dynamicMoodIsland.revealT : (dynamicMoodIsland.isExpanded ? 1.0 : 0.0)
+            Behavior on opacity { enabled: !headerRoot.notchMode; NumberAnimation { duration: 200 } }
+            transform: Translate { y: headerRoot.notchMode ? -10 * (1 - dynamicMoodIsland.revealT) : 0 }
 
             readonly property real accentLuminance: (0.299 * headerRoot.accentColor.r + 0.587 * headerRoot.accentColor.g + 0.114 * headerRoot.accentColor.b)
 

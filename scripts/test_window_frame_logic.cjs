@@ -96,4 +96,31 @@ assert.ok(cn.includes('A 15 15 0 0 1 899 80'), cn);                  // right bo
 assert.ok(cn.includes('A 8 8 0 0 0 678 6'), cn);
 assert.strictEqual(L.centerNotchPath(200, 34, 228, 60, 44), '');      // dropped notch: nothing to tint
 
+// The open center notch's bottom corners can grow (boring.notch: 14 -> 24) without touching the sides
+inner = L.innerPath(1600, 1000, 0, 228, 60, 12, 44, 22);
+assert.ok(inner.includes('V 58 A 22 22 0 0 0 708 80'), inner);      // 80 - 22, 678 + 8 + 22
+assert.ok(inner.includes('A 8 8 0 0 1 1594 44'), inner);
+assert.ok(L.centerNotchPath(1600, 0, 228, 60, 44, 22).includes('A 22 22 0 0 1 892 80'));
+assert.strictEqual(L.innerPath(1600, 1000, 0, 228, 60, 12, 44, 0), L.innerPath(1600, 1000, 0, 228, 60, 12, 44));
+
+// Spring: run at 60 fps and look at the curve
+function run(x, v, target, resp, damp, frames) {
+    let peak = x, s = [x, v];
+    for (let i = 0; i < frames; ++i) { s = L.springStep(s[0], s[1], target, resp, damp, 1 / 60); peak = Math.max(peak, s[0]); }
+    return { x: s[0], v: s[1], peak };
+}
+let r = run(0, 0, 1, 0.42, 0.8, 60);
+assert.ok(Math.abs(r.x - 1) < 0.005 && Math.abs(r.v) < 0.05, JSON.stringify(r));   // settled within 1 s
+assert.ok(r.peak > 1.005 && r.peak < 1.03, 'open overshoot ' + r.peak);             // a small bounce
+r = run(1, 0, 0, 0.45, 1.0, 60);
+assert.ok(Math.abs(r.x) < 0.005, JSON.stringify(r));
+let lo = 1, s2 = [1, 0];
+for (let i = 0; i < 90; ++i) { s2 = L.springStep(s2[0], s2[1], 0, 0.45, 1.0, 1 / 60); lo = Math.min(lo, s2[0]); }
+assert.ok(lo > -0.001, 'close undershoots ' + lo);                                     // critically damped
+// halfway through, after 0.2 s, the open spring is already most of the way there
+assert.ok(run(0, 0, 1, 0.42, 0.8, 12).x > 0.6);
+// a long frame (window hidden) is capped at 0.1 s and does not blow up
+const big = L.springStep(0, 0, 1, 0.42, 0.8, 5)[0];
+assert.ok(big > 0.2 && big < 1.05, 'long frame ' + big);
+
 console.log('window_frame_logic: OK');
