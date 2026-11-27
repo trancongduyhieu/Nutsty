@@ -19,6 +19,8 @@ Item {
     property real centerTint: 0
     // the center notch's bottom corner radius (0 = the closed default); grows while it is open
     property real centerBottomRadius: 0
+    // extra depth of the left notch (the logo there is taller than a button)
+    property real leftExtraHeight: 0
     property color fillColor: Qt.rgba(0, 0, 0, 0.35)
     property color hairlineColor: Qt.rgba(1, 1, 1, 0.10)
 
@@ -35,9 +37,9 @@ Item {
 
     readonly property bool sized: width > 0 && height > 0
     readonly property string holePath: sized
-        ? Frame.innerPath(Math.round(width), Math.round(height), leftContentWidth, centerContentWidth, rightContentWidth, cornerRadius, centerExtraHeight, centerBottomRadius) : ""
+        ? Frame.innerPath(Math.round(width), Math.round(height), leftContentWidth, centerContentWidth, rightContentWidth, cornerRadius, centerExtraHeight, centerBottomRadius, leftExtraHeight) : ""
     readonly property string bandPath: sized
-        ? Frame.framePath(Math.round(width), Math.round(height), leftContentWidth, centerContentWidth, rightContentWidth, cornerRadius, centerExtraHeight, centerBottomRadius) : ""
+        ? Frame.framePath(Math.round(width), Math.round(height), leftContentWidth, centerContentWidth, rightContentWidth, cornerRadius, centerExtraHeight, centerBottomRadius, leftExtraHeight) : ""
 
     Shape {
         anchors.fill: parent

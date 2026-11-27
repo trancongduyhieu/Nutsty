@@ -31,8 +31,10 @@ function centerNotchX(W, leftW, centerW, rightW) {
 // rc: the hole's own corner radius, concentric with the window's (defaults to RC).
 // centerExtra: how much deeper the center notch reaches while it is open (mood chips)
 // cbr: the center notch's bottom corner radius (defaults to BR; it grows while the notch is open)
-function innerPath(W, Hh, leftW, centerW, rightW, rc, centerExtra, cbr) {
+// leftExtra: how much deeper the left notch hangs (room for the logo)
+function innerPath(W, Hh, leftW, centerW, rightW, rc, centerExtra, cbr, leftExtra) {
     var hc = H + (centerExtra > 0 ? centerExtra : 0);
+    var hl = H + (leftExtra > 0 ? leftExtra : 0);
     var CB = cbr > 0 ? cbr : BR;
     var C = rc > 0 ? rc : RC;
     var L = B, T = B, Rr = W - B, Bt = Hh - B;
@@ -59,8 +61,8 @@ function innerPath(W, Hh, leftW, centerW, rightW, rc, centerExtra, cbr) {
     d += " V " + (Bt - C) + a(C, 1, Rr - C, Bt)
        + " H " + (L + C) + a(C, 1, L, Bt - C);
     if (wl > 0) {
-        d += " V " + (T + H + R) + a(R, 1, L + R, T + H)
-           + " H " + (L + wl - R - BR) + a(BR, 0, L + wl - R, T + H - BR)
+        d += " V " + (T + hl + R) + a(R, 1, L + R, T + hl)
+           + " H " + (L + wl - R - BR) + a(BR, 0, L + wl - R, T + hl - BR)
            + " V " + (T + R) + a(R, 1, L + wl, T);
     } else {
         d += " V " + (T + C) + a(C, 1, L + C, T);
@@ -69,8 +71,8 @@ function innerPath(W, Hh, leftW, centerW, rightW, rc, centerExtra, cbr) {
 }
 
 // Outer rectangle plus the hole: filled with OddEvenFill this leaves only the band and notches
-function framePath(W, Hh, leftW, centerW, rightW, rc, centerExtra, cbr) {
-    return "M 0 0 H " + W + " V " + Hh + " H 0 Z " + innerPath(W, Hh, leftW, centerW, rightW, rc, centerExtra, cbr);
+function framePath(W, Hh, leftW, centerW, rightW, rc, centerExtra, cbr, leftExtra) {
+    return "M 0 0 H " + W + " V " + Hh + " H 0 Z " + innerPath(W, Hh, leftW, centerW, rightW, rc, centerExtra, cbr, leftExtra);
 }
 
 // The center notch on its own, with the band strip above it, outlined clockwise: drawn over the

@@ -103,6 +103,15 @@ assert.ok(inner.includes('A 8 8 0 0 1 1594 44'), inner);
 assert.ok(L.centerNotchPath(1600, 0, 228, 60, 44, 22).includes('A 22 22 0 0 1 892 80'));
 assert.strictEqual(L.innerPath(1600, 1000, 0, 228, 60, 12, 44, 0), L.innerPath(1600, 1000, 0, 228, 60, 12, 44));
 
+// The left notch can hang deeper than the others (room for a bigger logo); the rest stays put
+inner = L.innerPath(1600, 1000, 34, 228, 60, 12, 0, 0, 6);
+assert.ok(inner.includes('V 50 A 8 8 0 0 1 14 42'), inner);          // concave join at 6 + 36 + 8
+assert.ok(inner.includes('A 15 15 0 0 0 40 27'), inner);             // bottom corner up to 42 - 15
+assert.ok(inner.includes('A 8 8 0 0 1 1594 44'), inner);             // right notch unchanged
+assert.ok(inner.includes('A 15 15 0 0 0 701 36'), inner);            // center notch unchanged
+assert.strictEqual(L.innerPath(1600, 1000, 34, 228, 60, 12, 0, 0, 0), L.innerPath(1600, 1000, 34, 228, 60, 12));
+assert.ok(L.framePath(1600, 1000, 34, 228, 60, 12, 0, 0, 6).includes('V 50 A 8 8 0 0 1 14 42'));
+
 // Spring: run at 60 fps and look at the curve
 function run(x, v, target, resp, damp, frames) {
     let peak = x, s = [x, v];

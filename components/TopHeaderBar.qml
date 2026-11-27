@@ -260,6 +260,7 @@ Rectangle {
         width: headerRoot.width
         height: headerRoot.frameHeight
         visible: headerRoot.notchMode && height > 0
+        leftExtraHeight: headerRoot.notchMode ? 6 : 0
         // the Nutsty mark (home) always, then the collapse chevron while Now Playing is open
         leftContentWidth: headerRoot.notchMode
             ? logoNotchBtn.width + (collapseNotchBtn.shown ? 1 + headerRoot.navBox : 0) + 6 : 0
@@ -301,9 +302,9 @@ Rectangle {
         id: logoNotchBtn
         visible: headerRoot.notchMode
         x: notchFrame.leftContentX + 1
-        // as big as the notch allows (its full 30px depth below the band, 1px clear at the bottom)
+        // liner-sized mark: the left notch hangs 6px deeper than the others to hold it
         y: notchFrame.band
-        width: 30; height: 29
+        width: 36; height: 35
         radius: 8
         color: logoH.hovered ? Qt.rgba(headerRoot.accentColor.r, headerRoot.accentColor.g, headerRoot.accentColor.b, 0.22) : "transparent"
         Behavior on color { ColorAnimation { duration: 140 } }
@@ -314,7 +315,7 @@ Rectangle {
         AppIcon {
             anchors.centerIn: parent
             source: "../assets/icons/nutsty-outline-symbolic.svg"
-            iconSize: 27
+            iconSize: 32
             color: "#ffffff"
             opacity: logoH.hovered || (headerRoot.currentView === "home" && !headerRoot.isNowPlayingOpen) ? 1.0 : 0.8
             scale: logoMouse.pressed ? 0.9 : (logoH.hovered ? 1.06 : 1.0)
@@ -330,7 +331,7 @@ Rectangle {
         readonly property bool shown: headerRoot.notchMode && headerRoot.isNowPlayingOpen
         visible: shown
         x: logoNotchBtn.x + logoNotchBtn.width + 1
-        y: notchFrame.band
+        y: Math.round(logoNotchBtn.y + (logoNotchBtn.height - height) / 2)
         width: headerRoot.navBox; height: headerRoot.navBox
         radius: 8
         color: collapseNotchH.hovered ? Qt.rgba(headerRoot.accentColor.r, headerRoot.accentColor.g, headerRoot.accentColor.b, 0.22) : "transparent"
