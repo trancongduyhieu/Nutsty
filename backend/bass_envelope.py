@@ -1,10 +1,16 @@
 """How hard a track's bass hits over time, for the artwork backdrop's pulse.
 
-Port of SimpMusic's BassEnvelope (core/domain/.../player/BassEnvelope.kt): mono samples go through two
-one-pole low-passes at 150 Hz, each 25 ms slot keeps the RMS of what passed, and a slot's pulse is judged
-against the hardest hit within 2 s either side (never less than 0.15 of the track's loud hits), so a quiet
-verse pulses as plainly as a loud drop. The whole track is measured, then every slot's pulse is stored as
-one byte (0..255).
+The level comes from SimpMusic's BassEnvelope (core/domain/.../player/BassEnvelope.kt): mono samples go
+through two one-pole low-passes at 150 Hz and each 25 ms slot keeps the RMS of what passed. From those
+levels two channels are stored, one byte (0..255) per slot each:
+
+- hit: how sharply the bass just rose (against its own last ~150 ms), judged against the sharpest rise
+  within 2 s either side, then weighted by how loud that stretch is against the whole track. A kick hits;
+  a held 808 hits once when it starts, not for as long as it rings; a drop hits harder than a verse, and a
+  quiet verse still hits (SimpMusic judged the level itself, so a held bass kept the pulse at full and a
+  verse hit as hard as the drop).
+- body: the bass that stays, the quietest slot within 150 ms either side against the track's loud hits.
+  Spaced kicks leave gaps and score near 0; a held bass or a thick bass line fills it.
 """
 import array
 import math
@@ -17,6 +23,9 @@ from collections import deque
 SLOTS_PER_SECOND = 40
 CUTOFF_HZ = 150.0
 FLOOR = 0.5
+RISE_FOLLOW_S = 0.15     # a rise is measured against the bass of about the last 150 ms
+SECTION_MIN = 0.45       # a stretch at a quarter of the track's loud level still hits at ~0.59 of a drop
+BODY_HALF_SLOTS = 6      # body: the quietest slot within 150 ms either side
 REFERENCE_PERCENTILE = 0.95
 WINDOW_SLOTS = 2 * SLOTS_PER_SECOND
 QUIET_SHARE = 0.15
@@ -26,7 +35,7 @@ MAX_SLOTS = 6 * 3600 * SLOTS_PER_SECOND
 
 
 class BassEnvelope:
-    """Feed a continuous mono stream with add(); pulses() closes it and returns one byte per slot."""
+    """Feed a continuous mono stream with add(); channels() closes it and returns (hit, body)."""
 
     def __init__(self, rate):
         self.rate = rate
@@ -67,10 +76,10 @@ class BassEnvelope:
             self.levels.append(0.0)
         self.levels.append(math.sqrt(s / c))
 
-    def pulses(self):
+    def channels(self):
         self._store(self._slot, self._sum, self._count)
         self._sum, self._count = 0.0, 0
-        return pulses_from_levels(self.levels)
+        return channels_from_levels(self.levels)
 
 
 def _bin(level):
@@ -100,35 +109,59 @@ def _reference(levels):
     return _level_of(HISTOGRAM_BINS)
 
 
-def pulses_from_levels(levels):
-    """One byte per slot: round(pulse * 255), pulse as SimpMusic's pulseAt."""
-    reference = _reference(levels)
-    if reference <= 0 or not levels:
-        return bytes(len(levels))
-    quiet = reference * QUIET_SHARE
-    n = len(levels)
-    out = bytearray(n)
-    window = deque()  # indices with decreasing levels: front is the max of [i-W, i+W]
+def _window_max(values, half):
+    """max over [i-half, i+half] for every i (sliding window, O(n))."""
+    n = len(values)
+    out = [0.0] * n
+    window = deque()
     nxt = 0
     for i in range(n):
-        hi = min(n - 1, i + WINDOW_SLOTS)
+        hi = min(n - 1, i + half)
         while nxt <= hi:
-            while window and levels[window[-1]] <= levels[nxt]:
+            while window and values[window[-1]] <= values[nxt]:
                 window.pop()
             window.append(nxt)
             nxt += 1
-        while window[0] < i - WINDOW_SLOTS:
+        while window[0] < i - half:
             window.popleft()
-        local = max(quiet, levels[window[0]])
-        p = (levels[i] / local - FLOOR) / (1.0 - FLOOR)
-        out[i] = int(round(min(max(p, 0.0), 1.0) * 255))
-    return bytes(out)
+        out[i] = values[window[0]]
+    return out
 
 
-def pulses_from_samples(samples, rate):
+def _byte(x):
+    return int(round(min(max(x, 0.0), 1.0) * 255))
+
+
+def channels_from_levels(levels):
+    """(hit, body): one byte per slot each, as described at the top of this module."""
+    n = len(levels)
+    reference = _reference(levels)
+    if reference <= 0 or n == 0:
+        return bytes(n), bytes(n)
+    quiet = reference * QUIET_SHARE
+    keep = math.exp(-1.0 / (SLOTS_PER_SECOND * RISE_FOLLOW_S))
+    rises = [0.0] * n
+    follow = 0.0
+    for i, v in enumerate(levels):
+        rises[i] = max(0.0, v - follow)
+        follow = keep * follow + (1.0 - keep) * v
+    local_rise = _window_max(rises, WINDOW_SLOTS)
+    local_level = _window_max(levels, WINDOW_SLOTS)
+    lows = [-v for v in _window_max([-v for v in levels], BODY_HALF_SLOTS)]
+    hit = bytearray(n)
+    body = bytearray(n)
+    for i in range(n):
+        sharp = (rises[i] / max(quiet, local_rise[i]) - FLOOR) / (1.0 - FLOOR)
+        section = SECTION_MIN + (1.0 - SECTION_MIN) * min(1.0, local_level[i] / reference)
+        hit[i] = _byte(sharp * section)
+        body[i] = _byte(lows[i] / reference)
+    return bytes(hit), bytes(body)
+
+
+def analyze(samples, rate):
     env = BassEnvelope(rate)
     env.add(samples)
-    return env.pulses()
+    return env.channels()
 
 
 # ---- measuring a whole track and caching it ----
@@ -144,7 +177,7 @@ _CHUNK = 1 << 16   # ~33 s of audio per read; the GIL is let go between reads (W
 
 def _cache_path(cache_dir, key):
     import hashlib
-    return os.path.join(cache_dir, hashlib.sha1(key.encode("utf-8", "replace")).hexdigest() + ".bass")
+    return os.path.join(cache_dir, hashlib.sha1(key.encode("utf-8", "replace")).hexdigest() + ".bp")
 
 
 def _default_cache_dir():
@@ -159,7 +192,9 @@ def _prune(cache_dir):
             f = os.path.join(cache_dir, n)
             if n.endswith((".raw", ".tmp")) and now - os.path.getmtime(f) > 3600:
                 os.remove(f)   # left behind by a killed measurement
-        names = [os.path.join(cache_dir, n) for n in os.listdir(cache_dir) if n.endswith(".bass")]
+            elif n.endswith(".bass"):
+                os.remove(f)   # one-channel pulses from before hit/body: measured again when played
+        names = [os.path.join(cache_dir, n) for n in os.listdir(cache_dir) if n.endswith(".bp")]
         if len(names) <= CACHE_KEEP:
             return
         names.sort(key=lambda f: os.path.getmtime(f))
@@ -170,17 +205,18 @@ def _prune(cache_dir):
 
 
 def cached(key, cache_dir=None):
-    """The stored pulse for key (b"" = measured, nothing usable), or None when not measured yet."""
+    """(hit, body) stored for key ((b"", b"") = measured, nothing usable), or None when not measured yet."""
     path = _cache_path(cache_dir or _default_cache_dir(), key)
     try:
         with open(path, "rb") as f:
-            return f.read()
+            data = f.read()
     except OSError:
         return None
+    return data[0::2], data[1::2]   # stored interleaved: hit, body per slot
 
 
 def measure(url, stream_args, key, cache_dir=None, expect_s=0.0):
-    """Pulse bytes for the track at url (decoding it once through mpv), or None when decoding failed.
+    """(hit, body) bytes for the track at url (decoding it once through mpv), or None when decoding failed.
     expect_s: the track's known length; a decode that stops well short of it (a dropped stream) is not cached."""
     cache_dir = cache_dir or _default_cache_dir()
     hit = cached(key, cache_dir)
@@ -224,7 +260,7 @@ def measure(url, stream_args, key, cache_dir=None, expect_s=0.0):
         if expect_s > 0 and env.n / ANALYSIS_RATE < 0.9 * min(expect_s, MAX_SECONDS):
             sys.stderr.write(f"[bass] decode stopped at {env.n / ANALYSIS_RATE:.0f}s of {expect_s:.0f}s\n")
             return None
-        pulse = env.pulses()
+        hit, body = env.channels()
     except Exception as e:
         sys.stderr.write(f"[bass] measure failed: {e}\n")
         return None
@@ -233,15 +269,15 @@ def measure(url, stream_args, key, cache_dir=None, expect_s=0.0):
             os.remove(raw_path)
         except OSError:
             pass
-    if not any(pulse):
-        pulse = b""
+    if not any(hit) and not any(body):
+        hit = body = b""
     path = _cache_path(cache_dir, key)
     tmp = path + ".tmp"
     try:
         with open(tmp, "wb") as f:
-            f.write(pulse)
+            f.write(bytes(b for pair in zip(hit, body) for b in pair))
         os.replace(tmp, path)
         _prune(cache_dir)
     except OSError:
         pass
-    return pulse
+    return hit, body

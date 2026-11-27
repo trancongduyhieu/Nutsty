@@ -247,11 +247,12 @@ Scope {
     property bool autoMixEnabled: false
     // Bass pulse (backend/bass_envelope.py): the artwork backdrop swells with the bass. Off by default
     property bool bassPulseEnabled: false
-    property var bassSlotsByKey: ({})        // track key -> [0..255 per 25 ms], the last few tracks only
+    property var bassSlotsByKey: ({})        // track key -> {hit, body}, 0..255 per 25 ms, the last few tracks only
     property var bassFailedKeys: ({})        // measured and failed this session: not retried
     property string bassPrefetchKey: ""
     property real currentTimeStampMs: 0      // when currentTime was last read, for the backdrop's playhead
     onCurrentTimeChanged: currentTimeStampMs = Date.now()
+    // {hit, body} of the playing track, or null
     readonly property var currentBassSlots: (bassPulseEnabled && currentTrack) ? (bassSlotsByKey[PlaybackEngine.trackKeyOf(currentTrack)] || null) : null
     function bassPulseWake() { if (bassPulseEnabled && isPlaying && isWindowEffectivelyActive) requestBassPulse(currentTrack, true); }
     onLiteModeChanged: bassPulseWake()
@@ -2679,7 +2680,8 @@ Scope {
                     zoom: 1.6
                     darkScrim: 0.0
                     pulseOn: win.isPlaying && !win.isLoadingAudio
-                    pulseSlots: win.currentBassSlots
+                    pulseSlots: win.currentBassSlots ? win.currentBassSlots.hit : null
+                    bodySlots: win.currentBassSlots ? win.currentBassSlots.body : null
                     playhead: win.currentTime
                     playheadStampMs: win.currentTimeStampMs
                     opacity: (win.currentTrack && win.isPlaying) ? 0.88 : 0.0
@@ -5805,7 +5807,7 @@ Scope {
                             if (keep.indexOf(old[i]) < 0) m[old[i]] = win.bassSlotsByKey[old[i]];
                         for (var j = 0; j < keep.length; j++)
                             if (keep[j] && win.bassSlotsByKey[keep[j]]) m[keep[j]] = win.bassSlotsByKey[keep[j]];
-                        m[key] = r.slots;
+                        m[key] = { hit: r.slots, body: r.body || [] };
                         win.bassSlotsByKey = m;
                     } else if (r) {
                         // failed, or plays from Tidal (not measured): not asked again this session
@@ -6015,10 +6017,10 @@ Scope {
         function bassPulseState(): string {
             var slots = win.currentBassSlots;
             return JSON.stringify({ enabled: win.bassPulseEnabled, playing: win.isPlaying, liteMode: win.liteMode,
-                                    key: PlaybackEngine.trackKeyOf(win.currentTrack), slots: slots ? slots.length : 0,
+                                    key: PlaybackEngine.trackKeyOf(win.currentTrack), slots: slots ? slots.hit.length : 0,
                                     measuring: bassProc.running ? bassProc.forKey : "", cached: Object.keys(win.bassSlotsByKey),
                                     prefetch: win.bassPrefetchKey, t: win.currentTime, dur: win.totalDuration,
-                                    pulse: songAtmosphereEffect.pulse, scale: 1 + songAtmosphereEffect.pulseZoom * songAtmosphereEffect.pulse });
+                                    pulse: songAtmosphereEffect.pulse, body: songAtmosphereEffect.body, scale: songAtmosphereEffect.children.length ? 1 + songAtmosphereEffect.pulseZoom * songAtmosphereEffect.pulse + songAtmosphereEffect.bodyZoom * songAtmosphereEffect.body : 1 });
         }
         // Preview the AutoMix card without waiting for a track end: "upcoming" | "active" | "clear"
         function testAutoMixCard(phase: string): string {

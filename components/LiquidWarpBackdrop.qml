@@ -22,15 +22,19 @@ Item {
     property real animTime: 0.0
 
     // ---- Bass pulse -------------------------------------------------------------------------
-    // pulseSlots: one 0..255 value per 25 ms of the playing song (backend/bass_envelope.py).
-    // The caller hands over the last known position (playhead, seconds) and when it was read
-    // (playheadStampMs, Date.now()); each frame looks the pulse up at the position now. A hit makes
-    // the backdrop swell and the warp run faster for a moment (strength below).
+    // Two channels of 0..255 per 25 ms of the playing song (backend/bass_envelope.py): pulseSlots, how
+    // hard the bass hits (a kick, the start of a note; a drop harder than a verse), and bodySlots, how
+    // much bass stays (a held 808, a thick bass line). The caller hands over the last known position
+    // (playhead, seconds) and when it was read (playheadStampMs, Date.now()); each frame looks both up
+    // at the position now. A hit swells the backdrop and runs the warp faster for a moment; a held bass
+    // keeps it slightly fuller and quicker for as long as it lasts, easing in and out
     property var pulseSlots: null
+    property var bodySlots: null
     property bool pulseOn: false
     property real playhead: 0
     property real playheadStampMs: 0
     property real pulse: 0
+    property real body: 0
     // Strength, tuned for a desktop window (SimpMusic's phone numbers, 8% / 4x / instant / 140 ms, read
     // as too strong here): a hit eases in over ~40 ms, swells up to 3.5%, warps up to 2.5x and fades over
     // ~220 ms; the level is shaped by ^1.5 so moderate hits swell little and only the hardest swell fully
@@ -38,17 +42,23 @@ Item {
     readonly property real pulseWarp: 1.5
     readonly property real pulseAttackS: 0.04
     readonly property real pulseDecayS: 0.22
+    readonly property real bodyZoom: 0.012
+    readonly property real bodyWarp: 0.6
+    readonly property real bodyEaseS: 0.35
     property int lastSlot: -1
+    property real bodyTarget: 0
 
     // The strongest slot passed since the last frame, so a slow frame (or 30 fps) never skips a hit.
     // The position counts on from the last status read for at most 0.5 s: past that the reads have
     // stopped (loading, a stall) and guessing on would run ahead of the sound
     function pulseTarget() {
-        if (!pulseOn || !pulseSlots || pulseSlots.length === 0) { lastSlot = -1; return 0; }
+        if (!pulseOn || !pulseSlots || pulseSlots.length === 0) { lastSlot = -1; bodyTarget = 0; return 0; }
         var t = playhead + Math.min(0.5, Math.max(0, Date.now() - playheadStampMs) / 1000);
         var i = Math.floor(t * 40);
         var from = (lastSlot >= 0 && i > lastSlot && i - lastSlot <= 8) ? lastSlot + 1 : i;
         lastSlot = i;
+        var b = (pulseOn && bodySlots && i >= 0 && i < bodySlots.length) ? bodySlots[i] / 255 : 0;
+        bodyTarget = b;
         var best = 0;
         for (var k = Math.max(0, from); k <= i && k < pulseSlots.length; k++)
             if (pulseSlots[k] > best) best = pulseSlots[k];
@@ -64,9 +74,12 @@ Item {
                     ? root.pulse + (target - root.pulse) * (1 - Math.exp(-dt / root.pulseAttackS))
                     : Math.max(target, root.pulse * Math.exp(-dt / root.pulseDecayS));
             root.pulse = p < 0.002 ? 0 : p;
-            root.animTime = (root.animTime + dt * (62.831853 / 50) * (1 + root.pulseWarp * root.pulse)) % 62.831853;
+            var b = root.body + (root.bodyTarget - root.body) * (1 - Math.exp(-dt / root.bodyEaseS));
+            root.body = b < 0.002 ? 0 : b;
+            root.animTime = (root.animTime + dt * (62.831853 / 50)
+                             * (1 + root.pulseWarp * root.pulse + root.bodyWarp * root.body)) % 62.831853;
         }
-        onRunningChanged: if (!running) root.pulse = 0
+        onRunningChanged: if (!running) { root.pulse = 0; root.body = 0; }
     }
 
     // ---- Artwork hand-over ------------------------------------------------------------------
@@ -176,7 +189,7 @@ Item {
         width: root.width
         height: root.height
         source: warpEffect
-        scale: 1 + root.pulseZoom * root.pulse
+        scale: 1 + root.pulseZoom * root.pulse + root.bodyZoom * root.body
         visible: root.frontImg.status === Image.Ready
         blurEnabled: true
         blur: 1.0

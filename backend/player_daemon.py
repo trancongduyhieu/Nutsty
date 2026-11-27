@@ -813,7 +813,8 @@ def _resolve_for_crossfade(file_path, title, artist, my_epoch=0, source_out=None
 
 
 def _bass_envelope(path, title, artist, duration_s=0.0):
-    """{"ok", "key", "slots"}: one 0..255 pulse per 25 ms of the track; Tidal lossless is not measured."""
+    """{"ok", "key", "slots", "body"}: per 25 ms of the track, 0..255 how hard the bass hits (slots) and how
+    much of it stays (body), see bass_envelope.py; Tidal lossless is not measured."""
     import bass_envelope as be
     key = path
     # With lossless on an online song may play from Tidal, whose cut can differ from YouTube's: find the
@@ -833,7 +834,7 @@ def _bass_envelope(path, title, artist, duration_s=0.0):
         hit = be.measure(url, _mpv_stream_args(fmt, ua), key, expect_s=expect)
         if hit is None:
             return {"ok": False, "key": key, "reason": "decode"}
-    return {"ok": True, "key": key, "slots": list(hit)}
+    return {"ok": True, "key": key, "slots": list(hit[0]), "body": list(hit[1])}
 
 
 def _media_duration(url):
