@@ -1624,29 +1624,30 @@ Rectangle {
                 // needs the Discord app open on this computer. Signed in: no app needed at all.
                 Item {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: Math.max(36, discordAccountRow.implicitHeight) + 2
+                    Layout.preferredHeight: Math.max(root.discordSignedIn ? 48 : 36, discordAccountRow.implicitHeight) + 2
                     visible: root.discordPresenceEnabled
 
                     Row {
                         id: discordAccountRow
                         anchors.left: parent.left
-                        anchors.leftMargin: 58
+                        // signed in: the picture sits under the Discord icon, text under the title
+                        anchors.leftMargin: root.discordSignedIn ? 0 : 58
                         anchors.right: discordAccountBtn.left
                         anchors.rightMargin: 14
                         anchors.verticalCenter: parent.verticalCenter
-                        spacing: 10
+                        spacing: 14
 
-                        // Discord picture of the signed-in account (32x32, radius 9 = 12 - padding)
+                        // Discord picture of the signed-in account, same frame as the icon above
                         Item {
-                            width: 32
-                            height: 32
+                            width: 44
+                            height: 44
                             anchors.verticalCenter: parent.verticalCenter
                             visible: root.discordSignedIn
 
                             Rectangle {
                                 id: discordAvatarMask
                                 anchors.fill: parent
-                                radius: 9
+                                radius: 12
                                 color: "#ffffff"
                                 visible: false
                                 layer.enabled: true
@@ -1669,7 +1670,7 @@ Rectangle {
                                         anchors.centerIn: parent
                                         text: root.discordAccountName ? root.discordAccountName.substring(0, 1).toUpperCase() : "D"
                                         font.family: Theme.fontFamily
-                                        font.pixelSize: 14
+                                        font.pixelSize: 18
                                         font.bold: true
                                         color: "#ffffff"
                                     }
@@ -1677,7 +1678,7 @@ Rectangle {
 
                                 Image {
                                     anchors.fill: parent
-                                    sourceSize: Qt.size(64, 64)
+                                    sourceSize: Qt.size(96, 96)
                                     source: root.discordAccountAvatar
                                     fillMode: Image.PreserveAspectCrop
                                     visible: root.discordAccountAvatar !== "" && status === Image.Ready
@@ -1688,7 +1689,7 @@ Rectangle {
 
                             Rectangle {
                                 anchors.fill: parent
-                                radius: 9
+                                radius: 12
                                 color: "transparent"
                                 border.color: Qt.rgba(255, 255, 255, 0.20)
                                 border.width: 1
@@ -1698,7 +1699,7 @@ Rectangle {
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 2
-                            width: parent.width - (root.discordSignedIn ? 42 : 0)
+                            width: parent.width - (root.discordSignedIn ? 58 : 0)
 
                             Text {
                                 width: parent.width
