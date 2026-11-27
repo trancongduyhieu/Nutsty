@@ -270,6 +270,22 @@ function maybePrefetchNextCover(win) {
     if (typeof win.prefetchTrackCover === "function") win.prefetchTrackCover(nextTrk);
 }
 
+// From 50% of a track, measure the next track's bass in the background so its backdrop pulses
+// from the first beat (decoding a whole song takes a few seconds)
+function maybePrefetchNextBass(win) {
+    if (!win.bassPulseEnabled || win.liteMode || !win.isPlaying) return;
+    var dur = win.totalDuration;
+    if (!(dur > 0) || win.currentTime < dur * 0.5) return;
+    var key = trackKeyOf(win.currentTrack);
+    if (!key) return;
+    var nextTrk = peekNextTrack(win);
+    if (!nextTrk) return;
+    var pairKey = key + ">" + trackKeyOf(nextTrk);   // queue edits after 50% measure the new next track
+    if (win.bassPrefetchKey === pairKey) return;
+    win.bassPrefetchKey = pairKey;
+    if (typeof win.requestBassPulse === "function") win.requestBassPulse(nextTrk, false);
+}
+
 // Seconds before the blend starts that the Now Playing view shows the upcoming track
 var MIX_PREVIEW_SEC = 14.0;
 
@@ -1295,6 +1311,7 @@ function handlePlayerStatus(win, data, listenAlongSeekSafetyTimer, sessionFileVi
         // Auto-advance / Repeat khi het bai
         var seekGraceAdv = Date.now() - (win.lastSeekTimestamp || 0) < 2500;
         maybePrefetchNextCover(win);
+        maybePrefetchNextBass(win);
         if (maybeStartCrossfade(win, seekGraceAdv)) return;
         var isNearEnd = !seekGraceAdv && win.totalDuration > 3 && win.currentTime >= (win.totalDuration - 1.0);
         var isEofStopped = !seekGraceAdv && (!s.is_playing && !s.is_paused && win.totalDuration > 3 && win.currentTime >= (win.totalDuration - 4.0));

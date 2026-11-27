@@ -9,6 +9,9 @@ Số phiên bản có dạng `A.B.C`, ví dụ `1.2.0`:
 
 ## [2.7.0] - 2026-11-27
 
+### Added
+- **Nền ảnh bìa đập theo nhịp bass**: Bật "Đập theo nhịp bass" trong Cài đặt > Giao diện thì nền ảnh bìa mờ phía sau cửa sổ, ở cả trang chủ lẫn màn Đang phát, phồng nhẹ và uốn nhanh hơn mỗi khi có cú bass. Đoạn hát nhỏ cũng đập rõ như đoạn cao trào, và tiếng hát hay tiếng hi-hat không làm nền đập. Lần đầu nghe một bài, Nutsty cần vài giây để nghe trước cả bài; khi bài đang phát được nửa chừng, bài kế tiếp được nghe trước luôn nên chuyển bài là đập ngay. Nền đứng yên khi tạm dừng, khi bật Chế độ nhẹ và với bài lossless từ Tidal. Mặc định tắt.
+
 ### Fixed
 - **Biết ngay cần tải bao nhiêu khi cập nhật trên Linux**: Trên Linux, bảng cập nhật có lúc cứ quay số mãi, không hiện dung lượng và không có nút cập nhật, chỉ còn nút "Để sau". Giờ chỉ một hai giây là hiện đúng phần cần tải (thường chỉ vài trăm KB), kèm nút "Cập nhật". Nếu không tính được, ví dụ lúc mất mạng, bảng ghi "Sẵn sàng cập nhật" và vẫn cho bấm cập nhật.
 - **Bảng cập nhật hiện dung lượng sớm hơn**: Trước đây có lúc máy đã tính xong mà bảng cập nhật vẫn chờ thêm vài giây mới hiện con số và nút cập nhật. Giờ tính xong là hiện ngay, trên cả Windows lẫn Linux.

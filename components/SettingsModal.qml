@@ -38,6 +38,7 @@ Rectangle {
     property bool liteModeAutoActive: false
     property int crossfadeSeconds: 6
     property bool autoMixEnabled: false
+    property bool bassPulseEnabled: false
     // Fully bit-perfect lossless holds the DAC alone: AutoMix cannot run
     property bool autoMixLocked: false
     property int cacheLimitMb: 1536
@@ -388,6 +389,7 @@ Rectangle {
     signal toggleSyncHistoryRequested(bool enabled)
 
     signal toggleAnimatedCoverRequested(bool enabled)
+    signal toggleBassPulseRequested(bool enabled)
     signal toggleCrossfadeRequested(bool enabled)
     signal toggleScrollEdgeFadeRequested(bool enabled)
     signal toggleUpNextTiltRequested(bool enabled)
@@ -3531,6 +3533,72 @@ Rectangle {
                                         }
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+
+                // =============================================================
+                // Bass pulse: the artwork background swells with the bass (backend/bass_envelope.py)
+                // =============================================================
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 46
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: toggleBassPulse.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Đập theo nhịp bass", "Pulse to the bass")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Nền ảnh bìa phồng nhẹ theo tiếng bass của bài đang phát", "The artwork background swells with the bass of the playing song")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    Rectangle {
+                        id: toggleBassPulse
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 44
+                        height: 24
+                        radius: 12
+                        color: root.bassPulseEnabled ? root.accentColor : Qt.rgba(255, 255, 255, 0.14)
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        Rectangle {
+                            width: 18
+                            height: 18
+                            radius: 9
+                            color: "#ffffff"
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: root.bassPulseEnabled ? parent.width - width - 3 : 3
+                            Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            preventStealing: false
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                root.bassPulseEnabled = !root.bassPulseEnabled;
+                                root.toggleBassPulseRequested(root.bassPulseEnabled);
                             }
                         }
                     }

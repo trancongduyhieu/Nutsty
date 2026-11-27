@@ -244,6 +244,16 @@ Scope {
         cacheProc.running = true;
     }
     property bool autoMixEnabled: false
+    // Bass pulse (backend/bass_envelope.py): the artwork backdrop swells with the bass. Off by default
+    property bool bassPulseEnabled: false
+    property var bassSlotsByKey: ({})        // track key -> [0..255 per 25 ms], the last few tracks only
+    property var bassFailedKeys: ({})        // measured and failed this session: not retried
+    property string bassPrefetchKey: ""
+    property real currentTimeStampMs: 0      // when currentTime was last read, for the backdrop's playhead
+    onCurrentTimeChanged: currentTimeStampMs = Date.now()
+    readonly property var currentBassSlots: (bassPulseEnabled && currentTrack) ? (bassSlotsByKey[PlaybackEngine.trackKeyOf(currentTrack)] || null) : null
+    function bassPulseWake() { if (bassPulseEnabled && isPlaying && !liteMode) requestBassPulse(currentTrack, true); }
+    onBassPulseEnabledChanged: bassPulseWake()
     property var autoMixPlan: null
     property string mixNextDurationKey: ""
     property real mixNextDuration: 0
@@ -2263,6 +2273,7 @@ Scope {
         }
     }
     onCurrentTrackChanged: {
+        bassPulseWake();
         win.currentResolvedCover = "";
         win.triggerUserActiveBoost();
         var coverUrl = win.getTrackCoverUrl(win.currentTrack);
@@ -2333,6 +2344,7 @@ Scope {
         }
     }
     onIsPlayingChanged: {
+        bassPulseWake();
         win.triggerUserActiveBoost();
         if (win.isPlaying && win.currentTrack) {
             var coverUrl = win.getTrackCoverUrl(win.currentTrack);
@@ -2664,6 +2676,10 @@ Scope {
                     running: Boolean(win.isPlaying && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive)))
                     zoom: 1.6
                     darkScrim: 0.0
+                    pulseOn: win.isPlaying
+                    pulseSlots: win.currentBassSlots
+                    playhead: win.currentTime
+                    playheadStampMs: win.currentTimeStampMs
                     opacity: (win.currentTrack && win.isPlaying) ? 0.88 : 0.0
                     visible: opacity > 0.02
                     Behavior on opacity {
@@ -3960,6 +3976,7 @@ Scope {
             liteModeAutoActive: win.softwareRendering
             closeBehavior: win.closeBehavior
             autoMixEnabled: win.autoMixEnabled
+            bassPulseEnabled: win.bassPulseEnabled
             cacheLimitMb: win.cacheLimitMb
             cacheUsage: win.cacheUsage
             cacheBusy: win.cacheBusy
@@ -4066,6 +4083,10 @@ Scope {
                 win.autoMixBeforeLossless = enabled;
                 win.autoMixPlan = null;
                 win.autoMixRequestedKey = "";
+                win.saveSettings();
+            }
+            onToggleBassPulseRequested: enabled => {
+                win.bassPulseEnabled = enabled;
                 win.saveSettings();
             }
             onToggleAnimatedCoverRequested: enabled => {
@@ -4829,6 +4850,7 @@ Scope {
             if (obj.cacheLimitMb !== undefined) win.cacheLimitMb = [1024, 1536, 2048].indexOf(parseInt(obj.cacheLimitMb)) >= 0 ? parseInt(obj.cacheLimitMb) : 1536;
             if (obj.crossfadeSeconds !== undefined) win.crossfadeSeconds = Math.max(2, Math.min(12, parseInt(obj.crossfadeSeconds) || 6));
             if (obj.autoMixEnabled !== undefined) win.autoMixEnabled = !!obj.autoMixEnabled;
+            if (obj.bassPulseEnabled !== undefined) win.bassPulseEnabled = !!obj.bassPulseEnabled;
             var ll = LosslessLogic.normalizeLosslessSettings(obj, win.isWindowsPlatform);
             win.losslessEnabled = ll.losslessEnabled;
             win.losslessQuality = ll.losslessQuality;
@@ -4901,6 +4923,7 @@ Scope {
             closeBehavior: win.closeBehavior,
             cacheLimitMb: win.cacheLimitMb,
             autoMixEnabled: win.autoMixEnabled,
+            bassPulseEnabled: win.bassPulseEnabled,
             losslessEnabled: win.losslessEnabled,
             losslessQuality: win.losslessQuality,
             losslessQualityChosen: win.losslessQualityChosen,
@@ -5761,6 +5784,57 @@ Scope {
             }
         }
     }
+    // Bass pulse: one measurement at a time; the playing track goes before the next one
+    Process {
+        id: bassProc
+        property string forKey: ""
+        property var pending: null      // {key, path, title, artist} waiting for the running one
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                try {
+                    var r = JSON.parse(data);
+                    var key = bassProc.forKey;
+                    if (r && r.ok && r.slots && r.slots.length) {
+                        var m = {}, keep = [key, PlaybackEngine.trackKeyOf(win.currentTrack)];
+                        // keep the playing track, the one just measured and two more
+                        var old = Object.keys(win.bassSlotsByKey);
+                        for (var i = old.length - 1; i >= 0 && Object.keys(m).length < 2; i--)
+                            if (keep.indexOf(old[i]) < 0) m[old[i]] = win.bassSlotsByKey[old[i]];
+                        for (var j = 0; j < keep.length; j++)
+                            if (keep[j] && win.bassSlotsByKey[keep[j]]) m[keep[j]] = win.bassSlotsByKey[keep[j]];
+                        m[key] = r.slots;
+                        win.bassSlotsByKey = m;
+                    } else if (r && r.reason !== "tidal") {
+                        var f = win.bassFailedKeys; f[key] = true; win.bassFailedKeys = f;
+                    }
+                } catch(e) {}
+            }
+        }
+        onExited: {
+            var next = bassProc.pending;
+            bassProc.pending = null;
+            if (next && win.bassPulseEnabled) win.startBassProc(next);
+        }
+    }
+    function startBassProc(job) {
+        bassProc.forKey = job.key;
+        bassProc.command = ["python3", win.appDir + "/backend/player_daemon.py", "bass_envelope", job.path, job.title, job.artist];
+        bassProc.running = true;
+    }
+    function requestBassPulse(trk, isCurrent) {
+        if (!bassPulseEnabled || liteMode || !trk) return;
+        var key = PlaybackEngine.trackKeyOf(trk);
+        var path = PlaybackEngine.playablePathOf(win, trk);
+        if (!key || !path || bassSlotsByKey[key] || bassFailedKeys[key]) return;
+        if (bassProc.running && bassProc.forKey === key) return;
+        var job = { key: key, path: path, title: trk.title || trk.name || "", artist: trk.artist || "" };
+        if (!bassProc.running) { startBassProc(job); return; }
+        // the playing track takes the waiting slot over the next one; a next one never displaces it
+        var waiting = bassProc.pending;
+        if (isCurrent || !waiting || waiting.key !== PlaybackEngine.trackKeyOf(win.currentTrack)) bassProc.pending = job;
+    }
+
     function requestMixNextDuration(key, path, title, artist) {
         mixDurProc.running = false;
         mixDurProc.forKey = key;
@@ -5930,6 +6004,16 @@ Scope {
         id: frostifyIpc
         target: "frostify"
         function testShufflePlay() { mainGrid.shufflePlayRequested(); }
+        // Bass pulse check: turn it on/off for this run (not saved) and read what the backdrop gets
+        function setBassPulse(on: bool) { win.bassPulseEnabled = on; }
+        function bassPulseState(): string {
+            var slots = win.currentBassSlots;
+            return JSON.stringify({ enabled: win.bassPulseEnabled, playing: win.isPlaying, liteMode: win.liteMode,
+                                    key: PlaybackEngine.trackKeyOf(win.currentTrack), slots: slots ? slots.length : 0,
+                                    measuring: bassProc.running ? bassProc.forKey : "", cached: Object.keys(win.bassSlotsByKey),
+                                    prefetch: win.bassPrefetchKey, t: win.currentTime, dur: win.totalDuration,
+                                    pulse: songAtmosphereEffect.pulse, scale: 1 + 0.07 * songAtmosphereEffect.pulse });
+        }
         // Preview the AutoMix card without waiting for a track end: "upcoming" | "active" | "clear"
         function testAutoMixCard(phase: string): string {
             // Nothing queued: show the card with two library tracks (nothing starts playing)
