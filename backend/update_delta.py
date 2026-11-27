@@ -145,6 +145,34 @@ def plan(entries, app_dir, stage_dir, skip=(), cancelled=lambda: False):
     return todo, same_bytes
 
 
+def plan_from_baseline(new_entries, base_entries, app_dir, stage_dir, skip=(), cancelled=lambda: False):
+    """Entries that differ between the installed version's zip directory and the new one.
+
+    Hashing every installed file (about 900 MB, thousands of files) takes minutes on Windows, where
+    the virus scanner inspects each file as it is opened. Both directories already carry each file's
+    CRC32, so the answer is metadata only. On the disk only a size check runs, which still catches
+    missing or damaged installed files; staged files are small and are verified as before (resume)."""
+    skip_set = {s.replace("\\", "/") for s in skip}
+    base = {e.name: e for e in base_entries}
+    todo = []
+    for e in new_entries:
+        if cancelled():
+            raise RuntimeError("cancelled")
+        if e.name.endswith("/") or e.name in skip_set:
+            continue
+        old = base.get(e.name)
+        if old is not None and old.crc == e.crc and old.usize == e.usize:
+            try:
+                if os.path.getsize(os.path.join(app_dir, *e.name.split("/"))) == e.usize:
+                    continue
+            except OSError:
+                pass
+        if is_current(os.path.join(stage_dir, *e.name.split("/")), e):
+            continue
+        todo.append(e)
+    return todo
+
+
 def _group(todo):
     groups, cur = [], []
     for e in sorted(todo, key=lambda x: x.offset):

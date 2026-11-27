@@ -16,6 +16,7 @@ import zipfile
 import shutil
 import subprocess
 import threading
+from concurrent.futures import ThreadPoolExecutor
 
 try:
     from . import platform_compat as pc
@@ -244,6 +245,18 @@ def source_archive_url(tag):
     return f"https://github.com/trancongduyhieu/Nutsty/archive/refs/tags/{tag}.zip"
 
 
+def baseline_url(url, current_ver=None):
+    """The same release asset for the version that is installed now, or "" when it cannot be derived."""
+    ver = (current_ver or getattr(pc, "APP_VERSION", "")).strip().lstrip("vV")
+    m = re.search(r"/releases/download/([^/]+)/", str(url))
+    if not ver or not m:
+        return ""
+    tag = "v" + ver
+    if m.group(1) == tag:
+        return ""
+    return url[:m.start(1)] + tag + url[m.end(1):]
+
+
 def source_app_dir():
     return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -395,13 +408,25 @@ class DirectUpdateManager:
                 self.plan_info = None
             return
         try:
-            entries, full_size = ud.read_directory(url)
+            base_url = baseline_url(url)
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                new_job = pool.submit(ud.read_directory, url)
+                base_job = pool.submit(ud.read_directory, base_url) if base_url else None
+                entries, full_size = new_job.result()
+                try:
+                    base_entries = base_job.result()[0] if base_job else None
+                except Exception:
+                    base_entries = None  # this version has no release zip (dev build): hash the folder instead
             app_dir = _install_dir()
             stage = self._stage_dir()
             marker = os.path.join(stage, ".source")
             if os.path.exists(stage) and (not os.path.exists(marker) or open(marker, encoding="utf-8").read() != url):
                 shutil.rmtree(stage, ignore_errors=True)
-            todo, _same = ud.plan(entries, app_dir, stage, skip=LOCAL_STATE_FILES, cancelled=self._is_cancelled)
+            if base_entries:
+                todo = ud.plan_from_baseline(entries, base_entries, app_dir, stage,
+                                             skip=LOCAL_STATE_FILES, cancelled=self._is_cancelled)
+            else:
+                todo, _same = ud.plan(entries, app_dir, stage, skip=LOCAL_STATE_FILES, cancelled=self._is_cancelled)
         except Exception:
             if self._cancel:
                 raise _Cancelled()

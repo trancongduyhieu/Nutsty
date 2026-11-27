@@ -56,6 +56,14 @@ def serve(payload, honour=True):
     return srv, f"http://127.0.0.1:{srv.server_address[1]}/u.zip"
 
 
+def serve_second(payload):
+    """A second server (own handler class) so the main one keeps serving the new zip."""
+    handler = type("BaseHandler", (RangeHandler,), {"payload": payload, "honour_range": True})
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv, f"http://127.0.0.1:{srv.server_address[1]}/base.zip"
+
+
 def main():
     big = os.urandom(300_000)
     old = {"Nutsty.exe": b"exe-v1", "_internal/big.bin": big, "shell.qml": b"qml v1", "components/A.qml": b"A" * 5000}
@@ -92,6 +100,31 @@ def main():
         open(os.path.join(stage, "shell.qml"), "wb").write(b"broken")
         todo3, _ = ud.plan(entries, app, stage)
         assert [e.name for e in todo3] == ["shell.qml"]
+
+        # baseline: the installed version's own zip directory answers the size without reading any app file
+        shutil.rmtree(stage)
+        base_srv, base_url = serve_second(make_zip(old))
+        base_entries, _ = ud.read_directory(base_url)
+        base_srv.shutdown()
+        real_crc = ud.file_crc
+        app_prefix = os.path.join(app, "")
+
+        def no_app_reads(path):
+            assert not path.startswith(app_prefix), f"read an installed file: {path}"
+            return real_crc(path)
+
+        ud.file_crc = no_app_reads
+        try:
+            todo4 = ud.plan_from_baseline(entries, base_entries, app, stage)
+            assert sorted(e.name for e in todo4) == ["components/B.qml", "shell.qml"], [e.name for e in todo4]
+            # a missing or damaged (size changed) installed file is fetched even though the baseline says unchanged
+            os.remove(os.path.join(app, "Nutsty.exe"))
+            open(os.path.join(app, "components", "A.qml"), "wb").write(b"short")
+            todo5 = ud.plan_from_baseline(entries, base_entries, app, stage)
+            assert sorted(e.name for e in todo5) == ["Nutsty.exe", "components/A.qml", "components/B.qml", "shell.qml"], \
+                [e.name for e in todo5]
+        finally:
+            ud.file_crc = real_crc
 
         # a server without Range support must fall back, not mis-parse
         srv.shutdown()
