@@ -186,7 +186,28 @@ Rectangle {
                     brightness: -0.08
                     maskEnabled: true
                     maskSource: notchGlassMask
+                    // soft mask: glass coverage follows the shape's antialiased edge exactly like the
+                    // smoke's does. The default hard mask counted every edge pixel as full glass, a
+                    // 1px ring brighter than the smoked inside: a light blue line along the bottom
+                    // while the notch moved between pixels.
+                    // MultiEffect maps mask alpha through smoothstep(2*min - 1, 2*min, a) when spread is 1:
+                    // min 0.5 gives smoothstep(0, 1, a), i.e. the edge's own coverage (min 0 would show
+                    // the whole crop rectangle)
+                    maskThresholdMin: 0.5
+                    maskSpreadAtMin: 1.0
                     autoPaddingEnabled: false
+                }
+                // the smoke is part of the glass and fades in with it: a tint that ramped up on its own
+                // let the freshly revealed bottom of the notch show the bright blur for a few frames
+                Shape {
+                    width: notchGlass.width; height: notchGlass.height
+                    preferredRendererType: Shape.CurveRenderer
+                    ShapePath {
+                        fillColor: Qt.rgba(0, 0, 0, 0.5)
+                        strokeWidth: -1
+                        PathSvg { path: Frame.centerNotchPath(Math.round(notchFrame.width), notchFrame.leftContentWidth, notchFrame.centerContentWidth,
+                                                              notchFrame.rightContentWidth, notchFrame.centerExtraHeight, notchFrame.centerBottomRadius) }
+                    }
                 }
             }
         }
@@ -205,10 +226,11 @@ Rectangle {
         readonly property real closedW: navCluster.implicitWidth + 8
         readonly property real openW: Math.max(navCluster.implicitWidth, dynamicMoodIsland.expandedTargetWidth) + 8
         centerContentWidth: closedW + (openW - closedW) * headerRoot.moodMorph
-        centerExtraHeight: (headerRoot.moodRowH + 6) * Math.max(0, headerRoot.moodMorph)
-        // open: a dark smoked layer over the frosted backdrop (fill 0.35 + tint 0.5 ~ 0.68), dark
-        // enough for the chips, still showing the blurred colour underneath
-        centerTint: (notchGlass.active ? 0.5 : 0.92) * Math.min(1, Math.max(0, headerRoot.moodMorph))
+        // whole pixels: a bottom edge between pixel rows smears into a soft bright line while it moves
+        centerExtraHeight: Math.round((headerRoot.moodRowH + 6) * Math.max(0, headerRoot.moodMorph))
+        // with the glass the smoke lives in the glass layer (glass + 0.5 smoke + fill 0.35 ~ 0.68 dark);
+        // without a backdrop source it falls back to a near solid black island
+        centerTint: notchGlass.active ? 0 : 0.92 * Math.min(1, Math.max(0, headerRoot.moodMorph))
         // bottom corners round out as it opens (boring.notch: 14 -> 24)
         centerBottomRadius: Frame.BR + 7 * Math.min(1, Math.max(0, headerRoot.moodMorph))
         rightContentWidth: headerRoot.navBox * 2 + 2 + 8
