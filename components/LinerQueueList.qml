@@ -350,9 +350,9 @@ Item {
                     source: underCard
                     autoPaddingEnabled: false
                     blurEnabled: true
+                    // Mochy's glass strength: the rows under the card read as soft colour, not text
                     blur: 1.0
-                    blurMax: 40
-                    blurMultiplier: 0.6
+                    blurMax: 48
                     maskEnabled: true
                     maskSource: cardMask
                     maskThresholdMin: 0.5
