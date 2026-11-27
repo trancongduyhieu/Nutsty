@@ -58,12 +58,92 @@ Item {
     // outer edges dissolve into a blur
     // Playing Next list leans in perspective (upNextMatrix); off keeps it straight
     property bool upNextTilt: false
+    // Style 2 (liner's queue drawer): the panel sits on a frosted card. The window backdrop under
+    // the panel is blurred 48 px, the dark scrim goes back over it and a neutral wash
+    // rgba(70, 70, 70, 0.2) lifts the card off the page; 14 px corners, no border.
+    property bool cardLook: false
+    property Item glassSource: null
+    property Item glassScrim: null
+    readonly property real cardRadius: 14
     property var currentTracks: []
     readonly property real targetPanelWidth: Math.max(380, Math.min(460, Math.round((parent ? parent.width : 1200) * 0.34)))
 
     // Performance Gating (Zero-overhead: disables all shaders, FBOs, and lyric updates when hidden, closed, or in another app)
     property bool isEffectivelyActive: true
     readonly property bool isPanelRenderable: root.visible && root.opacity > 0.01 && root.isEffectivelyActive
+
+    Item {
+        id: glassCard
+        anchors.fill: parent
+        z: -100
+        visible: root.cardLook && root.isPanelRenderable
+        readonly property bool blurOn: visible && !root.liteMode && !!root.glassSource
+        // The settled panel rect in backdrop coordinates. The slide-in transform is left out on
+        // purpose: the backdrop is soft, so sampling the resting spot during the 0.3 s slide reads
+        // the same and spares a per-frame remap.
+        readonly property rect sampleRect: root.parent && root.glassSource
+            ? root.parent.mapToItem(root.glassSource, root.x, root.y, root.width, root.height)
+            : Qt.rect(0, 0, 0, 0)
+
+        Item {
+            id: glassContent
+            anchors.fill: parent
+            visible: false
+            layer.enabled: true
+
+            ShaderEffectSource {
+                id: glassBackdropCrop
+                anchors.fill: parent
+                visible: false
+                live: glassCard.blurOn
+                sourceItem: glassCard.blurOn ? root.glassSource : null
+                sourceRect: glassCard.sampleRect
+            }
+            MultiEffect {
+                anchors.fill: parent
+                visible: glassCard.blurOn
+                source: glassBackdropCrop
+                blurEnabled: true
+                blur: 1.0
+                blurMax: 48
+                autoPaddingEnabled: false
+            }
+            ShaderEffectSource {
+                anchors.fill: parent
+                visible: glassCard.blurOn && !!root.glassScrim
+                live: visible
+                sourceItem: visible ? root.glassScrim : null
+                sourceRect: glassCard.sampleRect
+            }
+            // Lite mode or no backdrop: the same card as a flat fill, no shader
+            Rectangle {
+                anchors.fill: parent
+                visible: !glassCard.blurOn
+                color: Qt.rgba(0.06, 0.06, 0.07, 0.85)
+            }
+            Rectangle {
+                anchors.fill: parent
+                color: Qt.rgba(70 / 255, 70 / 255, 70 / 255, 0.2)
+            }
+        }
+
+        Rectangle {
+            id: glassMask
+            anchors.fill: parent
+            radius: root.cardRadius
+            visible: false
+            layer.enabled: true
+        }
+
+        MultiEffect {
+            anchors.fill: parent
+            source: glassContent
+            maskEnabled: true
+            maskSource: glassMask
+            maskThresholdMin: 0.5
+            maskSpreadAtMin: 1.0
+        }
+    }
 
     signal closeRequested()
     signal openDetailsRequested()

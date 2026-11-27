@@ -35,6 +35,7 @@ Rectangle {
     // "auto" | "on" | "off"; liteModeAutoActive says whether Auto currently resolves to on (no GPU)
     property string liteMode: "auto"
     property string closeBehavior: "widget"
+    property int sidebarStyle: 1
     property bool liteModeAutoActive: false
     property int crossfadeSeconds: 6
     property bool autoMixEnabled: false
@@ -395,6 +396,7 @@ Rectangle {
     signal toggleUpNextTiltRequested(bool enabled)
     signal selectLiteModeRequested(string mode)
     signal selectCloseBehaviorRequested(string mode)
+    signal selectSidebarStyleRequested(int style)
     signal selectCrossfadeSecondsRequested(int seconds)
     signal toggleAutoMixRequested(bool enabled)
     signal refreshCacheUsageRequested()
@@ -3950,6 +3952,113 @@ Rectangle {
                             onClicked: {
                                 root.upNextTilt = !root.upNextTilt;
                                 root.toggleUpNextTiltRequested(root.upNextTilt);
+                            }
+                        }
+                    }
+                }
+
+                // =============================================================
+                // Right sidebar look: 1 floats on the wallpaper, 2 sits on a frosted card
+                // =============================================================
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 46
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: sidebarStyleChips.left
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        Text {
+                            width: parent.width
+                            text: I18n.tr("Kiểu thanh bên", "Sidebar style")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: Theme.textPrimary
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            width: parent.width
+                            text: root.sidebarStyle === 2
+                                  ? I18n.tr("Lời, hàng đợi và bình luận nằm trên một tấm kính mờ", "Lyrics, queue and comments sit on a frosted glass card")
+                                  : I18n.tr("Lời, hàng đợi và bình luận nổi thẳng trên hình nền", "Lyrics, queue and comments float right on the wallpaper")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    // Segmented selector, same look as the close behaviour picker
+                    Rectangle {
+                        id: sidebarStyleChips
+                        readonly property var choices: [1, 2]
+                        readonly property real segW: 72
+                        readonly property int selIndex: Math.max(0, choices.indexOf(root.sidebarStyle))
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: segW * choices.length + 6
+                        height: 32
+                        radius: 16
+                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
+
+                        Rectangle {
+                            x: 3 + sidebarStyleChips.selIndex * sidebarStyleChips.segW
+                            y: 3
+                            width: sidebarStyleChips.segW
+                            height: parent.height - 6
+                            radius: height / 2
+                            color: root.accentColor
+                            Behavior on x { NumberAnimation { duration: 340; easing.type: Easing.OutCubic } }
+                        }
+
+                        Row {
+                            x: 3
+                            y: 3
+                            Repeater {
+                                model: sidebarStyleChips.choices
+                                delegate: Item {
+                                    required property int modelData
+                                    required property int index
+                                    readonly property bool selected: index === sidebarStyleChips.selIndex
+                                    width: sidebarStyleChips.segW
+                                    height: sidebarStyleChips.height - 6
+
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: height / 2
+                                        color: root.accentColor
+                                        opacity: !parent.selected && sidebarSegMouse.containsMouse ? 0.16 : 0
+                                        Behavior on opacity { NumberAnimation { duration: 150 } }
+                                    }
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: parent.modelData === 1 ? I18n.tr("Bản 1", "Style 1") : I18n.tr("Bản 2", "Style 2")
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 12
+                                        font.weight: parent.selected ? Font.DemiBold : Font.Normal
+                                        color: "#ffffff"
+                                        opacity: parent.selected ? 1.0 : 0.72
+                                        Behavior on opacity { NumberAnimation { duration: 200 } }
+                                    }
+
+                                    MouseArea {
+                                        id: sidebarSegMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            if (root.sidebarStyle === parent.modelData) return;
+                                            root.sidebarStyle = parent.modelData;
+                                            root.selectSidebarStyleRequested(parent.modelData);
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

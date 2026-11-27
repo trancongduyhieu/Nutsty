@@ -2436,6 +2436,8 @@ Scope {
     // Right panel look (preview): "classic" framed, "tilt" leaning plane, "type" giant outline type
     // Playing Next list leans in perspective; off keeps it straight
     property bool upNextTilt: false
+    // Right sidebar look: 1 floats on the wallpaper with no frame, 2 sits on a frosted card (liner's queue drawer)
+    property int sidebarStyle: 1
     onIsNowPlayingOpenChanged: {
         if (win.isNowPlayingOpen) {
             win.isMochySidePanelOpen = false;
@@ -3410,6 +3412,9 @@ Scope {
                     // Same top and bottom edges as the browsing area on the left, so both columns line up
                     anchors.rightMargin: win.mochyPanelStyle === 1 ? 0 : 8
                     upNextTilt: win.upNextTilt
+                    cardLook: win.sidebarStyle === 2
+                    glassSource: masterBackdropStack
+                    glassScrim: masterScrimOverlay
                     // Fixed width + transform slide: content never re-lays out per frame (no FBO realloc / cover reflow)
                     width: targetPanelWidth
                     property real revealProgress: (win.isMochySidePanelOpen && !win.isNowPlayingOpen) ? 1.0 : 0.0
@@ -4005,6 +4010,7 @@ Scope {
             crossfadeSeconds: win.crossfadeSeconds
             scrollEdgeFadeEnabled: Theme.scrollEdgeFadeEnabled
             upNextTilt: win.upNextTilt
+            sidebarStyle: win.sidebarStyle
             liteMode: win.liteModePreference
             liteModeAutoActive: win.softwareRendering
             closeBehavior: win.closeBehavior
@@ -4093,6 +4099,10 @@ Scope {
             }
             onSelectCloseBehaviorRequested: mode => {
                 win.closeBehavior = mode;
+                win.saveSettings();
+            }
+            onSelectSidebarStyleRequested: style => {
+                win.sidebarStyle = style;
                 win.saveSettings();
             }
             onSelectCrossfadeSecondsRequested: secs => {
@@ -4882,6 +4892,7 @@ Scope {
             if (obj.scrollEdgeFadeEnabled !== undefined) Theme.scrollEdgeFadeEnabled = !!obj.scrollEdgeFadeEnabled;
             if (["auto", "on", "off"].indexOf(obj.liteMode) >= 0) win.liteModePreference = obj.liteMode;
             if (typeof obj.upNextTilt === "boolean") win.upNextTilt = obj.upNextTilt;
+            if (obj.sidebarStyle === 1 || obj.sidebarStyle === 2) win.sidebarStyle = obj.sidebarStyle;
             if (["widget", "background"].indexOf(obj.closeBehavior) >= 0) win.closeBehavior = obj.closeBehavior;
             if (obj.cacheLimitMb !== undefined) win.cacheLimitMb = [1024, 1536, 2048].indexOf(parseInt(obj.cacheLimitMb)) >= 0 ? parseInt(obj.cacheLimitMb) : 1536;
             if (obj.crossfadeSeconds !== undefined) win.crossfadeSeconds = Math.max(2, Math.min(12, parseInt(obj.crossfadeSeconds) || 6));
@@ -4957,6 +4968,7 @@ Scope {
             scrollEdgeFadeEnabled: Theme.scrollEdgeFadeEnabled,
             liteMode: win.liteModePreference,
             upNextTilt: win.upNextTilt,
+            sidebarStyle: win.sidebarStyle,
             closeBehavior: win.closeBehavior,
             cacheLimitMb: win.cacheLimitMb,
             autoMixEnabled: win.autoMixEnabled,
@@ -6084,6 +6096,7 @@ Scope {
             if (win.isNowPlayingOpen) win.isNowPlayingOpen = false;
             win.isMochySidePanelOpen = !win.isMochySidePanelOpen;
         }
+        function setSidebarStyle(s: int) { if (s === 1 || s === 2) win.sidebarStyle = s; }
         function setMochyPanelStyle(s: int) {
             win.mochyPanelStyle = s;
             console.log("[MochyPanel] Style set to:", win.mochyPanelStyle);
