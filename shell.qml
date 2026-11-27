@@ -3476,6 +3476,7 @@ Scope {
                         }
                     }
                     onTrackContextMenuRequested: (trk, gx, gy) => trackContextMenu.openAt(trk, gx, gy, false)
+                    onQueueMoveRequested: (from, to) => win.moveQueueTrack(from, to)
                 }
 
                 // 3. YouTube Music Split-Screen Now Playing View (Full-Width Experience)
@@ -5445,6 +5446,10 @@ Scope {
 
     function removeTrackFromQueue(trk) {
         return PlaybackEngine.removeTrackFromQueue(win, trk);
+    }
+
+    function moveQueueTrack(from, to) {
+        return PlaybackEngine.moveQueueTrack(win, from, to);
     }
 
     function deleteLocalTrack(trk) {

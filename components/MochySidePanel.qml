@@ -288,6 +288,7 @@ Item {
     signal trackPlayRequested(var track, int index)
     signal trackContextMenuRequested(var track, real gx, real gy)
     signal tabRequested(string tab)
+    signal queueMoveRequested(int from, int to)
 
     readonly property var upNextTracks: {
         if (!root.currentTracks || root.currentTracks.length === 0) return [];
@@ -1687,8 +1688,25 @@ Item {
             // No header and no panel behind it: the songs float on the wallpaper as one leaning
             // column, pinned at its right edge with the left edge receding toward the middle of
             // the window. The exact lean comes from upNextMatrix().
+            // Style 2: the whole queue as liner's drawer lists it, with drag-to-reorder
+            LinerQueueList {
+                anchors.fill: parent
+                anchors.topMargin: root.headerSpace
+                anchors.bottomMargin: root.dockSpace
+                visible: root.cardLook
+                active: root.cardLook && root.isPanelRenderable && root.activeTab === "queue"
+                tracks: root.currentTracks
+                currentTrack: root.currentTrack
+                sameTrack: root.isSameTrack
+                backdrop: glassCard
+                onPlayRequested: (trk, idx) => root.trackPlayRequested(trk, idx)
+                onMenuRequested: (trk, gx, gy) => root.trackContextMenuRequested(trk, gx, gy)
+                onMoveRequested: (from, to) => root.queueMoveRequested(from, to)
+            }
+
             Item {
                 id: queueStage
+                visible: !root.cardLook
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 anchors.left: parent.left

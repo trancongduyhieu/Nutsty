@@ -936,6 +936,18 @@ function removeTrackFromQueue(win, trk) {
     }
 }
 
+// Drag-to-reorder in the queue: move the song at `from` to `to`. The shuffle pre-pick is an index
+// into the old order, so it is dropped and picked again.
+function moveQueueTrack(win, from, to) {
+    var list = win.currentTracks;
+    if (!list || from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return;
+    var updated = list.slice();
+    var item = updated.splice(from, 1)[0];
+    updated.splice(to, 0, item);
+    win.shuffleNextPick = null;
+    win.currentTracks = updated;
+}
+
 function deleteLocalTrack(win, trk) {
     if (!trk) return;
     var p = trk.path || "";

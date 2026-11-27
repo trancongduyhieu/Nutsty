@@ -47,6 +47,7 @@ MotionLyricsView 1.0 MotionLyricsView.qml
 HomeFeedView 1.0 HomeFeedView.qml
 singleton I18n 1.0 I18n.qml
 singleton LibraryData 1.0 LibraryData.qml
+LinerQueueList 1.0 LinerQueueList.qml
 LibraryLoader 1.0 LibraryLoader.qml
 LiquidGlass 1.0 LiquidGlass.qml
 LiquidScrollBar 1.0 LiquidScrollBar.qml
