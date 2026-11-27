@@ -3463,6 +3463,7 @@ Scope {
                     objectName: "ytMusicNowPlayingView"
                     anchors.fill: parent
                     chromeInNotch: topHeader.notchMode
+                    notchHost: topHeader.nowPlayingNotchHost
                     visible: revealReach > 0.0
                     enabled: win.isNowPlayingOpen
 

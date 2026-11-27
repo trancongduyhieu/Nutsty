@@ -22,6 +22,9 @@ Item {
     readonly property bool autoMixing: autoMix.mixing
     // Maximized window: the collapse button lives in the frame's left notch instead
     property bool chromeInNotch: false
+    // the header's center notch slot: in notch mode the mode switcher lives there instead of
+    // floating top-right (liner keeps its lyric controls in the notch the same way)
+    property Item notchHost: null
     property bool isShuffle: false
     property string repeatMode: "off"
     property real volume: 100
@@ -1995,37 +1998,45 @@ Item {
     Rectangle {
         id: modeSwitcher
         z: 5
-        anchors.right: parent.right
-        anchors.top: parent.top
+        readonly property bool inNotch: root.chromeInNotch && root.notchHost !== null
+        parent: inNotch ? root.notchHost : root
+        anchors.right: inNotch ? undefined : parent.right
+        anchors.top: inNotch ? undefined : parent.top
         anchors.rightMargin: root.width >= 1200 ? 40 : 18
         anchors.topMargin: 14
-        width: modeRow.implicitWidth + 10
-        height: 46
-        radius: 23
-        // Swiftify-like frosted pill: light translucent fill + hairline, no dark accent tint
-        color: Qt.rgba(1, 1, 1, 0.10)
-        border.width: 1
+        x: 0; y: 0
+        width: modeRow.implicitWidth + (inNotch ? 0 : 10)
+        height: inNotch ? 26 : 46
+        radius: height / 2
+        // Swiftify-like frosted pill: light translucent fill + hairline, no dark accent tint;
+        // in the notch the notch's own glass is the pill
+        color: inNotch ? "transparent" : Qt.rgba(1, 1, 1, 0.10)
+        border.width: inNotch ? 0 : 1
         border.color: Qt.rgba(1, 1, 1, 0.14)
         Row {
             id: modeRow
             anchors.centerIn: parent
-            spacing: 4
+            spacing: modeSwitcher.inNotch ? 2 : 4
             NowPlayingModeButton {
+                compact: modeSwitcher.inNotch
                 icon: "../assets/icons/material/ms-image-fill.svg"; tip: I18n.tr("Ảnh bìa", "Artwork")
                 active: root.activeTab === "artwork"; accent: root.accentColor
                 onClicked: root.activeTab = "artwork"
             }
             NowPlayingModeButton {
+                compact: modeSwitcher.inNotch
                 icon: "../assets/icons/material/ms-lyrics-fill.svg"; tip: I18n.tr("Lời bài hát", "Lyrics")
                 active: root.activeTab === "lyrics"; accent: root.accentColor
                 onClicked: root.activeTab = "lyrics"
             }
             NowPlayingModeButton {
+                compact: modeSwitcher.inNotch
                 icon: "../assets/icons/material/ms-queue_music.svg"; tip: I18n.tr("Tiếp theo", "Up next")
                 active: root.activeTab === "up_next"; accent: root.accentColor
                 onClicked: root.activeTab = "up_next"
             }
             NowPlayingModeButton {
+                compact: modeSwitcher.inNotch
                 id: sleepModeBtn
                 icon: "../assets/icons/material/ms-bedtime.svg"
                 badge: root.isSleepTimerActive

@@ -39,6 +39,25 @@ Rectangle {
     }
     // the chip row's full height inside the open notch (island pill height)
     readonly property real moodRowH: 38
+    // Now Playing in notch mode: the center notch swaps the nav icons for the view's mode switcher
+    // (artwork / lyrics / up next / sleep), as liner keeps its lyric controls in its notch. Same
+    // spring as the mood island so the notch width morphs between the two rows.
+    property real npMorph: 0
+    property real npMorphVel: 0
+    readonly property real npMorphTarget: notchMode && isNowPlayingOpen ? 1 : 0
+    FrameAnimation {
+        running: Math.abs(headerRoot.npMorph - headerRoot.npMorphTarget) > 0.0005 || Math.abs(headerRoot.npMorphVel) > 0.002
+        onTriggered: {
+            var open = headerRoot.npMorphTarget > 0.5;
+            var s = Frame.springStep(headerRoot.npMorph, headerRoot.npMorphVel, headerRoot.npMorphTarget,
+                                     open ? 0.42 : 0.45, open ? 0.8 : 1.0, frameTime);
+            var done = Math.abs(s[0] - headerRoot.npMorphTarget) <= 0.0005 && Math.abs(s[1]) <= 0.002;
+            headerRoot.npMorphVel = done ? 0 : s[1];
+            headerRoot.npMorph = done ? headerRoot.npMorphTarget : s[0];
+        }
+    }
+    // where the Now Playing view parents its mode switcher while in notch mode
+    readonly property Item nowPlayingNotchHost: notchMode ? npNotchHost : null
     signal collapseRequested()
 
     property string currentTab: "all"
@@ -223,7 +242,9 @@ Rectangle {
         visible: headerRoot.notchMode && height > 0
         leftContentWidth: collapseNotchBtn.shown ? headerRoot.navBox + 8 : 0
         // one morph progress drives width, depth and tint together, so the island grows as one shape
+        // the closed row: nav icons, or the Now Playing mode switcher, morphing between the two
         readonly property real closedW: navCluster.implicitWidth + 8
+            + (Math.max(npNotchHost.childrenRect.width, 1) - navCluster.implicitWidth) * Math.min(1, Math.max(0, headerRoot.npMorph))
         readonly property real openW: Math.max(navCluster.implicitWidth, dynamicMoodIsland.expandedTargetWidth) + 8
         centerContentWidth: closedW + (openW - closedW) * headerRoot.moodMorph
         // whole pixels: a bottom edge between pixel rows smears into a soft bright line while it moves
@@ -277,6 +298,24 @@ Rectangle {
         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: headerRoot.collapseRequested() }
     }
 
+    // Center notch slot for the Now Playing mode switcher (YTMusicNowPlayingView parents it here)
+    Item {
+        id: npNotchHost
+        visible: headerRoot.notchMode && notchFrame.centerVisible && headerRoot.npMorph > 0.01
+        enabled: headerRoot.isNowPlayingOpen
+        width: childrenRect.width
+        height: notchFrame.contentHeight
+        x: Math.round(notchFrame.centerMid - width / 2)
+        y: notchFrame.band
+        z: 2
+        // fades in late and out early so it never overlaps the nav icons at full strength
+        opacity: Math.min(1, Math.max(0, (headerRoot.npMorph - 0.35) / 0.5))
+        transform: Scale {
+            origin.x: npNotchHost.width / 2; origin.y: npNotchHost.height / 2
+            xScale: 0.92 + 0.08 * npNotchHost.opacity; yScale: xScale
+        }
+    }
+
     RowLayout {
         id: headerRow
         anchors.left: parent.left
@@ -293,6 +332,13 @@ Rectangle {
         RowLayout {
             id: navCluster
             spacing: headerRoot.notchMode ? 6 : 14
+            // gives the center notch over to the Now Playing mode switcher
+            opacity: Math.min(1, Math.max(0, 1 - headerRoot.npMorph / 0.5))
+            enabled: headerRoot.npMorph < 0.5
+            transform: Scale {
+                origin.x: navCluster.width / 2; origin.y: navCluster.height / 2
+                xScale: 0.92 + 0.08 * navCluster.opacity; yScale: xScale
+            }
 
             // Profile: the user's own avatar opens the listener card page
             Item {

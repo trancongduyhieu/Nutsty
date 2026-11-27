@@ -12,8 +12,10 @@ Rectangle {
     property color accent: "#ffffff"
     // Small dot in the top-right corner (e.g. a running sleep timer)
     property bool badge: false
+    // compact: the notch size (26px row, like liner's notch buttons)
+    property bool compact: false
     signal clicked()
-    width: 52; height: 36; radius: 18
+    width: compact ? 34 : 52; height: compact ? 26 : 36; radius: height / 2
     color: active ? Qt.rgba(1, 1, 1, 0.92) : Qt.rgba(1, 1, 1, mbH.hovered ? 0.10 : 0.0)
     Behavior on color { ColorAnimation { duration: 160 } }
     HoverHandler { id: mbH }
@@ -23,7 +25,7 @@ Rectangle {
     AppIcon {
         anchors.centerIn: parent
         source: mb.icon
-        iconSize: 20
+        iconSize: mb.compact ? 16 : 20
         color: mb.active ? "#121214" : "#ffffff"
         opacity: (mb.active || mbH.hovered) ? 1.0 : 0.75
         scale: mbMouse.pressed ? 0.88 : 1.0
@@ -36,8 +38,8 @@ Rectangle {
         color: mb.active ? "#121214" : "#ffffff"
         anchors.top: parent.top
         anchors.right: parent.right
-        anchors.topMargin: 7
-        anchors.rightMargin: 13
+        anchors.topMargin: mb.compact ? 4 : 7
+        anchors.rightMargin: mb.compact ? 8 : 13
     }
     MouseArea { id: mbMouse; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: mb.clicked() }
 }
