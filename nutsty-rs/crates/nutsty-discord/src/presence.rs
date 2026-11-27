@@ -6,7 +6,7 @@ use std::collections::VecDeque;
 
 /// Shown when the song has no artwork Discord can fetch (a local file, or none at all).
 pub const LOGO_URL: &str =
-    "https://raw.githubusercontent.com/trancongduyhieu/Nutsty/main/assets/nutsty-app-icon.png";
+    "https://raw.githubusercontent.com/trancongduyhieu/Nutsty/main/assets/discord/nutsty-mark.png";
 
 /// Discord's limit for a status line and for a button label.
 const LINE_MAX: usize = 128;
