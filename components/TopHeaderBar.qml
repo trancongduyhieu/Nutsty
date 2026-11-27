@@ -260,7 +260,9 @@ Rectangle {
         width: headerRoot.width
         height: headerRoot.frameHeight
         visible: headerRoot.notchMode && height > 0
-        leftContentWidth: collapseNotchBtn.shown ? headerRoot.navBox + 8 : 0
+        // the Nutsty mark (home) always, then the collapse chevron while Now Playing is open
+        leftContentWidth: headerRoot.notchMode
+            ? logoNotchBtn.width + (collapseNotchBtn.shown ? 2 + headerRoot.navBox : 0) + 8 : 0
         // one morph progress drives width, depth and tint together, so the island grows as one shape
         // the closed row: nav icons, or the Now Playing mode switcher, morphing between the two
         readonly property real closedW: navCluster.implicitWidth + 8
@@ -293,12 +295,40 @@ Rectangle {
         onDoubleClicked: headerRoot.maximizeWindowRequested()
     }
 
-    // Left notch (maximized Now Playing only): collapse back to the page underneath
+    // Left notch, first: the Nutsty mark in white (as on the update screen) is the home button,
+    // where liner keeps its logo
+    Rectangle {
+        id: logoNotchBtn
+        visible: headerRoot.notchMode
+        x: notchFrame.leftContentX + 2
+        y: notchFrame.band
+        width: headerRoot.navBox; height: headerRoot.navBox
+        radius: 8
+        color: logoH.hovered ? Qt.rgba(headerRoot.accentColor.r, headerRoot.accentColor.g, headerRoot.accentColor.b, 0.22) : "transparent"
+        Behavior on color { ColorAnimation { duration: 140 } }
+        HoverHandler { id: logoH }
+        ToolTip.visible: logoH.hovered
+        ToolTip.text: I18n.tr("Trang chủ", "Home")
+        ToolTip.delay: 400
+        AppIcon {
+            anchors.centerIn: parent
+            source: "../assets/icons/nutsty-outline-symbolic.svg"
+            iconSize: 22
+            color: "#ffffff"
+            opacity: logoH.hovered || (headerRoot.currentView === "home" && !headerRoot.isNowPlayingOpen) ? 1.0 : 0.8
+            scale: logoMouse.pressed ? 0.9 : (logoH.hovered ? 1.06 : 1.0)
+            Behavior on opacity { NumberAnimation { duration: 140 } }
+            Behavior on scale { NumberAnimation { duration: 120 } }
+        }
+        MouseArea { id: logoMouse; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: headerRoot.homeClicked() }
+    }
+
+    // Left notch, after the mark (Now Playing only): collapse back to the page underneath
     Rectangle {
         id: collapseNotchBtn
         readonly property bool shown: headerRoot.notchMode && headerRoot.isNowPlayingOpen
         visible: shown
-        x: notchFrame.leftContentX + 2
+        x: logoNotchBtn.x + logoNotchBtn.width + 2
         y: notchFrame.band
         width: headerRoot.navBox; height: headerRoot.navBox
         radius: 8
@@ -427,9 +457,10 @@ Rectangle {
                 }
             }
 
-            // 1. Home Button
+            // 1. Home Button (windowed header only; the notch layout uses the Nutsty mark in the left notch)
             Item {
                 id: homeBtn
+                visible: !headerRoot.notchMode
                 // tucks under the open mood island instead of showing through its glass
                 readonly property bool underMood: headerRoot.moodCovers(homeBtn)
                 opacity: underMood ? 0 : 1
