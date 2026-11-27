@@ -11,6 +11,7 @@ import math
 import os
 import subprocess
 import sys
+import time
 from collections import deque
 
 SLOTS_PER_SECOND = 40
@@ -132,11 +133,13 @@ def pulses_from_samples(samples, rate):
 
 # ---- measuring a whole track and caching it ----
 
-ANALYSIS_RATE = 8000
+# The bass sits below 150 Hz, so 1 kHz keeps all of it (mpv's resampler drops what is above 500 Hz)
+# while the sample loop below does an eighth of the work it would at 8 kHz
+ANALYSIS_RATE = 1000
 MAX_SECONDS = 15 * 60
 DECODE_TIMEOUT = 120
 CACHE_KEEP = 500
-_CHUNK = 1 << 20
+_CHUNK = 1 << 16   # ~33 s of audio per read; the GIL is let go between reads (Windows runs this in-process)
 
 
 def _cache_path(cache_dir, key):
@@ -151,6 +154,11 @@ def _default_cache_dir():
 
 def _prune(cache_dir):
     try:
+        now = time.time()
+        for n in os.listdir(cache_dir):
+            f = os.path.join(cache_dir, n)
+            if n.endswith((".raw", ".tmp")) and now - os.path.getmtime(f) > 3600:
+                os.remove(f)   # left behind by a killed measurement
         names = [os.path.join(cache_dir, n) for n in os.listdir(cache_dir) if n.endswith(".bass")]
         if len(names) <= CACHE_KEEP:
             return
@@ -171,8 +179,9 @@ def cached(key, cache_dir=None):
         return None
 
 
-def measure(url, stream_args, key, cache_dir=None):
-    """Pulse bytes for the track at url (decoding it once through mpv), or None when decoding failed."""
+def measure(url, stream_args, key, cache_dir=None, expect_s=0.0):
+    """Pulse bytes for the track at url (decoding it once through mpv), or None when decoding failed.
+    expect_s: the track's known length; a decode that stops well short of it (a dropped stream) is not cached."""
     cache_dir = cache_dir or _default_cache_dir()
     hit = cached(key, cache_dir)
     if hit is not None:
@@ -211,6 +220,10 @@ def measure(url, stream_args, key, cache_dir=None):
                 if sys.byteorder == "big":
                     samples.byteswap()
                 env.add([x / 32768.0 for x in samples])
+                time.sleep(0)
+        if expect_s > 0 and env.n / ANALYSIS_RATE < 0.9 * min(expect_s, MAX_SECONDS):
+            sys.stderr.write(f"[bass] decode stopped at {env.n / ANALYSIS_RATE:.0f}s of {expect_s:.0f}s\n")
+            return None
         pulse = env.pulses()
     except Exception as e:
         sys.stderr.write(f"[bass] measure failed: {e}\n")

@@ -30,7 +30,7 @@ DEFAULT_LIMIT_MB = 1536
 # "thumbnails" holds the library's own cover art (paths saved in library.json), so it is never evicted.
 EVICTABLE_DIRS = ("audio_cache", "mpv_stream_cache")
 # Extra regenerable data removed by "clear" (not by the limit)
-CLEAR_DIRS = ("related", "moods", "beatgrid")
+CLEAR_DIRS = ("related", "moods", "beatgrid", "bass")
 CLEAR_FILES = ("stream_cache.json",)
 CLEAR_GLOBS = ("*.tmp",)
 RECENT_GUARD_SEC = 600  # never evict files touched in the last 10 minutes (current / next track)

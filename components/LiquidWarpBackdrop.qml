@@ -31,12 +31,21 @@ Item {
     property real playhead: 0
     property real playheadStampMs: 0
     property real pulse: 0
+    property int lastSlot: -1
 
+    // The strongest slot passed since the last frame, so a slow frame (or 30 fps) never skips a hit.
+    // The position counts on from the last status read for at most 0.5 s: past that the reads have
+    // stopped (loading, a stall) and guessing on would run ahead of the sound
     function pulseTarget() {
-        if (!pulseOn || !pulseSlots || pulseSlots.length === 0) return 0;
-        var t = playhead + Math.max(0, Date.now() - playheadStampMs) / 1000;
+        if (!pulseOn || !pulseSlots || pulseSlots.length === 0) { lastSlot = -1; return 0; }
+        var t = playhead + Math.min(0.5, Math.max(0, Date.now() - playheadStampMs) / 1000);
         var i = Math.floor(t * 40);
-        return (i >= 0 && i < pulseSlots.length) ? pulseSlots[i] / 255 : 0;
+        var from = (lastSlot >= 0 && i > lastSlot && i - lastSlot <= 8) ? lastSlot + 1 : i;
+        lastSlot = i;
+        var best = 0;
+        for (var k = Math.max(0, from); k <= i && k < pulseSlots.length; k++)
+            if (pulseSlots[k] > best) best = pulseSlots[k];
+        return best / 255;
     }
 
     FrameAnimation {

@@ -812,21 +812,25 @@ def _resolve_for_crossfade(file_path, title, artist, my_epoch=0, source_out=None
     return file_path, DEFAULT_UA, file_path, ""
 
 
-def _bass_envelope(path, title, artist):
+def _bass_envelope(path, title, artist, duration_s=0.0):
     """{"ok", "key", "slots"}: one 0..255 pulse per 25 ms of the track; Tidal lossless is not measured."""
     import bass_envelope as be
     key = path
-    hit = be.cached(key)
+    # With lossless on an online song may play from Tidal, whose cut can differ from YouTube's: find the
+    # source before trusting a pulse cached from the YouTube version
+    tidal_possible = bool(_target_vid_of(path)) and get_lossless_settings()["enabled"] and not is_lossless_suspended()
+    hit = None if tidal_possible else be.cached(key)
     if hit is None:
         box = {}
         try:
-            url, ua, _, _ = _resolve_for_crossfade(path, title, artist, source_out=box)
+            url, ua, _, _ = _resolve_for_crossfade(path, title, artist, source_out=box, duration_s=duration_s)
         except Exception as e:
             return {"ok": False, "key": key, "reason": str(e)}
         if box.get("source") == "tidal":
             return {"ok": False, "key": key, "reason": "tidal"}
+        expect = duration_s if duration_s > 0 else _media_duration(url)
         fmt = YTDL_FORMAT_MAP.get(get_current_streaming_quality(), "774/141/251/140/bestaudio/best")
-        hit = be.measure(url, _mpv_stream_args(fmt, ua), key)
+        hit = be.measure(url, _mpv_stream_args(fmt, ua), key, expect_s=expect)
         if hit is None:
             return {"ok": False, "key": key, "reason": "decode"}
     return {"ok": True, "key": key, "slots": list(hit)}
@@ -1477,7 +1481,8 @@ def execute_command(args):
 
     elif action == "bass_envelope" and len(args) > 1:
         # The bass pulse of a whole track for the artwork backdrop: measured once, then read from the cache
-        print(json.dumps(_bass_envelope(args[1], args[2] if len(args) > 2 else "", args[3] if len(args) > 3 else "")))
+        print(json.dumps(_bass_envelope(args[1], args[2] if len(args) > 2 else "", args[3] if len(args) > 3 else "",
+                                        _float_arg(args, 4)), separators=(",", ":")))
 
     elif action == "status":
         print(get_status_json())

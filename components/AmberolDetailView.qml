@@ -350,7 +350,7 @@ Rectangle {
         running: root.visible && root.isPlaying && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive))
         darkScrim: 0.28
         zoom: 1.6
-        pulseOn: root.isPlaying
+        pulseOn: root.isPlaying && !((typeof win !== "undefined" && win) ? win.isLoadingAudio : false)
         pulseSlots: (typeof win !== "undefined" && win) ? win.currentBassSlots : null
         playhead: (typeof win !== "undefined" && win) ? win.currentTime : 0
         playheadStampMs: (typeof win !== "undefined" && win) ? win.currentTimeStampMs : 0

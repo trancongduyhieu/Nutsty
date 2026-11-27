@@ -83,6 +83,7 @@ Scope {
         }
 
         onIsWindowEffectivelyActiveChanged: {
+            win.bassPulseWake();
             if (!win.isWindowEffectivelyActive) {
                 unfocusedPurgeTimer.restart();
             } else {
@@ -252,7 +253,8 @@ Scope {
     property real currentTimeStampMs: 0      // when currentTime was last read, for the backdrop's playhead
     onCurrentTimeChanged: currentTimeStampMs = Date.now()
     readonly property var currentBassSlots: (bassPulseEnabled && currentTrack) ? (bassSlotsByKey[PlaybackEngine.trackKeyOf(currentTrack)] || null) : null
-    function bassPulseWake() { if (bassPulseEnabled && isPlaying && !liteMode) requestBassPulse(currentTrack, true); }
+    function bassPulseWake() { if (bassPulseEnabled && isPlaying && isWindowEffectivelyActive) requestBassPulse(currentTrack, true); }
+    onLiteModeChanged: bassPulseWake()
     onBassPulseEnabledChanged: bassPulseWake()
     property var autoMixPlan: null
     property string mixNextDurationKey: ""
@@ -2676,7 +2678,7 @@ Scope {
                     running: Boolean(win.isPlaying && (typeof win === "undefined" || !win || Boolean(win.isWindowEffectivelyActive)))
                     zoom: 1.6
                     darkScrim: 0.0
-                    pulseOn: win.isPlaying
+                    pulseOn: win.isPlaying && !win.isLoadingAudio
                     pulseSlots: win.currentBassSlots
                     playhead: win.currentTime
                     playheadStampMs: win.currentTimeStampMs
@@ -5805,7 +5807,8 @@ Scope {
                             if (keep[j] && win.bassSlotsByKey[keep[j]]) m[keep[j]] = win.bassSlotsByKey[keep[j]];
                         m[key] = r.slots;
                         win.bassSlotsByKey = m;
-                    } else if (r && r.reason !== "tidal") {
+                    } else if (r) {
+                        // failed, or plays from Tidal (not measured): not asked again this session
                         var f = win.bassFailedKeys; f[key] = true; win.bassFailedKeys = f;
                     }
                 } catch(e) {}
@@ -5815,11 +5818,12 @@ Scope {
             var next = bassProc.pending;
             bassProc.pending = null;
             if (next && win.bassPulseEnabled) win.startBassProc(next);
+            else if (next) win.bassPrefetchKey = "";   // dropped: the next-track check asks again
         }
     }
     function startBassProc(job) {
         bassProc.forKey = job.key;
-        bassProc.command = ["python3", win.appDir + "/backend/player_daemon.py", "bass_envelope", job.path, job.title, job.artist];
+        bassProc.command = ["python3", win.appDir + "/backend/player_daemon.py", "bass_envelope", job.path, job.title, job.artist, String(job.duration)];
         bassProc.running = true;
     }
     function requestBassPulse(trk, isCurrent) {
@@ -5828,11 +5832,13 @@ Scope {
         var path = PlaybackEngine.playablePathOf(win, trk);
         if (!key || !path || bassSlotsByKey[key] || bassFailedKeys[key]) return;
         if (bassProc.running && bassProc.forKey === key) return;
-        var job = { key: key, path: path, title: trk.title || trk.name || "", artist: trk.artist || "" };
+        var job = { key: key, path: path, title: trk.title || trk.name || "", artist: trk.artist || "",
+                    duration: PlaybackEngine.extractTrackDuration(trk) || 0 };
         if (!bassProc.running) { startBassProc(job); return; }
         // the playing track takes the waiting slot over the next one; a next one never displaces it
         var waiting = bassProc.pending;
         if (isCurrent || !waiting || waiting.key !== PlaybackEngine.trackKeyOf(win.currentTrack)) bassProc.pending = job;
+        else bassPrefetchKey = "";   // the playing track keeps the slot: ask for the next one again later
     }
 
     function requestMixNextDuration(key, path, title, artist) {

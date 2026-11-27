@@ -83,6 +83,11 @@ def local_wav_end_to_end():
             assert be.measure(wav, [], wav, cache_dir=cache) == p
         finally:
             subprocess.run = real_run
+        # a decode that stops well short of the known length (a dropped stream) is not cached
+        short_cache = os.path.join(tmp, "short")
+        assert be.measure(wav, [], wav, cache_dir=short_cache, expect_s=60.0) is None
+        assert not os.listdir(short_cache), os.listdir(short_cache)
+        assert be.measure(wav, [], wav, cache_dir=short_cache, expect_s=6.0) is not None
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
