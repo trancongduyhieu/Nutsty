@@ -50,7 +50,7 @@ cộng thời gian trôi qua kể từ lần cập nhật cuối, khi đang phá
 `pulse = max(mức_tại_vị_trí, pulse · e^(−Δt / 0.14 s))`. Nền phóng to thêm tối đa 7% (`scale`), và thời gian
 của sóng uốn chạy nhanh hơn `1 + 3·pulse` lần (đổi `NumberAnimation` của `animTime` sang cập nhật theo khung).
 
-**Cài đặt**: công tắc "Đập theo nhịp bass" / "Pulse to the bass" (qua `I18n.tr`), mặc định tắt, lưu cùng các cài đặt
+**Cài đặt**: công tắc "Đập theo nhịp bass" / "Pulse to the bass" (qua `I18n.tr`), mặc định bật, lưu cùng các cài đặt
 khác. Tắt thì không đo gì cả.
 
 ## Quyết định của mình (mày sửa được)

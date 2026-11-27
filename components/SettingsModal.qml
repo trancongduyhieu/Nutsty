@@ -38,7 +38,7 @@ Rectangle {
     property bool liteModeAutoActive: false
     property int crossfadeSeconds: 6
     property bool autoMixEnabled: false
-    property bool bassPulseEnabled: false
+    property bool bassPulseEnabled: true
     // Fully bit-perfect lossless holds the DAC alone: AutoMix cannot run
     property bool autoMixLocked: false
     property int cacheLimitMb: 1536

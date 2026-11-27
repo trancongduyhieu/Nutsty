@@ -246,7 +246,7 @@ Scope {
     }
     property bool autoMixEnabled: false
     // Bass pulse (backend/bass_envelope.py): the artwork backdrop swells with the bass. Off by default
-    property bool bassPulseEnabled: false
+    property bool bassPulseEnabled: true
     property var bassSlotsByKey: ({})        // track key -> {hit, body}, 0..255 per 25 ms, the last few tracks only
     property var bassFailedKeys: ({})        // measured and failed this session: not retried
     property string bassPrefetchKey: ""
