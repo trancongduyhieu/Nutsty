@@ -28,8 +28,10 @@ function centerNotchX(W, leftW, centerW, rightW) {
 }
 
 // The hole's outline, clockwise from the top-left: flares sweep 1, notch bottoms sweep 0.
-// rc: the hole's own corner radius, concentric with the window's (defaults to RC)
-function innerPath(W, Hh, leftW, centerW, rightW, rc) {
+// rc: the hole's own corner radius, concentric with the window's (defaults to RC).
+// centerExtra: how much deeper the center notch reaches while it is open (mood chips)
+function innerPath(W, Hh, leftW, centerW, rightW, rc, centerExtra) {
+    var hc = H + (centerExtra > 0 ? centerExtra : 0);
     var C = rc > 0 ? rc : RC;
     var L = B, T = B, Rr = W - B, Bt = Hh - B;
     var wl = notchOuterWidth("start", leftW);
@@ -40,8 +42,8 @@ function innerPath(W, Hh, leftW, centerW, rightW, rc) {
     var d = wl > 0 ? "M " + (L + wl) + " " + T : "M " + (L + C) + " " + T;
     if (x1 >= 0) {
         d += " L " + x1 + " " + T + a(R, 1, x1 + R, T + R)
-           + " V " + (T + H - BR) + a(BR, 0, x1 + R + BR, T + H)
-           + " H " + (x1 + wc - R - BR) + a(BR, 0, x1 + wc - R, T + H - BR)
+           + " V " + (T + hc - BR) + a(BR, 0, x1 + R + BR, T + hc)
+           + " H " + (x1 + wc - R - BR) + a(BR, 0, x1 + wc - R, T + hc - BR)
            + " V " + (T + R) + a(R, 1, x1 + wc, T);
     }
     if (wr > 0) {
@@ -65,6 +67,20 @@ function innerPath(W, Hh, leftW, centerW, rightW, rc) {
 }
 
 // Outer rectangle plus the hole: filled with OddEvenFill this leaves only the band and notches
-function framePath(W, Hh, leftW, centerW, rightW, rc) {
-    return "M 0 0 H " + W + " V " + Hh + " H 0 Z " + innerPath(W, Hh, leftW, centerW, rightW, rc);
+function framePath(W, Hh, leftW, centerW, rightW, rc, centerExtra) {
+    return "M 0 0 H " + W + " V " + Hh + " H 0 Z " + innerPath(W, Hh, leftW, centerW, rightW, rc, centerExtra);
+}
+
+// The center notch on its own, with the band strip above it, outlined clockwise: drawn over the
+// frame with a deeper tint while the notch is open, so it reads as one solid island ("" if dropped)
+function centerNotchPath(W, leftW, centerW, rightW, centerExtra) {
+    var x1 = centerNotchX(W, leftW, centerW, rightW);
+    if (x1 < 0) return "";
+    var wc = notchOuterWidth("center", centerW), T = B;
+    var hc = H + (centerExtra > 0 ? centerExtra : 0);
+    var a = function (r, sweep, x, y) { return " A " + r + " " + r + " 0 0 " + sweep + " " + x + " " + y; };
+    return "M " + x1 + " 0 H " + (x1 + wc) + " V " + T + a(R, 0, x1 + wc - R, T + R)
+        + " V " + (T + hc - BR) + a(BR, 1, x1 + wc - R - BR, T + hc)
+        + " H " + (x1 + R + BR) + a(BR, 1, x1 + R, T + hc - BR)
+        + " V " + (T + R) + a(R, 0, x1, T) + " Z";
 }

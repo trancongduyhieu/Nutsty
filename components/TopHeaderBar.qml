@@ -6,9 +6,9 @@ import "."
 
 Rectangle {
     id: headerRoot
-    // Notch mode: the header folds into notches hanging from a thin frame (liner style). On the home
-    // feed the mood island hangs below the center notch, so the header keeps room for it there.
-    height: notchMode ? ((currentView === "home" && !isNowPlayingOpen) ? 90 : 44) : 64
+    // Notch mode: the header folds into notches hanging from a thin frame (liner style). The mood
+    // sits in the middle of the center notch, which grows down to show the chips (Dynamic Island).
+    height: notchMode ? 44 : 64
     color: "transparent"
     z: 100
 
@@ -16,6 +16,24 @@ Rectangle {
     // full window height: the frame is drawn from this item, which sits at the window's top-left
     property real frameHeight: 0
     readonly property real navBox: notchMode ? 26 : 32
+    readonly property bool moodShown: currentView === "home" && !isNowPlayingOpen
+    readonly property bool moodOpenInNotch: notchMode && moodShown && isMoodIslandExpanded
+    // Island morph (timings from V-Notch): opens on Apple's ease-out (0.32, 0.72, 0, 1) over 500 ms,
+    // closes on a fast-start expo-out over 420 ms; the chip row fades in after the shape starts
+    // growing and fades out before it shrinks. Started by hand so each direction keeps its curve.
+    property real moodMorph: 0
+    NumberAnimation {
+        id: moodMorphAnim
+        target: headerRoot; property: "moodMorph"
+    }
+    onMoodOpenInNotchChanged: {
+        moodMorphAnim.stop();
+        moodMorphAnim.to = moodOpenInNotch ? 1 : 0;
+        moodMorphAnim.duration = moodOpenInNotch ? 500 : 420;
+        moodMorphAnim.easing.type = Easing.BezierSpline;
+        moodMorphAnim.easing.bezierCurve = moodOpenInNotch ? [0.32, 0.72, 0.0, 1.0, 1, 1] : [0.16, 1.0, 0.3, 1.0, 1, 1];
+        moodMorphAnim.start();
+    }
     signal collapseRequested()
 
     property string currentTab: "all"
@@ -114,7 +132,12 @@ Rectangle {
         height: headerRoot.frameHeight
         visible: headerRoot.notchMode && height > 0
         leftContentWidth: collapseNotchBtn.shown ? headerRoot.navBox + 8 : 0
-        centerContentWidth: navCluster.implicitWidth + 8
+        // one morph progress drives width, depth and tint together, so the island grows as one shape
+        readonly property real closedW: navCluster.implicitWidth + 8
+        readonly property real openW: Math.max(navCluster.implicitWidth, dynamicMoodIsland.expandedTargetWidth) + 8
+        centerContentWidth: closedW + (openW - closedW) * headerRoot.moodMorph
+        centerExtraHeight: (dynamicMoodIsland.height + 6) * headerRoot.moodMorph
+        centerTint: 0.45 * Math.min(1, Math.max(0, headerRoot.moodMorph))
         rightContentWidth: headerRoot.navBox * 2 + 2 + 8
         // windowed: concentric with the 24px window corner; maximized: liner's 12px
         cornerRadius: headerRoot.isMaximized ? 12 : 24 - band
@@ -160,13 +183,14 @@ Rectangle {
     }
 
     RowLayout {
+        id: headerRow
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.topMargin: headerRoot.notchMode ? notchFrame.band : 0
         height: headerRoot.notchMode ? notchFrame.contentHeight : 64
         // notch mode: the nav cluster starts inside the center notch, the window buttons end inside the right one
-        anchors.leftMargin: headerRoot.notchMode ? notchFrame.centerContentX + 4 : 20
+        anchors.leftMargin: headerRoot.notchMode ? Math.round(notchFrame.centerMid - navCluster.implicitWidth / 2) : 20
         anchors.rightMargin: headerRoot.notchMode ? notchFrame.band + 2 : 20
         spacing: headerRoot.notchMode ? 2 : 14
 
@@ -339,6 +363,50 @@ Rectangle {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: headerRoot.libraryClicked()
+                }
+            }
+
+            // Notch mode, home feed: the selected mood in the middle of the icon row; it opens the
+            // chip row by growing the center notch down (the island's own pill is unused here)
+            Item {
+                id: moodNotchLabel
+                visible: headerRoot.notchMode && headerRoot.moodShown
+                Layout.preferredWidth: moodNotchTxt.implicitWidth + 24
+                Layout.preferredHeight: headerRoot.navBox
+                Layout.leftMargin: 4
+                Layout.rightMargin: 4
+
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.topMargin: 2
+                    anchors.bottomMargin: 2
+                    radius: height / 2
+                    color: Qt.rgba(headerRoot.accentColor.r, headerRoot.accentColor.g, headerRoot.accentColor.b,
+                                   moodNotchMouse.containsMouse ? 1.0 : 0.95)
+                    Behavior on color { ColorAnimation { duration: 200 } }
+                }
+                // stays solid while open (fading fill and text together made the label blink out
+                // mid-morph); a slight press-in shows the island is open instead
+                Text {
+                    id: moodNotchTxt
+                    anchors.centerIn: parent
+                    text: headerRoot.formatMoodTitle(headerRoot.selectedMood)
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 12
+                    font.bold: true
+                    color: dynamicMoodIsland.chipTextColor
+                }
+                scale: headerRoot.isMoodIslandExpanded ? 0.92 : 1.0
+                Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                MouseArea {
+                    id: moodNotchMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        headerRoot.isMoodIslandExpanded = !headerRoot.isMoodIslandExpanded;
+                        if (headerRoot.isMoodIslandExpanded) autoCollapseTimer.restart();
+                    }
                 }
             }
 
@@ -566,8 +634,9 @@ Rectangle {
         id: dynamicMoodIsland
         anchors.horizontalCenter: headerRoot.horizontalCenter
         anchors.verticalCenter: headerRoot.verticalCenter
-        // notch mode: hang just below the center notch (header 90: top 44 -> center 63, offset 18)
-        anchors.verticalCenterOffset: headerRoot.notchMode ? 18 : 0
+        // notch mode: the chip row opens inside the grown center notch, under the icon row
+        anchors.verticalCenterOffset: headerRoot.notchMode ? (notchFrame.band + notchFrame.contentHeight + 3 + height / 2 - headerRoot.height / 2) : 0
+        anchors.horizontalCenterOffset: headerRoot.notchMode ? notchFrame.centerMid - headerRoot.width / 2 : 0
         // Same frosted pill as the Now Playing mode switcher: light translucent fill + hairline,
         // the active mood is a solid segment in the cover / wallpaper accent
         height: 38
@@ -575,14 +644,26 @@ Rectangle {
         z: 12
         clip: true
         visible: opacity > 0.01
-        opacity: (headerRoot.currentView === "home" && !headerRoot.isNowPlayingOpen) ? 1.0 : 0.0
-        Behavior on opacity { NumberAnimation { duration: 180 } }
+        // notch mode: only the open chip row shows here; the closed mood is the label in the icon row
+        // notch mode: the row follows the morph, it only shows once the shape is most of the way open
+        // (and is gone early on close), dropping in from the icon row with a slight scale-up
+        readonly property real revealT: Math.min(1, Math.max(0, (headerRoot.moodMorph - 0.62) / 0.38))
+        opacity: !headerRoot.moodShown ? 0.0 : (headerRoot.notchMode ? revealT : 1.0)
+        Behavior on opacity { enabled: !headerRoot.notchMode; NumberAnimation { duration: 180 } }
+        transform: [
+            Scale {
+                origin.x: dynamicMoodIsland.width / 2; origin.y: 0
+                xScale: headerRoot.notchMode ? 0.94 + 0.06 * dynamicMoodIsland.revealT : 1
+                yScale: xScale
+            },
+            Translate { y: headerRoot.notchMode ? -8 * (1 - dynamicMoodIsland.revealT) : 0 }
+        ]
 
         readonly property bool isExpanded: headerRoot.isMoodIslandExpanded
         // Selected chip takes the cover / wallpaper accent; text flips dark on light accents
         readonly property color chipTextColor: topMoodFlickable.accentLuminance > 0.6 ? "#121214" : "#ffffff"
         readonly property real compactWidth: compactTxt.implicitWidth + 36
-        readonly property real maxExpandedWidth: headerRoot.width - 580
+        readonly property real maxExpandedWidth: headerRoot.width - (headerRoot.notchMode ? 180 : 580)
         readonly property real expandedTargetWidth: Math.min(maxExpandedWidth, moodRow.width + 24)
         // Chips shrink their side padding (24 -> 16) so the whole row fits the island instead of the
         // last chip being cut flat by the clip; it only scrolls if even the tight padding cannot fit
@@ -601,7 +682,7 @@ Rectangle {
             }
             moodTextSum = sum;
         }
-        width: isExpanded ? expandedTargetWidth : compactWidth
+        width: (isExpanded || headerRoot.notchMode) ? expandedTargetWidth : compactWidth
         // Once the island has finished opening, bring the selected mood into view (it may sit past
         // the right end, e.g. "Tâm trạng"). Until then hover never scrolls: chips sliding under the
         // still cursor (it rests where the compact pill was clicked) would drag the row back to 0.
@@ -612,7 +693,7 @@ Rectangle {
         }
         Timer {
             id: settleTimer
-            interval: 340 // width animation is 320 ms
+            interval: headerRoot.notchMode ? 520 : 340 // notch morph is 500 ms, pill width 320 ms
             onTriggered: {
                 dynamicMoodIsland.settled = true;
                 topMoodFlickable.revealSelected();
@@ -627,8 +708,9 @@ Rectangle {
             }
         }
 
-        color: Qt.rgba(1, 1, 1, 0.10)
-        border.width: 1
+        // notch mode: the notch's own glass is the background
+        color: headerRoot.notchMode ? "transparent" : Qt.rgba(1, 1, 1, 0.10)
+        border.width: headerRoot.notchMode ? 0 : 1
         border.color: Qt.rgba(1, 1, 1, 0.14)
 
         scale: (!isExpanded && compactMouse.containsMouse) ? 1.05 : 1.0

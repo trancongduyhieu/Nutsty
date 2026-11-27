@@ -82,4 +82,18 @@ assert.ok(inner.includes('A 18 18 0 0 1 24 6'), inner);
 assert.ok(inner.includes('A 18 18 0 0 1 776 594'), inner);
 assert.ok(L.framePath(800, 600, 0, 228, 60, 18).includes('A 18 18 0 0 1 24 6'));
 
+// Expanded center notch (mood chips open): only the center dips deeper, by the extra height
+inner = L.innerPath(1600, 1000, 0, 228, 60, 12, 44);
+assert.ok(inner.includes('A 15 15 0 0 0 701 80'), inner);          // bottom at 6 + 30 + 44
+assert.ok(inner.includes('V 65'), inner);                            // side runs down to 80 - 15
+assert.ok(inner.includes('A 8 8 0 0 1 1594 44'), inner);            // right notch unchanged
+assert.strictEqual(L.innerPath(1600, 1000, 0, 228, 60, 12, 0), L.innerPath(1600, 1000, 0, 228, 60, 12));
+
+// The open center notch alone (band strip above it included), for a deeper tint while open
+const cn = L.centerNotchPath(1600, 0, 228, 60, 44);
+assert.ok(cn.startsWith('M 678 0 H 922'), cn);                       // 678 + 244
+assert.ok(cn.includes('A 15 15 0 0 1 899 80'), cn);                  // right bottom corner, drawn the other way
+assert.ok(cn.includes('A 8 8 0 0 0 678 6'), cn);
+assert.strictEqual(L.centerNotchPath(200, 34, 228, 60, 44), '');      // dropped notch: nothing to tint
+
 console.log('window_frame_logic: OK');
