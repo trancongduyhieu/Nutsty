@@ -65,6 +65,11 @@ Item {
     property Item glassSource: null
     property Item glassScrim: null
     readonly property real cardRadius: 14
+    // Style 2 swaps the big word tabs at the bottom for liner's queue header at the top
+    readonly property real headerSpace: cardLook ? 64 : 0
+    // The lyrics tab drops its cover and lyrics by the header plus the room the word tabs left
+    readonly property real coverDrop: cardLook ? headerSpace + actionDock.height : 0
+    readonly property real dockSpace: cardLook ? dockInset : actionDock.height + actionDock.anchors.bottomMargin + dockInset
     property var currentTracks: []
     readonly property real targetPanelWidth: Math.max(380, Math.min(460, Math.round((parent ? parent.width : 1200) * 0.34)))
 
@@ -142,6 +147,134 @@ Item {
             maskSource: glassMask
             maskThresholdMin: 0.5
             maskSpreadAtMin: 1.0
+        }
+    }
+
+    // Style 2 header, liner's RightDrawerHeader: a back button that closes the panel, the tab's
+    // name over a small count, and a pill of icon buttons for Lyrics, Comments and Up Next
+    component HeaderAction: Rectangle {
+        id: ha
+        property string icon: ""
+        property string tip: ""
+        property bool active: false
+        signal clicked()
+        width: 36; height: 32
+        radius: 7
+        color: active ? Qt.rgba(1, 1, 1, 0.16) : (haHover.hovered ? Qt.rgba(1, 1, 1, 0.08) : "transparent")
+        Behavior on color { ColorAnimation { duration: 150 } }
+        scale: haMouse.pressed ? 0.94 : 1.0
+        Behavior on scale { NumberAnimation { duration: 150 } }
+        HoverHandler { id: haHover }
+        AppIcon {
+            anchors.centerIn: parent
+            source: ha.icon
+            iconSize: 18
+            color: "#ffffff"
+            opacity: ha.active || haHover.hovered ? 1.0 : 0.7
+        }
+        MouseArea { id: haMouse; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: ha.clicked() }
+        ToolTip.visible: haHover.hovered && ha.tip !== ""
+        ToolTip.delay: 400
+        ToolTip.text: ha.tip
+    }
+
+    Item {
+        id: cardHeader
+        visible: root.cardLook
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.leftMargin: 12
+        anchors.rightMargin: 12
+        anchors.topMargin: 12
+        height: 40
+        z: 60
+
+        Rectangle {
+            id: cardBackBtn
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            width: 44; height: 40
+            radius: 10
+            color: backHover.hovered ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.10)
+            Behavior on color { ColorAnimation { duration: 150 } }
+            scale: backMouse.pressed ? 0.94 : 1.0
+            Behavior on scale { NumberAnimation { duration: 150 } }
+            HoverHandler { id: backHover }
+            AppIcon {
+                anchors.centerIn: parent
+                anchors.horizontalCenterOffset: backHover.hovered ? -2 : 0
+                Behavior on anchors.horizontalCenterOffset { NumberAnimation { duration: 150 } }
+                source: "../assets/icons/go-previous-symbolic.svg"
+                iconSize: 20
+                color: "#ffffff"
+            }
+            MouseArea { id: backMouse; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.closeRequested() }
+        }
+
+        Column {
+            anchors.left: cardBackBtn.right
+            anchors.right: cardTabPill.left
+            anchors.leftMargin: 10
+            anchors.rightMargin: 10
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 1
+            Text {
+                width: parent.width
+                elide: Text.ElideRight
+                text: root.activeTab === "queue" ? I18n.tr("Tiếp theo", "Up next")
+                      : root.activeTab === "comments" ? I18n.tr("Bình luận", "Comments")
+                      : I18n.tr("Lời bài hát", "Lyrics")
+                color: "#ffffff"
+                font.family: Theme.fontFamily
+                font.pixelSize: 16
+                font.weight: Font.DemiBold
+                font.letterSpacing: -0.2
+            }
+            Text {
+                width: parent.width
+                elide: Text.ElideRight
+                visible: text !== ""
+                text: root.activeTab === "queue" ? I18n.tr(root.upNextTracks.length + " bài", root.upNextTracks.length + (root.upNextTracks.length === 1 ? " track" : " tracks"))
+                      : root.activeTab === "comments" ? (commentsView.countText !== "" ? I18n.tr(commentsView.countText + " bình luận", commentsView.countText + " comments") : "")
+                      : (root.currentTrack ? (root.currentTrack.title || "") : "")
+                color: Qt.rgba(1, 1, 1, 0.45)
+                font.family: Theme.fontFamily
+                font.pixelSize: 12
+            }
+        }
+
+        Rectangle {
+            id: cardTabPill
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            width: tabRow.implicitWidth + 8
+            height: 40
+            radius: 10
+            color: Qt.rgba(1, 1, 1, 0.10)
+            Row {
+                id: tabRow
+                anchors.centerIn: parent
+                spacing: 2
+                HeaderAction {
+                    icon: "../assets/icons/material/ms-lyrics.svg"
+                    tip: I18n.tr("Lời bài hát", "Lyrics")
+                    active: root.activeTab === "lyrics"
+                    onClicked: root.tabRequested("lyrics")
+                }
+                HeaderAction {
+                    icon: "../assets/icons/material/ms-forum.svg"
+                    tip: I18n.tr("Bình luận", "Comments")
+                    active: root.activeTab === "comments"
+                    onClicked: root.tabRequested("comments")
+                }
+                HeaderAction {
+                    icon: "../assets/icons/material/ms-queue_music.svg"
+                    tip: I18n.tr("Tiếp theo", "Up next")
+                    active: root.activeTab === "queue"
+                    onClicked: root.tabRequested("queue")
+                }
+            }
         }
     }
 
@@ -646,7 +779,8 @@ Item {
         y: 0
         width: root.width - x
         height: Math.round(root.coverTop + root.width * root.coverLength * 1.3) + pad
-        visible: root.coverFeathered && root.fxOn && opacity > 0.01
+        // On the card the light would spill past its edges and read as a sticker: off there
+        visible: !root.cardLook && root.coverFeathered && root.fxOn && opacity > 0.01
         // fades in when its image arrives, so the blur never pops in a moment after the cover
         opacity: (root.activeTab === "lyrics" && auraSrc.status === Image.Ready) ? 1.0 : 0.0
         Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
@@ -696,6 +830,8 @@ Item {
     Item {
         id: coverHost
         anchors.fill: parent
+        // On the card the cover stays inside it, below the header
+        clip: root.cardLook
         opacity: lyricsView.opacity
         visible: opacity > 0.01
     }
@@ -744,7 +880,7 @@ Item {
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.topMargin: root.coverTop
+            anchors.topMargin: root.coverTop + root.coverDrop
             anchors.leftMargin: root.coverLeft
             anchors.rightMargin: root.coverRight
             height: Math.round(root.width * root.coverLength)
@@ -855,6 +991,7 @@ Item {
         // Close mark: two thin accent strokes lying on the cover
         StrokeClose {
             id: closeBtn
+            visible: !root.cardLook
             anchors.top: parent.top
             anchors.right: parent.right
             anchors.margins: 16
@@ -874,7 +1011,7 @@ Item {
             anchors.leftMargin: root.dockInset
             anchors.rightMargin: root.dockInset
             anchors.bottomMargin: root.dockInset
-            height: actionDock.height
+            height: root.cardLook ? 0 : actionDock.height
             z: 10
 
         }
@@ -944,7 +1081,7 @@ Item {
             id: expressiveCanvas
             anchors.top: parent.top
             // the lyrics start where the cover is mostly faded out
-            anchors.topMargin: Math.round(root.coverTop + circleCover.height * root.coverLyricsAt)
+            anchors.topMargin: Math.round(root.coverTop + root.coverDrop + circleCover.height * root.coverLyricsAt)
             anchors.bottom: posterCredits.top
             anchors.bottomMargin: 12
             anchors.left: parent.left
@@ -1556,10 +1693,10 @@ Item {
                 anchors.bottom: parent.bottom
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.topMargin: 28
+                anchors.topMargin: root.cardLook ? root.headerSpace : 28
                 anchors.leftMargin: 20
                 anchors.rightMargin: 18
-                anchors.bottomMargin: actionDock.height + actionDock.anchors.bottomMargin + root.dockInset + 8
+                anchors.bottomMargin: root.dockSpace + 8
 
                 // Leans only when the Settings switch is on; straight otherwise
                 transform: Matrix4x4 {
@@ -1932,7 +2069,9 @@ Item {
             accentColor: root.accentColor
             isLoggedIn: root.isLoggedIn
             active: root.activeTab === "comments" && root.isPanelRenderable
-            bottomInset: actionDock.height + actionDock.anchors.bottomMargin + root.dockInset
+            bottomInset: root.dockSpace
+            showHeader: !root.cardLook
+            topInset: root.headerSpace
             sideInset: root.dockInset
             cornerRadius: root.panelRadius - root.dockInset
             onCloseRequested: root.closeRequested()
@@ -1942,6 +2081,7 @@ Item {
         // bottomDock inside lyricsView only reserves its space for the lyric canvas.
         Item {
             id: actionDock
+            visible: !root.cardLook
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom

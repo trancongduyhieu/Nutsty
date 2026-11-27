@@ -18,6 +18,9 @@ Item {
     // Composer insets and radius, concentric with the panel like the tab bar below it
     property real sideInset: 8
     property real cornerRadius: 16
+    // The host can draw its own header (sidebar style 2): then this one goes and the list starts at topInset
+    property bool showHeader: true
+    property real topInset: 0
 
     signal closeRequested()
 
@@ -307,8 +310,9 @@ Item {
         anchors.right: parent.right
         anchors.leftMargin: 16
         anchors.rightMargin: 16
-        anchors.topMargin: 16
-        height: 48
+        anchors.topMargin: root.showHeader ? 16 : root.topInset
+        height: root.showHeader ? 48 : 0
+        visible: root.showHeader
         z: 20
 
         Row {

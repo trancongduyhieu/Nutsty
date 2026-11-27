@@ -3411,6 +3411,8 @@ Scope {
                     anchors.right: parent.right
                     // Same top and bottom edges as the browsing area on the left, so both columns line up
                     anchors.rightMargin: win.mochyPanelStyle === 1 ? 0 : 8
+                    // Style 2 floats its card clear of the window's bottom edge, like liner's drawer
+                    anchors.bottomMargin: win.sidebarStyle === 2 ? 14 : 0
                     upNextTilt: win.upNextTilt
                     cardLook: win.sidebarStyle === 2
                     glassSource: masterBackdropStack
