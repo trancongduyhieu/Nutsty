@@ -1365,8 +1365,8 @@ Item {
                             id: queueListView
                             Layout.fillWidth: true
                             Layout.maximumWidth: 640
-                            // Swiftify-like: a compact window (about six rows) beside the cover
-                            Layout.preferredHeight: Math.max(0, Math.min(parent.height - queueTopGap.Layout.preferredHeight - queueColumn.spacing, 80 * 6.5 + topMargin + bottomMargin))
+                            // Swiftify-like: a compact window of eight whole rows beside the cover
+                            Layout.preferredHeight: Math.max(0, Math.min(parent.height - queueTopGap.Layout.preferredHeight - queueColumn.spacing, 80 * 8 - spacing + topMargin + bottomMargin))
                             clip: true
                             spacing: 10
                             topMargin: 24
