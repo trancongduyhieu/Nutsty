@@ -402,6 +402,9 @@ class DirectUpdateManager:
 
     def _compute_plan(self, url):
         """Fill plan_info. Leaves mode 'delta' when only part of the zip is needed, else 'full'."""
+        if not pc.IS_WINDOWS and is_git_checkout(source_app_dir()):
+            self._git_plan(source_app_dir())
+            return
         if not self._delta_possible(url):
             with self._lock:
                 self.mode = "full"
@@ -590,6 +593,36 @@ class DirectUpdateManager:
             self.progress = 1.0
             self.percent = 100
             self.message = "Bản cập nhật đã tải xong! Bấm để áp dụng và khởi động lại."
+
+    def _git_plan(self, app_dir):
+        """Linux git checkout: fetch now (usually well under a second) and report the size of the new objects,
+        so the dialog shows a real figure. Without it the size stays unknown; the dialog then shows a plain button."""
+        env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
+
+        def run(*args, timeout=30):
+            res = subprocess.run(["git", "-C", app_dir, *args], capture_output=True, text=True,
+                                 timeout=timeout, env=env)
+            if res.returncode != 0:
+                raise RuntimeError((res.stderr or res.stdout or "").strip())
+            return res.stdout.strip()
+
+        try:
+            run("fetch", "--quiet", timeout=60)
+            if self._cancel:
+                raise _Cancelled()
+            size = int(run("rev-list", "--objects", "--disk-usage", "HEAD..@{u}") or 0)
+            changed = len([ln for ln in run("diff", "--name-only", "HEAD", "@{u}").splitlines() if ln.strip()])
+        except _Cancelled:
+            raise
+        except Exception:
+            with self._lock:
+                self.mode = "full"
+                self.plan_info = None
+            return
+        with self._lock:
+            self.mode = "delta"
+            self.plan_info = {"download_bytes": size, "full_bytes": 0, "changed": changed, "total": 0}
+            self._plan = None
 
     def _git_pull(self, app_dir):
         """Linux git checkout: fast-forward to the latest commit instead of copying an archive over it."""

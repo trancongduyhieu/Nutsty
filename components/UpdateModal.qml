@@ -153,10 +153,13 @@ Item {
     Timer { id: minSpinTimer; interval: 900; onTriggered: root.minSpin = false }
     // True once the backend finished comparing (or we gave up waiting), so a plain package size may be shown
     property bool planSettled: false
+    // Read updateState itself: stateName/plan are bindings on it and may still hold the old value inside this handler
     onUpdateStateChanged: {
-        if (stateName === "planning") planFresh = true;
-        if (plan && planFresh && updateState.mode === "delta" && plan.download_bytes >= 0) knownPlan = plan;
-        if (planFresh && (stateName === "planned" || stateName === "error")) planSettled = true;
+        var s = updateState || {};
+        var st = s.status || "idle";
+        if (st === "planning") planFresh = true;
+        if (s.plan && planFresh && s.mode === "delta" && s.plan.download_bytes >= 0) knownPlan = s.plan;
+        if (planFresh && (st === "planned" || st === "error")) planSettled = true;
     }
     onLatestVersionChanged: { knownPlan = null; planSettled = false; }
     Timer { id: planWait; interval: 6000; onTriggered: { root.planFresh = true; root.planSettled = true; } }
@@ -165,19 +168,23 @@ Item {
     readonly property bool isDelta: !!shownPlan && shownPlan.download_bytes >= 0 && (knownPlan !== null || updateState.mode === "delta")
     // The whole package size only once comparing is over: while it runs the real (smaller) size is still coming
     readonly property bool fullSizeShown: planSettled && phase !== "planning" && packageBytes > 0
-    readonly property bool sizeKnown: !minSpin && (isDelta || fullSizeShown)
+    // Comparing is over and there is no figure at all (no package size, no delta): stop the reels, offer the button
+    readonly property bool sizeUnavailable: planSettled && phase === "available" && !isDelta && packageBytes <= 0
+    readonly property bool sizeKnown: !minSpin && (isDelta || fullSizeShown || sizeUnavailable)
     // Waiting for the size: show a quiet dot only, no text that would change under the reader
     readonly property bool sizePending: (phase === "available" || phase === "planning") && !sizeKnown
     readonly property real savedPercent: (isDelta && shownPlan.full_bytes > 0)
         ? Math.max(0, Math.min(99, Math.round(100 * (1 - shownPlan.download_bytes / shownPlan.full_bytes)))) : 0
     readonly property bool nothingToDownload: isDelta && shownPlan.changed === 0
-    readonly property string sizeText: nothingToDownload ? I18n.tr("Không cần tải gì, chỉ cần khởi động lại", "Nothing to download, just restart") : ""
+    readonly property string sizeText: nothingToDownload ? I18n.tr("Không cần tải gì, chỉ cần khởi động lại", "Nothing to download, just restart")
+                                     : (sizeUnavailable && !minSpin ? I18n.tr("Sẵn sàng cập nhật", "Ready to update") : "")
     // The figure that rolls on its reels: the delta size if we have it, else the whole package, else a placeholder that spins
     readonly property string sizeFigure: isDelta ? formatBytes(shownPlan.download_bytes)
                                       : (fullSizeShown ? formatBytes(packageBytes) : "00.0 MB")
     readonly property string sizeNumber: sizeFigure.split(" ")[0]
     readonly property string sizeUnit: sizeFigure.split(" ")[1] || ""
     readonly property bool showSizeRow: (phase === "available" || phase === "planning") && !nothingToDownload
+                                        && !(sizeUnavailable && !minSpin)
 
     // Two fixed lines under the version: what matters now, then the detail. Both are always one line,
     // so the layout below never moves when the phase changes.
