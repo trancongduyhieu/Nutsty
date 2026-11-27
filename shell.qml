@@ -2437,7 +2437,7 @@ Scope {
     // Playing Next list leans in perspective; off keeps it straight
     property bool upNextTilt: false
     // Right sidebar look: 1 floats on the wallpaper with no frame, 2 sits on a frosted card (liner's queue drawer)
-    property int sidebarStyle: 1
+    property int sidebarStyle: 2
     onIsNowPlayingOpenChanged: {
         if (win.isNowPlayingOpen) {
             win.isMochySidePanelOpen = false;

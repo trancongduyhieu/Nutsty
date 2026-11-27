@@ -35,7 +35,7 @@ Rectangle {
     // "auto" | "on" | "off"; liteModeAutoActive says whether Auto currently resolves to on (no GPU)
     property string liteMode: "auto"
     property string closeBehavior: "widget"
-    property int sidebarStyle: 1
+    property int sidebarStyle: 2
     property bool liteModeAutoActive: false
     property int crossfadeSeconds: 6
     property bool autoMixEnabled: false
@@ -3892,11 +3892,17 @@ Rectangle {
                 }
 
                 // =============================================================
-                // Up Next lean: the Playing Next list stands straight unless this is on
+                // Up Next lean: the Playing Next list stands straight unless this is on.
+                // Only sidebar style 1 leans its list; in style 2 the switch is greyed out and off.
                 // =============================================================
                 Item {
+                    id: upNextTiltRow
                     Layout.fillWidth: true
                     Layout.preferredHeight: 46
+                    readonly property bool available: root.sidebarStyle === 1
+                    readonly property bool shownOn: available && root.upNextTilt
+                    opacity: available ? 1.0 : 0.45
+                    Behavior on opacity { NumberAnimation { duration: 150 } }
 
                     Column {
                         anchors.left: parent.left
@@ -3917,7 +3923,9 @@ Rectangle {
 
                         Text {
                             width: parent.width
-                            text: I18n.tr("Các bài sắp phát xếp nghiêng lơ lửng thay vì đứng thẳng", "Upcoming songs float at a slant instead of standing straight")
+                            text: upNextTiltRow.available
+                                ? I18n.tr("Các bài sắp phát xếp nghiêng lơ lửng thay vì đứng thẳng", "Upcoming songs float at a slant instead of standing straight")
+                                : I18n.tr("Chỉ dùng được với kiểu thanh bên Bản 1", "Only available with sidebar Style 1")
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
                             color: Theme.textSecondary
@@ -3932,21 +3940,23 @@ Rectangle {
                         width: 44
                         height: 24
                         radius: 12
-                        color: root.upNextTilt ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18)
+                        color: !upNextTiltRow.available ? Qt.rgba(1, 1, 1, 0.14)
+                             : (upNextTiltRow.shownOn ? root.accentColor : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18))
                         Behavior on color { ColorAnimation { duration: 150 } }
 
                         Rectangle {
                             width: 18
                             height: 18
                             radius: 9
-                            color: "#ffffff"
+                            color: upNextTiltRow.available ? "#ffffff" : Qt.rgba(1, 1, 1, 0.55)
                             anchors.verticalCenter: parent.verticalCenter
-                            x: root.upNextTilt ? parent.width - width - 3 : 3
+                            x: upNextTiltRow.shownOn ? parent.width - width - 3 : 3
                             Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
                         }
 
                         MouseArea {
                             anchors.fill: parent
+                            enabled: upNextTiltRow.available
                             preventStealing: false
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
