@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Shapes
 import "window_frame_logic.js" as Frame
 
-// Maximized-window frame (liner style): a dark glass band around the app with notches hanging from
+// Window frame (liner style): a dark glass band around the app with notches hanging from
 // the top edge, one continuous shape so the 1px hairline runs unbroken around every notch.
 // Content widths include the notch's own padding; 0 means that notch is absent.
 // Takes no mouse input: whatever sits in the notches is drawn by the owner above this item.
@@ -11,6 +11,8 @@ Item {
     property real leftContentWidth: 0
     property real centerContentWidth: 0
     property real rightContentWidth: 0
+    // the hole's corner radius: concentric with the window corner (24 - band) when windowed
+    property real cornerRadius: Frame.RC
     property color fillColor: Qt.rgba(0, 0, 0, 0.35)
     property color hairlineColor: Qt.rgba(1, 1, 1, 0.10)
 
@@ -25,9 +27,9 @@ Item {
 
     readonly property bool sized: width > 0 && height > 0
     readonly property string holePath: sized
-        ? Frame.innerPath(Math.round(width), Math.round(height), leftContentWidth, centerContentWidth, rightContentWidth) : ""
+        ? Frame.innerPath(Math.round(width), Math.round(height), leftContentWidth, centerContentWidth, rightContentWidth, cornerRadius) : ""
     readonly property string bandPath: sized
-        ? Frame.framePath(Math.round(width), Math.round(height), leftContentWidth, centerContentWidth, rightContentWidth) : ""
+        ? Frame.framePath(Math.round(width), Math.round(height), leftContentWidth, centerContentWidth, rightContentWidth, cornerRadius) : ""
 
     Shape {
         anchors.fill: parent

@@ -76,4 +76,10 @@ assert.strictEqual(L.centerNotchX(200, 34, 228, 60), -1);
 assert.strictEqual((L.innerPath(200, 500, 34, 228, 60).match(/A 15 15 0 0 0/g) || []).length, 2);
 assert.strictEqual((L.innerPath(1600, 1000, 34, 228, 60).match(/A 15 15 0 0 0/g) || []).length, 4);
 
+// Windowed (24px outer corners): hole corners stay concentric, 24 - 6 = 18
+inner = L.innerPath(800, 600, 0, 228, 60, 18);
+assert.ok(inner.includes('A 18 18 0 0 1 24 6'), inner);
+assert.ok(inner.includes('A 18 18 0 0 1 776 594'), inner);
+assert.ok(L.framePath(800, 600, 0, 228, 60, 18).includes('A 18 18 0 0 1 24 6'));
+
 console.log('window_frame_logic: OK');

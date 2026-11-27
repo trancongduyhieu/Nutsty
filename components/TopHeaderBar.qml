@@ -6,7 +6,7 @@ import "."
 
 Rectangle {
     id: headerRoot
-    // Maximized: the header folds into notches hanging from a thin frame (liner style). On the home
+    // Notch mode: the header folds into notches hanging from a thin frame (liner style). On the home
     // feed the mood island hangs below the center notch, so the header keeps room for it there.
     height: notchMode ? ((currentView === "home" && !isNowPlayingOpen) ? 90 : 44) : 64
     color: "transparent"
@@ -116,6 +116,8 @@ Rectangle {
         leftContentWidth: collapseNotchBtn.shown ? headerRoot.navBox + 8 : 0
         centerContentWidth: navCluster.implicitWidth + 8
         rightContentWidth: headerRoot.navBox * 2 + 2 + 8
+        // windowed: concentric with the 24px window corner; maximized: liner's 12px
+        cornerRadius: headerRoot.isMaximized ? 12 : 24 - band
     }
 
     // The top band and the gaps between notches still move the window and restore it on double click

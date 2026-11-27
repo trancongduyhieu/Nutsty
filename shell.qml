@@ -2823,7 +2823,7 @@ Scope {
                 isSidebarVisible: win.showSidebar
                 isNowPlayingOpen: win.isNowPlayingOpen
                 isMaximized: Boolean(win.visibility === 4 || win.maximized)
-                notchMode: Boolean(win.visibility === 4 || win.maximized || win.fullscreen)
+                notchMode: true
                 frameHeight: masterContainer.height
                 onCollapseRequested: win.isNowPlayingOpen = false
                 accentColor: win.accentColor
@@ -2907,7 +2907,10 @@ Scope {
                     win.sendToBackground();
                 }
                 onMaximizeWindowRequested: {
-                    if (win.visibility === 4) {
+                    // Quickshell on Linux has no visibility/showNormal: only win.maximized says it is maximized
+                    if (win.fullscreen) {
+                        win.fullscreen = false;
+                    } else if (win.visibility === 4 || win.maximized) {
                         if (typeof win.showNormal === "function") win.showNormal();
                         else win.maximized = false;
                     } else {

@@ -7,7 +7,7 @@ var B = 6;    // band thickness
 var H = 30;   // notch height below the band
 var R = 8;    // concave flare where a notch meets the band
 var BR = 15;  // convex bottom corners of a notch
-var RC = 12;  // inner corners of the hole where no notch sits
+var RC = 12;  // inner corners of the hole where no notch sits (maximized; windowed passes 24 - B)
 
 function even(w) { return Math.ceil(Math.max(0, w) / 2) * 2; }
 
@@ -27,15 +27,17 @@ function centerNotchX(W, leftW, centerW, rightW) {
     return Math.max(lo, Math.min(hi, Math.round(W / 2 - wc / 2)));
 }
 
-// The hole's outline, clockwise from the top-left: flares sweep 1, notch bottoms sweep 0
-function innerPath(W, Hh, leftW, centerW, rightW) {
+// The hole's outline, clockwise from the top-left: flares sweep 1, notch bottoms sweep 0.
+// rc: the hole's own corner radius, concentric with the window's (defaults to RC)
+function innerPath(W, Hh, leftW, centerW, rightW, rc) {
+    var C = rc > 0 ? rc : RC;
     var L = B, T = B, Rr = W - B, Bt = Hh - B;
     var wl = notchOuterWidth("start", leftW);
     var wr = notchOuterWidth("end", rightW);
     var x1 = centerNotchX(W, leftW, centerW, rightW);
     var wc = notchOuterWidth("center", centerW);
     var a = function (r, sweep, x, y) { return " A " + r + " " + r + " 0 0 " + sweep + " " + x + " " + y; };
-    var d = wl > 0 ? "M " + (L + wl) + " " + T : "M " + (L + RC) + " " + T;
+    var d = wl > 0 ? "M " + (L + wl) + " " + T : "M " + (L + C) + " " + T;
     if (x1 >= 0) {
         d += " L " + x1 + " " + T + a(R, 1, x1 + R, T + R)
            + " V " + (T + H - BR) + a(BR, 0, x1 + R + BR, T + H)
@@ -48,21 +50,21 @@ function innerPath(W, Hh, leftW, centerW, rightW) {
            + " V " + (T + H - BR) + a(BR, 0, x2 + R + BR, T + H)
            + " H " + (Rr - R) + a(R, 1, Rr, T + H + R);
     } else {
-        d += " L " + (Rr - RC) + " " + T + a(RC, 1, Rr, T + RC);
+        d += " L " + (Rr - C) + " " + T + a(C, 1, Rr, T + C);
     }
-    d += " V " + (Bt - RC) + a(RC, 1, Rr - RC, Bt)
-       + " H " + (L + RC) + a(RC, 1, L, Bt - RC);
+    d += " V " + (Bt - C) + a(C, 1, Rr - C, Bt)
+       + " H " + (L + C) + a(C, 1, L, Bt - C);
     if (wl > 0) {
         d += " V " + (T + H + R) + a(R, 1, L + R, T + H)
            + " H " + (L + wl - R - BR) + a(BR, 0, L + wl - R, T + H - BR)
            + " V " + (T + R) + a(R, 1, L + wl, T);
     } else {
-        d += " V " + (T + RC) + a(RC, 1, L + RC, T);
+        d += " V " + (T + C) + a(C, 1, L + C, T);
     }
     return d + " Z";
 }
 
 // Outer rectangle plus the hole: filled with OddEvenFill this leaves only the band and notches
-function framePath(W, Hh, leftW, centerW, rightW) {
-    return "M 0 0 H " + W + " V " + Hh + " H 0 Z " + innerPath(W, Hh, leftW, centerW, rightW);
+function framePath(W, Hh, leftW, centerW, rightW, rc) {
+    return "M 0 0 H " + W + " V " + Hh + " H 0 Z " + innerPath(W, Hh, leftW, centerW, rightW, rc);
 }
