@@ -2078,7 +2078,9 @@ Item {
                 id: lyricsIsland
                 readonly property bool wanted: modeSwitcher.inNotch && root.activeTab === "lyrics" && root.visible
                 active: wanted
-                shown: wanted && (currentSourceTag !== "" || available.length > 0)
+                // waits for the lyrics on screen, so the name and the offset part are known up front
+                // and the notch widens once
+                shown: wanted && currentSourceTag !== ""
                 track: root.track
                 trackVid: {
                     var t = root.track;

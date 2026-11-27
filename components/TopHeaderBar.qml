@@ -58,7 +58,7 @@ Rectangle {
     }
     // the switcher row's width, eased when it grows or shrinks in place (lyrics controls come and go)
     // Springs like the notch itself: grows with a small bounce (0.42, 0.8), shrinks a touch slower
-    // and without one (0.55, 1.0). The host clips to it, so the new controls are uncovered as the
+    // and without one (0.44, 1.0). The host clips to it, so the new controls are uncovered as the
     // notch widens instead of popping in at full width.
     readonly property real npRowTarget: npNotchHost.childrenRect.width
     property real npRowW: 0
@@ -70,7 +70,7 @@ Rectangle {
             if (headerRoot.npMorph < 0.99) { headerRoot.npRowW = headerRoot.npRowTarget; headerRoot.npRowVel = 0; return; }
             var grow = headerRoot.npRowTarget > headerRoot.npRowW;
             var s = Frame.springStep(headerRoot.npRowW, headerRoot.npRowVel, headerRoot.npRowTarget,
-                                     grow ? 0.42 : 0.55, grow ? 0.8 : 1.0, frameTime);
+                                     grow ? 0.42 : 0.44, grow ? 0.8 : 1.0, frameTime);
             var done = Math.abs(s[0] - headerRoot.npRowTarget) <= 0.25 && Math.abs(s[1]) <= 0.5;
             headerRoot.npRowVel = done ? 0 : s[1];
             headerRoot.npRowW = done ? headerRoot.npRowTarget : s[0];

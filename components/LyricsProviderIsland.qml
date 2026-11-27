@@ -63,13 +63,15 @@ RowLayout {
         return currentSourceTag;
     }
     readonly property bool hasMultiple: available.length > 1
+    property string lastName: ""
+    onCurrentNameChanged: if (currentName !== "") lastName = currentName
     // eases in as the notch widens around it
     // shown: whether the owner wants it. It fades in while the notch widens around it, and on the
     // way out fades first, staying in the row until gone, so the notch closes after it
     property bool shown: false
     visible: shown || opacity > 0.01
     opacity: shown ? 1 : 0
-    Behavior on opacity { NumberAnimation { duration: root.shown ? 340 : 170; easing.type: Easing.OutCubic } }
+    Behavior on opacity { NumberAnimation { duration: root.shown ? 340 : 136; easing.type: Easing.OutCubic } }
 
     function step(delta) {
         if (!hasMultiple) return;
@@ -116,13 +118,17 @@ RowLayout {
         property real iconRotation: 0
         property int iconSize: 14
         property string tip: ""
+        // kept in the row while unavailable (dimmed, inert) so the notch never resizes for it
+        property bool available: true
         signal clicked()
         Layout.preferredWidth: 26; Layout.preferredHeight: 26
+        opacity: available ? 1.0 : 0.3
+        Behavior on opacity { NumberAnimation { duration: 200 } }
         radius: 8
-        color: nbH.hovered ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) : "transparent"
+        color: nbH.hovered && nb.available ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.22) : "transparent"
         Behavior on color { ColorAnimation { duration: 140 } }
         HoverHandler { id: nbH }
-        ToolTip.visible: nbH.hovered && nb.tip !== ""
+        ToolTip.visible: nbH.hovered && nb.tip !== "" && nb.available
         ToolTip.text: nb.tip
         ToolTip.delay: 400
         AppIcon {
@@ -134,11 +140,11 @@ RowLayout {
             opacity: nbH.hovered ? 1.0 : 0.7
             scale: nbM.pressed ? 0.9 : 1.0
         }
-        MouseArea { id: nbM; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: nb.clicked() }
+        MouseArea { id: nbM; anchors.fill: parent; enabled: nb.available; cursorShape: Qt.PointingHandCursor; onClicked: nb.clicked() }
     }
 
     NotchIconButton {
-        visible: root.hasMultiple
+        available: root.hasMultiple
         icon: "../assets/icons/material/ms-expand_more.svg"
         iconRotation: 90
         tip: I18n.tr("Nguồn trước", "Previous source")
@@ -161,7 +167,8 @@ RowLayout {
             spacing: 6
             Text {
                 anchors.verticalCenter: parent.verticalCenter
-                text: root.currentName !== "" ? root.currentName : I18n.tr("Đang tìm lời...", "Finding lyrics...")
+                // keeps the last name while fading out on a song change instead of flashing a placeholder
+                text: root.lastName
                 color: "#ffffff"
                 font.family: Theme.fontFamily
                 font.pixelSize: 13
@@ -169,21 +176,25 @@ RowLayout {
                 elide: Text.ElideRight
                 width: Math.min(implicitWidth, 120)
             }
+            // fixed slot: the count fills in as the background probe finds sources, without
+            // widening the notch a second time
             Text {
-                visible: root.hasMultiple && root.currentIndex >= 0
                 anchors.verticalCenter: parent.verticalCenter
-                text: (root.currentIndex + 1) + "/" + root.available.length
+                width: countMetrics.width
+                horizontalAlignment: Text.AlignHCenter
+                text: root.hasMultiple && root.currentIndex >= 0 ? (root.currentIndex + 1) + "/" + root.available.length : ""
+                TextMetrics { id: countMetrics; font.family: "monospace"; font.pixelSize: 10; text: "8/8" }
                 color: Qt.rgba(1, 1, 1, 0.5)
                 font.family: "monospace"
                 font.pixelSize: 10
             }
             AppIcon {
-                visible: root.hasMultiple
                 anchors.verticalCenter: parent.verticalCenter
                 source: "../assets/icons/material/ms-expand_more.svg"
                 iconSize: 13
                 color: "#ffffff"
-                opacity: 0.55
+                opacity: root.hasMultiple ? 0.55 : 0.2
+                Behavior on opacity { NumberAnimation { duration: 200 } }
                 rotation: providerMenu.opened ? 180 : 0
                 Behavior on rotation { NumberAnimation { duration: 150 } }
             }
@@ -263,7 +274,7 @@ RowLayout {
     }
 
     NotchIconButton {
-        visible: root.hasMultiple
+        available: root.hasMultiple
         icon: "../assets/icons/material/ms-expand_more.svg"
         iconRotation: -90
         tip: I18n.tr("Nguồn tiếp theo", "Next source")
