@@ -1855,6 +1855,24 @@ class CoverTests(SyncCase):
         self.sync(c, now=self.NOW + 20)
         self.assertEqual(len(self.covers_sent(c)), 1)
 
+    def test_no_pillow_skips_covers_not_the_sync(self):
+        from unittest import mock
+        import spotify_sync as ss
+        import playlist_manager as pm
+        c = self.setup_p()
+        path = CONFIG_DIR / "raw.png"
+        path.write_bytes(b"\x89PNG not really")
+        pls = pm.load_playlists()
+        rec = next(p for p in pls if p["id"] == "custom_pl_spotify_P")
+        rec["customCover"] = rec["image"] = path.resolve().as_uri()
+        pm.save_playlists(pls)
+        with mock.patch.object(ss, "_cover_jpeg", side_effect=ModuleNotFoundError("No module named 'PIL'")):
+            self.assertTrue(self.sync(c, now=self.NOW + 10)["success"])
+        self.assertEqual(c.writes, [])
+        link = self.playlist()["spotifyLink"]
+        self.assertNotIn("cover", link)          # still pending: sent once Pillow is there
+        self.assertNotIn("coverFailed", link)
+
     def test_cover_jpeg_is_a_small_centre_square(self):
         import io
         import spotify_sync as ss

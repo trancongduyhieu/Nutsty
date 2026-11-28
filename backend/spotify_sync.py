@@ -722,6 +722,9 @@ def _push_covers(client, covers, st, now):
                 return e.code
             sys.stderr.write(f"[spotify_sync] cover for {pid} refused: {e}\n")
             key = "coverFailed"
+        except ImportError as e:   # no Pillow on this install: covers wait, the rest of the sync goes on
+            sys.stderr.write(f"[spotify_sync] cannot convert covers: {e}\n")
+            return ""
         except (OSError, ValueError) as e:   # unreadable or not an image
             sys.stderr.write(f"[spotify_sync] cover for {pid} unreadable: {e}\n")
             key = "coverFailed"
