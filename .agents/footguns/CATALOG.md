@@ -30,12 +30,20 @@ Mỗi dòng: `tên` — bẫy là gì — bằng chứng — triệu chứng ng�
    kiểu Cristian/NTP — `hostStampAgeSec`, test clock skew 7s — khách luôn lệch cố định vài giây
    giữa Linux và Windows.
 
-## D · Quickshell nạp nóng (1)
+## D · Quickshell nạp nóng và môi trường chạy (2)
 
 8. `no-new-inline-component-on-hot-reload` — thêm `component X:` mới vào file QML đang chạy thì
    Quickshell (noctalia-qs 0.0.12) nạp lại báo "X is not a type" và giữ bản cũ; mở mới thì chạy —
    tái hiện bằng `quickshell -p` riêng, đổi file sang bản mới — giao diện mới không hiện, đọc
    `quickshell log --pid <pid>`. Component mới để file riêng và thêm vào `components/qmldir`.
+9. `exe-inside-repo-cannot-write-config` — trên Windows, sandbox của AI agent chặn mọi exe nằm trong
+   thư mục repo ghi ra ngoài repo, kể cả khi người dùng tự mở exe từ Explorer; `Desktop\Nutsty` là
+   junction vào repo nên cũng dính — cùng một `python.exe` đặt trong repo bị `PermissionError` khi ghi
+   `~/.config/noctalia`, đặt ngoài repo thì ghi được; PowerShell và Python hệ thống ghi bình thường —
+   đồng bộ Spotify báo "internal", "Đang đồng bộ" rồi không có playlist, đổi cài đặt không lưu.
+   Build xong chép `dist_*\Nutsty` ra `%LOCALAPPDATA%\Programs\Nutsty`, trỏ shortcut vào đó và để
+   người dùng tự mở. Test cũng vậy: `venv\Scripts\python.exe` không ghi được `%TEMP%`, nên
+   `tempfile` rơi về repo và test sqlite lỗi khóa file; chạy test bằng Python hệ thống hoặc chấp nhận.
 
 ## C · Kiểm thử và chứng minh (1)
 

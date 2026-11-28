@@ -146,5 +146,5 @@ Tài liệu đặc tả "Hiến pháp kiến trúc", quy chuẩn kỹ thuật c�
 Mọi thay đổi mã nguồn trước khi báo cáo hoàn thành hoặc commit đều **BẮT BUỘC** trải qua quy trình kiểm thử 4 bước:
 1. **Kiểm tra tĩnh toàn diện (< 1s)**: `python scripts/verify_codebase.py` (kiểm tra `py_compile`, AST symbol scope chống `NameError`, và hợp đồng QML/JS), rồi `python scripts/verify_qml_compat.py` (nạp mọi QML qua `compat/`, bắt API Quickshell mà Windows thiếu). Cả hai chạy trong CI `verify.yml`.
 2. **Kiểm tra cú pháp QML**: `qmllint components/*.qml shell.qml` (hoặc trình nạp QML).
-3. **Thực nghiệm giao diện trực quan**: Chạy ứng dụng qua `run_command` -> Chụp ảnh màn hình -> Xem trực tiếp bằng `view_file` để đánh giá kết quả thực tế.
+3. **Thực nghiệm giao diện trực quan**: Chạy ứng dụng qua `run_command` -> Chụp ảnh màn hình -> Xem trực tiếp bằng `view_file` để đánh giá kết quả thực tế. **Sandbox Windows**: exe nằm trong repo (kể cả `dist_*`, `venv`, junction `Desktop\Nutsty`) không ghi được ra ngoài repo nên đồng bộ lỗi "internal", playlist không lưu; chép build ra `%LOCALAPPDATA%\Programs\Nutsty` rồi để người dùng tự mở (xem footgun `exe-inside-repo-cannot-write-config`).
 4. **Git Commit & Push**: Đảm bảo commit thông điệp rõ ràng theo chuẩn Conventional Commits và push lên nhánh `main`.
