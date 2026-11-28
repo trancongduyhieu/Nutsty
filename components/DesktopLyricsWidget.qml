@@ -130,9 +130,13 @@ PanelWindow {
         } catch(e) {}
     }
 
-    readonly property color colHighlight: root.frostifyPalette.highlightColor || "#deb06c"
-    readonly property color colActiveText: root.frostifyPalette.baseTextColor || "#f8fafc"
-    readonly property color colDeadText: root.frostifyPalette.deadTextColor || "#f1f5f9"
+    // A new wallpaper fades the lyric colours over instead of switching them in one frame
+    property color colHighlight: root.frostifyPalette.highlightColor || "#deb06c"
+    property color colActiveText: root.frostifyPalette.baseTextColor || "#f8fafc"
+    property color colDeadText: root.frostifyPalette.deadTextColor || "#f1f5f9"
+    Behavior on colHighlight { ColorAnimation { duration: 800; easing.type: Easing.InOutQuad } }
+    Behavior on colActiveText { ColorAnimation { duration: 800; easing.type: Easing.InOutQuad } }
+    Behavior on colDeadText { ColorAnimation { duration: 800; easing.type: Easing.InOutQuad } }
     readonly property color colShadowDir: root.frostifyPalette.shadowDirectional || "#a6020305"
     readonly property color colShadowAmb: root.frostifyPalette.shadowAmbient || "#66000000"
     readonly property bool isLightArea: !!root.frostifyPalette.isLightArea

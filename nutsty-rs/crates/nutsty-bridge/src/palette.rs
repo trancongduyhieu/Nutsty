@@ -265,6 +265,88 @@ pub fn extract_palette_from_rgb_buffer(pixels: &[(u8, u8, u8)]) -> SongPaletteRe
     }
 }
 
+/// Desktop-lyrics palette for the wallpaper: same JSON keys palette_extractor.py writes to
+/// nutsty_palette.json. Runs as its own process so a 4K decode never holds the app's Python GIL.
+#[derive(Debug, Clone, Serialize)]
+pub struct WallpaperPalette {
+    pub wallpaper: String,
+    #[serde(rename = "meanLuminance")]
+    pub mean_luminance: f32,
+    #[serde(rename = "brightRatio")]
+    pub bright_ratio: f32,
+    #[serde(rename = "isLightArea")]
+    pub is_light_area: bool,
+    pub theme: String,
+    #[serde(rename = "baseTextColor")]
+    pub base_text_color: String,
+    #[serde(rename = "highlightColor")]
+    pub highlight_color: String,
+    #[serde(rename = "accentColor")]
+    pub accent_color: String,
+    #[serde(rename = "backgroundTint")]
+    pub background_tint: String,
+    #[serde(rename = "deadTextColor")]
+    pub dead_text_color: String,
+    #[serde(rename = "shadowDirectional")]
+    pub shadow_directional: String,
+    #[serde(rename = "shadowAmbient")]
+    pub shadow_ambient: String,
+}
+
+fn round3(x: f32) -> f32 {
+    (x * 1000.0).round() / 1000.0
+}
+
+/// Mean luminance and bright-pixel ratio of the desktop-lyrics band
+/// (x 14%..52%, y 69%..77%), as analyze_crop in palette_extractor.py.
+pub fn analyze_lyric_region(img: &image::DynamicImage) -> (f32, f32, bool) {
+    let (w, h) = (img.width(), img.height());
+    let x1 = (0.14 * w as f32) as u32;
+    let y1 = (0.69 * h as f32) as u32;
+    let x2 = ((0.52 * w as f32) as u32).min(w);
+    let y2 = ((0.77 * h as f32) as u32).min(h);
+    if x2 <= x1 || y2 <= y1 {
+        return (0.3, 0.0, false);
+    }
+    let crop = img.crop_imm(x1, y1, x2 - x1, y2 - y1).resize_exact(48, 24, FilterType::Triangle).to_rgb8();
+    let lums: Vec<f32> = crop
+        .pixels()
+        .map(|p| (0.299 * p[0] as f32 + 0.587 * p[1] as f32 + 0.114 * p[2] as f32) / 255.0)
+        .collect();
+    if lums.is_empty() {
+        return (0.3, 0.0, false);
+    }
+    let mean = lums.iter().sum::<f32>() / lums.len() as f32;
+    let bright = lums.iter().filter(|&&l| l > 0.55).count() as f32 / lums.len() as f32;
+    (round3(mean), round3(bright), mean > 0.45 || bright > 0.20)
+}
+
+pub fn extract_wallpaper_palette(path: &str) -> Option<WallpaperPalette> {
+    let p = normalize_file_path(path);
+    // Windows' TranscodedWallpaper has no extension: guess the format from the bytes
+    let img = image::ImageReader::open(&p).ok()?.with_guessed_format().ok()?.decode().ok()?;
+    // Shrink once (fast integer sampling): both passes below work on a small copy
+    let small = img.thumbnail(640, 640);
+    let (mean, bright, is_light) = analyze_lyric_region(&small);
+    let thumb = small.resize_exact(96, 96, FilterType::Triangle).to_rgb8();
+    let pixels: Vec<(u8, u8, u8)> = thumb.pixels().map(|q| (q[0], q[1], q[2])).collect();
+    let pal = extract_palette_from_rgb_buffer(&pixels);
+    Some(WallpaperPalette {
+        wallpaper: path.replace('\\', "/"),
+        mean_luminance: mean,
+        bright_ratio: bright,
+        is_light_area: is_light,
+        theme: pal.theme,
+        base_text_color: "#f8fafc".into(),
+        highlight_color: pal.highlight_color,
+        accent_color: pal.accent_color,
+        background_tint: pal.background_tint,
+        dead_text_color: "#f1f5f9".into(),
+        shadow_directional: "#a6020305".into(),
+        shadow_ambient: "#66000000".into(),
+    })
+}
+
 /// Resolve platform-appropriate cache file for song palettes
 fn get_cache_file_path() -> PathBuf {
     #[cfg(windows)]
@@ -405,6 +487,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn flat_wallpaper_does_not_crash_and_reads_as_dark() {
+        // Under the workspace target dir: always writable, unlike a sandboxed system Temp
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/test-tmp/wallpaper");
+        fs::create_dir_all(&dir).expect("create test dir");
+        let p = dir.join("flat.png");
+        image::RgbImage::from_pixel(320, 180, image::Rgb([20, 30, 160])).save(&p).unwrap();
+        let res = extract_wallpaper_palette(p.to_str().unwrap()).expect("decodes");
+        assert!(!res.is_light_area);
+        assert!(res.highlight_color.starts_with('#'));
+        assert!(extract_wallpaper_palette(dir.join("missing.png").to_str().unwrap()).is_none());
+    }
+
+    #[test]
+    #[ignore = "needs a local thumbnail from the author's machine"]
     fn test_extract_thumbnail() {
         let path = "/home/apple/.cache/nutsty/thumbnails/a01318451eeaaaf36900165e55046ba0.jpg";
         let res = extract_song_palette(path);

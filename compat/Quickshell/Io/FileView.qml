@@ -40,7 +40,24 @@ Item {
         reload();
     }
 
+    function _norm(p) {
+        return String(p || "").replace(/^file:\/\/\/?/, "").replace(/\\/g, "/").toLowerCase();
+    }
+
+    // A backend thread wrote a file (wallpaper palette): reload now instead of on the next poll
+    Connections {
+        target: (root.watchChanges && typeof __NutstyBridge !== "undefined") ? __NutstyBridge : null
+        ignoreUnknownSignals: true
+        function onFileWritten(written) {
+            if (root._norm(written) !== root._norm(root.path)) return;
+            mtimePoll.lastMtime = __NutstyBridge.checkFileMtime(root.path);
+            root.reload();
+            root.fileChanged();
+        }
+    }
+
     Timer {
+        id: mtimePoll
         interval: 1500
         repeat: true
         running: root.watchChanges && root.path !== ""

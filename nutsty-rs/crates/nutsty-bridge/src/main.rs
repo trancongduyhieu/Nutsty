@@ -316,6 +316,14 @@ fn main() {
             let pal = palette::extract_song_palette(src);
             println!("{}", serde_json::to_string(&pal).unwrap());
         }
+        "wallpaper" => {
+            // Exit 1 when the image cannot be read: the caller falls back to Pillow
+            let src = args.get(2).map(|s| s.as_str()).unwrap_or("");
+            match palette::extract_wallpaper_palette(src) {
+                Some(pal) => println!("{}", serde_json::to_string(&pal).unwrap()),
+                None => std::process::exit(1),
+            }
+        }
         _ => {
             handle_status();
         }

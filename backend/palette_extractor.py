@@ -134,8 +134,9 @@ def oklch_to_hex(L, C, h):
     return f"#{r:02x}{g:02x}{b:02x}"
 
 def kmeans_oklab(points, k=5, iters=8):
+    # Every centroid is (L, a, b, count): callers rank clusters by count
     if len(points) <= k:
-        return points
+        return [(p[0], p[1], p[2], 1) for p in points]
     # Deterministic farthest-point seeding
     centroids = [points[0]]
     while len(centroids) < k:
@@ -160,7 +161,8 @@ def kmeans_oklab(points, k=5, iters=8):
         new_centroids = []
         for i in range(k):
             if not clusters[i]:
-                new_centroids.append(centroids[i])
+                # Flat wallpaper (Windows "Solid colour"): empty cluster, count 0 so it never wins
+                new_centroids.append((centroids[i][0], centroids[i][1], centroids[i][2], 0))
             else:
                 L = sum(p[0] for p in clusters[i]) / len(clusters[i])
                 a = sum(p[1] for p in clusters[i]) / len(clusters[i])
@@ -285,6 +287,14 @@ def main():
             os.system(f'magick "{wp_path}[0]" /tmp/noctalia_wallbash_frame.png')
             img_to_open = Path("/tmp/noctalia_wallbash_frame.png")
 
+    # Fast path: the Rust bridge decodes and clusters in its own process (~0.1 s for a 4K
+    # picture), so the app's Python, which on Windows runs inside Nutsty.exe, never stalls on it
+    native = _native_wallpaper_palette(img_to_open)
+    if native:
+        native["wallpaper"] = str(wp_path).replace("\\", "/")
+        _write_palette(native)
+        return
+
     if not HAS_PIL:
         result = {
             "wallpaper": str(wp_path or ""),
@@ -330,7 +340,36 @@ def main():
         "shadowDirectional": palette_info["shadowDirectional"],
         "shadowAmbient": palette_info["shadowAmbient"]
     }
+    _write_palette(result)
 
+
+def _native_wallpaper_palette(img_path: Path) -> dict | None:
+    """Palette from `nutsty-bridge wallpaper <path>`, or None (no binary, unreadable image,
+    timeout) so the caller falls back to Pillow."""
+    bridge_bin = Path(pc.APP_ROOT) / "bin" / ("nutsty-bridge.exe" if pc.IS_WINDOWS else "nutsty-bridge")
+    if not bridge_bin.exists():
+        return None
+    try:
+        import subprocess
+        proc = subprocess.run(
+            [str(bridge_bin), "wallpaper", str(img_path)],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=10, check=False,
+            creationflags=0x08000000 if pc.IS_WINDOWS else 0,   # CREATE_NO_WINDOW: no console flash
+        )
+        if proc.returncode != 0:
+            return None
+        data = json.loads(proc.stdout)
+        return data if data.get("highlightColor") else None
+    except Exception:
+        return None
+
+
+# Called with the main output path after every write (Windows: the launcher reloads the
+# desktop-lyrics FileView at once instead of waiting for its mtime poll)
+on_written = None
+
+
+def _write_palette(result: dict):
     out_file = Path(pc.get_config_dir()) / "nutsty_palette.json"
     out_file.parent.mkdir(parents=True, exist_ok=True)
     out_file.write_text(json.dumps(result, indent=2), encoding="utf-8")
@@ -353,6 +392,44 @@ def main():
 
     print(f"Successfully generated palette at {out_file}")
     print(json.dumps(result, indent=2))
+    if on_written:
+        for p in {str(out_file), str(Path.home() / ".config" / "noctalia" / "nutsty_palette.json")}:
+            try:
+                on_written(p)
+            except Exception:
+                pass
+
+def _wallpaper_signature():
+    """(path, mtime) of the current wallpaper; a Spotlight rotation changes the path, a new
+    picture set in Settings rewrites TranscodedWallpaper in place and changes only the mtime."""
+    try:
+        wp = get_current_wallpaper()
+        return (str(wp), wp.stat().st_mtime) if wp and wp.exists() else None
+    except Exception:
+        return None
+
+
+def watch_wallpaper(interval: float = 1.0, active=None):
+    """Windows has no Noctalia hook to re-run main() when the wallpaper changes, so poll it.
+    One SystemParametersInfoW call and a stat a second; extraction (Rust, own process) only on
+    change. `active` (threading.Event): while cleared, as with desktop lyrics off, the watcher
+    sleeps; the first pass always runs, since the main window's accent reads the same file."""
+    import time
+    last = None
+    first = True
+    while True:
+        if active is not None and not first and not active.is_set():
+            active.wait()
+        first = False
+        sig = _wallpaper_signature()
+        if sig and sig != last:
+            try:
+                main()
+                last = sig
+            except BaseException as e:  # main() calls sys.exit on a half-written image; retry next tick
+                sys.stderr.write(f"[palette watch] {e!r}\n")
+        time.sleep(interval)
+
 
 SONG_PALETTES_CACHE = Path(pc.get_cache_dir()) / "song_palettes.json"
 

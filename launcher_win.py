@@ -395,6 +395,9 @@ def _safe_submit(fn, *args, **kwargs):
 
 tray_icon_ref = [None]
 bridge_ref = [None]
+# Set while desktop lyrics are on: the wallpaper palette watcher waits on it (shell.qml drives it)
+WALLPAPER_WATCH = threading.Event()
+WALLPAPER_WATCH.set()
 main_win_ref = [None]
 engine_ref = [None]
 
@@ -568,6 +571,16 @@ class NutstyBridge(QObject):
     streamExited = Signal(int, int)
     openSettingsRequested = Signal(int)
     taskbarLyricsToggled = Signal(bool)
+    # A backend thread wrote this file (palette): compat FileView reloads it at once
+    fileWritten = Signal(str)
+
+    @Slot(bool)
+    def setWallpaperWatch(self, on: bool):
+        """Desktop lyrics off: stop watching the wallpaper (nothing on screen uses it)."""
+        if on:
+            WALLPAPER_WATCH.set()
+        else:
+            WALLPAPER_WATCH.clear()
 
     @Slot(int)
     def openSettings(self, tab: int = 0):
@@ -1563,7 +1576,16 @@ def start_daemons():
     def _palette_runner():
         try:
             import palette_extractor
-            if hasattr(palette_extractor, "main"):
+            # Keeps extracting when the wallpaper changes (Spotlight rotation, Settings),
+            # so desktop lyrics and the accent follow it without restarting Nutsty
+            if hasattr(palette_extractor, "watch_wallpaper"):
+                # Reload the palette FileViews right after a write, not on their next mtime poll
+                def _written(path):
+                    if bridge_ref[0]:
+                        bridge_ref[0].fileWritten.emit(path)
+                palette_extractor.on_written = _written
+                palette_extractor.watch_wallpaper(active=WALLPAPER_WATCH)
+            elif hasattr(palette_extractor, "main"):
                 palette_extractor.main()
         except Exception as e:
             sys.stderr.write(f"palette_extractor daemon thread error: {e}\n")
