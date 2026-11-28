@@ -6,7 +6,7 @@
 
 *A desktop music player for Linux Wayland and Windows*
 
-![Phiên bản](https://img.shields.io/badge/version-2.5.0-gold?style=flat-square)
+![Phiên bản](https://img.shields.io/badge/version-2.6.0-gold?style=flat-square)
 ![Nền tảng](https://img.shields.io/badge/platform-Linux%20Wayland%20%7C%20Windows-blue?style=flat-square)
 ![Giao diện](https://img.shields.io/badge/UI-Qt%206%20%2F%20Quickshell-41CD52?style=flat-square)
 

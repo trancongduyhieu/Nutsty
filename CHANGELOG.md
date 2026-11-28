@@ -7,6 +7,20 @@ Số phiên bản có dạng `A.B.C`, ví dụ `1.2.0`:
 - **B (số thứ 2)** tăng khi có tính năng mới mà mọi thứ cũ vẫn dùng bình thường. Số thứ 3 về 0, ví dụ `2.1.3` lên `2.2.0`.
 - **A (số đầu tiên)** tăng khi có thay đổi lớn buộc bạn làm lại gì đó hoặc dữ liệu, cài đặt của bản cũ không dùng được nữa. Hai số sau về 0, ví dụ `2.4.1` lên `3.0.0`.
 
+## [2.6.0] - 2026-11-27
+
+### Added
+- **Ảnh bìa Nutsty lên luôn Spotify**: Khi bật đồng bộ "Hai chiều", playlist nào bạn tự đặt ảnh bìa trong Nutsty (ví dụ ảnh tạo bằng "Tạo ảnh bìa") thì ở lần đồng bộ sau ảnh đó cũng thành ảnh bìa của playlist bên Spotify. Mỗi ảnh chỉ gửi một lần, đổi ảnh khác thì gửi lại. Nutsty tự cắt ảnh vuông và thu nhỏ cho vừa giới hạn của Spotify. Playlist của người khác và album thì không bị đổi. Ở "Một chiều", ảnh bìa bên Spotify giữ nguyên.
+
+### Changed
+- **Lời bài hát trên màn hình đổi màu mượt theo hình nền**: Khi hình nền đổi (đổi tay hay Windows tự xoay ảnh), màu lời bài hát chuyển dần sang màu mới trong chưa tới một giây thay vì đổi phắt, và Nutsty nhận ra hình nền mới chỉ trong khoảng một giây, không cần mở lại app. Lúc tắt lời bài hát trên màn hình, Nutsty ngừng theo dõi hình nền cho nhẹ máy.
+
+### Fixed
+- **Màu lời bài hát trên màn hình Windows theo đúng hình nền**: Trước đây lời bài hát trên màn hình có lúc giữ màu của hình nền cũ. Giờ màu luôn theo hình nền đang hiện.
+- **Đồng bộ Spotify không còn kẹt ở "Đang đồng bộ"**: Nếu Nutsty bận lúc đang đồng bộ và lỡ một lần hỏi tiến độ, dòng "Đang đồng bộ" có thể đứng mãi và nút "Đồng bộ ngay" không bấm được nữa. Giờ Nutsty hỏi lại cho tới khi đồng bộ xong, và nếu khoảng một phút không có trả lời thì báo lỗi mạng để bạn bấm lại.
+- **Bài xóa trên Spotify biến mất ngay khi bấm đồng bộ**: Trước đây xóa một bài trong playlist trên Spotify rồi bấm "Đồng bộ ngay", bài đó có khi hơn một phút sau mới mất khỏi Nutsty. Giờ mỗi lần bạn bấm "Đồng bộ ngay" hoặc quay lại cửa sổ Nutsty, từng playlist được đọc lại thẳng từ Spotify nên thay đổi về ngay.
+- **Nhạc Hi-Res từ Tidal trên Windows mở nhanh hơn khi nghe lại**: Trên Windows, bài Hi-Res từ Tidal đã tìm trước đó không được dùng lại nên lần nào cũng phải hỏi Tidal từ đầu. Giờ bài nghe lại bắt đầu ngay.
+
 ## [2.5.0] - 2026-11-27
 
 ### Added

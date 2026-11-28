@@ -195,6 +195,11 @@ Scope {
     }
     property bool syncHistoryToGoogle: true
     property bool desktopLyricsEnabled: true
+    // Windows: the wallpaper palette watcher only runs while desktop lyrics show (Linux: Noctalia drives it)
+    onDesktopLyricsEnabledChanged: {
+        if (typeof __NutstyBridge !== "undefined" && __NutstyBridge && __NutstyBridge.setWallpaperWatch)
+            __NutstyBridge.setWallpaperWatch(win.desktopLyricsEnabled);
+    }
     // Desktop lyrics on screen (not covered by other apps), so worth a 25 FPS clock
     readonly property bool desktopLyricsLive: desktopLyricsEnabled && !desktopLyrics.occluded
     property bool taskbarLyricsEnabled: Qt.platform.os === "windows"
@@ -404,9 +409,9 @@ Scope {
     property NotificationStore notificationStore: NotificationStore {}
     property string localApiUrl: "http://127.0.0.1:17890"
     property string notesApiUrl: Quickshell.env("NUTSTY_WORKER_URL") || "http://127.0.0.1:17890"
-    property string appVersion: "2.5.0"
-    property string latestVersion: "2.5.0"
-    property string lastSeenVersion: "2.5.0"
+    property string appVersion: "2.6.0"
+    property string latestVersion: "2.6.0"
+    property string lastSeenVersion: "2.6.0"
     property bool hasAppUpdate: false
     property bool isCheckingUpdate: false
     property string updateUrl: ""
@@ -1596,7 +1601,7 @@ Scope {
                                 if (res.mock_update) {
                                     win.updateDemo = true;
                                     win.appVersion = "2.3.0";
-                                    win.latestVersion = "v2.5.0";
+                                    win.latestVersion = "v2.6.0";
                                     win.hasAppUpdate = true;
                                     win.updatePackageBytes = 399087882;
                                     win.updateReleaseNotes = "- **Cập nhật chỉ tải phần thay đổi**: Chỉ tải những tệp khác bản bạn đang dùng.\n- **Hộp thoại cập nhật mới**: Vòng chữ xoay quanh số phiên bản, tốc độ và thời gian còn lại.\n- **Giữ nguyên trình phát mpv**: Không đổi giữa các bản.";
