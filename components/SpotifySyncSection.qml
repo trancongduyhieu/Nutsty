@@ -254,7 +254,7 @@ ColumnLayout {
             description: !root.sync ? "" : (root.sync.lastSync > 0
                   ? I18n.tr("Lần cuối lúc %1", "Last synced at %1").arg(Qt.formatDateTime(new Date(root.sync.lastSync * 1000), "HH:mm dd/MM"))
                   : I18n.tr("Chưa đồng bộ lần nào", "Not synced yet"))
-            onClicked: root.sync.run()
+            onClicked: root.sync.run(true)
 
             Item {
                 width: 20

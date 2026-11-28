@@ -631,9 +631,16 @@ def fetch_betterlyrics_ttml(title, artist, duration_sec=None):
 _SPOTIFY_TOKEN_CACHE = {"token": "", "expires_at": 0, "spdc": "", "anonymous": False}
 _SPOTIFY_SECRETS_CACHE = {"secrets": None, "fetched_at": 0}
 
-def get_spotify_access_token(spdc=None, require_user=False):
+# Tokens of another product type than the default, one per type (see get_spotify_access_token)
+_SPOTIFY_OTHER_TOKENS = {}
+DEFAULT_TOKEN_PRODUCT = "mobile-web-player"
+
+
+def get_spotify_access_token(spdc=None, require_user=False, product_type=DEFAULT_TOKEN_PRODUCT):
     """Exchange sp_dc cookie for a valid Spotify personal access token via TOTP.
-    The cache holds one token for one cookie. require_user refuses an anonymous token (expired cookie)."""
+    The cache holds one token for one cookie. require_user refuses an anonymous token (expired cookie).
+    product_type "web-player" gets the desktop web player's token: its scopes include uploading a
+    playlist cover image, which the default mobile-web-player token is refused (insufficient scope)."""
     global _SPOTIFY_TOKEN_CACHE, _SPOTIFY_SECRETS_CACHE
     if not spdc:
         spdc = get_spotify_spdc()
@@ -641,7 +648,8 @@ def get_spotify_access_token(spdc=None, require_user=False):
         return ""
 
     now = time.time()
-    cached = _SPOTIFY_TOKEN_CACHE
+    default = product_type == DEFAULT_TOKEN_PRODUCT
+    cached = _SPOTIFY_TOKEN_CACHE if default else _SPOTIFY_OTHER_TOKENS.get(product_type, {})
     if (cached.get("token") and cached.get("spdc") == spdc and now < cached.get("expires_at", 0) - 60):
         return "" if (require_user and cached.get("anonymous")) else cached["token"]
 
@@ -693,7 +701,7 @@ def get_spotify_access_token(spdc=None, require_user=False):
         # 5. Request access token
         params = urllib.parse.urlencode({
             "reason": "transport",
-            "productType": "mobile-web-player",
+            "productType": product_type,
             "totp": otp,
             "totpServer": otp,
             "totpVer": version,
@@ -713,8 +721,11 @@ def get_spotify_access_token(spdc=None, require_user=False):
             exp_ms = data.get("accessTokenExpirationTimestampMs", (now + 3600) * 1000)
             if acc_tok:
                 anonymous = bool(data.get("isAnonymous"))
-                _SPOTIFY_TOKEN_CACHE = {"token": acc_tok, "expires_at": exp_ms / 1000,
-                                        "spdc": spdc, "anonymous": anonymous}
+                entry = {"token": acc_tok, "expires_at": exp_ms / 1000, "spdc": spdc, "anonymous": anonymous}
+                if default:
+                    _SPOTIFY_TOKEN_CACHE = entry
+                else:
+                    _SPOTIFY_OTHER_TOKENS[product_type] = entry
                 return "" if (require_user and anonymous) else acc_tok
     except Exception as e:
         sys.stderr.write(f"[Spotify get_spotify_access_token error]: {e}\n")

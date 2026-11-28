@@ -129,6 +129,8 @@ def migrate_legacy_imports(playlists, remote_by_pid, match, cache, now=None):
 # Pull orchestration (spec 5.3-5.5, 5.7, 5.8)
 # ---------------------------------------------------------------------------
 import copy
+import hashlib
+import io
 import sys
 import threading
 
@@ -328,8 +330,10 @@ def _library_read(client):
     return library + albums, True
 
 
-def _fetch(st, client, match, cache, now, playlists_snapshot):
+def _fetch(st, client, match, cache, now, playlists_snapshot, fresh=False):
     """Network phase: read everything first so a failure never leaves a half-written file.
+    `fresh` reads every selected list even when the library revision did not move: Spotify's library
+    view can lag a playlist edit, so a sync the user asked for must not trust it.
     Returns (library, fetched {pid: (info, remote)}, liked_remote, reverse {(list, key): sid}, error_code)."""
     fetched, liked_remote, reverse = {}, None, {}
     baseline = st.get("localBaseline") or {}
@@ -356,7 +360,8 @@ def _fetch(st, client, match, cache, now, playlists_snapshot):
             if pid not in selected:
                 continue
             try:
-                _fetch_one(st, info, client, match, cache, now, playlists_snapshot, force, baseline, fetched, reverse)
+                _fetch_one(st, info, client, match, cache, now, playlists_snapshot, force, baseline, fetched, reverse,
+                           fresh)
             except sw.SpotifyError as e:
                 if e.code not in _SKIP_ONE:
                     raise
@@ -453,12 +458,13 @@ def _note_error(st, e, now):
 _SKIP_ONE = ("not_found", "http_error", "graphql_error")
 
 
-def _fetch_one(st, info, client, match, cache, now, playlists_snapshot, force, baseline, fetched, reverse):
+def _fetch_one(st, info, client, match, cache, now, playlists_snapshot, force, baseline, fetched, reverse,
+               fresh=False):
     pid = info["id"]
     rec = _find_linked(playlists_snapshot, pid)
     link = (rec or {}).get("spotifyLink") or {}
     wb = bool(rec) and _wb_on(st, info) and pid in baseline
-    if (rec and info.get("revision") and link.get("libRevision") == info["revision"]
+    if (not fresh and rec and info.get("revision") and link.get("libRevision") == info["revision"]
             and not link.get("unmatched") and pid not in force
             and not (wb and _push_pending(rec, st, pid))):
         return
@@ -588,6 +594,9 @@ def _apply_playlist(playlists, info, remote, st, cache, now, blocked, reverse=No
         link["kind"] = "album"              # the page says Spotify does not let anyone edit it
     if "title" in old_link:
         link["title"] = old_link["title"]   # the agreed name, kept by _merge_titles
+    for key in ("cover", "coverFailed"):    # the cover last sent / refused, kept by _push_covers
+        if key in old_link:
+            link[key] = old_link[key]
     if (before is not None and rec["tracks"] == before and old_count == rec["trackCount"]
             and dict(old_link, syncedAt=now) == link):
         # Nothing moved: leave the record byte-identical, so account_sync does not see a fresh
@@ -642,6 +651,85 @@ def _push_renames(client, renames, st, now):
             rec = _find_linked(playlists, pid)
             if rec and rec.get("spotifyLink"):
                 rec["spotifyLink"]["title"] = name
+                pm.save_playlists(playlists)
+    return ""
+
+
+# Spotify's own limit for a cover is undocumented for the web player; the public API takes 256 KB,
+# so stay under that. The web player sends the centre square at most 640 px.
+COVER_MAX_BYTES = 256 * 1024
+COVER_MAX_PX = 640
+
+
+def _file_sha(path):
+    try:
+        with open(path, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+    except OSError:
+        return ""
+
+
+def _cover_jpeg(path):
+    """The centre square of a cover image, at most COVER_MAX_PX, as JPEG bytes under COVER_MAX_BYTES."""
+    from PIL import Image, ImageOps
+    with Image.open(path) as src:
+        im = ImageOps.exif_transpose(src).convert("RGB")
+    side = min(im.size)
+    left, top = (im.width - side) // 2, (im.height - side) // 2
+    im = im.crop((left, top, left + side, top + side))
+    if side > COVER_MAX_PX:
+        im = im.resize((COVER_MAX_PX, COVER_MAX_PX), Image.LANCZOS)
+    for quality in (90, 82, 74, 66, 58, 50):
+        buf = io.BytesIO()
+        im.save(buf, "JPEG", quality=quality, optimize=True)
+        if buf.tell() <= COVER_MAX_BYTES:
+            return buf.getvalue()
+    raise ValueError("cover too large even at low quality")
+
+
+def _covers_to_push(playlists, library, st):
+    """A cover the user set in Nutsty (a local image file) on a linked list write-back may touch, and
+    not yet on Spotify. spotifyLink.cover holds the sha of the last one sent; coverFailed the last one
+    Spotify refused, so a list the user cannot change is not retried every run."""
+    out = []
+    for info in library:
+        if not _wb_on(st, info):
+            continue
+        rec = _find_linked(playlists, info["id"])
+        link = (rec or {}).get("spotifyLink")
+        ref = (rec or {}).get("customCover")
+        if not link or not pm._is_local_ref(ref):
+            continue
+        path = pm._to_local_path(ref)
+        sha = _file_sha(path)
+        if sha and sha not in (link.get("cover"), link.get("coverFailed")):
+            out.append((info["id"], path, sha))
+    return out
+
+
+def _push_covers(client, covers, st, now):
+    """Send each cover; record its sha as sent, or as refused when Spotify will not take it. Account-wide
+    failures (auth, rate limit, network) stop here and leave the cover pending for the next run."""
+    for pid, path, sha in covers:
+        if not sstate.load_state().get("writeBack"):
+            return ""
+        key = "cover"
+        try:
+            client.set_playlist_cover(pid, _cover_jpeg(path))
+        except sw.SpotifyError as e:
+            if e.code not in _SKIP_ONE + ("query_changed",):
+                _note_error(st, e, now)
+                return e.code
+            sys.stderr.write(f"[spotify_sync] cover for {pid} refused: {e}\n")
+            key = "coverFailed"
+        except (OSError, ValueError) as e:   # unreadable or not an image
+            sys.stderr.write(f"[spotify_sync] cover for {pid} unreadable: {e}\n")
+            key = "coverFailed"
+        with pm.locked():
+            playlists = pm.load_playlists()
+            rec = _find_linked(playlists, pid)
+            if rec and rec.get("spotifyLink"):
+                rec["spotifyLink"][key] = sha
                 pm.save_playlists(playlists)
     return ""
 
@@ -846,10 +934,10 @@ def _patch_bases(st, done):
             pm.save_playlists(playlists)
 
 
-def _cycle(st, client, match, cache, now, sleep=time.sleep):
+def _cycle(st, client, match, cache, now, sleep=time.sleep, fresh=False):
     snapshot = pm.load_playlists()
     try:
-        library, fetched, liked_remote, reverse, error, gone = _fetch(st, client, match, cache, now, snapshot)
+        library, fetched, liked_remote, reverse, error, gone = _fetch(st, client, match, cache, now, snapshot, fresh)
     except sw.SpotifyError as e:
         _note_error(st, e, now)
         return _result(False, e.code)
@@ -869,6 +957,7 @@ def _cycle(st, client, match, cache, now, sleep=time.sleep):
         renames = []
         if _merge_titles(playlists, library, st, renames):
             changed["playlists"] = True
+        covers = _covers_to_push(playlists, library, st)
         if changed["playlists"] or [p.get("id") if isinstance(p, dict) else None for p in playlists] != before:
             pm.save_playlists(playlists)
         st["linked"] = sorted(set(st.get("linked") or []) | {pid for pid in fetched if _find_linked(playlists, pid)})
@@ -881,6 +970,8 @@ def _cycle(st, client, match, cache, now, sleep=time.sleep):
         _patch_bases(st, done)
     if renames and not error:
         error = _push_renames(client, renames, st, now)
+    if covers and not error:
+        error = _push_covers(client, covers, st, now)
     if st.get("deleteRemote") and not error:
         error = _push_deletes(client, library, st)
     return _result(not error, error, changed=changed, blocked=blocked, unmatched=unmatched, pushed=pushed)
@@ -901,7 +992,7 @@ def _keep_user_changes(st, orig):
     st["backlog"] = disk.get("backlog") or {}
 
 
-def sync_once(profile="", client=None, matcher=None, now=None, sleep=None):
+def sync_once(profile="", client=None, matcher=None, now=None, sleep=None, fresh=False):
     if not _RUN_LOCK.acquire(blocking=False):
         return _result(False, "busy")
     try:
@@ -916,7 +1007,7 @@ def sync_once(profile="", client=None, matcher=None, now=None, sleep=None):
             cache = sstate.MatchCache()
             try:
                 client = client or _default_client()
-                res = _cycle(st, client, matcher or _default_matcher(), cache, now, sleep or time.sleep)
+                res = _cycle(st, client, matcher or _default_matcher(), cache, now, sleep or time.sleep, fresh)
             except sw.SpotifyError as e:
                 _note_error(st, e, now)
                 res = _result(False, e.code)
@@ -1186,10 +1277,10 @@ def _blocked_names(blocked):
 _last_run = {}
 
 
-def _run_background(profile):
+def _run_background(profile, fresh=False):
     def worker():
         try:
-            _last_run[profile] = sync_once(profile)
+            _last_run[profile] = sync_once(profile, fresh=fresh)
         except Exception as e:
             sys.stderr.write(f"[spotify_sync] background run failed: {e}\n")
     threading.Thread(target=worker, name="spotify-sync", daemon=True).start()
@@ -1204,7 +1295,7 @@ def handle_http_path(handler, path, body):
             if _RUN_LOCK.locked():
                 res = {"success": False, "error": "busy"}
             else:
-                _run_background(profile)
+                _run_background(profile, bool(body.get("fresh")))
                 res = {"success": True, "started": True}
         elif op == "status":
             res = dict(status(profile), last=_last_run.get(profile))

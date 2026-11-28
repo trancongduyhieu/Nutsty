@@ -93,7 +93,7 @@ QtObject {
 
     // Back at the window after a while: Spotify may have changed meanwhile
     function windowActivated() {
-        if (Date.now() / 1000 - sp.lastSync > 120) sp.run();
+        if (Date.now() / 1000 - sp.lastSync > 120) sp.run(true);
     }
 
     property Timer soonTimer: Timer {
@@ -109,21 +109,38 @@ QtObject {
         });
     }
 
-    // The run happens in the background on the backend; poll status until it ends
-    function run() {
+    // The run happens in the background on the backend; poll status until it ends.
+    // fresh: the user asked (button, back at the window), so every list is read even when Spotify's
+    // library view has not caught up with an edit yet; automatic runs keep the cheap check.
+    function run(fresh) {
         if (!sp.hasCookie || !sp.enabled || !sp.selectionConfirmed || sp.running) return;
         sp.running = true;
-        sp._post("run", {}, function(res) {
+        sp._post("run", { fresh: !!fresh }, function(res) {
             if (!res.success && res.error !== "busy") { sp.running = false; sp.lastError = res.error || "network"; return; }
             pollTimer.start();
         });
     }
 
+    // Status polls in a row that got no answer. One dropped poll (backend busy mid-sync, which on
+    // Windows shares Nutsty.exe) must not stop the poll: running would stay true for good, the
+    // stores would never reload and run() would refuse every later sync.
+    property int pollFailures: 0
+    readonly property int maxPollFailures: 30   // about a minute without an answer
+
     property Timer pollTimer: Timer {
         interval: 2000
         repeat: true
+        onRunningChanged: if (running) sp.pollFailures = 0
         onTriggered: sp._post("status", {}, function(res) {
-            if (!res || res.running) return;
+            if (!res || res.enabled === undefined) {
+                if (++sp.pollFailures < sp.maxPollFailures) return;
+                pollTimer.stop();
+                sp.running = false;
+                sp.lastError = "network";
+                return;
+            }
+            sp.pollFailures = 0;
+            if (res.running) return;
             pollTimer.stop();
             sp._applyStatus(res);
             var last = res.last;

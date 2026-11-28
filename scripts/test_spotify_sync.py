@@ -63,6 +63,7 @@ class FakeTransport:
         op = payload.get("operationName") or url
         self.calls.append((op, payload.get("variables")))
         self.bodies = getattr(self, "bodies", []) + [payload]
+        self.headers = getattr(self, "headers", []) + [headers]
         queue = self.script[op]
         resp = queue.pop(0) if len(queue) > 1 else queue[0]
         if isinstance(resp, Exception):
@@ -521,6 +522,11 @@ class FakeClient:
             if p["id"] == pid:
                 p["title"] = name
 
+    def set_playlist_cover(self, pid, jpeg):
+        if self.write_error:
+            raise self.write_error
+        self.writes.append(("set_playlist_cover", pid, jpeg[:3]))
+
     def remove_from_playlist(self, pid, uids):
         self._write("remove_from_playlist", pid, uids, self.playlists.get(pid),
                     lambda r: _shrink(r, lambda i: i["uid"] in set(uids)))
@@ -669,6 +675,17 @@ class PullTests(SyncCase):
         self.sync(c)
         self.sync(c)
         self.assertEqual(c.fetched, ["P"])
+
+    def test_fresh_run_pulls_a_delete_the_library_revision_missed(self):
+        # Spotify's library view lags a playlist edit: same revision, but the list lost a track
+        import spotify_sync as ss
+        self.enable(["P"])
+        self.sync(FakeClient([lib("P")], {"P": remote_list(["a", "b"])}))
+        lagging = FakeClient([lib("P")], {"P": remote_list(["a"])})
+        self.sync(lagging)
+        self.assertEqual(self.vids(), ["va", "vb"])   # the cheap automatic run trusts the revision
+        ss.sync_once("", client=lagging, matcher=FakeMatcher(), now=self.NOW, sleep=self.sleeps.append, fresh=True)
+        self.assertEqual(self.vids(), ["va"])
 
     def test_truncated_fetch_removes_nothing(self):
         import spotify_web as sw
@@ -1750,6 +1767,151 @@ class RenameTests(SyncCase):
         c.write_error = None
         self.sync(c, now=self.NOW + 20)
         self.assertEqual(c.writes, [("rename_playlist", "P", "ahihi")])
+
+
+JPEG_MAGIC = b"\xff\xd8\xff"
+
+
+class CoverTests(SyncCase):
+    """A cover set in Nutsty goes to Spotify with write-back on, once per image."""
+
+    def setup_p(self, owned=True, write_back=True):
+        import spotify_sync as ss
+        self.enable(["P"])
+        c = FakeClient([lib("P", owned=owned)], {"P": remote_list(["a"])})
+        self.sync(c)
+        if write_back:
+            ss.set_write_back("", True, now=self.NOW)
+        return c
+
+    def set_cover(self, color=(200, 40, 90), size=(1600, 900), name="cover.png", ref=None):
+        from PIL import Image
+        import playlist_manager as pm
+        path = CONFIG_DIR / name
+        Image.new("RGB", size, color).save(path)
+        pls = pm.load_playlists()
+        rec = next(p for p in pls if p["id"] == "custom_pl_spotify_P")
+        rec["customCover"] = rec["image"] = ref or path.resolve().as_uri()
+        pm.save_playlists(pls)
+        return path
+
+    def covers_sent(self, c):
+        return [w for w in c.writes if w[0] == "set_playlist_cover"]
+
+    def test_cover_is_pushed_once(self):
+        c = self.setup_p()
+        self.set_cover()
+        self.assertTrue(self.sync(c, now=self.NOW + 10)["success"])
+        self.assertEqual(self.covers_sent(c), [("set_playlist_cover", "P", JPEG_MAGIC)])
+        self.sync(c, now=self.NOW + 20)
+        self.assertEqual(len(self.covers_sent(c)), 1)
+        self.assertTrue(self.playlist()["spotifyLink"]["cover"])
+
+    def test_new_cover_is_pushed_again(self):
+        c = self.setup_p()
+        self.set_cover()
+        self.sync(c, now=self.NOW + 10)
+        self.set_cover(color=(10, 200, 30), name="cover2.png")
+        self.sync(c, now=self.NOW + 20)
+        self.assertEqual(len(self.covers_sent(c)), 2)
+
+    def test_one_way_never_pushes(self):
+        c = self.setup_p(write_back=False)
+        self.set_cover()
+        self.sync(c, now=self.NOW + 10)
+        self.assertEqual(c.writes, [])
+
+    def test_not_editable_never_pushes(self):
+        c = self.setup_p(owned=False)
+        self.set_cover()
+        self.sync(c, now=self.NOW + 10)
+        self.assertEqual(c.writes, [])
+
+    def test_spotify_cover_url_is_not_pushed(self):
+        c = self.setup_p()
+        self.set_cover(ref="https://mosaic.scdn.co/640/abc")
+        self.sync(c, now=self.NOW + 10)
+        self.assertEqual(c.writes, [])
+
+    def test_refused_cover_is_not_retried(self):
+        import spotify_web as sw
+        c = self.setup_p()
+        self.set_cover()
+        c.write_error = sw.SpotifyError("403", code="http_error")
+        r = self.sync(c, now=self.NOW + 10)
+        self.assertTrue(r["success"])           # one refused cover does not fail the run
+        self.assertIn("coverFailed", self.playlist()["spotifyLink"])
+        c.write_error = None
+        self.sync(c, now=self.NOW + 20)
+        self.assertEqual(c.writes, [])
+
+    def test_network_error_retries_next_run(self):
+        import spotify_web as sw
+        c = self.setup_p()
+        self.set_cover()
+        c.write_error = sw.SpotifyNetworkError("down")
+        self.assertEqual(self.sync(c, now=self.NOW + 10)["error"], "network")
+        c.write_error = None
+        self.sync(c, now=self.NOW + 20)
+        self.assertEqual(len(self.covers_sent(c)), 1)
+
+    def test_cover_jpeg_is_a_small_centre_square(self):
+        import io
+        import spotify_sync as ss
+        from PIL import Image
+        path = CONFIG_DIR / "wide.png"
+        Image.new("RGB", (1600, 900), (200, 40, 90)).save(path)
+        data = ss._cover_jpeg(str(path))
+        self.assertTrue(data.startswith(JPEG_MAGIC))
+        self.assertLessEqual(len(data), ss.COVER_MAX_BYTES)
+        self.assertEqual(Image.open(io.BytesIO(data)).size, (640, 640))
+
+
+class CoverClientTests(WebClientTests):
+    CHANGES = "https://spclient.wg.spotify.com/playlist/v2/playlist/P/changes"
+    REGISTER = "https://spclient.wg.spotify.com/playlist/v2/playlist/P/register-image"
+
+    def upload_client(self, upload_reply, register_reply):
+        import spotify_web as sw
+        sent = []
+
+        def upload(url, data, headers):
+            sent.append((url, data, headers))
+            return upload_reply
+        t = FakeTransport({"profileAttributes": [ME], self.REGISTER: [register_reply],
+                           self.CHANGES: [(200, {}, {})]})
+        c = sw.SpotifyWebClient("cookie", transport=t, min_interval=0, token_provider=lambda: "tok",
+                                client_token_provider=lambda: "ct", upload_transport=upload,
+                                cover_token_provider=lambda: "wptok")
+        return c, t, sent
+
+    def test_cover_goes_upload_register_then_picture_attribute(self):
+        c, t, sent = self.upload_client(ok({"uploadToken": "up1"}), ok({"picture": "cGlj"}))
+        c.set_playlist_cover("P", JPEG_MAGIC + b"rest")
+        url, data, headers = sent[0]
+        self.assertEqual(url, "https://image-upload.spotify.com/v4/playlist")
+        self.assertEqual(data, JPEG_MAGIC + b"rest")
+        self.assertEqual(headers["content-type"], "image/jpeg")
+        # the desktop web player's token: the default one is refused "insufficient scope"
+        self.assertEqual(headers["authorization"], "Bearer wptok")
+        self.assertEqual(t.bodies[0], {"uploadToken": "up1"})
+        self.assertEqual(t.headers[0]["accept"], "application/json")   # else spclient answers protobuf
+        op = t.bodies[1]["deltas"][0]["ops"][0]
+        self.assertEqual(op["kind"], 6)
+        self.assertEqual(op["updateListAttributes"]["newAttributes"]["values"], {"picture": "cGlj"})
+
+    def test_answer_without_token_is_query_changed(self):
+        import spotify_web as sw
+        c, t, _ = self.upload_client(ok({}), ok({"picture": "x"}))
+        with self.assertRaises(sw.SpotifyQueryChanged):
+            c.set_playlist_cover("P", JPEG_MAGIC)
+        self.assertEqual(getattr(t, "bodies", []), [])
+
+    def test_upload_refused_raises(self):
+        import spotify_web as sw
+        c, _, _ = self.upload_client((403, {}, {}), ok({"picture": "x"}))
+        with self.assertRaises(sw.SpotifyError):
+            c.set_playlist_cover("P", JPEG_MAGIC)
 
 
 class AutoBacklogTests(SyncCase):
