@@ -147,6 +147,10 @@ class TidalSourceTest(unittest.TestCase):
         self.env = mock.patch.dict(os.environ, {
             "HOME": self.tmp,
             "XDG_CONFIG_HOME": os.path.join(self.tmp, "config"),
+            # Windows takes the cache from LOCALAPPDATA, not HOME: without these the match
+            # cache leaks between tests and into the real %LOCALAPPDATA%\Nutsty\cache
+            "LOCALAPPDATA": os.path.join(self.tmp, "localappdata"),
+            "APPDATA": os.path.join(self.tmp, "appdata"),
             "NUTSTY_PROFILE": "",
             "NUTSTY_TEMP_DIR": os.path.join(self.tmp, "tmp"),
         })
@@ -205,7 +209,7 @@ class TidalSourceTest(unittest.TestCase):
     def test_resolve_mpd_writes_manifest_file(self):
         s = ts.resolve("vid2", "Song24", "Artist", 200, "hires")
         self.assertTrue(s["url"].startswith("file://"))
-        self.assertTrue(os.path.exists(s["url"][len("file://"):]))
+        self.assertTrue(os.path.exists(ts.file_url_to_path(s["url"])))
         self.assertEqual((s["bit_depth"], s["sample_rate"]), (24, 96000))
 
     def test_quality_is_sent_to_tidal(self):
@@ -399,7 +403,7 @@ class TidalSourceTest(unittest.TestCase):
     def test_mpd_dir_and_manifest_are_private(self):
         s = ts.resolve("vid2", "Song24", "Artist", 200, "hires")
         self.assertEqual(os.stat(ts.mpd_dir()).st_mode & 0o777, 0o700)
-        self.assertEqual(os.stat(s["url"][len("file://"):]).st_mode & 0o777, 0o600)
+        self.assertEqual(os.stat(ts.file_url_to_path(s["url"])).st_mode & 0o777, 0o600)
 
     def test_requests_get_a_default_timeout(self):
         seen = {}

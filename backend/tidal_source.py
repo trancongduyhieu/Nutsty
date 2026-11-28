@@ -489,9 +489,17 @@ def _cached_stream(video_id, quality_key):
     if not entry or float(entry.get("expires_at", 0)) <= time.time():
         return None
     url = entry.get("url", "")
-    if url.startswith("file://") and not os.path.exists(url[len("file://"):]):
+    if url.startswith("file://") and not os.path.exists(file_url_to_path(url)):
         return None
     return entry
+
+
+def file_url_to_path(url):
+    """file:///C:/x.mpd -> C:\\x.mpd on Windows, file:///tmp/x.mpd -> /tmp/x.mpd elsewhere
+    (slicing off "file://" leaves "/C:/x.mpd", which never exists on Windows)."""
+    from urllib.parse import urlparse
+    from urllib.request import url2pathname
+    return url2pathname(urlparse(url).path)
 
 
 def _work(video_id, title, artist, duration_s, quality_key):
